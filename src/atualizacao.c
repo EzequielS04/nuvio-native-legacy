@@ -16,6 +16,7 @@
 // nova tag, novo cartao; a mesma nao volta.
 //
 // O irmao e novidades.c: mesmo cartao central, mesma regra de fechamento.
+#include "horafmt.h"
 #include "atualizacao.h"
 #include "ilha.h"
 #include "dados.h"
@@ -1516,8 +1517,8 @@ void atualizacao_desenhar(Uint32 agora) {
     // A HORA no canto: o cartao E a ilha do relogio, e ela continua dizendo.
     { time_t tt = time(NULL);
       struct tm lt;
-      char h[8] = "";
-      if (localtime_r(&tt, &lt)) strftime(h, sizeof h, "%H:%M", &lt);
+      char h[12] = "";
+      if (localtime_r(&tt, &lt)) hora_tela(h, sizeof h, &lt);
       if (h[0]) {
         TxtLinha l = txt_linha(TXT_ILHA_NOME, h, AT_TX, 255);
         txt_desenhar_alpha(l, C.x + C.w - AT_PADX - (float)l.w, yc - (float)l.h * 0.5f, ca * 0.60f);

@@ -24,6 +24,7 @@
 //   3. Parado alguns segundos, eles somem sozinhos — mas nao enquanto o video
 //      esta pausado. Pausado sem controles o usuario fica olhando um quadro
 //      congelado sem saber o que houve.
+#include "horafmt.h"
 #include "player.h"
 #include "ilhacart.h"
 #include "idbase.h"
@@ -2046,14 +2047,14 @@ static void linhasCanal(char *l1, size_t n1, char *l2, size_t n2) {
     if (epgIdx < 0) epgIdx = -2;
   }
   if (pAgora(epgIdx, agoraT, &ag)) {
-    char h1[8], h2[8];
-    localtime_r(&ag.ini, &lt); strftime(h1, sizeof h1, "%H:%M", &lt);
-    localtime_r(&ag.fim, &lt); strftime(h2, sizeof h2, "%H:%M", &lt);
+    char h1[12], h2[12];
+    localtime_r(&ag.ini, &lt); hora_tela(h1, sizeof h1, &lt);
+    localtime_r(&ag.fim, &lt); hora_tela(h2, sizeof h2, &lt);
     snprintf(l1, n1, "%s  %s\xe2\x80\x93%s  \xc2\xb7  %s",
              i18n("AGORA"), h1, h2, ag.titulo);
     if (pProximo(epgIdx, agoraT, 0, &px)) {
-      char h3[8];
-      localtime_r(&px.ini, &lt); strftime(h3, sizeof h3, "%H:%M", &lt);
+      char h3[12];
+      localtime_r(&px.ini, &lt); hora_tela(h3, sizeof h3, &lt);
       snprintf(l2, n2, "%s %s  \xc2\xb7  %s", i18n("A seguir"), h3, px.titulo);
     }
   } else {

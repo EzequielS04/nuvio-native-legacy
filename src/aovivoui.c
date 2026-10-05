@@ -23,6 +23,7 @@
 // GLASS UI (03/10): tudo isso passa a ser ilha — a do canal no canto, a hora
 // em pilula, Informacoes, o zapping e o erro; a barra e a do player e o
 // "Carregando o fluxo" volta ao ambar, agora como estado de aviso.
+#include "horafmt.h"
 #include "aovivo.h"
 #include "ajustes.h"
 #include "badges.h"
@@ -54,7 +55,7 @@ static void relogioDur(char *b, size_t n, int seg) {
 static void hhmm(char *b, size_t n, time_t t) {
   struct tm lt;
   localtime_r(&t, &lt);
-  strftime(b, n, "%H:%M", &lt);
+  hora_tela(b, n, &lt);
 }
 
 static const char *icone(int b) {
@@ -253,7 +254,7 @@ static void aovivo_osd_desenharCorpo_(const AoVivoOsd *o, float a) {
       plrui_barra(AV_X, yBar, NV_TELA_W - 2.0f * AV_X, f - fa, f, 0, NULL, 0, a);
     }
     if (e->temProx) {
-      char hp[8];
+      char hp[12];
       float lx = AV_X;
       hhmm(hp, sizeof hp, e->proxIni);
       yb -= 24.0f;
@@ -297,7 +298,7 @@ static void aovivo_osd_desenharCorpo_(const AoVivoOsd *o, float a) {
         mx += (float)t2.w + 16.0f;
       } else mx += seloAoVivo(mx, yb, 34.0f, a) + 16.0f;
       if (e->temAgora) {
-        char h1[8], h2[8], resto[64];
+        char h1[12], h2[12], resto[64];
         int falta = (int)((e->agoraFim - agoraT + 59) / 60);
         if (falta < 0) falta = 0;
         hhmm(h1, sizeof h1, e->agoraIni); hhmm(h2, sizeof h2, e->agoraFim);

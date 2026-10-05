@@ -39,6 +39,7 @@
 // CONCORRENCIA: o fio escreve em s* (staging); quando termina sobe
 // `pendPronto` e o fio de desenho copia para os vetores publicados. Leitores
 // nunca tocam no staging — mesma disciplina do epg.c.
+#include "horafmt.h"
 #include "guia.h"
 #include "plrui.h"
 #include "badges.h"   /* marcas de resolucao no heroi */
@@ -2369,7 +2370,7 @@ void guia_atualizar(float dt, Uint32 agora) {
 // --- desenho ---------------------------------------------------------------------
 static void fmtHora(time_t t, char *dst, size_t n) {
   struct tm lt; localtime_r(&t, &lt);
-  strftime(dst, n, "%H:%M", &lt);
+  hora_tela(dst, n, &lt);
 }
 
 // O cartao de canal: logo + nome em cima, "agora" com barra de progresso e o
@@ -2556,7 +2557,7 @@ static void desenharCard(GCanal *c, float x, float y, float foco, float a,
   // AGORA.
   { float ly = y + 118.0f;
     if (temAgora) {
-      char h1[8], h2[8], faixa[40];
+      char h1[12], h2[12], faixa[40];
       fmtHora(ag.ini, h1, sizeof h1); fmtHora(ag.fim, h2, sizeof h2);
       snprintf(faixa, sizeof faixa, "%s %s\xe2\x80\x93%s", i18n("AGORA"), h1, h2);
       { TxtLinha l = escuro ? txt_linha_corta(TXT_MINI, faixa, 30, 50, 90, 255, r.w - 28.0f)
@@ -2593,7 +2594,7 @@ static void desenharCard(GCanal *c, float x, float y, float foco, float a,
   // A SEGUIR, numa linha so.
   { char linha[300];
     if (temProx) {
-      char h1[8]; fmtHora(px.ini, h1, sizeof h1);
+      char h1[12]; fmtHora(px.ini, h1, sizeof h1);
       snprintf(linha, sizeof linha, "%s %s  \xc2\xb7  %s",
                i18n("A seguir"), h1, px.titulo);
     } else {
@@ -2823,7 +2824,7 @@ static void desenharHero(float a, time_t agoraT, time_t tFoco) {
                  x, y - 4.0f, w, 66.0f, ha, 2) + 10.0f;
 
   // META: selo + faixa de horario + quanto falta, e a barra de progresso.
-  { char meta[160], h1[8], h2[8];
+  { char meta[160], h1[12], h2[12];
     float mx = x;
     meta[0] = 0;
     if (tem) {
@@ -2921,7 +2922,7 @@ static void desenharHero(float a, time_t agoraT, time_t tFoco) {
   // A SEGUIR, ancorado na base do heroi (alinhado a base do preview).
   { EpgProg q;
     if (gProximo(c, tFoco, 0, &q)) {
-      char hh[8];
+      char hh[12];
       TxtLinha l = txt_linha(TXT_PG_ROTULO, i18n("A SEGUIR"), 140, 143, 152, 255);
       TxtLinha hr, tt;
       float lx = x;
@@ -3163,9 +3164,9 @@ static float desenharTopo(float a) {
            + (i == G_TOPO_PREVIEW ? 20.0f : (i == G_TOPO_CATEGORIAS || i == G_TOPO_BUSCAR) ? 26.0f : 0.0f);
 
   // Relogio na margem direita, na altura dos chips.
-  { time_t tt = time(NULL); struct tm lt; char hora[8];
+  { time_t tt = time(NULL); struct tm lt; char hora[12];
     TxtLinha t;
-    localtime_r(&tt, &lt); strftime(hora, sizeof hora, "%H:%M", &lt);
+    localtime_r(&tt, &lt); hora_tela(hora, sizeof hora, &lt);
     t = txt_linha(TXT_CALLOUT, hora, 236, 237, 242, 255);
     x = G_AREA_DIR - (float)t.w;
     txt_desenhar_alpha(t, x, G_TOPO_Y + (G_TOPO_H - (float)t.h) * 0.5f, a);
@@ -3279,7 +3280,7 @@ static void desenharReguaEm(float a, time_t ini, float yR) {
   float ppm = G_L_FAIXA_W / (float)G_L_JANELA_MIN;
   int i, n = G_L_JANELA_MIN / G_L_PASSO_MIN;
   for (i = 0; i < n; i++) {
-    char h[8];
+    char h[12];
     float x = G_L_FAIXA_X + (float)(i * G_L_PASSO_MIN) * ppm;
     TxtLinha t;
     fmtHora(ini + (time_t)i * G_L_PASSO_MIN * 60, h, sizeof h);
@@ -3421,7 +3422,7 @@ static void desenharLinhaLista(GCanal *c, float y, int focada, float a,
         } else
         txt_desenhar_alpha(t, tx, y + 7.0f, a);
         if (b.w > 120.0f && h >= 70.0f) {
-          char h1[8], h2[8], faixa[24];
+          char h1[12], h2[12], faixa[24];
           int cm = foc ? 200 : 146;
           TxtLinha m;
           fmtHora(ps[k].ini, h1, sizeof h1); fmtHora(ps[k].fim, h2, sizeof h2);
@@ -3742,7 +3743,7 @@ static void desenharBanda(float a, Uint32 agora) {
   (void)agora;
   focoAnelOk = 0;   // na banda o foco e a superficie da linha, sem anel
   if (agoraVis) {
-    char hora[8];
+    char hora[12];
     int tf = ajustes_tinta_foco();
     TxtLinha t;
     GfxRect pl;
@@ -3949,10 +3950,10 @@ static void buscaDesenhar(Uint32 agora) {
     } else {
       int k = i - buscaNC, vivo = buscaProg[k].ini <= agoraT;
       const GCanal *c = &canais[buscaProg[k].canal];
-      char h1[8], h2[8], quando[64];
+      char h1[12], h2[12], quando[64];
       struct tm lt;
-      localtime_r(&buscaProg[k].ini, &lt); strftime(h1, sizeof h1, "%H:%M", &lt);
-      localtime_r(&buscaProg[k].fim, &lt); strftime(h2, sizeof h2, "%H:%M", &lt);
+      localtime_r(&buscaProg[k].ini, &lt); hora_tela(h1, sizeof h1, &lt);
+      localtime_r(&buscaProg[k].fim, &lt); hora_tela(h2, sizeof h2, &lt);
       if (vivo) snprintf(quando, sizeof quando, "%s", i18n("Ao vivo"));
       else {
         long m = (long)(buscaProg[k].ini - agoraT) / 60;
@@ -4134,7 +4135,7 @@ void guia_desenhar(Uint32 agora) {
     gfx_sem_recorte();
     // A cabeca da linha "agora": a hora numa pilula na regua.
     if (agoraVis) {
-      char hora[8];
+      char hora[12];
       TxtLinha t;
       GfxRect pl;
       int tf = ajustes_tinta_foco();

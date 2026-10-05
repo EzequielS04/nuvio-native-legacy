@@ -3,6 +3,7 @@
 // cancela. A lista mostra valor e chevron, a ficha explica alcance e padrao.
 // IDs, chaves persistidas e indices de valores continuam os legados.
 #include "ajustes.h"
+#include "horafmt.h"
 #include "ajustes_ux.h"
 #include "trailerfonte.h"   // NV_TRAILER_CONTINUA_DETALHE, nas ajudas do trailer
 #include "dados.h"
@@ -406,6 +407,9 @@ typedef enum {
   // (Vitrine/Relogio/So escurecer) e de onde a vitrine tira os titulos. LOCAIS.
   // No fim: valor[]/CHAVE[] posicionais.
   AJ_DESCANSO_ESTILO, AJ_DESCANSO_FONTE,
+  // Formato do relogio (2.0, pedido de usuario Samsung): 24 h ou 12 h com
+  // AM/PM, em toda hora DE TELA (relogio.h). LOCAL. No fim: posicional.
+  AJ_RELOGIO_12H,
   AJ_N
 } OpcaoId;
 
@@ -437,6 +441,7 @@ static const char *V_FONTE_HDR[] = { "Preferir", "Indiferente", "Evitar" };
 // ajuste nunca saiu numa versao publicada, entao os indices antigos nao migram.
 static const char *V_ESMAECER[] = { "Desligado", "30 s", "1 min", "2 min", "5 min", "10 min" };
 static const char *V_DESCANSO_ESTILO[] = { "Vitrine", "Relógio", "Só escurecer" };
+static const char *V_RELOGIO_12H[] = { "24 horas", "12 horas (AM/PM)" };
 static const char *V_DESCANSO_FONTE[]  = { "Catálogo", "Minha lista e Continuar" };
 static const char *V_BRILHO_PLAYER[] = { "100%", "80%", "65%", "50%" };
 static const char *V_LOGO_APP[] = { "Novo", "Clássico" };
@@ -1156,6 +1161,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Manter o vídeo pronto ao sair",   V_LIGA, 2),             // local: manterVideoLocal
   ESC("Estilo do descanso",              V_DESCANSO_ESTILO, 3),  // local: descansoEstiloLocal
   ESC("Títulos da vitrine",              V_DESCANSO_FONTE, 2),   // local: descansoFonteLocal
+  ESC("Formato do relógio",              V_RELOGIO_12H, 2),      // local: relogio12hLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1351,6 +1357,7 @@ static const char *CHAVE[] = {
   "-novidades20",
   "manterVideoLocal",
   "descansoEstiloLocal", "descansoFonteLocal",
+  "relogio12hLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1747,6 +1754,7 @@ void ajustes_teste_vidro_env(void) {
 }
 int ajustes_relogio_ligado(void) { return lig(AJ_RELOGIO); }
 int ajustes_relogio_pos(void) { return valor[AJ_RELOGIO_POS]; }
+int ajustes_relogio_12h(void) { return valor[AJ_RELOGIO_12H] == 1; }
 float ajustes_tamanho_ui(void) {
   static const float F[] = { 1.0f, 1.2f, 1.3f, 1.5f };
   int v = valor[AJ_TAMANHO_UI];
@@ -2859,15 +2867,15 @@ void ajustes_dir(const char *dir) {
       gravar();
     } }
   // MIGRACAO UNICA (2.0): a aparencia de quem ja tinha o app vira a de fabrica
-  // da 2.0 — Imersiva, Cor da logo ligada, fundo Frost e interface de vidro
+  // da 2.0 — Da arte (era Imersiva ate o dono trocar, 05/10), Cor da logo ligada, fundo Frost e interface de vidro
   // desligada. Decisao do dono (05/10/2026): "para novos e antigos usuarios".
   // Uma vez so; quem trocar depois, fica. Em modo seguro (SEGURO) a cor
   // dinamica continua desligada na leitura, como sempre.
   { char *m = dados_ler("aparencia-20.txt");
     if (m) free(m);
     else {
-      printf("[ajustes] aparencia -> Imersiva + Cor da logo + Frost, sem vidro (migracao unica da 2.0)\n");
-      valor[AJ_TEMA] = AJ_TEMA_IMERSIVA;
+      printf("[ajustes] aparencia -> Da arte + Cor da logo + Frost, sem vidro (migracao unica da 2.0)\n");
+      valor[AJ_TEMA] = AJ_TEMA_DINAMICA;
       valor[AJ_COR_LOGO] = 0;        // V_LIGA: 0 = Ligado
       valor[AJ_FUNDO] = FUNDO_FROST;
       valor[AJ_VIDRO] = 1;           // V_LIGA: 1 = Desligado
@@ -3615,6 +3623,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_DESCANSO_ESTILO: case AJ_DESCANSO_FONTE: /* tela de descanso: desta TV */
     case AJ_ENQUETES:       /* o web nao tem a ilha; a conta guarda o opt-out por outro caminho (enquete.c) */
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER: /* o web nao tem a ilha */
+    case AJ_RELOGIO_12H:    /* formato da hora: desta TV */
     case AJ_FONTE_PRAZO:    /* o web nao tem: a rede e os addons sao desta casa */
     case AJ_MEDIDOR:        /* o medidor e da GPU desta TV; o web nao tem */
     case AJ_TAMANHO_UI:     /* o tamanho e desta tela, e o web nao tem */
@@ -4835,6 +4844,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_ENQUETES: return "Ligado, o Nuvio pode convidar você a votar numa enquete curta na ilha do relógio. Desligado, nenhuma aparece. A escolha fica na sua conta.";
     case AJ_RELOGIO: return "Desligado, a pílula do relógio não fica na tela em repouso. Os avisos continuam saindo dela: ela aparece só para o aviso e some depois.";
     case AJ_SAIDA_PLAYER: return "Ao sair de um filme ou episódio no meio. Home: o vídeo encolhe até a pílula do relógio, que fica com o título para você retomar (CH+ ou AZUL). Página do título: volta para onde você estava. Só vale com o relógio na tela; terminar o título segue para o próximo episódio como sempre.";
+    case AJ_RELOGIO_12H: return "Como a hora aparece no relógio, na tela de descanso, no fim do filme e no guia de TV: 18:30 ou 6:30 PM.";
     case AJ_RELOGIO_POS: return "Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.";
     case AJ_AVANCADAS: return "Mostra, em todas as categorias, as opções técnicas marcadas como Avançado. Vale só para esta TV.";
     case AJ_LOGO_TRAILER: return "Para TVs OLED: não deixa a logo parada na tela enquanto o trailer toca.";
@@ -6426,7 +6436,7 @@ static AjPreview familiaPreviaOpcao(int op) {
       return AJPV_CARTAZ;
     case AJ_IDIOMA: case AJ_ANIM: case AJ_TEMA:
     case AJ_COR_LOGO: case AJ_FONTE_UI: case AJ_VIDRO: case AJ_VIDRO_CONTORNO:
-    case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER:
+    case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER: case AJ_RELOGIO_12H:
     case AJ_TAMANHO_UI: case AJ_TAMANHO_AJUSTES: case AJ_FUNDO: case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO:
     case AJ_AVANCADAS: case AJ_LOGO_APP: case AJ_ABERTURA:
     case AJ_ESMAECER: case AJ_BRILHO_PLAYER: case AJ_MANTER_VIDEO:

@@ -9,6 +9,7 @@
 // SEM A VIRADA DO MINUTO (02/10). O numero velho subia e o novo vinha de baixo
 // em 320 ms; o dono aprovou todos os estados do mockup MENOS esse: o minuto
 // troca seco. Saiu o estado (horaAnt/horaT) e as duas linhas extras por virada.
+#include "horafmt.h"
 #include "ilha.h"
 #include "ilha_voo.h"
 #include "ajustes.h"
@@ -88,7 +89,7 @@ static int dsMostra, dsVez, dsCartao;
 static Uint32 ultQuadro;
 
 // O relogio: troca seco, sem animacao (ver o topo).
-static char hora[8];
+static char hora[12];
 static time_t horaSeg;
 
 // Cartoes persistentes (ilha.h) e o que a pilula mostra deles.
@@ -669,7 +670,7 @@ static void atualizarHora(void) {
   if (t == horaSeg) return;
   horaSeg = t;
   if (!localtime_r(&t, &lt)) return;
-  strftime(hora, sizeof hora, "%H:%M", &lt);
+  hora_tela(hora, sizeof hora, &lt);
 }
 
 #define PAD_E   22.0f
@@ -1192,7 +1193,7 @@ static float layoutModalCabecalho(GfxRect m, float a, int desenha) {
     time_t tt = time(NULL);
     struct tm tmv;
     localtime_r(&tt, &tmv);
-    snprintf(hora, sizeof hora, "%02d:%02d", tmv.tm_hour, tmv.tm_min);
+    hora_tela(hora, sizeof hora, &tmv);
     corDoTipo(c->tipo == ILHA_ERRO ? ILHA_ERRO : ILHA_ACENTO, &cr, &cg, &cb);
     if (c->icone[0]) {
       gfx_icone((GfxRect){ hx, y + 20.0f, 24.0f, 24.0f }, c->icone, cr, cg, cb, ad);

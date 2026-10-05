@@ -208,7 +208,7 @@ static int ajCenaSecao(int op) {
     case AJ_TRAILER_QUAL: case AJ_TRAILER_ASPECTO: case AJ_TRAILER_ZOOM_TPK: case AJ_LOGO_TRAILER:
       return AJC_TRL_SOM;
     case AJ_VIDRO: case AJ_VIDRO_CONTORNO: case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO: return AJC_APA_VIDRO;
-    case AJ_ANIM: case AJ_RELOGIO: return AJC_APA_MOVIMENTO;
+    case AJ_ANIM: case AJ_RELOGIO: case AJ_RELOGIO_12H: return AJC_APA_MOVIMENTO;
     case AJ_FONTE_MANUAL: case AJ_FONTE_AUTO: case AJ_FONTE_REPOR: case AJ_FONTE_PRIORIDADE: case AJ_FONTE_HDR:
     case AJ_FONTE_PRAZO: case AJ_FONTE_TEXTO: case AJ_SELOS_CORES: case AJ_SELOS_PACOTE: case AJ_SELOS_PACOTE_ADD:
     case AJ_SELOS_PACOTE_REM:
@@ -753,7 +753,7 @@ static void ajcApaVidro(int A) {
 // nas reduzidas) e a ilha do relogio no canto.
 static void ajcApaMovimento(int A) {
   int red = valor[AJ_ANIM] == 1, i;
-  char hora[8];
+  char hora[12];
   ajCenaArte(ajArte(AJA_FUNDO, A), (GfxRect){ ajc.x, ajc.y, 640 * ajc.s, ajc.h }, 22, 0.55f);
   for (i = 0; i < 5; i++) CIMG(ajArte(AJA_POSTER, AJ_POS[(A + i) % 14]), 36 + i * 118, 120, 100, 150, 12, i == 2 ? 1.0f : 0.55f);
   if (!red) for (i = 1; i <= 3; i++) gfx_anel(CR(272 - i * 26, 120, 100, 150), 12.0f / 150, 2 * ajc.s, ajc.ar, ajc.ag, ajc.ab, 0.5f - i * 0.12f);

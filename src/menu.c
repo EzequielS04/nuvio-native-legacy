@@ -11,6 +11,7 @@
 // mola so, a barra aparece ja no tamanho final e o efeito some.
 //
 // Icones derivados dos SVGs originais do sidebar, com alpha e recortes reais.
+#include "horafmt.h"
 #include "menu.h"
 #include "iconeapp.h"
 #include "perfis.h"
@@ -957,7 +958,7 @@ static void tvRelogio(char *buf, size_t tam) {
 #else
   localtime_r(&t, &tmv);
 #endif
-  snprintf(buf, tam, "%02d:%02d", tmv.tm_hour, tmv.tm_min);
+  hora_tela(buf, tam, &tmv);
 }
 
 // Icone de linha, sem bolha atras: branco a 85% em repouso, a tinta escura
@@ -1117,7 +1118,7 @@ static void tvDesenhar(void) {
     { float cyCab = topo + 50.0f;
       int emFoco, c, cRel;
       const ContaPerfil *p = perfis_item_ativo();
-      char hora[8];
+      char hora[12];
       GfxRect av = { Q.x + TV_PAD_X + TV_COL_CX - TV_AVATAR * 0.5f, cyCab - TV_AVATAR * 0.5f,
                      TV_AVATAR, TV_AVATAR };
       TxtLinha rel, nome;

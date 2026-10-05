@@ -346,7 +346,7 @@ static void ajCenaNotas(int op, float x, float y, float s, float ar, float ag, f
 static void ajCenaHora(char *hora, size_t n) {
   time_t t = time(NULL);
   struct tm lt;
-  if (localtime_r(&t, &lt)) strftime(hora, n, "%H:%M", &lt); else snprintf(hora, n, "--:--");
+  if (localtime_r(&t, &lt)) hora_tela(hora, n, &lt); else snprintf(hora, n, "--:--");
 }
 
 // A IMAGEM DE CADA SUBMENU (ajustes_ux_secoes.inc): a cena do que o bloco
@@ -447,7 +447,7 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
       ACC(36, 312, 238, 5, 1);
       break; }
     case AJS_APARENCIA: {   // a cor, o vidro, a fonte e o relogio sobre a arte
-      char hora[8], fam[96];
+      char hora[12], fam[96];
       int tema = valor[AJ_TEMA];
       ajCenaArte(ajArte(AJA_FUNDO, A), q, rr, 0.18f);
       gfx_rect(RR(26, 50, 320, 290), 0, GFX_SOMBRA, 1, 0, 0, 0.5f, 0, 0, 0, 0.4f);

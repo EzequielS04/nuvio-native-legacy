@@ -187,14 +187,14 @@ static void ajMiniHome(AjMini o, float ox, float oy, float W) {
   }
   // A pilula do relogio, no canto que a opcao escolhe.
   if (o.relogio >= 0) {
-    char hora[8];
+    char hora[12];
     time_t t = time(NULL);
     struct tm lt;
     int dir = o.relogio == 1 || (o.relogio == 2 && o.lay == HOME_LAYOUT_DINAMICA);
     TxtEstilo e = ajEstiloPx(46 * s, 1);
     float tw = 0, pw, px;
     TxtLinha l = { 0 };
-    if (localtime_r(&t, &lt)) strftime(hora, sizeof hora, "%H:%M", &lt); else snprintf(hora, sizeof hora, "--:--");
+    if (localtime_r(&t, &lt)) hora_tela(hora, sizeof hora, &lt); else snprintf(hora, sizeof hora, "--:--");
     if ((int)e >= 0) { l = txt_linha(e, hora, 243, 242, 239, 255); tw = l.w; } else tw = 110 * s;
     pw = 40 * s + tw + 22 * s + 52 * s + 40 * s;
     px = dir ? ox + W - 48 * s - pw : MX(48);

@@ -1,5 +1,6 @@
 // Modelo da tela do social. Ver socialvis.h para de onde vem cada dado hoje e
 // o que se espera do socialsrv.
+#include "horafmt.h"
 #include "socialvis.h"
 #include "catalogo.h"
 #include "recomenda.h"
@@ -837,7 +838,7 @@ void socialvis_quando(long long quando, char *dst, size_t tam) {
     localtime_r(&q, &tq);
     localtime_r(&n, &tn);
     if (tq.tm_year == tn.tm_year && tq.tm_yday == tn.tm_yday)
-      snprintf(dst, tam, "%02d:%02d", tq.tm_hour, tq.tm_min);
+      hora_tela(dst, tam, &tq);
     else if (d < 172800) snprintf(dst, tam, "%s", i18n("ontem"));
     else if (d < 7 * 86400) snprintf(dst, tam, i18n("há %d dias"), (int)(d / 86400));
     else snprintf(dst, tam, "%02d/%02d", tq.tm_mday, tq.tm_mon + 1);

@@ -1,4 +1,5 @@
 // Ver descanso.h.
+#include "horafmt.h"
 #include "descanso.h"
 #include "esmaecer.h"
 #include <math.h>
@@ -174,14 +175,14 @@ static float suave(float t) {
 }
 
 // Hora "HH:MM" e a data por extenso, recalculadas so quando o minuto vira.
-static void horaAgora(char *hora, size_t nh, char *data, size_t nd, float *segFrac) {
+static void horaAgora(char *hora, size_t nh, char *suf, size_t ns, char *data, size_t nd, float *segFrac) {
   static const char *DIA[7] = { "domingo", "segunda-feira", "ter\xc3\xa7" "a-feira", "quarta-feira",
                                 "quinta-feira", "sexta-feira", "s\xc3\xa1" "bado" };
   time_t t = time(NULL);
   struct tm lt;
-  hora[0] = 0; if (data) data[0] = 0;
+  hora[0] = 0; if (suf && ns) suf[0] = 0; if (data) data[0] = 0;
   if (!localtime_r(&t, &lt)) return;
-  strftime(hora, nh, "%H:%M", &lt);
+  hora_tela_partes(hora, nh, suf, ns, &lt);
   if (data) snprintf(data, nd, i18n("%s, %d de %s"), i18n(DIA[lt.tm_wday]), lt.tm_mday,
                      i18n(agenda_mes_nome(lt.tm_mon + 1)));
   if (segFrac) *segFrac = (float)lt.tm_sec / 60.0f;
@@ -189,11 +190,11 @@ static void horaAgora(char *hora, size_t nh, char *data, size_t nd, float *segFr
 
 // --- RELOGIO -----------------------------------------------------------------
 static void desenharRelogio(unsigned agora, float a) {
-  char hora[8], data[96];
+  char hora[12], suf[4], data[96];
   float seg, px, py, cx, cy, ar, ag, ab, s = (float)agora / 1000.0f;
   int reduz = ajustes_animacoes_reduzidas();
   TxtLinha lh, ld, lp;
-  horaAgora(hora, sizeof hora, data, sizeof data, &seg);
+  horaAgora(hora, sizeof hora, suf, sizeof suf, data, sizeof data, &seg);
   // O bloco troca de lugar A CADA CICLO (painel OLED) e fica PARADO dentro
   // dele, em pixel inteiro: andar um pouco a cada quadro deixava o numeral e a
   // data tremendo (texto em posicao fracionaria muda de amostragem todo quadro).
@@ -219,6 +220,13 @@ static void desenharRelogio(unsigned agora, float a) {
   if (lh.tex) {
     float x = floorf(cx - (float)lh.w * 0.5f), y = floorf(cy - (float)lh.h * 0.62f);
     txt_desenhar_alpha(lh, x, y, 0.62f * a);
+    // 12 h: o "AM/PM" ao lado do numeral, na fonte comum (a do numeral so tem
+    // digitos e ':'), alinhado pelo topo dos digitos. Nao entra na largura do
+    // bloco: o numeral continua centrado como em 24 h.
+    if (suf[0]) {
+      TxtLinha ls = txt_linha(TXT_HEADLINE, suf, 236, 238, 244, 255);
+      txt_desenhar_alpha(ls, x + (float)lh.w + 18.0f, y + (float)lh.h * 0.22f, 0.55f * a);
+    }
     // A linha do minuto: trilho apagado e o trecho cheio no destaque.
     { float yl = y + (float)lh.h * 0.98f, w = (float)lh.w;
       gfx_cor((GfxRect){ x, yl, w, 2.0f }, 0, 1, 1, 1, 0.10f * a);

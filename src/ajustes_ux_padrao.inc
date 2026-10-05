@@ -95,7 +95,7 @@
   // ultimo degrau e o ingles. Quem prefere outro troca em Ajustes -> Interface,
   // e a escolha fica gravada (e desliga o automatico).
   0, 0, 0,          /* idioma, animacoes, resolucao (0 = 1080p) */
-  AJ_TEMA_IMERSIVA, /* tema (cor de destaque): Imersiva desde a 2.0 (dono, 05/10/2026) */
+  AJ_TEMA_DINAMICA, /* tema (cor de destaque): Da arte desde a 2.0 (dono, 05/10/2026: era Imersiva) */
   0,                /* cor da logo (so com tema dinamico): ligada */
   // O COMENTARIO ANTIGO AQUI ESTAVA ERRADO, e o erro so nao machucou por sorte.
   // Ele dizia `0, 0, /* versao, espaco */` logo depois do idioma, mas esta
@@ -225,3 +225,4 @@
   1, /* keep the video ready on exit: Desligado (V_LIGA: 1); retention costs memory */
   0, /* rest screen style: Vitrine */
   0, /* showcase titles: Catalogo */
+  0, /* clock format: 24 horas */

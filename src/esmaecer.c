@@ -1,3 +1,4 @@
+#include "horafmt.h"
 #include "esmaecer.h"
 #include <math.h>
 #include <stdio.h>
@@ -146,8 +147,8 @@ void esmaecer_desenhar(unsigned agora) {
       struct tm lt;
       seg = t;
       if (localtime_r(&t, &lt)) {
-        char h[8];
-        strftime(h, sizeof h, "%H:%M", &lt);
+        char h[12];
+        hora_tela(h, sizeof h, &lt);
         if (!l.tex || strcmp(h, horaTxt)) {
           snprintf(horaTxt, sizeof horaTxt, "%s", h);
           l = txt_linha(TXT_BODY, horaTxt, 120, 120, 120, 255);

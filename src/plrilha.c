@@ -3,6 +3,7 @@
 // CUSTO, a mesma regra da ilha.c: uma sombra do tamanho da ilha, o miolo, a
 // luz de canto, o texto do cabecalho e o corpo de quem pediu. Nada de tela
 // cheia (o veu de cima do aviso sozinho e o unico, e so sem o OSD).
+#include "horafmt.h"
 #include "plrilha.h"
 #include "plrui.h"
 #include "ajustes.h"
@@ -133,7 +134,7 @@ static void horaAgora(char *h, size_t n, char *fim, size_t nf) {
   if (horaFixa) t = horaFixa;
 #endif
   localtime_r(&t, &lt);
-  strftime(h, n, "%H:%M", &lt);
+  hora_tela(h, n, &lt);
   fim[0] = 0;
   if (falta >= 0.0) relogio_fim_ilha(fim, nf, t, falta);
 }
