@@ -343,12 +343,18 @@ static void ajCenaHora(char *hora, size_t n) {
   if (localtime_r(&t, &lt)) strftime(hora, n, "%H:%M", &lt); else snprintf(hora, n, "--:--");
 }
 
+// A IMAGEM DE CADA SUBMENU (ajustes_ux_secoes.inc): a cena do que o bloco
+// controla, com a peca da opcao em foco marcada. -1 = a opcao fica com a
+// imagem da categoria.
+static int ajCenaSecao(int op);
+static float ajSecaoDesenhar(int cena, int op, float x, float y, float w);
 static float ajVisualCena(int sec, int op, float x, float y, float w) {
   float s = w / 640.0f, h = w * 9.0f / 16.0f, rr = 22.0f, ar, ag, ab;
   GfxRect q = { x, y, w, h };
   int i, j;
   // A arte do quadro: a do submenu da opcao em foco, ou a da categoria.
   int A = op >= 0 ? ajCenaArteOp(op) : ajCenaArteN(sec);
+  if (op >= 0) { int c = ajCenaSecao(op); if (c >= 0) return ajSecaoDesenhar(c, op, x, y, w); }
 #define PX(a) (x + (a) * s)
 #define PY(b) (y + (b) * s)
 #define RR(a,b,c,d) (GfxRect){ PX(a), PY(b), (c) * s, (d) * s }
