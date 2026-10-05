@@ -409,6 +409,15 @@ int main(int argc, char **argv) {
   }
 
   if (quer(argc, argv, "filme-topo")) { abrir(1, 0, 0, 0); gravar("filme-topo"); }
+  // O circular "Explorar" (Explorar 2.0), ultimo da linha aberta, em foco.
+  if (quer(argc, argv, "filme-explorar")) {
+    abrir(1, 0, 0, 0);
+    maisAcoes = 1; botao = nBotoesTodos() - 1;
+    // A linha abre com mola em tempo REAL (SDL_GetTicks): quadros espacados.
+    for (int k = 0; k < 50; k++) { quadros(1); SDL_Delay(16); }
+    quadros(4);
+    gravar("filme-explorar");
+  }
   if (quer(argc, argv, "filme-trailers")) { abrir(1, 1, SEC_TRAILERS, 0); gravar("filme-trailers"); }
   if (quer(argc, argv, "filme-elenco")) { abrir(1, 1, SEC_ELENCO, 0); gravar("filme-elenco"); }
   if (quer(argc, argv, "filme-notas")) { abrir(1, 1, SEC_NOTAS, 0); gravar("filme-notas"); }

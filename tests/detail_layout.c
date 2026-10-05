@@ -134,6 +134,23 @@ int main(void) {
   // Back never carries a menu request.
   nivel = 0; e.key.keysym.sym = SDLK_ESCAPE; detail_evento(&e);
   assert(saindo && !detail_pediu_menu());
+  // "Explorar" (Explorar 2.0): the LAST circular for a movie with a title; OK
+  // on it asks the router once to open the rabbit hole on this title.
+  { CatItem m = {0};
+    snprintf(m.tipo, sizeof m.tipo, "movie");
+    snprintf(m.titulo, sizeof m.titulo, "Prisoners");
+    snprintf(m.imdb, sizeof m.imdb, "tt1392214");
+    cat_definir_tudo(&m, 1, NULL, 0); idx = 0;
+    carro = 0; saindo = 0; nivel = 0; pessoaAberta = 0; maisAcoes = 1;
+    assert(temExplorar() && acaoEm(nBotoesTodos() - 1) == ACAO_EXPLORAR);
+    botao = nBotoesTodos() - 1;
+    SDL_Delay(2);
+    e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_RETURN; detail_evento(&e);
+    e.type = SDL_KEYUP; detail_evento(&e);
+    assert(detail_pediu_explorar() && !detail_pediu_explorar());
+    snprintf(m.tipo, sizeof m.tipo, "tv");
+    cat_definir_tudo(&m, 1, NULL, 0);
+    assert(!temExplorar()); }
   puts("PASS: title/navigation and focus-only action group");
   return 0;
 }
