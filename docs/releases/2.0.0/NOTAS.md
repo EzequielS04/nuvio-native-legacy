@@ -5,7 +5,7 @@ The first time you open it, a short guide walks through what changed. It stays i
 ## Added
 
 - **Glass UI.** Every panel is now an island, like the clock. Glass or solid, 18 accent colors, and art, blurred art or Frost as the background.
-- **New look by default.** Everyone starts 2.0 on the Immersive accent with Logo color and the Frost background. Change it in Settings › Appearance.
+- **New look by default.** Everyone starts 2.0 with the accent taken from the art, Logo color and the Frost background. Change it in Settings › Appearance.
 - **New logo and startup.** The Classic logo is still there. Three ways to open the app: Default, Fade only, Direct.
 - **Screensaver.** Showcase from your catalog, Clock with the next premiere, or just dim. It never starts while something is playing.
 - **Home and menu.** Floating rail in Modern, full-height bar in Default. Library, Search (with People) and a monthly Schedule were redone.
