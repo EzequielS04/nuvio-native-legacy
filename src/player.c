@@ -3516,7 +3516,7 @@ static float alturaExpandido(void) {
   const Stream *st = stream_item(stream_atual());
   float h = 22.0f + CAR_LOGO_H + 16.0f + 32.0f + 6.0f;
   if (linhaEp[0]) h += 24.0f + 10.0f;
-  if (st && st->badges) h += 24.0f + 14.0f;
+  if (st && (stream_selos_ha(st) || st->badges)) h += 24.0f + 14.0f;
   h += 1.0f + 10.0f + (float)linhasAbrindo(st, L) * 30.0f + 8.0f;
   h += 24.0f + 14.0f + 4.0f + 22.0f;
   return h;
@@ -3560,7 +3560,8 @@ static void corpoCarregando(GfxRect r, float a, void *u) {
   // estilo cinza do app, e o "Fonte 2 de 3" miudo na ponta direita.
   if (ac > 0.01f) {
     float yy = yc + 10.0f;
-    if (st && st->badges) badges_desenhar_tom(st->badges, x + 32.0f, yy, w * 0.62f, 24.0f, .52f, .52f, .52f, ac);
+    if (st && stream_selos_ha(st)) stream_selos_fileira(st, x + 32.0f, yy, w * 0.62f, 24.0f, .52f, ac);
+    else if (st && st->badges) badges_desenhar_tom(st->badges, x + 32.0f, yy, w * 0.62f, 24.0f, .52f, .52f, .52f, ac);
     if (fd[0]) {
       TxtLinha l = txt_linha(TXT_ILHA_APOIO, fd, 243, 242, 239, 140);
       txt_desenhar_alpha(l, x + w - 6.0f - (float)l.w, yy + 12.0f - (float)l.h * 0.5f, ac);
@@ -3576,8 +3577,9 @@ static void corpoCarregando(GfxRect r, float a, void *u) {
       txt_desenhar_alpha(l, lx, yy, ae);
       yy += 24.0f + 10.0f;
     }
-    if (st && st->badges) {
-      badges_desenhar_tom(st->badges, lx, yy, w * 0.62f, 24.0f, .52f, .52f, .52f, ae);
+    if (st && (stream_selos_ha(st) || st->badges)) {
+      if (stream_selos_ha(st)) stream_selos_fileira(st, lx, yy, w * 0.62f, 24.0f, .52f, ae);
+      else badges_desenhar_tom(st->badges, lx, yy, w * 0.62f, 24.0f, .52f, .52f, .52f, ae);
       yy += 24.0f + 14.0f;
     }
     gfx_cor((GfxRect){ x, yy, w, 1.0f }, 0.0f, 1, 1, 1, 0.07f * ae);

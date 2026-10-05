@@ -1738,14 +1738,43 @@ static void tituloConteudo(const Stream *s, char *nome, size_t tn, char *ep, siz
 _Static_assert(SELOS_MAX_CASADOS == sizeof(((Stream *)0)->selosPacote) / sizeof(unsigned short),
                "Stream.selosPacote e SELOS_MAX_CASADOS tem de ter o mesmo tamanho");
 static int selosPacoteDa(Stream *s) {
-  const char *campos[4];
-  if (selospacote_ativo() < 0) return 0;
+  const char *campos[5];
+  // O modo colorido vale para a lista inteira: ligar/desligar nos Ajustes
+  // sobe a versao do pacote e cada fonte e recalculada na proxima olhada.
+  selospacote_colorido(ajustes_selos_coloridos());
+  if (selospacote_ativo() < 0 && !selospacote_embutidos_ok()) return 0;
   if (s->selosPacoteVer != selospacote_versao()) {
     campos[0] = s->arquivo; campos[1] = s->rotulo; campos[2] = s->descricao; campos[3] = s->provedor;
     s->nSelosPacote = (unsigned char)selospacote_casar(campos, 4, s->selosPacote, SELOS_MAX_CASADOS);
+    // Fonte de servidor de midia (Plex/Jellyfin) sabe do Dolby Vision pela faixa
+    // e nao pelo nome: se o texto nao o disse, entra a palavra e casa de novo.
+    if (s->dolbyVision && selospacote_ativo() < 0) {
+      int k, tem = 0;
+      for (k = 0; k < (int)s->nSelosPacote; k++) {
+        const SeloFiltro *f = selospacote_filtro(s->selosPacote[k]);
+        if (f && (strstr(f->nome, "DV") || strstr(f->nome, "Dolby Vision"))) tem = 1;
+      }
+      if (!tem) {
+        campos[4] = "Dolby Vision";
+        s->nSelosPacote = (unsigned char)selospacote_casar(campos, 5, s->selosPacote, SELOS_MAX_CASADOS);
+      }
+    }
     s->selosPacoteVer = selospacote_versao();
   }
   return s->nSelosPacote;
+}
+
+// Quantos selos do pacote a FILEIRA desenha: com os pacotes embutidos a
+// resolucao e o grupo da folha e nao entra nela (como em logosDa), e uma fonte
+// so com a resolucao cai na linha de descricao como sempre caiu.
+static int selosPacoteVisiveis(Stream *s) {
+  int k, n = 0;
+  if (!selosPacoteDa(s)) return 0;
+  for (k = 0; k < (int)s->nSelosPacote; k++) {
+    const SeloFiltro *f = selospacote_filtro(s->selosPacote[k]);
+    if (f && !(f->arte != SELO_ARTE_PACOTE && f->resolucao)) n++;
+  }
+  return n;
 }
 
 // A fileira mostra TODOS os logos, inclusive o que tambem esta no titulo
@@ -1783,7 +1812,7 @@ static const char *arquivoDa(const Stream *s) {
   static char ult[192];
   const char *p, *f;
   if (s->arquivo[0]) return s->arquivo;
-  if (!logosDa(s, 0) && !selosPacoteDa((Stream *)s) && strcmp(containerDa(s), "MP4") && !idiomaDa(s)) return "";
+  if (!logosDa(s, 0) && !selosPacoteVisiveis((Stream *)s) && strcmp(containerDa(s), "MP4") && !idiomaDa(s)) return "";
   ult[0] = 0;
   for (p = s->descricao; *p; p = f + 1) {
     f = strchr(p, '\n');
@@ -2208,18 +2237,52 @@ static void desenharOnde(GfxRect r, float tx, float tr, const OndeVer *o, int se
 // a marca clara — o pacote e colorido), na altura `h` e com a proporcao dela;
 // sem imagem (ou imagem que nao baixou) vira uma pilula com o NOME e as cores
 // do filtro. Para no `maxW`. Devolve a largura usada.
-static float desenharSelosPacote(const Stream *s, float x, float y, float maxW, float h, float a) {
+static float desenharSelosPacote(const Stream *s, float x, float y, float maxW, float h, float a,
+                                 float tom, int semResolucao) {
   const float gap = 8.0f, padX = 9.0f, imgMaxW = 220.0f;
   float x0 = x;
-  int k;
+  int k, colorido = ajustes_selos_coloridos();
   for (k = 0; k < (int)s->nSelosPacote; k++) {
     const SeloFiltro *f = selospacote_filtro(s->selosPacote[k]);
     float w, r, g, b, al;
     int pronta = 0;
     if (!f) continue;
+    // A resolucao e o grupo da folha (e o titulo da fonte): fora da fileira.
+    if (semResolucao && f->resolucao) continue;
     if (f->imagem[0]) {
       GLuint t = tex_obter_larg(f->imagem, 128);
       float asp = t ? tex_aspecto(f->imagem) : 0.0f;
+      if (t && asp > 0.01f && f->arte != SELO_ARTE_PACOTE) {
+        // PACOTES EMBUTIDOS (selospacote.h). Padrao: a arte e branca e a forma
+        // mora no alfa, entao tinge no cinza da linha como os logos de sempre.
+        // Colorido: cada selo numa PECA de base escura (a arte colorida e feita
+        // para fundo escuro, e a linha em foco e clara), e o selo padrao que
+        // cobre o que o colorido nao tem entra na mesma peca, em branco.
+        if (colorido) {
+          const float pad = 6.0f, sobra = 3.0f, ch = h + sobra * 2.0f, raio = 6.0f / ch;
+          float ih = h;
+          w = ih * asp;
+          if (w > 144.0f) { w = 144.0f; ih = w / asp; }
+          if (x + w + pad * 2.0f > x0 + maxW) break;
+          { GfxRect p = (GfxRect){x, y - sobra, w + pad * 2.0f, ch};
+            gfx_cor(p, raio, 0.10f, 0.11f, 0.13f, 0.88f * a);
+            gfx_anel(p, raio, 1.5f, 1.0f, 1.0f, 1.0f, 0.20f * a); }
+          if (f->arte == SELO_ARTE_COR) {
+            gfx_tex_aspect_atual = 0.0f;
+            gfx_rect((GfxRect){x + pad, y + (h - ih) * .5f, w, ih}, t, GFX_TEXTO, 0, 0, 0, 0.0f, 1, 1, 1, a);
+          } else
+            gfx_rect((GfxRect){x + pad, y + (h - ih) * .5f, w, ih}, t, GFX_MARCA, 0, 0, 0, 0.0f, 1, 1, 1, a);
+          x += w + pad * 2.0f + gap;
+        } else {
+          float ih = h;
+          w = ih * asp;
+          if (w > 160.0f) { w = 160.0f; ih = w / asp; }
+          if (x + w > x0 + maxW) break;
+          gfx_rect((GfxRect){x, y + (h - ih) * .5f, w, ih}, t, GFX_MARCA, 0, 0, 0, 0.0f, tom, tom, tom, a);
+          x += w + 16.0f;
+        }
+        continue;
+      }
       if (t && asp > 0.01f) {
         float ih = h;
         w = ih * asp;
@@ -2260,6 +2323,13 @@ static float desenharSelosPacote(const Stream *s, float x, float y, float maxW, 
       x += w + gap; }
   }
   return x > x0 ? x - x0 - gap : 0.0f;
+}
+
+int stream_selos_ha(const Stream *s) { return s && selosPacoteDa((Stream *)s) > 0; }
+float stream_selos_fileira(const Stream *s, float x, float y, float maxW, float h, float tom, float a) {
+  if (!s || !selosPacoteDa((Stream *)s)) return 0.0f;
+  return desenharSelosPacote(s, x, y, maxW, h,
+                             ajustes_selos_coloridos() ? a * 0.9f : a, tom, 0);
 }
 
 static float caixaAlta(const char *s, int r, int g, int b, float x, float y, float a) {
@@ -2659,9 +2729,15 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
       // SELOS COLORIDOS (Ajustes, #198): o dono manteve a opcao (03/10). Ligada,
       // cada selo na peca da cor do seu grupo; desligada (o padrao do Glass
       // UI), todos na mesma tinta branca.
-      if(selosPacoteDa((Stream *)s))
-        lw=desenharSelosPacote(s,tx,cy,txtW-mpW,FOLHA_SELO_H,anim*(sel?1.0f:.85f));
-      else if(logos) lw=ajustes_selos_coloridos()
+      if(selosPacoteVisiveis((Stream *)s)) {
+        lw=desenharSelosPacote(s,tx,cy,txtW-mpW,FOLHA_SELO_H,
+                               ajustes_selos_coloridos()?anim*(sel?1.0f:.85f):anim,t,1);
+        // O Crave (servico canadense) nao esta em nenhum dos dois pacotes
+        // embutidos: sai pela arte antiga para nao ser perdido.
+        if(selospacote_ativo()<0 && (logos&badges_bit("p-crave"))) {
+          float cw=badges_desenhar_tom(badges_bit("p-crave"),tx+(lw>0?lw+16:0),cy,txtW-mpW-lw-16,FOLHA_SELO_H,t,t,t,anim);
+          if(cw>0) lw+=(lw>0?16:0)+cw; }
+      } else if(logos) lw=ajustes_selos_coloridos()
         ? badges_desenhar_selos(logos,tx,cy,txtW-mpW,FOLHA_SELO_H,anim*(sel?1.0f:.85f))
         : badges_desenhar_tom(logos,tx,cy,txtW-mpW,FOLHA_SELO_H,t,t,t,anim);
       else if(!ehMp4){ char d[sizeof s->descricao];

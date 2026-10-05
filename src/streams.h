@@ -151,6 +151,12 @@ int  stream_lista_do_alvo(const char *id);
 void stream_invalidar(const char *porque);
 int  stream_n(void);
 const Stream *stream_item(int i);
+// Fileira de selos do pacote ativo (ver selospacote.h) para fora da folha, como
+// o cartao "Abrindo fonte" do player: padrao em cinza `tom`, colorido em pecas.
+// `stream_selos_ha` diz se ha o que desenhar (a resolucao entra); 0 de largura
+// = nada, e quem chama usa a mascara de badges.h.
+int   stream_selos_ha(const Stream *s);
+float stream_selos_fileira(const Stream *s, float x, float y, float maxW, float h, float tom, float a);
 
 // Indice do stream que o modo automatico escolhe, ou -1 se a lista esta vazia.
 int  stream_automatico(void);

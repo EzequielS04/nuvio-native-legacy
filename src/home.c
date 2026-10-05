@@ -42,6 +42,7 @@
 #include "gif.h"
 #include "gifcolecao.h"
 #include "badges.h"
+#include "selospacote.h"
 #include "svdesenho.h"
 #include "amigostitulo.h"
 #include "extras.h"
@@ -1661,6 +1662,7 @@ int home_iniciar(const char *dirArte) {
   extras_carregar(dirArte);
   col_carregar(dirArte);
   badges_carregar(dirArte);
+  selospacote_dir_embutidos(dirArte);   // pacotes de selos embutidos (padrao + colorido)
   cat_carregar(dirArte);
   // O cache da ULTIMA sessao entra por cima do catalogo do pacote, antes de
   // qualquer rede. Se nao existir (primeira execucao) ou for de outra build,
