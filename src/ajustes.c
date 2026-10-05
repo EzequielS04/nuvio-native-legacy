@@ -389,6 +389,9 @@ typedef enum {
   AJ_ENQUETES,
   // #231: "Buscar no Cinemeta" (Ligado = como sempre). LOCAL. No fim: valor[]/CHAVE[] posicionais.
   AJ_BUSCA_CINEMETA,
+  // 2.0: "Novidades 2.0" (Sobre e ajuda) reabre o guia da 2.0 (novidades20.h).
+  // Acao. No fim: valor[]/CHAVE[] posicionais.
+  AJ_NOVIDADES20,
   AJ_N
 } OpcaoId;
 
@@ -1125,6 +1128,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Abertura do app",                 V_ABERTURA, 3),         // local: aberturaAppLocal
   ESC("Receber enquetes",                V_LIGA, 2),             // local: enquetesLocal (espelho do opt-out da conta)
   ESC("Buscar no Cinemeta",              V_LIGA, 2),             // local: buscaCinemetaLocal
+  ACAO("Novidades 2.0"),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1316,6 +1320,7 @@ static const char *CHAVE[] = {
   "logoAppLocal", "aberturaAppLocal",
   "enquetesLocal",
   "buscaCinemetaLocal",
+  "-novidades20",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1458,6 +1463,8 @@ static int pediuAddons;
 int ajustes_pediu_addons(void) { int v = pediuAddons; pediuAddons = 0; return v; }
 static int pediuPlugins;
 int ajustes_pediu_plugins(void) { int v = pediuPlugins; pediuPlugins = 0; return v; }
+static int pediuNovidades20;
+int ajustes_pediu_novidades20(void) { int v = pediuNovidades20; pediuNovidades20 = 0; return v; }
 static int pediuDiagnostico;
 int ajustes_pediu_diagnostico(void) { int v = pediuDiagnostico; pediuDiagnostico = 0; return v; }
 static int pediuVelocidade;
@@ -4769,6 +4776,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_VER_REGISTRO: return "Abre o registro do app por cima desta tela, ao vivo: o mesmo painel do botão vermelho do controle, para quem não tem esse botão.";
     case AJ_MEDIDOR: return "Mostra quadros por segundo, o pior quadro e a memória dentro da ilha do relógio, atualizados a cada 3 s. Mínimo fica na linha da hora, Menor ganha uma segunda linha e Grande abre o painel completo. Quando a ilha mostra um aviso, o medidor se recolhe e volta depois.";
     case AJ_GUIA: return "O que o Nuvio faz, em 12 capítulos. Cada recurso diz onde fica e tem um atalho para ele.";
+    case AJ_NOVIDADES20: return "O tour do que mudou na 2.0, capítulo por capítulo, com o que vale neste aparelho. Abre do começo.";
     case AJ_ENVIAR_LOG: return "Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.";
     case AJ_ENVIO_AUTO: return "Ligado, o app manda o registro sozinho: o da sessão anterior ao abrir e o desta a cada minuto. Sem senhas nem chaves; serve para achar o que trava a Samsung. Desligue quando quiser.";
     case AJ_DIAGNOSTICO: return "Testa manifestos, fontes e artes dos addons, mede os tempos e aplica um perfil seguro de Qualidade ou Desempenho. O teste não marca títulos como assistidos.";
@@ -5585,6 +5593,7 @@ static void eventoTela(const SDL_Event *e) {
     if (focoOp == AJ_ENVIAR_LOG) { registro_envio_abrir(); return; }
     if (focoOp == AJ_VER_REGISTRO) { registro_abrir(); return; }
     if (focoOp == AJ_GUIA) { guiaAbrir(0); return; }
+    if (focoOp == AJ_NOVIDADES20) { pediuNovidades20 = 1; return; }
     if (focoOp == AJ_ADDONS) { pediuAddons = 1; return; }
     if (focoOp == AJ_PLUGINS) { pediuPlugins = 1; return; }
     if (focoOp == AJ_DIAGNOSTICO) { pediuDiagnostico = 1; return; }
@@ -6342,7 +6351,7 @@ static AjPreview familiaPreviaOpcao(int op) {
       return AJPV_CONTA;
     case AJ_SALVOS_DEST: case AJ_TRAKT: case AJ_SIMKL: case AJ_DISCORD:
       return AJPV_RASTREIO;
-    case AJ_VERSAO_I: case AJ_ATUALIZAR: case AJ_ENVIAR_LOG: case AJ_GUIA:
+    case AJ_VERSAO_I: case AJ_ATUALIZAR: case AJ_ENVIAR_LOG: case AJ_GUIA: case AJ_NOVIDADES20:
     case AJ_ENVIO_AUTO: case AJ_VER_REGISTRO:
       return AJPV_ABOUT;
     case AJ_TMDB_LIGADO: case AJ_TMDB_IDIOMA: case AJ_TMDB_ARTE:
