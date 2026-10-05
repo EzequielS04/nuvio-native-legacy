@@ -80,8 +80,13 @@ static void copiar(PlrIlhaPedido *d, const PlrIlhaPedido *s, char *t, char *dr, 
 static PlrIlhaPedido cen, cenUlt;
 static char cenT[200], cenD[80], cenI[32], cenUT[200], cenUD[80], cenUI[32];
 static int temCen;
-static float cenA;
+static float cenA, cenCorpoA, cenW, cenH, cenVW, cenVH;
 static Uint32 cenQuadro;
+// Quanto a pilula da HORA segura depois que um corpo com `voltaRelogio` acaba,
+// antes de encolher e sair (o corpo vira o relogio e ai some).
+#define HORA_SEGURA_MS 1600u
+static Uint32 horaAte;
+static int prevVolta;
 
 void plrilha_pedir(const PlrIlhaPedido *p) {
   if (p->centro && p->w > 0.0f && p->h > 0.0f) {
@@ -209,18 +214,38 @@ static void plrilha_desenharCorpo_(Uint32 agora);
 // Camada ampliada (escala.h): o corpo desenha na tela virtual.
 static void cartaoCentro(Uint32 agora) {
   float dt = cenQuadro ? (float)(agora - cenQuadro) / 1000.0f : 1.0f / 60.0f;
+  int quer = temCen;
   cenQuadro = agora;
   if (dt > 0.1f) dt = 0.1f;
   if (temCen) copiar(&cenUlt, &cen, cenUT, cenUD, cenUI);
-  if (anim_politica_reduzida || ajustes_animacoes_reduzidas()) cenA = temCen ? 1.0f : 0.0f;
-  else cenA = anim_mola(cenA, temCen ? 1.0f : 0.0f, dt, temCen ? 10.0f : 12.0f);
+  // A SAIDA E A DA ILHA: a mesma mola (MOLA_W/MOLA_Z, mola()) leva a forma ao
+  // disco de PIL_H*0.6 e o alfa cai com a mesma taxa (12) de quando a ilha some.
+  // O corpo sai antes da forma encolher (26, a taxa do corpo da ilha).
+  { float alvoW = quer ? cenUlt.w : PIL_H * 0.6f, alvoH = quer ? cenUlt.h : PIL_H * 0.6f;
+    if (cenW <= 0.0f) { cenW = alvoW; cenH = alvoH; }
+    cenW = mola(&cenVW, cenW, alvoW, dt);
+    cenH = mola(&cenVH, cenH, alvoH, dt); }
+  if (anim_politica_reduzida || ajustes_animacoes_reduzidas()) {
+    cenA = quer ? 1.0f : 0.0f; cenCorpoA = cenA;
+  } else {
+    cenA = anim_mola(cenA, quer ? 1.0f : 0.0f, dt, quer ? 10.0f : 12.0f);
+    cenCorpoA = anim_mola(cenCorpoA, quer ? 1.0f : 0.0f, dt, quer ? 10.0f : 26.0f);
+  }
   temCen = 0;
-  if (cenA < 0.01f) { cenA = 0.0f; return; }
+  if (cenA < 0.01f) { cenA = cenCorpoA = 0.0f; cenW = cenH = 0.0f; cenVW = cenVH = 0.0f; return; }
   { const PlrIlhaPedido *c = &cenUlt;
-    GfxRect R = { (NV_TELA_W - c->w) * 0.5f, (NV_TELA_H - c->h) * 0.5f, c->w, c->h };
-    plrui_material(R, RAIO_CORPO, c->modal, cenA);
+    float w = cenW < 8.0f ? 8.0f : cenW, h = cenH < 8.0f ? 8.0f : cenH;
+    GfxRect R = { (NV_TELA_W - w) * 0.5f, (NV_TELA_H - h) * 0.5f, w, h };
+    GfxRect F = { (NV_TELA_W - c->w) * 0.5f, (NV_TELA_H - c->h) * 0.5f, c->w, c->h };
+    // O raio acompanha a forma como na ilha: da pilula (meia altura) ao do corpo.
+    float cresce = anim_clamp((h - PIL_H) / 120.0f, 0.0f, 1.0f);
+    float raio = RAIO_CORPO * cresce + h * 0.5f * (1.0f - cresce);
+    if (raio > h * 0.5f) raio = h * 0.5f;
+    if (raio > w * 0.5f) raio = w * 0.5f;
+    plrui_material(R, raio, c->modal, cenA);
     gfx_recorte(R.x, R.y, R.w, R.h);
-    if (c->corpo) c->corpo(R, cenA, c->u);
+    // O corpo fica no tamanho final, centrado, e o recorte da forma o corta.
+    if (c->corpo && cenCorpoA > 0.01f) c->corpo(F, cenCorpoA * cenA, c->u);
     gfx_sem_recorte(); }
 }
 
@@ -245,7 +270,14 @@ static void plrilha_desenharCorpo_(Uint32 agora) {
   if (temPed && ped.w > 0.0f) { copiar(&ult, &ped, ultTexto, ultDir, ultIcone); temUlt = 1; }
   p = temPed ? &ped : &vazio;
   corpo = temPed && ped.w > 0.0f;
-  quer = !escondida && (temPed || relA > 0.01f);
+  // VOLTA AO RELOGIO: o corpo que pediu `voltaRelogio` acabou. Com o relogio
+  // ligado a pilula da hora segura HORA_SEGURA_MS (o corpo encolhe ate ela) e so
+  // depois sai pelo caminho de sempre (!quer). Desligado, nao ha pilula para a
+  // qual voltar: encolhe e some no lugar, direto.
+  if (prevVolta && !temPed && ajustes_relogio_ligado()) horaAte = agora + HORA_SEGURA_MS;
+  prevVolta = temPed && ped.w > 0.0f && ped.voltaRelogio;
+  if (temPed || !ajustes_relogio_ligado()) horaAte = 0;
+  quer = !escondida && (temPed || relA > 0.01f || (horaAte && (int)(horaAte - agora) > 0));
 
   // O que a linha da pilula mostra: o pedido, ou (encolhendo depois de um
   // corpo) a linha dele ate o corpo apagar — a hora volta com a forma.

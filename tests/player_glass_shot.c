@@ -109,6 +109,8 @@ static void titulos(void) {
   snprintf(filme.titulo, sizeof filme.titulo, "Project Hail Mary");
   snprintf(filme.backdrop, sizeof filme.backdrop, "%s", img("img/bd/13.jpg"));
   snprintf(filme.logo, sizeof filme.logo, "%s", img("img/lg/13.png"));
+  { const char *lg = getenv("NUVIO_SHOT_LOGO");   // PNG transparente: o logo do titulo
+    if (lg && *lg) snprintf(filme.logo, sizeof filme.logo, "%s", lg); }
   snprintf(filme.meta, sizeof filme.meta, "2026 \xc2\xb7 2h 37min \xc2\xb7 Aventura \xc2\xb7 Com\xc3\xa9" "dia \xc2\xb7 12");
   memset(&serie, 0, sizeof serie);
   snprintf(serie.tipo, sizeof serie.tipo, "series");
@@ -340,6 +342,8 @@ int main(int argc, char **argv) {
     snprintf(caminho, sizeof caminho, "%s/ajustes.txt", getenv("NUVIO_DADOS"));
     f = fopen(caminho, "w"); assert(f);
     fprintf(f, "idioma 0\nselected_theme 2\n");
+    { const char *fo = getenv("NUVIO_SHOT_FONTE");   // 3 = Montserrat, a da TV do dono
+      if (fo && *fo) fprintf(f, "fonteInterface %d\n", atoi(fo)); }
     fclose(f);
     ajustes_dir(getenv("NUVIO_DADOS")); }
   ajustes_iniciar();
@@ -708,6 +712,74 @@ int main(int argc, char **argv) {
     simular(3840, 1606, "", 1, 1);
     quadros(40);
     salvar("abrindo-tocou");
+  }
+  // OPENING SOURCE COM LOGO / SEM LOGO / ENCOLHENDO, e o aviso de conteudo
+  // virando a hora (dono, 04/10). Montserrat: NUVIO_SHOT_FONTE=3.
+  if (quer(argc, argv, "abrindo-logo") || quer(argc, argv, "abrindo-sem-logo")) {
+    int com;
+    for (com = 1; com >= 0; com--) {
+      Stream st;
+      CatItem l1[1];
+      if (!quer(argc, argv, com ? "abrindo-logo" : "abrindo-sem-logo")) continue;
+      faixas_evento(&(SDL_Event){ .key = { .type = SDL_KEYDOWN, .keysym = { .sym = SDLK_ESCAPE } } });
+      stream_folha_evento(&(SDL_Event){ .key = { .type = SDL_KEYDOWN, .keysym = { .sym = SDLK_ESCAPE } } });
+      quadros(60);
+      memset(&st, 0, sizeof st);
+      snprintf(st.rotulo, sizeof st.rotulo, "Project Hail Mary 2160p");
+      snprintf(st.provedor, sizeof st.provedor, "AIOStreams");
+      snprintf(st.url, sizeof st.url, "http://exemplo/phm.mkv");
+      st.tamanhoMB = (long)(21.4 * 1024);
+      st.badges = badges_bit("r-4k") | badges_bit("v-dv") | badges_bit("a-atmos");
+      stream_definir_lista(&st, 1);
+      l1[0] = filme;
+      if (!com) l1[0].logo[0] = 0;
+      cat_definir(l1, 1);
+      player_abrir(0, NULL);
+      simular(0, 0, "", 0, 0);
+      stream_definir_atual(0);
+      player_shot_carregando(1);
+      quadros(60); SDL_Delay(600);   // o decode do logo e de fio proprio
+      quadros(90);
+      salvar(com ? "abrindo-logo" : "abrindo-sem-logo");
+      // A imagem chegou: o cartao encolhe como a ilha do relogio sai.
+      player_shot_carregando(0);
+      simular(3840, 1606, "", 1, 1);
+      quadros(com ? 6 : 14);
+      salvar(com ? "abrindo-encolhendo-1" : "abrindo-encolhendo-2");
+      quadros(10);
+      if (com) salvar("abrindo-encolhendo-3");
+      quadros(90);
+    }
+  }
+  // O aviso de conteudo (guia parental) vira a pilula da HORA e so entao sai.
+  // guia-morph: meio do voo corpo -> pilula, a hora assentada e a ilha ja fora.
+  // guia-relogio-off: relogio desligado em Ajustes, encolhe e some no lugar.
+  if (quer(argc, argv, "guia-morph") || quer(argc, argv, "guia-relogio-off")) {
+    static const char *rot[4] = { "Viol\xc3\xaancia", "Linguagem Impr\xc3\xb3pria", "Conte\xc3\xba" "do Assustador", "Drogas/\xc3\x81lcool" };
+    static const char *gr[4] = { "Moderado", "Leve", "Severo", "Leve" };
+    int off;
+    for (off = 0; off < 2; off++) {
+      CatItem f = filme;
+      if (!quer(argc, argv, off ? "guia-relogio-off" : "guia-morph")) continue;
+      ajustes_shot_valor("relogioTelaLocal", off ? 1 : 0);   // 0 = Ligado
+      snprintf(f.classificacao, sizeof f.classificacao, "12");
+      abrir(&f); simular(3840, 1606, "", 1, 1);
+      { VideoSimulacao v; memset(&v, 0, sizeof v);
+        v.largura = 3840; v.altura = 1606; v.pronto = 1; v.duracao = 9420; v.pos = 30;
+        video_simular(&v); }
+      player_shot_video(1);
+      parental_shot(rot, gr, 4);
+      quadros(80);
+      salvar(off ? "guia-off-aberta" : "guia-morph-aberta");
+      quadros(668);   // 748 quadros: a janela de 12 s fecha em ~753
+      { int k; for (k = 0; k < 5; k++) { quadros(5);
+          { char n[48]; snprintf(n, sizeof n, "%s-%d", off ? "guia-off-saindo" : "guia-morph-voo", k); salvar(n); } } }
+      if (!off) { quadros(45); salvar("guia-morph-hora"); }
+      quadros(150);
+      salvar(off ? "guia-off-fora" : "guia-morph-fora");
+      player_shot_video(0); parental_shot(NULL, NULL, 0);
+      ajustes_shot_valor("relogioTelaLocal", 0);
+    }
   }
   // ABRINDO COM A FOLHA DE FONTES ABERTA (TV do dono, 04/10, "Continuar
   // assistindo" > Play com "escolher a fonte ao reproduzir"): o player espera

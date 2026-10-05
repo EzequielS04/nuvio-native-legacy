@@ -53,7 +53,7 @@ void plrguia_pedir(float tg, float osd, const char *classificacao) {
   memset(&pd, 0, sizeof pd);
   pd.icone = "aj_shield"; pd.texto = cab; pd.semFim = 1;
   pd.w = LARG; pd.h = TOPO_PAD + np * LIN_H + BASE_PAD;
-  pd.corpo = corpo; pd.baixa = 1;
+  pd.corpo = corpo; pd.baixa = 1; pd.voltaRelogio = 1;
   plrilha_pedir(&pd);
   // Sem o OSD, o veu de cima segura a ilha em cena clara (como o dos avisos).
   { float e = anim_clamp(tg / 0.30f, 0.0f, 1.0f);

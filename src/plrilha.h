@@ -41,6 +41,7 @@ typedef struct {
   int centro;               // 1 = cartao SOZINHO no meio da tela (sem relogio nem medidor); so o corpo
   int baixa;                // 1 = prioridade baixa: cede a qualquer outro pedido do quadro (a guia parental)
   int respira;              // 1 = o ponto que respira antes da frase (atividade: o canal sintonizando)
+  int voltaRelogio;         // 1 = ao acabar, o corpo vira a pilula da HORA, segura um instante e so entao sai (guia parental). Relogio desligado: encolhe e some no lugar
 } PlrIlhaPedido;
 
 void plrilha_pedir(const PlrIlhaPedido *p);
