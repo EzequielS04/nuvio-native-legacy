@@ -97,6 +97,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "progresso.h"
 #include "fontevolta.h"
 #include "marco.h"
+#include "ilha_voo.h"   /* NV_ILHA_VOO_MS: quanto dura o voo da saida */
 #include "plrui.h"
 #include "escala.h"
 #include "plrilha.h"
@@ -218,6 +219,21 @@ static int retomandoSalto; // seek requested playback; buffering is not user pau
 // prazo, o Retomar ainda evita a busca nos addons pela fonte guardada
 // (fontevolta.h).
 #define PLR_RETIDO_MS 120000u
+// RETIDO SO PARA O VOO (Android, 05/10/2026). Sem "Manter o video pronto ao
+// sair" a saida fechava a sessao ANTES do voo (fecharSessao(0) -> video_parar,
+// "[player] saida: video parar 3 ms"): o SurfaceView ficava vazio, o
+// ilha_minimizar_dissolver recebia player_retido()=0 e o voo nascia com a ARTE
+// em tela cheia por cima de um video que ja nao existia — e ainda depois dos
+// ~430 ms do fade do OSD, porque sem preparar a retencao nao ha a saida rapida
+// (PLR_SAIDA_ILHA_TETO_MS). Dono: "pisca, mostra a arte e depois encolhe".
+// Agora a mesma pausa da retencao vale tambem sem o ajuste, mas so ate o voo
+// pousar: o quadro parado fica no plano de baixo enquanto a home + arte se
+// dissolvem por cima (VOO_DISSOLVE_MS em ilha.c) e o pipeline e solto logo
+// depois do pouso, atras da home ja opaca. Memoria e decoder voltam em < 1 s,
+// nao em 2 min. LG/Samsung nao dissolvem (o plano nao aparece por baixo do GL
+// do mesmo jeito), entao la nada muda.
+#define PLR_RETIDO_VOO_MS (NV_ILHA_VOO_MS + 240u)
+static int retidoVoo;
 static int retido, prepararRetencao, retidoPerfil, retomarMkv;
 static Uint32 retidoDesde;
 // SAIDA PARA A ILHA SEM O FADE DO PLAYER (Android): o voo comeca assim que a
@@ -1600,7 +1616,8 @@ static void fecharSessao(int manter) {
            (unsigned)(tv - t0), (unsigned)(SDL_GetTicks() - tv));
     fflush(stdout); }
   if (!manter) comVideo = 0;
-  retido = manter; prepararRetencao = 0; saidaIlhaDesde = 0;
+  retido = manter; if (!manter) retidoVoo = 0;
+  prepararRetencao = 0; saidaIlhaDesde = 0;
   esperandoFonte = 0; aberto = 0; saindo = 0; pediuSair = 0;
   mini = 0; querMini = 0; miniGuia = 0; janAtiva = 0;
   avisarCascaAberto(0);
@@ -1615,12 +1632,24 @@ void player_encerrar(void) {
   if (retido) player_descartar_retido(); else fecharSessao(0);
 }
 
+// So o voo (RETIDO SO PARA O VOO, acima): Android, saida para a ilha, com
+// animacao. Sem o ajuste de reter, a sessao vive so ate o pouso.
+static int reterSoVoo(void) {
+#ifdef NV_ANDROID
+  return !ajustes_manter_video() && ajustes_saida_player_home() &&
+         !ajustes_animacoes_reduzidas();
+#else
+  return 0;
+#endif
+}
+
 static int podeReter(void) {
   const CatItem *c = item();
   // OPT-IN (05/10): so com "Manter o video pronto ao sair" (Avancado, padrao
   // Desligado; nunca no perfil seguro). Sem ele a saida fecha a sessao na hora
-  // e o Retomar reabre pela fonte guardada (fontevolta.h).
-  return ajustes_manter_video() &&
+  // e o Retomar reabre pela fonte guardada (fontevolta.h) — exceto o voo da
+  // saida no Android, que segura o quadro parado ate pousar (reterSoVoo).
+  return (ajustes_manter_video() || reterSoVoo()) &&
          comVideo && !ehCanal() && c && c->imdb[0] && !erroFonte &&
          video_pronto() && video_ativo() && !video_falhou() && !video_terminou() &&
          !video_conflito_recurso() && !video_reconectando() && video_url_atual()[0] &&
@@ -1647,12 +1676,17 @@ int player_suspender(void) {
   snprintf(retidoUrl, sizeof retidoUrl, "%s", video_url_atual());
   retidoDesde = SDL_GetTicks();
   retomarMkv = mkvass_ocupado();
+  retidoVoo = reterSoVoo();
   fecharSessao(1);
-  printf("[player] sessao pausada pronta para retomar (teto %u ms)\n", PLR_RETIDO_MS);
+  if (retidoVoo)
+    printf("[player] sessao pausada so ate o voo pousar (teto %u ms), depois solta\n", PLR_RETIDO_VOO_MS);
+  else
+    printf("[player] sessao pausada pronta para retomar (teto %u ms)\n", PLR_RETIDO_MS);
   return 1;
 }
 
 int player_retido(void) { return retido; }
+int player_retido_so_voo(void) { return retido && retidoVoo; }
 
 void player_descartar_retido(void) {
   if (!retido) return;
@@ -1660,7 +1694,7 @@ void player_descartar_retido(void) {
   if (strcmp(retidoUrl, video_url_atual())) comVideo = 0;
   fecharSessao(0); // progresso ja gravado na suspensao, nao faz outro scrobble
   retidoUrl[0] = retidoConta[0] = 0;
-  retomarMkv = 0;
+  retomarMkv = 0; retidoVoo = 0;
 }
 
 void player_validar_retido(Uint32 agora) {
@@ -1668,6 +1702,7 @@ void player_validar_retido(Uint32 agora) {
   if (!retido) return;
   // (Sint32): `agora` e o do inicio do quadro e retidoDesde pode ser mais novo.
   if ((Sint32)(agora - retidoDesde) >= (Sint32)PLR_RETIDO_MS) por = "prazo";
+  else if (retidoVoo && (Sint32)(agora - retidoDesde) >= (Sint32)PLR_RETIDO_VOO_MS) por = "voo pousou";
   else if (perfis_ativo() != retidoPerfil || strcmp(retidoConta, sessao_usuario())) por = "perfil";
   else if (strcmp(retidoUrl, video_url_atual())) por = "outro video";
   else if (!video_pausa_confirmada()) por = "pausa perdida";
@@ -1685,7 +1720,7 @@ int player_retomar_retido(const char *imdb, int t, int e) {
   if (!imdb || strcmp(imdb, itemFixo.imdb) || t != epT || e != epE) {
     player_descartar_retido(); return 0;
   }
-  retido = 0; aberto = 1; saindo = pediuSair = 0;
+  retido = 0; retidoVoo = 0; aberto = 1; saindo = pediuSair = 0;
   entrada = 1.0f; visivel = 0; anim = 0.0f; soBarra = 0;
   scrubbing = barraFoco = 0; encolhe = 1.0f; encolheT = encolheAlvo = 0.0f;
   ultimoInput = agora; retomadaAplicada = 1; tocando = 1;

@@ -141,6 +141,9 @@ void player_encerrar(void);
 void player_preparar_retencao(void);
 int  player_suspender(void);
 int  player_retido(void);
+// 1 = retida so ate o voo da saida pousar (Android, sem "Manter o video
+// pronto ao sair"); player_validar_retido solta em PLR_RETIDO_VOO_MS.
+int  player_retido_so_voo(void);
 int  player_retomar_retido(const char *imdb, int temporada, int episodio);
 void player_validar_retido(Uint32 agora);
 void player_descartar_retido(void);

@@ -60,14 +60,25 @@ int main(void) {
   ack = 1; quadro(); quadro(); assert(buscas == 0);
   puts("ok posicao salva chega no prepare, sem segundo seek ou uso de meta");
 
-  // Reter e opt-in (05/10, "Manter o video pronto ao sair"): de fabrica nao retem.
-  player_preparar_retencao(); assert(!player_suspender());
+  // Reter e opt-in (05/10, "Manter o video pronto ao sair"): de fabrica a
+  // sessao fica pausada SO ate o voo da saida pousar (o quadro parado e o
+  // fundo do dissolve) e o pipeline e solto logo depois — nada de 2 min.
+  player_preparar_retencao(); assert(player_suspender());
+  assert(player_retido() && player_retido_so_voo() && ativo);
+  player_validar_retido(SDL_GetTicks() + 100); assert(player_retido() && ativo);
+  player_validar_retido(SDL_GetTicks() + 5000);
+  assert(!player_retido() && !ativo && !fonte[0]);
+  puts("ok sem o ajuste: retida so durante o voo, solta depois do pouso");
+  abrir("fixture-filme", "movie", 34, 0, 0); fonteAbrir();
+  pronto = 1; ack = 1; quadro(); quadro();
   { char cam[600]; const char *d = getenv("NUVIO_DADOS"); FILE *f;
     assert(d && *d);
     snprintf(cam, sizeof cam, "%s/ajustes.txt", d);
     f = fopen(cam, "w"); assert(f); fputs("manterVideoLocal 0\n", f); fclose(f);
     ajustes_dir(d); }
   player_preparar_retencao(); assert(player_suspender());
+  assert(!player_retido_so_voo());
+  player_validar_retido(SDL_GetTicks() + 5000); assert(player_retido());
   int n = cargas;
   assert(player_retomar_retido("fixture-filme", 0, 0)); quadro();
   assert(cargas == n && buscas == 0);
