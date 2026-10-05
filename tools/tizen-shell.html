@@ -34,19 +34,13 @@
      quadro nao ha AVPlay tocando nada atras, e a abertura some exatamente no
      quadro em que poderia haver.
 
-     O ICONE NAO TEM FUNDO TRANSPARENTE, e isso decide as duas linhas abaixo.
-     Medido lendo os pixels do icon.png da Samsung num navegador: o fundo dele
-     e um degrade quase preto, de 3,5,19 nos cantos a 5,7,24 no meio das
-     bordas. Posto sobre qualquer cor chapada ele aparece como um RETANGULO em
-     volta da marca — e um degrade nao casa com cor nenhuma.
-     `mix-blend-mode: lighten` sobre exatamente o tom MAIS CLARO dele (#050718)
-     resolve sem editar a arte: todo pixel do fundo do icone e igual ou mais
-     escuro que a tela, entao some nela; a marca, que e clara, passa intacta.
-     Navegador que ignore a propriedade cai no retangulo de hoje, que e o
-     comportamento tolerado e nao uma falha.
-     O app entra desenhando o proprio fundo (NV_COR_FUNDO, #0D0D0D em
-     layout.h); os dois sao quase pretos e a troca no primeiro quadro nao se
-     percebe. */
+     NEUTRA (2.0 N1b): sem logo. O logo do app (Novo/Classico) e escolha do
+     usuario, gravada pelo app; esta pagina roda antes do wasm e nao pode
+     honra-la, entao so a barra de carga aparece, sobre o fundo liso da
+     abertura do app (#0E0F12, o AB_FUNDO de src/abertura.c). O logo escolhido
+     entra na abertura de dentro do app, sobre o mesmo fundo.
+     O app entra desenhando esse mesmo fundo: a troca no primeiro quadro nao
+     se percebe. */
   /* `top/left/right/bottom` POR EXTENSO, e nao `inset: 0`. O Chromium do
      Tizen 6.0 (Chrome 76) NAO conhece a abreviacao `inset` (Chrome 87+):
      ele ignorava a linha, o div ficava absoluto sem offset nenhum — encolhido
@@ -55,12 +49,9 @@
      icon in the corner". No Chrome de mesa `inset` funciona e o defeito nao
      aparece, que e por que a conferencia local passou. */
   #abertura { position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-              z-index: 4; background: #050718;
+              z-index: 4; background: #0E0F12;
               display: flex; flex-direction: column;
               align-items: center; justify-content: center; }
-  #abertura img { width: 512px; max-width: 42%; height: auto;
-                  mix-blend-mode: lighten;
-                  animation: nvPulso 1.8s ease-in-out infinite; }
   /* Barra do preload. Sem nenhum movimento na tela, um arranque de dez
      segundos e indistinguivel de um travado — que e a duvida que o painel
      tecnico respondia por acidente.
@@ -79,7 +70,6 @@
   /* Fracao conhecida: para de vaguear e passa a crescer da esquerda. */
   #abertura .barra.medida i { animation: none; transform: none;
                               transition: width .25s linear; }
-  @keyframes nvPulso { 0%, 100% { opacity: 1; } 50% { opacity: .72; } }
   @keyframes nvCorre { 0% { transform: translateX(-110%); }
                        100% { transform: translateX(440%); } }
   /* Mesmo motivo de #abertura: sem `inset` no Chromium desta TV. */
@@ -111,25 +101,7 @@
 <!-- A ABERTURA fica ANTES do painel no DOM so por leitura; quem manda na
      sobreposicao e o z-index (abertura 4, diag 5): com o painel aberto por
      tecla ou pelo cao de guarda, e ele que fica por cima. -->
-<div id="abertura"><img src="icon.png" alt="Nuvio Legacy"><div class="barra"><i></i></div></div>
-<script>
-  // ICONE DO APP (apoiadores, src/iconeapp.h): o app grava em localStorage o id
-  // do icone escolhido; a abertura troca a imagem antes do wasm subir. So ids
-  // conhecidos (o nome vira caminho de arquivo). A arte e 256px com fundo
-  // transparente: 320px na tela, para nao ampliar demais.
-  (function () {
-    var ids = ['fenix', 'nverde', 'tvlaranja', 'npixel', 'tricolor', 'arco',
-               'tvviva', 'cluberetro', 'arcaden'];
-    var v = null;
-    try { v = localStorage.getItem('nuvio-icone'); } catch (e) {}
-    if (!v || ids.indexOf(v) < 0) return;
-    var img = document.querySelector('#abertura img');
-    if (!img) return;
-    img.onerror = function () { img.onerror = null; img.src = 'icon.png'; img.style.width = ''; };
-    img.style.width = '320px';
-    img.src = 'icones-app/' + v + '.png';
-  })();
-</script>
+<div id="abertura"><div class="barra"><i></i></div></div>
 <!-- NASCE ESCONDIDO. Ver o cao de guarda no fim do arranque: ele volta sozinho
      quando o primeiro quadro NAO chega, que e o unico caso em que ele tinha de
      estar na tela. A tecla verde tambem continua trazendo-o a qualquer hora. -->

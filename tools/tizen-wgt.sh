@@ -93,11 +93,8 @@ else
   cp deploy/app/icon.png "$ESTAGIO"/icon.png
 fi
 
-# ICONES DO APP (apoiadores, src/iconeapp.h): a abertura em HTML troca o
-# icon.png pelo icone escolhido (localStorage "nuvio-icone", gravado pelo app).
-# Ela roda antes do wasm e do index.data, entao precisa dos arquivos soltos.
-mkdir -p "$ESTAGIO"/icones-app
-cp deploy/app/art/icones-app/*.png "$ESTAGIO"/icones-app/
+# (A abertura em HTML e neutra desde o 2.0 N1b: sem icone do app nela, entao
+# nao ha mais icones-app/ solto no pacote.)
 
 # CONFERE ANTES DE FECHAR. Um .wgt sem o .wasm instala, abre e fica preto — o
 # mesmo tipo de falha muda que ja mordeu o empacotamento Tizen do fork em

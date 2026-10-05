@@ -1,11 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- ABERTURA (#213): o fundo da janela ate o GLES desenhar o primeiro quadro.
-     Mesma arte do splash.png da LG e da abertura dentro do app
-     (src/abertura.c, art/marcas/abertura.jpg), que assume no primeiro quadro
-     sem salto. fill: a arte ocupa a janela inteira em 720p, 1080p ou 4K. -->
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@color/nuvio_abertura" />
-    <item>
-        <bitmap android:src="@drawable/abertura_arte" android:gravity="fill" />
-    </item>
-</layer-list>
+     NEUTRO (2.0 N1b): cor lisa, sem logo. O logo (Novo/Classico) e escolha do
+     usuario e so o app, ja rodando, sabe qual e; a abertura dentro do app
+     (src/abertura.c) comeca neste mesmo fundo liso e a marca entra por cima. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/nuvio_abertura" />
+</shape>
