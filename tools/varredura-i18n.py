@@ -455,6 +455,12 @@ IGNORAR = {
     # Chave do JSON do worker (noticia.c, /v1/noticia) e fragmento de class
     # HTML que o extrator descarta (leitura.c, "saiba-mais"): dado, nao rotulo.
     '"titulo"', "saiba-mais",
+    # novidades20.c: textos da tabela CAP[] (e a lista B[] do resumo) com "%" no
+    # meio da frase ("200%"). Nao sao formato de snprintf: sao chaves, e o desenho
+    # passa cada uma por i18n() (novidades20.c, linhas de `i18n(e->t)`). Todas
+    # tem entrada em idioma_tab.h. "poster/%s.jpg" e um caminho de arquivo.
+    "Volume até 200%", "Tamanho padrão 80%", "Continuar assistindo · 58%",
+    "Cache de busca e volume até 200%", "poster/%s.jpg",
 }
 
 def sem_corpo_em_js(txt):
