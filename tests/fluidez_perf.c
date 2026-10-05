@@ -30,6 +30,7 @@
 #include "corviva.h"
 #include "dados.h"
 #include "detail.h"
+#include "fundo.h"
 #include "gfx.h"
 #include "home.h"
 #include "layout.h"
@@ -112,6 +113,7 @@ static void quadro(SDL_Window *w, Quadro *q, Uint32 agora) {
   tex_novo_quadro();
   gfx_sem_recorte();
   gfx_ambiente_preparar();
+  fundo_fosco_quadro();   // main.c: vidro fosco
   glClearColor(NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
   gfx_ambiente(1.0f);
@@ -273,6 +275,15 @@ static void cenario(SDL_Window *w, const char *cen) {
       for (i = 0; i < n; i++) { quadro(w, &qs[i], t); t += 16; }
       relatar(cen, "detalhe", qs, n);
       if (getenv("PERF_BMP")) { char b[800]; snprintf(b, sizeof b, "%s-%s-detalhe.bmp", getenv("PERF_BMP"), cen); guardar(b); }
+      // A PAGINA do titulo (seta para baixo: o cartao vira tela cheia), onde
+      // entra Ajustes > Fundo (fundo.c).
+      tecla(SDLK_DOWN);
+      for (i = 0; i < 180; i++) { quadro(w, NULL, t); t += 16; }
+      for (i = 0; i < n; i++) { quadro(w, &qs[i], t); t += 16; }
+      relatar(cen, "pagina", qs, n);
+      if (getenv("PERF_BMP")) { char b[800]; snprintf(b, sizeof b, "%s-%s-pagina.bmp", getenv("PERF_BMP"), cen); guardar(b); }
+      tecla(SDLK_AC_BACK);
+      for (i = 0; i < 60; i++) { quadro(w, NULL, t); t += 16; }
       tecla(SDLK_AC_BACK);
       for (i = 0; i < 120; i++) { quadro(w, NULL, t); t += 16; }
     } else printf("[%s] sem item focado: detalhe nao medido\n", cen);

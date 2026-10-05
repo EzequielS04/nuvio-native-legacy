@@ -1527,6 +1527,7 @@ static float ambChave[20];
 static int ambPendente, ambIntacta;
 static int foscoOk;   // este quadro assou fundo (gfx_ambiente_preparar): o vidro fosco tem fonte
 static int foscoBloq; // este quadro tem video vivo por baixo (gfx_vidro_fosco_bloquear)
+static GLuint foscoFonte; // fonte do fosco posta pelo fundo deste quadro (gfx_vidro_fosco_fonte)
 void gfx_novo_quadro(void) {
   gfx_n_rect = gfx_n_prog = gfx_n_bind = gfx_n_outros = 0;
   gfx_ms_rect = gfx_ms_outros = 0.0;
@@ -1534,7 +1535,7 @@ void gfx_novo_quadro(void) {
   memcpy(gfx_fill_modo_ult, gfx_fill_modo, sizeof gfx_fill_modo);
   memset(gfx_fill_modo, 0, sizeof gfx_fill_modo);
   desfGeradosQuadro = 0;
-  ambPendente = 0; ambIntacta = 0; foscoOk = 0; foscoBloq = 0;
+  ambPendente = 0; ambIntacta = 0; foscoOk = 0; foscoBloq = 0; foscoFonte = 0;
   gfx_n_assados = 0;
 }
 // Relogio dos pontos de GL que NAO sao gfx_rect: recorte, FBO do snapshot e as
@@ -1647,6 +1648,7 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   // tambem era um no-op com leitura da tela. Fundo social, ceu da Explorar,
   // snapshot/luz assada e a arte desfocada do fundo.
   else if ((modo == GFX_SOCIAL || modo == GFX_CEU || modo == GFX_SNAP || modo == GFX_FUNDO ||
+            (modo == GFX_FOSCO && raio <= 0.0f) ||
             (modo == GFX_JANELA && raio <= 0.0f && cr > 0.5f &&
              nv_ambiente_forca <= 0.001f && parx <= 0.0f)) &&
            ca * gfx_opacidade_grupo >= 0.999f)
@@ -2100,9 +2102,107 @@ void gfx_cartao_foco_vidro(GfxRect r, float raio, float foco, float alfa,
 // uma faixa clara na folha, que fica a direita). O player avisa por quadro.
 void gfx_vidro_fosco_bloquear(void) { foscoBloq = 1; }
 void gfx_vidro_fosco(GfxRect r, float raio, float a) {
-  if (foscoBloq || !ajustes_vidro_fosco() || !foscoOk || !ambTex || ambChave[0] < 0.0f ||
-      efeitosMinimos || snapAtivo || r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
+  if (foscoBloq || !ajustes_vidro_fosco() || efeitosMinimos || snapAtivo ||
+      r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
+  if (foscoFonte) { gfx_rect(r, foscoFonte, GFX_FOSCO, 0, 0, 0, raio, 1, 1, 1, a); return; }
+  if (!foscoOk || !ambTex || ambChave[0] < 0.0f) return;
   gfx_rect(r, ambTex, GFX_FOSCO, 0, 0, 0, raio, 1, 1, 1, a);
+}
+void gfx_vidro_fosco_fonte(GLuint tex) { foscoFonte = tex; }
+
+// O FUNDO ASSADO (fundo.c: "Arte borrada" e "Frost" de tela cheia). MEDIDO no
+// Mac (tests/fluidez_perf.sh, Ajustes): o Frost pintava por quadro um clear,
+// um GFX_VEU_CSS e tres GFX_LUZ do tamanho da tela, todos com mistura — 4,1
+// telas misturadas so de fundo, contra UMA passada opaca do fundo da Dinamica.
+// A "Arte borrada" reaproveitava o quadro da luz imersiva: com a Imersiva ligada
+// as duas chaves se revezavam e o assado refazia DUAS vezes por quadro, mais o
+// quad da luz que ela cobria e o veu de 28% por cima.
+// Aqui cada fundo tem os SEUS quadros pequenos (320x180, como a luz imersiva):
+// o desenho inteiro (cores, luzes, veu) e assado so quando a chave muda — paleta,
+// acento, cor de fundo — e o quadro vira UM quad de tela cheia, opaco e sem
+// mistura com alfa 1, lido pelo GFX_FOSCO (o mesmo nv_dither dos degrades, entao
+// o painel de 8 bits nao faz faixa na ampliacao).
+#define FDO_N 3
+static GLuint fdoTex[FDO_N][2], fdoFbo[FDO_N][2];
+static int fdoLado[FDO_N], fdoPronto[FDO_N], fdoLeve[FDO_N], fdoFalhou;
+static float fdoChave[FDO_N][24];
+int gfx_n_fundo_assados;
+GLuint gfx_fundo_assado(int slot, const float *chave, int n, void (*pintar)(void *), void *ctx) {
+  GLint fboAnt, vpAnt[4];
+  int twAnt = telaW, thAnt = telaH, pend = ambPendente, intacta = ambIntacta, k;
+  GLboolean tesoura;
+  if (slot < 0 || slot >= FDO_N || n > 24 || fdoFalhou || snapAtivo || miniAtiva) return 0;
+  if (!fdoTex[slot][0]) {
+    GLint ant = fboLigado();
+    for (k = 0; k < 2; k++) {
+      glGenTextures(1, &fdoTex[slot][k]);
+      glBindTexture(GL_TEXTURE_2D, fdoTex[slot][k]);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, AMB_W, AMB_H, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+      glGenFramebuffers(1, &fdoFbo[slot][k]);
+      glBindFramebuffer(GL_FRAMEBUFFER, fdoFbo[slot][k]);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fdoTex[slot][k], 0);
+      if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) fdoFalhou = 1;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)ant);
+    gfx_tex_esquecer(0);
+    if (fdoFalhou) {
+      printf("[cor] fundo assado sem quadro pequeno (fbo incompleto): desenho direto\n");
+      glDeleteFramebuffers(2, fdoFbo[slot]); glDeleteTextures(2, fdoTex[slot]);
+      fdoFbo[slot][0] = fdoFbo[slot][1] = fdoTex[slot][0] = fdoTex[slot][1] = 0;
+      return 0;
+    }
+    fdoPronto[slot] = 0;
+  }
+  // Os efeitos leves tiram as GFX_LUZ do desenho: a chave inclui o nivel.
+  if (fdoPronto[slot] && fdoLeve[slot] == efeitosLeves &&
+      !memcmp(chave, fdoChave[slot], sizeof(float) * (size_t)n))
+    return fdoTex[slot][fdoLado[slot]];
+  memcpy(fdoChave[slot], chave, sizeof(float) * (size_t)n);
+  fdoPronto[slot] = 1; fdoLeve[slot] = efeitosLeves;
+  // Alterna o alvo, como a luz imersiva: a GPU pode ainda ler o anterior.
+  fdoLado[slot] ^= 1;
+  gfx_n_fundo_assados++;
+  {
+    GFX_OUTRO_INI();
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fboAnt);
+    glGetIntegerv(GL_VIEWPORT, vpAnt);
+    tesoura = glIsEnabled(GL_SCISSOR_TEST);
+    if (tesoura) glDisable(GL_SCISSOR_TEST);
+    glBindFramebuffer(GL_FRAMEBUFFER, fdoFbo[slot][fdoLado[slot]]);
+    telaW = AMB_W; telaH = AMB_H;
+    glViewport(0, 0, AMB_W, AMB_H);
+    glClearColor(NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    // A luz imersiva pendente NAO entra no assado: ela e da tela.
+    ambPendente = 0; ambIntacta = 0;
+    { float g = gfx_opacidade_grupo, desl = gfx_desliza_atual;
+      ESC_REAL_INI();
+      gfx_opacidade_grupo = 1.0f; gfx_desliza_atual = 0.0f;
+      pintar(ctx);
+      gfx_opacidade_grupo = g; gfx_desliza_atual = desl;
+      ESC_REAL_FIM(); }
+    ambPendente = pend; ambIntacta = intacta;
+    telaW = twAnt; telaH = thAnt;
+    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)fboAnt);
+    glViewport(vpAnt[0], vpAnt[1], vpAnt[2], vpAnt[3]);
+    if (tesoura) glEnable(GL_SCISSOR_TEST);
+    GFX_OUTRO_FIM();
+  }
+  return fdoTex[slot][fdoLado[slot]];
+}
+void gfx_fundo_assado_desenhar(GLuint tex, float a) {
+  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+  float aspAnt = gfx_tex_aspect_atual;
+  if (!tex || a <= 0.003f) return;
+  gfx_tex_aspect_atual = 0.0f;
+  { ESC_REAL_INI();
+    gfx_rect(tela, tex, GFX_FOSCO, 0, 0, 0, 0.0f, 1, 1, 1, a);
+    ESC_REAL_FIM(); }
+  gfx_tex_aspect_atual = aspAnt;
 }
 // 78% e o vidro de sempre: o fator escala o alfa do miolo (folha e painel).
 float gfx_vidro_opacidade(void) { return ajustes_vidro_opacidade() / 0.78f; }
