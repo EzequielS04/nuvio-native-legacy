@@ -409,6 +409,7 @@ void stream_definir_lista(const Stream *l, int qtd) {
 }
 
 static int selosPacoteDa(Stream *s);
+static void selosAgendar(int ini, int qtd);
 void stream_definir_lista_idade(const Stream *l, int qtd, Uint32 idade) {
   int i, k = 0;
   Stream *nova = l && qtd > 0 ? malloc(sizeof(Stream) * (size_t)qtd) : NULL;
@@ -420,7 +421,7 @@ void stream_definir_lista_idade(const Stream *l, int qtd, Uint32 idade) {
     if (l[i].url[0] || debrid_ativo() || p2p_ativo()) nova[k++] = l[i];
   if (nova && qtd - k) printf("[fonte] %d torrents sem debrid descartados\n", qtd - k);
   descartadosSemDebrid = nova ? qtd - k : 0;
-  for (i = 0; i < k && nova; i++) { nova[i].selosPacoteVer = 0; selosPacoteDa(&nova[i]); }
+  for (i = 0; i < k && nova; i++) nova[i].selosPacoteVer = 0;   // os selos saem do fio de fundo (selosAgendar)
   pthread_mutex_lock(&verTrava);
   free(lista); lista = nova; n = nova ? k : 0; atual = -1;
   fitN = 0; // raw identities have been replaced; preserve an open snapshot
@@ -435,6 +436,7 @@ void stream_definir_lista_idade(const Stream *l, int qtd, Uint32 idade) {
   temRecebidaEm = 1;
   listaGeracao++;
   pthread_mutex_unlock(&verTrava);
+  selosAgendar(0, n);
   pthread_mutex_lock(&autoExclTrava);
   nAutomaticasExcluidas = 0;
   pthread_mutex_unlock(&autoExclTrava);
@@ -480,7 +482,7 @@ void stream_lista_acrescentar(const Stream *l, int qtd, int ordemAddon) {
   if (qtd - k) printf("[fonte] %d torrents sem debrid descartados\n", qtd - k);
   descartadosSemDebrid += qtd - k;
   if (!k) { free(nova); return; }
-  for (i = 0; i < k; i++) { nova[i].selosPacoteVer = 0; selosPacoteDa(&nova[i]); }
+  for (i = 0; i < k; i++) nova[i].selosPacoteVer = 0;
   // O CARTAO EM FOCO E O QUE FICA PARADO. Guardado pelo indice da lista (que
   // nao muda), e nao pela linha (que muda quando entra coisa acima).
   if (aberta && grupo == 1 && n > 0) {
@@ -515,6 +517,7 @@ void stream_lista_acrescentar(const Stream *l, int qtd, int ordemAddon) {
   n = total;
   if (!temRecebidaEm) { recebidaEm = SDL_GetTicks(); temRecebidaEm = 1; }
   pthread_mutex_unlock(&verTrava);
+  selosAgendar(total - k, k);
   free(nova);
   printf("[fonte] +%d de %s (lista com %d)\n", k, l[0].provedor, n);
   fflush(stdout);
@@ -1737,31 +1740,91 @@ static void tituloConteudo(const Stream *s, char *nome, size_t tn, char *ep, siz
 // vazia.
 _Static_assert(SELOS_MAX_CASADOS == sizeof(((Stream *)0)->selosPacote) / sizeof(unsigned short),
                "Stream.selosPacote e SELOS_MAX_CASADOS tem de ter o mesmo tamanho");
-static int selosPacoteDa(Stream *s) {
+// O CALCULO (fio de fundo): os filtros do pacote ativo contra os textos da fonte.
+static void selosCalcular(Stream *s) {
   const char *campos[5];
+  unsigned ver = selospacote_versao();
+  campos[0] = s->arquivo; campos[1] = s->rotulo; campos[2] = s->descricao; campos[3] = s->provedor;
+  s->nSelosPacote = (unsigned char)selospacote_casar(campos, 4, s->selosPacote, SELOS_MAX_CASADOS);
+  // Fonte de servidor de midia (Plex/Jellyfin) sabe do Dolby Vision pela faixa
+  // e nao pelo nome: se o texto nao o disse, entra a palavra e casa de novo.
+  if (s->dolbyVision && selospacote_ativo() < 0) {
+    int k, tem = 0;
+    for (k = 0; k < (int)s->nSelosPacote; k++) {
+      const SeloFiltro *f = selospacote_filtro(s->selosPacote[k]);
+      if (f && (strstr(f->nome, "DV") || strstr(f->nome, "Dolby Vision"))) tem = 1;
+    }
+    if (!tem) {
+      campos[4] = "Dolby Vision";
+      s->nSelosPacote = (unsigned char)selospacote_casar(campos, 5, s->selosPacote, SELOS_MAX_CASADOS);
+    }
+  }
+  s->selosPacoteVer = ver;
+}
+// FORA DA THREAD PRINCIPAL. Sao centenas de regex por fonte: feito aqui dentro,
+// na chegada de cada addon, a pagina do titulo parava ~2 s por resposta (TCL,
+// 05/10/2026: "[quadro] upd=1667.5" com 20 fontes, 2052 com 46). O fio leva uma
+// COPIA do trecho da lista e devolve so os tres campos, sob verTrava e so se a
+// lista ainda e a mesma (listaGeracao; acrescentar nao muda indice). Ate
+// chegar, selosPacoteDa devolve 0 e a fileira usa a deteccao embutida.
+typedef struct { unsigned ger; int ini, k; Stream v[]; } SelosLote;
+static unsigned selosPedVer, selosPedGer;
+static void *selosFio(void *u) {
+  SelosLote *L = u;
+  int i;
+  for (i = 0; i < L->k; i++) selosCalcular(&L->v[i]);
+  pthread_mutex_lock(&verTrava);
+  if (L->ger == listaGeracao)
+    for (i = 0; i < L->k && L->ini + i < n; i++) {
+      Stream *d = &lista[L->ini + i];
+      memcpy(d->selosPacote, L->v[i].selosPacote, sizeof d->selosPacote);
+      d->nSelosPacote = L->v[i].nSelosPacote;
+      d->selosPacoteVer = L->v[i].selosPacoteVer;
+    }
+  pthread_mutex_unlock(&verTrava);
+  free(L);
+  return NULL;
+}
+static void selosAgendar(int ini, int qtd) {
+  SelosLote *L;
+  pthread_t fio;
+  pthread_attr_t at;
+  selosPedVer = selospacote_versao(); selosPedGer = listaGeracao;
+  if (qtd <= 0 || ini < 0 || ini + qtd > n) return;
+  selospacote_colorido(ajustes_selos_coloridos());
+  if (selospacote_ativo() < 0 && !selospacote_embutidos_ok()) return;
+  selosPedVer = selospacote_versao();
+  L = malloc(sizeof *L + sizeof(Stream) * (size_t)qtd);
+  if (!L) return;
+  L->ger = listaGeracao; L->ini = ini; L->k = qtd;
+  memcpy(L->v, lista + ini, sizeof(Stream) * (size_t)qtd);
+  pthread_attr_init(&at);
+  pthread_attr_setdetachstate(&at, PTHREAD_CREATE_DETACHED);
+  if (pthread_create(&fio, &at, selosFio, L)) free(L);
+  pthread_attr_destroy(&at);
+}
+static int selosPacoteDa(Stream *s) {
+  unsigned ver;
   // O modo colorido vale para a lista inteira: ligar/desligar nos Ajustes
-  // sobe a versao do pacote e cada fonte e recalculada na proxima olhada.
+  // sobe a versao do pacote e a lista e recalculada (no fio) na proxima olhada.
   selospacote_colorido(ajustes_selos_coloridos());
   if (selospacote_ativo() < 0 && !selospacote_embutidos_ok()) return 0;
-  if (s->selosPacoteVer != selospacote_versao()) {
-    campos[0] = s->arquivo; campos[1] = s->rotulo; campos[2] = s->descricao; campos[3] = s->provedor;
-    s->nSelosPacote = (unsigned char)selospacote_casar(campos, 4, s->selosPacote, SELOS_MAX_CASADOS);
-    // Fonte de servidor de midia (Plex/Jellyfin) sabe do Dolby Vision pela faixa
-    // e nao pelo nome: se o texto nao o disse, entra a palavra e casa de novo.
-    if (s->dolbyVision && selospacote_ativo() < 0) {
-      int k, tem = 0;
-      for (k = 0; k < (int)s->nSelosPacote; k++) {
-        const SeloFiltro *f = selospacote_filtro(s->selosPacote[k]);
-        if (f && (strstr(f->nome, "DV") || strstr(f->nome, "Dolby Vision"))) tem = 1;
+  ver = selospacote_versao();
+  if (s->selosPacoteVer == ver) return s->nSelosPacote;
+  // Pacote trocado com a lista em memoria: pede a lista inteira, uma vez.
+  if (selosPedVer != ver || selosPedGer != listaGeracao) selosAgendar(0, n);
+  // COPIA de uma fonte (cartao do player, retrato da folha): pega o resultado
+  // da entrada da lista com a mesma url, se ja saiu.
+  if (s < lista || s >= lista + n) {
+    int j;
+    for (j = 0; j < n; j++)
+      if (lista[j].selosPacoteVer == ver && !strcmp(lista[j].url, s->url) && !strcmp(lista[j].rotulo, s->rotulo)) {
+        memcpy(s->selosPacote, lista[j].selosPacote, sizeof s->selosPacote);
+        s->nSelosPacote = lista[j].nSelosPacote; s->selosPacoteVer = ver;
+        return s->nSelosPacote;
       }
-      if (!tem) {
-        campos[4] = "Dolby Vision";
-        s->nSelosPacote = (unsigned char)selospacote_casar(campos, 5, s->selosPacote, SELOS_MAX_CASADOS);
-      }
-    }
-    s->selosPacoteVer = selospacote_versao();
   }
-  return s->nSelosPacote;
+  return 0;
 }
 
 // Quantos selos do pacote a FILEIRA desenha: com os pacotes embutidos a

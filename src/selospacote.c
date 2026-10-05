@@ -8,6 +8,7 @@
 #include <ctype.h>
 #include <strings.h>
 #include <unistd.h>
+#include <pthread.h>
 
 // Ver selospacote.h. Espelha streamBadgeRules.js do app web (normalizacao,
 // limite de 3, dedupe por sourceUrl, candidatos de casamento).
@@ -347,6 +348,23 @@ static int ativo = -1;
 static int escolhaExplicita;         // 0 = ainda nao escolheu: vale o ativo da conta
 static char escolhaUrl[512];         // "" = "Do Nuvio" escolhido de proposito
 static unsigned versao = 1;
+
+// O CASAMENTO RODA NUM FIO DE FUNDO (streams.c): sao centenas de regex por
+// fonte, e na thread principal a pagina do titulo travava ~2 s a cada addon
+// que respondia (TCL, 05/10/2026: upd=1667 ms com 20 fontes). Esta trava
+// separa esse fio de quem troca os pacotes (Ajustes, sync, troca de perfil).
+// Recursiva: as funcoes publicas se chamam entre si.
+static pthread_mutex_t selosTrava;
+static pthread_once_t selosTravaUma = PTHREAD_ONCE_INIT;
+static void selosTravaCriar(void) {
+  pthread_mutexattr_t a;
+  pthread_mutexattr_init(&a);
+  pthread_mutexattr_settype(&a, PTHREAD_MUTEX_RECURSIVE);
+  pthread_mutex_init(&selosTrava, &a);
+  pthread_mutexattr_destroy(&a);
+}
+static void travar(void) { pthread_once(&selosTravaUma, selosTravaCriar); pthread_mutex_lock(&selosTrava); }
+static void soltar(void) { pthread_mutex_unlock(&selosTrava); }
 static int perfilLido = -1;
 
 static int parseCor(const char *s, int *tem, float rgba[4]) {
@@ -531,7 +549,7 @@ static void reconstruir(void) {
   versao++;
 }
 
-void selospacote_iniciar(void) {
+static void selospacote_iniciar_i(void) {
   int perfil = perfis_ativo(), k;
   char nome[48], *t;
   if (perfil == perfilLido) return;
@@ -565,8 +583,9 @@ void selospacote_iniciar(void) {
          ativo >= 0 ? pac[ativo].nome : "");
   fflush(stdout);
 }
+void selospacote_iniciar(void) { if (perfis_ativo() == perfilLido) return; travar(); selospacote_iniciar_i(); soltar(); }
 
-void selospacote_conta_do_blob(const char *blob) {
+static void selospacote_conta_do_blob_i(const char *blob) {
   J *raiz, *f, *v;
   Lote novo;
   char *antes, *depois;
@@ -591,6 +610,7 @@ void selospacote_conta_do_blob(const char *blob) {
   printf("[selos] conta: %d pacote(s)\n", conta.n);
   fflush(stdout);
 }
+void selospacote_conta_do_blob(const char *blob) { travar(); selospacote_conta_do_blob_i(blob); soltar(); }
 
 int selospacote_n(void) { selospacote_iniciar(); return nPac; }
 const char *selospacote_nome(int i) { selospacote_iniciar(); return i >= 0 && i < nPac ? pac[i].nome : ""; }
@@ -600,7 +620,7 @@ int selospacote_n_filtros(int i) { selospacote_iniciar(); return i >= 0 && i < n
 int selospacote_ativo(void) { selospacote_iniciar(); return ativo; }
 unsigned selospacote_versao(void) { return versao; }
 
-void selospacote_escolher(int i) {
+static void selospacote_escolher_i(int i) {
   selospacote_iniciar();
   if (i < 0 || i >= nPac) i = -1;
   escolhaExplicita = 1;
@@ -609,8 +629,9 @@ void selospacote_escolher(int i) {
   ativo = i >= 0 && pac[i].nc ? i : -1;
   versao++;
 }
+void selospacote_escolher(int i) { travar(); selospacote_escolher_i(i); soltar(); }
 
-int selospacote_adicionar(const char *json, const char *origem) {
+static int selospacote_adicionar_i(const char *json, const char *origem) {
   J *raiz;
   Lote novo;
   int i, k, entrou = 0, limite = 0, dup = 0;
@@ -648,8 +669,9 @@ int selospacote_adicionar(const char *json, const char *origem) {
   reconstruir();
   return SELOS_OK;
 }
+int selospacote_adicionar(const char *json, const char *origem) { int r; travar(); r = selospacote_adicionar_i(json, origem); soltar(); return r; }
 
-int selospacote_remover(int i) {
+static int selospacote_remover_i(int i) {
   int k, era;
   selospacote_iniciar();
   if (i < 0 || i >= nPac || !pac[i].daTv) return 0;
@@ -668,6 +690,7 @@ int selospacote_remover(int i) {
   reconstruir();
   return 1;
 }
+int selospacote_remover(int i) { int r; travar(); r = selospacote_remover_i(i); soltar(); return r; }
 
 // ---- casamento ---------------------------------------------------------------
 // badgeMatchCandidates: cada campo quebrado em linhas, espacos colapsados, sem
@@ -811,7 +834,7 @@ static int embCarregar(void) {
   return embOk;
 }
 
-void selospacote_dir_embutidos(const char *dir) {
+static void selospacote_dir_embutidos_i(const char *dir) {
   if (!dir) dir = "";
   if (!strcmp(dir, dirEmb)) return;
   embLiberar();
@@ -821,12 +844,14 @@ void selospacote_dir_embutidos(const char *dir) {
   // monta a lista de fontes, e nao deve ser ele a abrir os arquivos.
   embCarregar();
 }
-void selospacote_colorido(int ligado) {
+void selospacote_dir_embutidos(const char *dir) { travar(); selospacote_dir_embutidos_i(dir); soltar(); }
+static void selospacote_colorido_i(int ligado) {
   ligado = ligado != 0;
   if (ligado == modoCor) return;
   modoCor = ligado;
   versao++;
 }
+void selospacote_colorido(int ligado) { if ((ligado != 0) == modoCor) return; travar(); selospacote_colorido_i(ligado); soltar(); }
 int selospacote_embutidos_ok(void) { return embCarregar(); }
 
 typedef struct { int rank; unsigned short id; } Acerto;
@@ -858,7 +883,7 @@ static int casarEmbutido(char *const *cand, const size_t *lens, int ncand, const
   return n;
 }
 
-int selospacote_casar(const char *const *campos, int nc, unsigned short *ids, int max) {
+static int selospacote_casar_i(const char *const *campos, int nc, unsigned short *ids, int max) {
   char *arena, *cand[CAND_MAX + 1];
   size_t lens[CAND_MAX + 1];
   int ncand = 0, i, n = 0, ci;
@@ -913,6 +938,7 @@ int selospacote_casar(const char *const *campos, int nc, unsigned short *ids, in
   free(junto); free(arena);
   return n;
 }
+int selospacote_casar(const char *const *campos, int nc, unsigned short *ids, int max) { int r; travar(); r = selospacote_casar_i(campos, nc, ids, max); soltar(); return r; }
 
 const SeloFiltro *selospacote_filtro(unsigned short id) {
   if (ativo < 0) {
