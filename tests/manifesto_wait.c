@@ -3,6 +3,9 @@ int ajustes_busca_cinemeta(void) { return 1; }
 #include "../src/descoberta.c"
 #include <assert.h>
 #include <stdatomic.h>
+#include <unistd.h>
+// maniObter polls with SDL_Delay (3ab30f46); this test links no SDL, so sleep for real.
+void SDL_Delay(Uint32 ms) { usleep(ms * 1000u); }
 static _Atomic int requests;
 static int fixtureAddons;
 char *rede_baixar(const char *url, int seconds) {
