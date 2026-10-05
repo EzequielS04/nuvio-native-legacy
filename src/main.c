@@ -77,6 +77,7 @@
 #include "idioma.h"
 #include "idiomaauto.h"
 #include "abertura.h"
+#include "logoapp.h"
 // O idioma AUTOMATICO da interface mudou depois do arranque (a conta chegou, ou
 // a TV respondeu o locale). Titulos e generos das fileiras saem no idioma novo,
 // e a pessoa fica sabendo por que a tela trocou sozinha — uma vez por idioma
@@ -873,6 +874,7 @@ int main(int argc, char **argv) {
   printf("[arranque] gfx_iniciar ok\n"); fflush(stdout);
   // A marca da abertura (#213), ANTES do primeiro quadro: ele ja nasce com ela,
   // no lugar em que o splash do sistema a deixou.
+  logoapp_iniciar(dirArte);
   abertura_iniciar(dirArte);
 #ifdef __EMSCRIPTEN__
   // O ARRANQUE CEDE AO NAVEGADOR EM DOIS PONTOS (24/09/2026). Do topo do main

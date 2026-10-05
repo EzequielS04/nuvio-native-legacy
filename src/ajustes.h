@@ -388,6 +388,10 @@ float ajustes_vidro_opacidade(void);   // 0,60..0,92; 0,78 = o vidro de sempre
 int   ajustes_vidro_fosco(void);
 void  ajustes_teste_vidro_env(void);   // so capturas        // 1 = arte borrada atras do vidro
 int   ajustes_icone_app(void);
+// 2.0 (N1): 0 = Novo (default), 1 = Classico. Local to this TV.
+int   ajustes_logo_app(void);
+// 0 = Padrao, 1 = So esmaece, 2 = Direto. Local to this TV.
+int   ajustes_abertura(void);
 // Sair do player no meio vai para a HOME, minimizando o titulo na ilha (o
 // relogio ligado e Ao sair do player = home). 0 = a pagina do titulo, como antes.
 int   ajustes_saida_player_home(void);

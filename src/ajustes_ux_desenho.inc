@@ -16,6 +16,7 @@ static int guiaTotal(void);
 static char uxDirArte[1024];
 void ajustes_recursos(const char *dirArte) {
   snprintf(uxDirArte, sizeof uxDirArte, "%s", dirArte ? dirArte : "");
+  logoapp_iniciar(dirArte);
 }
 static const char *uxResumo(int op) {
   if (op == AJ_HOME_LAYOUT && uxIndice == 1) return i18n("Escolha como o destaque e as fileiras se organizam na Tela inicial.");
@@ -387,7 +388,8 @@ static const char *ajRotSeg(int op, int i) {
 static float aj2SegLargura(int op, int n);
 static int ajSegmentada(int op) {
   int n;
-  if (op < 0 || ajTipo(op) != AJL_ESC || op == AJ_LEG_LINGUA || op == AJ_LEG_LINGUA2 || op == AJ_AUD_LINGUA || op == AJ_FUNDO) return 0;
+  if (op < 0 || ajTipo(op) != AJL_ESC || op == AJ_LEG_LINGUA || op == AJ_LEG_LINGUA2 || op == AJ_AUD_LINGUA || op == AJ_FUNDO ||
+      op == AJ_LOGO_APP /* abre o seletor com miniaturas de 64 px, como o icone do app */) return 0;
   n = nValores(op);
   if (n < 2 || n > 3 || !OPCOES[op].valores) return 0;
   // O segmentado so fica na linha se o nome da opcao cabe ao lado dele;

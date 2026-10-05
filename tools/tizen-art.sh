@@ -24,7 +24,7 @@
 #                                            mdblist) e ajustes. Nunca.
 #
 # O que sobra e o que o app precisa para nao nascer sem cara:
-#   icones/ badges/ marcas/ prov/  532 KB  -> cromo da interface. Sem icones/ a
+#   icones/ badges/ marcas/ prov/  ~1,0 MB -> cromo da interface (marcas/ inclui os logos do 2.0: logo-novo-*.png, logo-classico.png). Sem icones/ a
 #                                             interface fica sem icone nenhum.
 #   *.jpg da raiz                  8,1 MB  -> os backdrops da home. Sem eles o
 #                                             log diz "home: nenhum backdrop".

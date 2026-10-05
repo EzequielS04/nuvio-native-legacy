@@ -13,6 +13,7 @@
 #include "sessao.h"
 #include "catalogo.h"
 #include "iconeapp.h"
+#include "logoapp.h"
 #include "cachearte.h"
 #include "ponteiro.h"
 #include <math.h>
@@ -1029,7 +1030,7 @@ void perfilsel_desenhar(Uint32 agora) {
                        PS_TITULO_Y + subida + 3.0f, a * 0.78f);
     txt_desenhar_alpha(t, (NV_TELA_W - t.w) * 0.5f, PS_TITULO_Y + subida, a); }
 
-  iconeapp_marca((GfxRect){ NV_MARGEM_X, NV_MARGEM_Y + subida, 72.0f, 72.0f }, a);
+  logoapp_marca((GfxRect){ NV_MARGEM_X, NV_MARGEM_Y + subida, 72.0f, 72.0f }, a);
 
   // Enquanto a lista nao chega, dizer isso. Uma tela com titulo e nada abaixo
   // le como travamento.

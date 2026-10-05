@@ -20,6 +20,7 @@
 #include "gfx.h"
 #include "ilha.h"
 #include "iconeapp.h"
+#include "logoapp.h"
 #include "text.h"
 #include "tex_cache.h"
 #include <SDL2/SDL.h>
@@ -296,6 +297,7 @@ int main(int argc, char **argv) {
     setenv("NUVIO_APOIADOR", "1", 1);
     apoiador_reler();
     iconeapp_iniciar("deploy/app/art");
+    logoapp_iniciar("deploy/app/art");
     for (i = 0; i < 3; i++) {
       int op = ajustes_teste_op_icone(esc[i]);
       assert(ajustes_teste_focar_opcao(op));

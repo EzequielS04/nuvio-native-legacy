@@ -692,6 +692,10 @@ static void aj2EditorEscolha(GfxRect m) {
         iconeapp_desenhar(i, (GfxRect){r.x + 24, r.y + 16, 64, 64}, 1, foco ? 1.0f : 0.7f);
         textoX = r.x + 110;
       }
+      if (uxOp == AJ_LOGO_APP) {
+        logoapp_miniatura(i, (GfxRect){r.x + 24, r.y + 16, 64, 64}, 1, foco ? 1.0f : 0.7f);
+        textoX = r.x + 110;
+      }
       TxtLinha l = ajTxtC(TXT_V2_ROT, t, lw - 210 - (textoX - r.x));
       txt_desenhar_alpha(l, textoX, r.y + (96 - l.h) * 0.5f, foco ? 1.0f : 0.88f);
     }
