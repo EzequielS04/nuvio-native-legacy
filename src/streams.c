@@ -2178,7 +2178,10 @@ static void desenharOnde(GfxRect r, float tx, float tr, const OndeVer *o, int se
   const char *action;
   TxtLinha la;
   int state = ondever_estado(o->nome);
-  GLuint logo = o->logo[0] ? tex_obter(o->logo) : 0;
+  // Logo de servico pedido pela largura com que desenha (side=40, cap 128
+  // pelo piso) — o 640 unico decodificava ~1,6 MB para um selo de 40. Ver
+  // tests/artemenor.c.
+  GLuint logo = o->logo[0] ? tex_obter_larg(o->logo, side) : 0;
   action = state==ONDE_ABRIR ? "Abrir app" : state==ONDE_LOJA ? "Ver na loja"
          : state==ONDE_PROCURAR ? "Procurar na loja" : "Disponível neste serviço";
   la = txt_linha_corta(TXT_PG_FIM, action, cp, cp, cp - 2, 255, 260);

@@ -3712,7 +3712,10 @@ static void recomenda_desenharCorpo_(Uint32 agora) {
 
   { GfxRect p = { RC_X + RC_PAD, RC_Y + dy + (RC_H - RC_POSTER_H) * 0.5f,
                   RC_POSTER_W, RC_POSTER_H };
-    GLuint tex = cartaoItem.poster[0] ? tex_obter(cartaoItem.poster) : 0;
+    // Poster pedido pela largura com que desenha (RC_POSTER_W=220, cap 288):
+    // o 640 unico decodificava 2,4 MB por poster de cartao. Ver
+    // tests/artemenor.c.
+    GLuint tex = cartaoItem.poster[0] ? tex_obter_larg(cartaoItem.poster, RC_POSTER_W) : 0;
     if (tex) {
       gfx_tex_aspect_atual = tex_aspecto(cartaoItem.poster);
       gfx_rect(p, tex, GFX_CARD, 0.0f, 0.0f, 0.0f, 0.06f, 0, 0, 0, a);

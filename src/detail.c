@@ -5398,7 +5398,10 @@ static void desenhaEstudio(float x, float y, int i, float f, float a) {
   if (!ajustes_borda_foco() && f > 0.01f) plrui_linha_foco(r, 14.0f, f * a);
   if (ajustes_vidro()) foco_anel(r0, raio, f, a);
   foco_profundidade(r, raio, ajustes_profundidade_posters(), a);
-  t = logo[0] ? tex_obter(logo) : 0;
+  // Logo pedido pela largura com que o cartao desenha (h=52, w<=204; cap 256
+  // com a folga cobrindo o crescimento do foco) — o 640 unico decodificava um
+  // wordmark inteiro para 52 px de altura. Ver tests/artemenor.c.
+  t = logo[0] ? tex_obter_larg(logo, EST_CARD_W - 36.0f) : 0;
   if (t) {
     float ap = tex_aspecto(logo), w, h, fr, fg, fb;
     int recorte;
@@ -6371,7 +6374,10 @@ static void desenhaPessoa(float a) {
   GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
   gfx_cor(tela, 0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, a);
 
-  { GLuint t = pessoa_foto()[0] ? tex_obter(pessoa_foto()) : 0;
+  // Foto pedida pela largura com que desenha (PES_FOTO_W=280, cap 352) — o
+  // 640 unico decodificava o retrato inteiro para 280 de cartao. Ver
+  // tests/artemenor.c.
+  { GLuint t = pessoa_foto()[0] ? tex_obter_larg(pessoa_foto(), PES_FOTO_W) : 0;
     GfxRect r = { NV_DETP_X, 96.0f, PES_FOTO_W, PES_FOTO_H };
     if (t) {
       gfx_tex_aspect_atual = tex_aspecto(pessoa_foto());

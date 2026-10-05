@@ -331,7 +331,10 @@ void sintro_desenhar(Uint32 agora) {
     y += 30.0f;
     for (i = 0; i < nMinis; i++) {
       GfxRect r = { px, y, SI_MINI_W, SI_MINI_H };
-      GLuint tex = tex_obter(minis[i]);
+      // Mini pedida pela largura com que desenha (SI_MINI_W=84, cap 128 pelo
+      // piso) — o 640 unico decodificava um cartaz inteiro por selo. Ver
+      // tests/artemenor.c.
+      GLuint tex = tex_obter_larg(minis[i], SI_MINI_W);
       if (tex) {
         gfx_tex_aspect_atual = tex_aspecto(minis[i]);
         gfx_rect(r, tex, GFX_CARD, 0.0f, 0.0f, 0.0f, 0.08f, 0, 0, 0, a);
