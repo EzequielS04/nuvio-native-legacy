@@ -1,5 +1,6 @@
 // Bootstrap: janela, contexto GL, loop e telemetria. Toda a UI vive nos modulos.
 #include <SDL2/SDL.h>
+#include "tpkteclas.h"
 #include "sdlcompat.h"
 #include <SDL2/SDL_image.h>
 #include "gl_compat.h"
@@ -139,6 +140,45 @@ static double rssMB(void) {
 //
 // Protocolo: alguem cria /tmp/nuvio-shot-req; no proximo quadro o app grava
 // /tmp/nuvio-shot.png e apaga o pedido.
+
+// CH+/CH- (F7/F8) e o que eles viram fora do zap. Funcao, e nao trecho do laco,
+// porque a tecla injetada da Samsung no simulador (/tmp/nuvio-key "XF86...")
+// passa por aqui tambem SEM a fila do SDL: o SDL do Mac (sdl2-compat 2.32,
+// SDL3 por baixo) zera no SDL_PushEvent o scancode 489 da AZUL (medido: 489
+// entra, 0 sai). No .tpk o SDL e o 2.30.9 de verdade e nao mexe nele.
+static void remapCanal(SDL_Event *e) {
+#if defined(NV_ANDROID) || defined(NV_TPK) || defined(__APPLE__)
+  // (Samsung .tpk: tpkteclas.c entrega XF86RaiseChannel/LowerChannel como F7/F8.
+  // No Mac vale tambem, com o comportamento da Samsung: e o simulador dela.)
+  // CH+/CH- NO ANDROID. O NuvioActivity entrega CH+ como F7 e CH- como F8.
+  // Com canal na tela (guia, canal ao vivo, canal no canto) sao CH+/CH- de
+  // verdade, com os scancodes do webOS que guia.c, player.c e app.c ja
+  // tratam. Fora disso fazem o papel das teclas que o controle Android nao
+  // tem: CH+ = AZUL (Salvos), CH- = Spotlight (F5, SPOT_TECLA_ABRIR). O
+  // registro foi para a tecla Info (NuvioActivity: KEYCODE_INFO -> F9).
+  if ((e->type == SDL_KEYDOWN || e->type == SDL_KEYUP) &&
+      (e->key.keysym.sym == SDLK_F7 || e->key.keysym.sym == SDLK_F8)) {
+    int sobe = e->key.keysym.sym == SDLK_F7;
+    if (app_zap_ativo()) {
+      e->key.keysym.scancode = (SDL_Scancode)(sobe ? NV_SCANCODE_CH_UP : NV_SCANCODE_CH_DOWN);
+      e->key.keysym.sym = sobe ? SDLK_PAGEUP : SDLK_PAGEDOWN;
+    } else {
+#if defined(NV_TPK) || defined(__APPLE__)
+      // Na Samsung o CH+ vai com o scancode da AZUL de verdade: como a
+      // letra "s" ele era recusado com campo de texto ativo e o Spotlight
+      // o escrevia (relato de 05/10/2026).
+      e->key.keysym.scancode = sobe ? (SDL_Scancode)NV_SCANCODE_BLUE : SDL_SCANCODE_F5;
+#else
+      e->key.keysym.scancode = sobe ? SDL_SCANCODE_S : SDL_SCANCODE_F5;
+#endif
+      e->key.keysym.sym = sobe ? SDLK_s : SDLK_F5;
+    }
+  }
+#else
+  (void)e;
+#endif
+}
+
 // Teclas injetadas por arquivo, para conferir a UI sem alguem no sofa com o
 // controle: escreva "down", "ok", "back"... em /tmp/nuvio-key e o app processa
 // como se viesse do D-pad. Uma tecla por linha, o arquivo e consumido.
@@ -347,6 +387,21 @@ static void teclasInjetadas(void (*entregar)(const SDL_Event *)) {
       continue;
     }
 
+    // NOME DE TECLA DA SAMSUNG ("XF86Blue", "XF86RaiseChannel", "XF86ChannelGuide"...):
+    // a mesma tabela do .tpk (tpkteclas.c) e o mesmo remapeamento de CH+/CH-
+    // do laco principal (remapCanal). E o simulador da Samsung no Mac.
+    if (!strncmp(linha, "XF86", 4)) {
+      SDL_Event t;
+      if (tpkteclas_evento(linha, 1, &t)) {
+        remapCanal(&t);
+        printf("[tecla] injetada %s -> sym=%d scancode=%d\n", linha,
+               (int)t.key.keysym.sym, (int)t.key.keysym.scancode);
+        fflush(stdout);
+        entregar(&t);
+      }
+      if (tpkteclas_evento(linha, 0, &t)) { remapCanal(&t); entregar(&t); }
+      continue;
+    }
     SDL_Keycode k = codigoDaTecla(linha);
     if (!k) continue;
     SDL_Event e; SDL_zero(e);
@@ -1157,33 +1212,7 @@ int main(int argc, char **argv) {
       if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE)
         e.key.keysym.sym = SDLK_AC_BACK;
 #endif
-#if defined(NV_ANDROID) || defined(NV_TPK)
-      // (Samsung .tpk: tpk.c entrega XF86RaiseChannel/LowerChannel como F7/F8.)
-      // CH+/CH- NO ANDROID. O NuvioActivity entrega CH+ como F7 e CH- como F8.
-      // Com canal na tela (guia, canal ao vivo, canal no canto) sao CH+/CH- de
-      // verdade, com os scancodes do webOS que guia.c, player.c e app.c ja
-      // tratam. Fora disso fazem o papel das teclas que o controle Android nao
-      // tem: CH+ = AZUL (Salvos), CH- = Spotlight (F5, SPOT_TECLA_ABRIR). O
-      // registro foi para a tecla Info (NuvioActivity: KEYCODE_INFO -> F9).
-      if ((e.type == SDL_KEYDOWN || e.type == SDL_KEYUP) &&
-          (e.key.keysym.sym == SDLK_F7 || e.key.keysym.sym == SDLK_F8)) {
-        int sobe = e.key.keysym.sym == SDLK_F7;
-        if (app_zap_ativo()) {
-          e.key.keysym.scancode = (SDL_Scancode)(sobe ? NV_SCANCODE_CH_UP : NV_SCANCODE_CH_DOWN);
-          e.key.keysym.sym = sobe ? SDLK_PAGEUP : SDLK_PAGEDOWN;
-        } else {
-#ifdef NV_TPK
-          // Na Samsung o CH+ vai com o scancode da AZUL de verdade: como a
-          // letra "s" ele era recusado com campo de texto ativo e o Spotlight
-          // o escrevia (relato de 05/10/2026).
-          e.key.keysym.scancode = sobe ? (SDL_Scancode)NV_SCANCODE_BLUE : SDL_SCANCODE_F5;
-#else
-          e.key.keysym.scancode = sobe ? SDL_SCANCODE_S : SDL_SCANCODE_F5;
-#endif
-          e.key.keysym.sym = sobe ? SDLK_s : SDLK_F5;
-        }
-      }
-#endif
+      remapCanal(&e);
       // TECLA DESCONHECIDA, UMA LINHA CADA, UMA VEZ SO.
       //
       // Este app aprendeu na mao qual scancode e cada tecla do controle: o Back
