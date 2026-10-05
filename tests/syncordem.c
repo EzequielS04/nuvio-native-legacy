@@ -306,6 +306,7 @@ void fontepref_esquecer(void) {}
 void homeestado_esquecer(void) {}
 void mapa_esquecer(void) {}
 void prog_esquecer_tudo(void) {}
+void perfilcont_esquecer(void) {}
 void recomenda_esquecer(void) {}
 void salvos_esquecer(void) {}
 void stalker_esquecer(void) {}

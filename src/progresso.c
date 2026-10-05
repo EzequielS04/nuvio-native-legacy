@@ -223,6 +223,27 @@ int prog_ler(ProgRegistro *saida, int max) {
   return k;
 }
 
+static int removidoVenceDe(int perfil, const char *imdb, long long instanteMs);
+
+int prog_continuar_de_perfil(int perfil, int pctConcluido, ProgRegistro *saida) {
+  int i, melhor = -1;
+  if (!saida) return 0;
+  TRANCAR();
+  carregar();
+  for (i = 0; i < nRegs; i++) {
+    const ProgRegistro *r = &regs[i];
+    double p;
+    if (r->perfil != perfil || r->durSeg < 60.0) continue;
+    p = r->posSeg / r->durSeg;
+    if (p < 0.01 || p * 100.0 >= pctConcluido) continue;
+    if (removidoVenceDe(perfil, r->contentId, r->lastWatchedMs)) continue;
+    if (melhor < 0 || maisNovoPrimeiro(r, &regs[melhor]) < 0) melhor = i;
+  }
+  if (melhor >= 0) *saida = regs[melhor];
+  DESTRANCAR();
+  return melhor >= 0;
+}
+
 int prog_por_chave(const char *chave, ProgRegistro *saida) {
   int i;
   if (!chave || !*chave) return 0;
@@ -388,27 +409,36 @@ void prog_marcar_removido(const char *imdb) {
   DESTRANCAR();
 }
 
+// Vale para QUALQUER perfil: a escolha de perfil olha o ultimo item de quem
+// ainda nao esta ativo. Chamar com a trava tomada.
+
 int prog_removido_vence(const char *imdb, long long instanteMs) {
+  int r;
+  TRANCAR();
+  r = removidoVenceDe(perfis_ativo(), imdb, instanteMs);
+  DESTRANCAR();
+  return r;
+}
+
+static int removidoVenceDe(int perfil, const char *imdb, long long instanteMs) {
   char obra[24];
-  int i, perfil = perfis_ativo();
+  int i;
   long long ms = 0;
   prog_content_id(obra, sizeof obra, imdb, NULL, NULL);
   if (!obra[0]) return 0;
-  TRANCAR();
   for (i = 0; i < nRemovidos; i++)
     if (removidos[i].perfil == perfil && !strcmp(removidos[i].obra, obra)) { ms = removidos[i].ms; break; }
-  if (!ms) { DESTRANCAR(); return 0; }
+  if (!ms) return 0;
   // EMPATE FICA COM A REMOCAO: o mesmo milissegundo e o proprio item que foi
   // tirado, nao uma sessao nova.
-  if (instanteMs > ms) { DESTRANCAR(); return 0; }
+  if (instanteMs > ms) return 0;
   // ASSISTIU DE NOVO AQUI: o player gravou depois da remocao. O item da
   // refacao pode vir do Trakt com o paused_at velho (o scrobble ainda nao
   // chegou la), e sem esta consulta o registro local novo perderia para ele.
   carregar();
   for (i = 0; i < nRegs; i++)
     if (regs[i].perfil == perfil && !strcmp(regs[i].contentId, obra) &&
-        regs[i].lastWatchedMs > ms) { DESTRANCAR(); return 0; }
-  DESTRANCAR();
+        regs[i].lastWatchedMs > ms) return 0;
   return 1;
 }
 
