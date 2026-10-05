@@ -181,7 +181,8 @@ enum { PLR_PLAY, PLR_CC, PLR_AUDIO, PLR_ASPECTO,
 
 // Avanco em curso: enquanto vale, posSeg e do DONO e nao do pipeline.
 static int    scrubbing, scrubPassos, scrubTocava, scrubDir;
-static Uint32 scrubUltimo, scrubInicio, scrubPasso;   // pulso do teclado (salto.h)
+static Uint32 scrubUltimo;
+static SaltoEst scrubSalto;   // rajada do teclado (salto.h)
 // BUSCA SUAVE: o que a BARRA mostra durante o avanco. posSeg anda em degraus
 // (10 s, 30 s, 60 s, 120 s por passo, ~3 passos por segundo) e desenhar direto dele fazia
 // o preenchimento saltar aos trancos. posVis persegue posSeg por mola de
@@ -2259,7 +2260,7 @@ static void avTecla(SDL_Keycode k) {
 //    mexia no pipeline com o video correndo. Agora o video PAUSA ao comecar o
 //    avanco e volta a tocar sozinho ao terminar, se estava tocando — e o
 //    pipeline recebe UMA posicao, no fim, em vez de uma por toque.
-static void saltar(int dir) {
+static void saltar(int dir, int repeticao) {
   int novo = 0;
   if (!scrubbing) {
     scrubbing = 1;
@@ -2274,8 +2275,8 @@ static void saltar(int dir) {
   if (dir != scrubDir) novo = 1;
   scrubDir = dir;
   Uint32 agora = SDL_GetTicks();
-  // Repeticao entre dois passos: so mantem o avanco vivo (scrubUltimo), nao anda.
-  float passo = salto_tecla(novo, agora, &scrubInicio, &scrubPasso, duracaoSeg);
+  // Repeticao de tecla segurada entre dois passos: so mantem o avanco vivo (scrubUltimo), nao anda.
+  float passo = salto_tecla(&scrubSalto, novo, repeticao, agora, duracaoSeg);
   scrubUltimo = agora;
   if (passo <= 0.0f) return;
   scrubPassos++;
@@ -2408,7 +2409,7 @@ void player_evento(const SDL_Event *e) {
       acordar();
       barraFoco = 1; skipFoco = 0; soBarra = 1;
       if (anim < 0.05f) cheio = 0.0f;   // de tudo apagado: o resto nem comeca a subir
-      saltar(k == SDLK_RIGHT ? 1 : -1);
+      saltar(k == SDLK_RIGHT ? 1 : -1, e->key.repeat);
       return;
     }
     if (k == SDLK_UP || k == SDLK_DOWN || k == SDLK_LEFT || k == SDLK_RIGHT) {
@@ -2490,8 +2491,8 @@ void player_evento(const SDL_Event *e) {
   }
   if (barraFoco) {
     // Na barra, ESQUERDA e DIREITA procuram no filme em vez de trocar de botao.
-    if (k == SDLK_LEFT)       saltar(-1);
-    else if (k == SDLK_RIGHT) saltar(1);
+    if (k == SDLK_LEFT)       saltar(-1, e->key.repeat);
+    else if (k == SDLK_RIGHT) saltar(1, e->key.repeat);
     else if (k == SDLK_DOWN)  barraFoco = 0;
     acordar();
     return;

@@ -6,17 +6,31 @@
 static int falhas;
 #define CHECK(c, ...) do { if (!(c)) { printf("FALHA: " __VA_ARGS__); printf("\n"); falhas++; } } while (0)
 
-// Segura a tecla por `holdMs` com repeticao a cada `repMs`; devolve segundos.
+// Segura a tecla por `holdMs` com repeticao a cada `repMs` (repeat=0, como o
+// firmware da TV); devolve segundos.
 static float segurar(unsigned holdMs, unsigned repMs, float dur) {
-  unsigned ini = 0, ult = 0; float tot = 0;
+  SaltoEst st = {0}; float tot = 0;
   for (unsigned t = 0; t <= holdMs; t += repMs)
-    tot += salto_tecla(t == 0, 1000u + t, &ini, &ult, dur);
-  // ini/ult comecam em 0 mas `novo` os reescreve com 1000+t; coerente.
+    tot += salto_tecla(&st, t == 0, 0, 1000u + t, dur);
+  return tot;
+}
+
+// `n` toques separados por `gapMs`, cada um uma rajada de uma tecla so.
+static float toques(int n, unsigned gapMs, float dur) {
+  SaltoEst st = {0}; float tot = 0;
+  for (int i = 0; i < n; i++)
+    tot += salto_tecla(&st, i == 0, 0, 1000u + i * gapMs, dur);
   return tot;
 }
 
 int main(void) {
   const float filme = 7200.0f;
+  CHECK(toques(5, 200, filme) == 50.0f, "5 toques em 1 s = 50 s, deu %.0f", toques(5, 200, filme));
+  CHECK(toques(2, 0, filme) == 20.0f, "dois toques no mesmo instante = 20 s");
+  CHECK(toques(3, 160, filme) == 30.0f, "toques a 160 ms nao sao repeticao");
+  { SaltoEst st = {0}; float t = salto_tecla(&st, 1, 0, 1000, filme);   // flag do SDL
+    t += salto_tecla(&st, 0, 1, 1050, filme);
+    CHECK(t == 10.0f, "repeat=1 dentro de 300 ms e ignorado"); }
   CHECK(segurar(0, 100, filme) == 10.0f, "toque unico deve ser 10 s");
   unsigned holds[] = {1000, 3000, 10000};
   float lo[] = {30, 150, 800}, hi[] = {50, 400, 2400};

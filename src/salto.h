@@ -39,15 +39,40 @@ static inline float salto_passo(unsigned heldMs, float duracaoSeg) {
   return p > teto ? teto : p;
 }
 
-// Decide se uma tecla em `agoraMs` aplica um passo. `inicioMs`/`ultimoMs` sao
-// o estado da rajada; `novo` = primeira tecla (ou direcao mudou). Devolve o
-// passo (0 = ignorar a repeticao).
-static inline float salto_tecla(int novo, unsigned agoraMs, unsigned *inicioMs,
-                                unsigned *ultimoMs, float duracaoSeg) {
-  if (novo) { *inicioMs = agoraMs; *ultimoMs = agoraMs; return SALTO_SEG; }
-  if (agoraMs - *ultimoMs < SALTO_INTERVALO_MS) return 0.0f;
-  *ultimoMs = agoraMs;
-  return salto_passo(agoraMs - *inicioMs, duracaoSeg);
+// ESTADO DA RAJADA e a regra de quem e toque e quem e tecla segurada.
+//
+// TOQUE SOLTO nunca e perdido: cada KEYDOWN novo aplica 10 s na hora e NAO
+// inicia a rampa — cinco toques rapidos sao +50 s. So a REPETICAO de tecla
+// segurada passa pelo limite de SALTO_INTERVALO_MS e pela rampa de tempo.
+//
+// Como saber que e repeticao, se cada plataforma entrega de um jeito: o
+// teclado do SDL marca key.repeat; o firmware da TV manda a tecla segurada como
+// KEYDOWNs SEPARADOS com repeat=0 (mesma observacao de app.c, issue #11), e a
+// casca Tizen ainda despacha um par keydown+keyup por tecla, entao "descida sem
+// subida" nao serve de criterio. Sobra o RELOGIO: repeticao de controle vem a
+// ~100 ms (SDL de teclado, ~30 ms); o toque mais rapido de uma mao, ~150 ms.
+// Logo, descida a menos de SALTO_REP_MS da anterior e repeticao. Abaixo de
+// SALTO_REP_MIN_MS (dois eventos do mesmo quadro) nao existe mao nem controle:
+// sao dois toques entregues juntos, e valem os dois.
+#define SALTO_REP_MS      130u
+#define SALTO_REP_MIN_MS   20u
+
+typedef struct { unsigned inicio, ultimaTecla, ultimoPasso; } SaltoEst;
+
+// `novo`: rajada nova (primeira tecla, ou a direcao mudou). `flagRepeat`:
+// key.repeat do SDL. Devolve o passo em segundos (0 = ignorar a repeticao).
+static inline float salto_tecla(SaltoEst *st, int novo, int flagRepeat,
+                                unsigned agoraMs, float duracaoSeg) {
+  unsigned gap = agoraMs - st->ultimaTecla;
+  int rep = !novo && (flagRepeat || (gap >= SALTO_REP_MIN_MS && gap <= SALTO_REP_MS));
+  st->ultimaTecla = agoraMs;
+  if (!rep) {                       // toque: 10 s agora, rampa recomeca
+    st->inicio = agoraMs; st->ultimoPasso = agoraMs;
+    return SALTO_SEG;
+  }
+  if (agoraMs - st->ultimoPasso < SALTO_INTERVALO_MS) return 0.0f;
+  st->ultimoPasso = agoraMs;
+  return salto_passo(agoraMs - st->inicio, duracaoSeg);
 }
 
 #endif
