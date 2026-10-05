@@ -192,15 +192,17 @@ static void desenharRelogio(unsigned agora, float a) {
   int reduz = ajustes_animacoes_reduzidas();
   TxtLinha lh, ld, lp;
   horaAgora(hora, sizeof hora, data, sizeof data, &seg);
-  descanso_rota(reduz ? 0.0f : s, &px, &py);
-  // Mesmo com animacoes reduzidas o bloco troca de lugar a cada minuto: o
-  // motivo da rota e o painel, nao o enfeite.
-  if (reduz) { float m = (float)(time(NULL) / 60); descanso_rota(m * 7.0f, &px, &py); }
-  cx = NV_TELA_W * 0.5f + (px * 2.0f - 1.0f) * DESC_ROTA_X;
-  cy = NV_TELA_H * 0.5f + (py * 2.0f - 1.0f) * DESC_ROTA_Y;
+  // O bloco troca de lugar UMA vez por minuto, em pixel inteiro, e fica parado
+  // no resto do tempo. A rota continua (painel OLED), mas andar um pouco a cada
+  // quadro deixava o numeral e a data tremendo: texto em posicao fracionaria
+  // muda de amostragem todo quadro. Pedido do dono, 05/10.
+  { float m = (float)(time(NULL) / 60); descanso_rota(m * 7.0f, &px, &py); }
+  cx = floorf(NV_TELA_W * 0.5f + (px * 2.0f - 1.0f) * DESC_ROTA_X);
+  cy = floorf(NV_TELA_H * 0.5f + (py * 2.0f - 1.0f) * DESC_ROTA_Y);
+  (void)s; (void)reduz;
   ajustes_acento(&ar, &ag, &ab);
   // Aurora: duas manchas muito fracas na cor de destaque, andando devagar.
-  { float t = reduz ? 0.0f : s;
+  { float t = 0.0f;   // parada: so muda de lugar com o bloco
     GfxRect l1 = { cx - 900.0f + sinf(t * 0.11f) * 120.0f, cy - 640.0f, 1300.0f, 1300.0f };
     GfxRect l2 = { cx - 200.0f, cy - 760.0f + cosf(t * 0.09f) * 110.0f, 1200.0f, 1200.0f };
     gfx_rect(l1, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.10f * a);
@@ -208,19 +210,19 @@ static void desenharRelogio(unsigned agora, float a) {
   // Brilho maximo do numeral em ~60% (OLED).
   lh = txt_linha(TXT_DESC_HORA, hora, 236, 238, 244, 255);
   if (lh.tex) {
-    float x = cx - (float)lh.w * 0.5f, y = cy - (float)lh.h * 0.62f;
+    float x = floorf(cx - (float)lh.w * 0.5f), y = floorf(cy - (float)lh.h * 0.62f);
     txt_desenhar_alpha(lh, x, y, 0.62f * a);
     // A linha do minuto: trilho apagado e o trecho cheio no destaque.
     { float yl = y + (float)lh.h * 0.98f, w = (float)lh.w;
       gfx_cor((GfxRect){ x, yl, w, 2.0f }, 0, 1, 1, 1, 0.10f * a);
       gfx_cor((GfxRect){ x, yl, w * seg, 2.0f }, 0, ar, ag, ab, 0.70f * a);
       ld = txt_linha(TXT_HEADLINE, data, 200, 204, 212, 255);
-      txt_desenhar_alpha(ld, cx - (float)ld.w * 0.5f, yl + 30.0f, 0.62f * a);
+      txt_desenhar_alpha(ld, floorf(cx - (float)ld.w * 0.5f), yl + 30.0f, 0.62f * a);
       if (proxLinha[0]) {
         TxtLinha k = txt_linha(TXT_CAPTION2, i18n("Próxima estreia"), 150, 154, 164, 255);
         lp = txt_linha_corta(TXT_CALLOUT, proxLinha, 210, 214, 222, 255, 1100.0f);
-        txt_desenhar_alpha(k, cx - (float)k.w * 0.5f, yl + 30.0f + (float)ld.h + 40.0f, 0.5f * a);
-        txt_desenhar_alpha(lp, cx - (float)lp.w * 0.5f,
+        txt_desenhar_alpha(k, floorf(cx - (float)k.w * 0.5f), yl + 30.0f + (float)ld.h + 40.0f, 0.5f * a);
+        txt_desenhar_alpha(lp, floorf(cx - (float)lp.w * 0.5f),
                            yl + 30.0f + (float)ld.h + 40.0f + (float)k.h + 8.0f, 0.55f * a);
       } }
   }
@@ -268,12 +270,12 @@ static void desenharVitrine(unsigned agora, float a) {
   ent = suave(t / DESC_ENTRA_S);
   sai = t > DESC_ITEM_S - DESC_SAI_S ? suave((t - (DESC_ITEM_S - DESC_SAI_S)) / DESC_SAI_S) : 0.0f;
   vis = ent * (1.0f - sai) * a;
-  u = ajustes_animacoes_reduzidas() ? 0.0f : (t > DESC_ITEM_S ? 1.0f : t / DESC_ITEM_S);
-  // A arte, com aproximacao lenta (Ken Burns) e um passo para a esquerda.
-  { float esc = 1.04f + 0.07f * u;
-    GfxRect r = { 0, 0, NV_TELA_W * esc, NV_TELA_H * esc };
-    r.x = (NV_TELA_W - r.w) * 0.5f + 30.0f - 60.0f * u;
-    r.y = (NV_TELA_H - r.h) * 0.5f;
+  u = 0.0f;
+  // A arte PARADA, so com o cruzamento na troca. O Ken Burns (aproximacao
+  // lenta e um passo para a esquerda) tremia na TV: a capa reamostrada em
+  // posicao fracionaria a cada quadro. Pedido do dono, 05/10.
+  { GfxRect r = { 0, 0, NV_TELA_W, NV_TELA_H };
+    (void)u;
     gfx_tex_aspect_atual = tex_aspecto(c->backdrop);
     gfx_card_forcar_cover_atual = 1.0f;
     gfx_rect(r, texArte, GFX_CARD, 0, 0, 0, 0.0f, 1, 1, 1, vis);
@@ -342,10 +344,9 @@ static void desenharVitrine(unsigned agora, float a) {
     txt_desenhar_alpha(lFonte, DESC_X, y + (1.0f - k[0]) * 10.0f, 0.8f * k[0]);
   }
 
-  // Hora discreta no alto e o quanto falta para o proximo, embaixo a direita.
-  horaAgora(hora, sizeof hora, NULL, 0, NULL);
-  { TxtLinha lh = txt_linha(TXT_G30M, hora, 236, 238, 244, 255);
-    txt_desenhar_alpha(lh, NV_TELA_W - 110.0f - (float)lh.w, 72.0f, 0.75f * a); }
+  // Sem hora na Vitrine (05/10, dono): numero parado no mesmo canto por
+  // horas e o que marca painel OLED. So o quanto falta para o proximo.
+  (void)hora;
   { float w = 150.0f, x = NV_TELA_W - 110.0f - w, y = NV_TELA_H - 92.0f;
     float p = t / DESC_ITEM_S;
     if (p > 1.0f) p = 1.0f;

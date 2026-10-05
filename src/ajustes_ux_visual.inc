@@ -251,15 +251,15 @@ static TxtEstilo ajEstiloPxS(float px, int forte) { return ajEstiloPx(px < 6.0f 
 // ajArte). Linha = categoria (AJS_*), coluna = o bloco (ROT) na ordem de
 // ajustes_ux_tela.inc; a coluna 0 e a imagem da categoria, e vale tambem para
 // o primeiro bloco (entrar na categoria nao troca a imagem). Nenhum indice se
-// repete: sao 34 das 40 amostras de deploy/app/art (sobram 11, 24, 28, 29, 34
-// e 36). -1 = a categoria nao tem esse bloco.
+// repete: sao 35 das 40 amostras de deploy/app/art (sobram 24, 28, 29, 34 e
+// 36). -1 = a categoria nao tem esse bloco.
 #define AJ_ARTE_BLOCOS 6
 static const signed char AJ_ARTE_SEC[11][AJ_ARTE_BLOCOS] = {
   { 12,  0, 20,  1, 31, -1 },   // Tela inicial: Estilo, Fileiras, Continuar, Barra lateral, Escolha de perfil
   {  3,  4, 17,  5, -1, -1 },   // Pagina do titulo: O que aparece, Notas, Dados do titulo, Busca
   { 13, 35, 27, -1, -1, -1 },   // Cartazes e arte: Cartaz em foco, Forma, De onde vem a arte
   { 15, 16, -1, -1, -1, -1 },   // Trailers: Onde toca, Som e imagem
-  {  9, 39, 38,  6, -1, -1 },   // Aparencia: Cores e vidro, Logo e abertura, Texto e tamanho, Movimento e relogio
+  {  9, 39, 38,  6, 11, -1 },   // Aparencia: Cores e vidro, Logo e abertura, Texto e tamanho, Movimento e relogio, Tela de descanso
   {  7, 18, 22, 32, -1, -1 },   // Reproducao: Escolha da fonte, Imagem e som, Durante e depois, Seekr
   { 21, -1, -1, -1, -1, -1 },   // Idiomas e legendas
   {  2, 14, -1, -1, -1, -1 },   // TV ao vivo: Provedor, Se o canal nao abre

@@ -60,20 +60,20 @@ static void regras(void) {
   novidades20_primeira_vez();
   assert(novidades20_aberto());
   assert(existe(N20_ARQ) && existe(NF_ARQ_180));
-  // Guia completo: hero + 10 capitulos + resumo + fim.
-  assert(novidades20_telas() == 13 && novidades20_tela_tipo(0) == N20_HERO);
-  assert(novidades20_tela_tipo(11) == N20_RESUMO && novidades20_tela_tipo(12) == N20_FIM);
+  // Guia completo: hero + 11 capitulos + resumo + fim.
+  assert(novidades20_telas() == 14 && novidades20_tela_tipo(0) == N20_HERO);
+  assert(novidades20_tela_tipo(12) == N20_RESUMO && novidades20_tela_tipo(13) == N20_FIM);
   // Hero: cima/baixo trocam o botao (com volta).
   assert(novidades20_foco() == 0);
   tecla(SDLK_DOWN); assert(novidades20_foco() == 1);
   tecla(SDLK_UP); tecla(SDLK_UP); assert(novidades20_foco() == 2);
   tecla(SDLK_DOWN); assert(novidades20_foco() == 0);
-  // "Só o que muda pra mim": esconde Perfis, Servidores e Plugins/P2P.
+  // "Só o que muda pra mim": esconde Servidores e Plugins/P2P.
   tecla(SDLK_DOWN); tecla(SDLK_RETURN);
-  assert(novidades20_essencial() && novidades20_telas() == 10 && novidades20_tela() == 1);
+  assert(novidades20_essencial() && novidades20_telas() == 12 && novidades20_tela() == 1);
   for (i = 0; i < novidades20_telas(); i++) {
     int t = novidades20_tela_tipo(i);
-    assert(t != 6 && t != 7 && t != 8);
+    assert(t != 8 && t != 9);
   }
   // OK troca o estado da cena, em volta.
   n = novidades20_estados(0);
@@ -110,16 +110,16 @@ static void regras(void) {
   teclaSc(SDLK_UNKNOWN, NV_SCANCODE_BLUE); tecla(SDLK_RIGHT);
   tecla(SDLK_RETURN);
   assert(!novidades20_aberto() && novidades20_pedido() == N20_PEDIU_NADA);
-  // Aparelho: AutoSync pelo audio (cap 3, "Também" 0) so no Android; zoom do
-  // trailer (cap 2, "Também" 4) so no .tpk; Plugins/P2P fora do .wgt.
+  // Aparelho: AutoSync pelo audio (cap 4, "Também" 0) so no Android; zoom do
+  // trailer (cap 3, "Também" 4) so no .tpk; Plugins/P2P fora do .wgt.
   novidades20_aparelho(N20_DEV_ANDROID);
-  assert(novidades20_disponivel(3, 3) && !novidades20_disponivel(2, 7) && novidades20_disponivel(8, 0));
+  assert(novidades20_disponivel(4, 3) && !novidades20_disponivel(3, 7) && novidades20_disponivel(9, 0));
   novidades20_aparelho(N20_DEV_TPK);
-  assert(!novidades20_disponivel(3, 3) && novidades20_disponivel(2, 7) && novidades20_disponivel(8, 1));
+  assert(!novidades20_disponivel(4, 3) && novidades20_disponivel(3, 7) && novidades20_disponivel(9, 1));
   novidades20_aparelho(N20_DEV_WGT);
-  assert(!novidades20_disponivel(8, 0) && !novidades20_disponivel(8, 1) && novidades20_disponivel(8, 2));
+  assert(!novidades20_disponivel(9, 0) && !novidades20_disponivel(9, 1) && novidades20_disponivel(9, 2));
   novidades20_aparelho(N20_DEV_LG);
-  assert(!novidades20_disponivel(4, 7) && novidades20_disponivel(8, 0));
+  assert(!novidades20_disponivel(5, 7) && novidades20_disponivel(9, 0));
   novidades20_aparelho(-1);
   puts("PASS: regras do guia da 2.0");
 }
@@ -220,21 +220,25 @@ int main(int argc, char **argv) {
       { "hero-novo", N20_DEV_ANDROID, 1, "D" },
       { "cap01-visual", N20_DEV_LG, 0, "R" },
       { "cap01-visual-solido", N20_DEV_LG, 0, "RO" },
-      { "cap02-home", N20_DEV_LG, 0, "RR" },
-      { "cap02-home-padrao", N20_DEV_LG, 0, "RRO" },
-      { "cap03-titulo-serie", N20_DEV_LG, 0, "RRRO" },
-      { "cap04-player-lg", N20_DEV_LG, 0, "RRRR" },
-      { "cap04-player-autosync", N20_DEV_ANDROID, 0, "RRRRO" },
-      { "cap05-fontes", N20_DEV_LG, 0, "RRRRR" },
-      { "cap05-memoria", N20_DEV_LG, 0, "RRRRRO" },
-      { "cap06-social", N20_DEV_LG, 0, "RRRRRR" },
-      { "cap06-social-enquete", N20_DEV_LG, 0, "RRRRRRO" },
-      { "cap07-perfis-pin", N20_DEV_LG, 0, "RRRRRRROO" },
-      { "cap08-servidores", N20_DEV_LG, 0, "RRRRRRRR" },
-      { "cap09-plugins-wgt", N20_DEV_WGT, 0, "RRRRRRRRR" },
-      { "cap09-p2p-tpk", N20_DEV_TPK, 0, "RRRRRRRRRO" },
-      { "cap10-ajustes", N20_DEV_LG, 0, "RRRRRRRRRR" },
-      { "cap10-ajustes-avancado", N20_DEV_LG, 0, "RRRRRRRRRRO" },
+      { "cap02-descanso", N20_DEV_LG, 0, "RR" },
+      { "cap02-descanso-relogio", N20_DEV_LG, 0, "RRO" },
+      { "cap02-descanso-escurecer", N20_DEV_LG, 0, "RROO" },
+      { "cap03-home", N20_DEV_LG, 0, "RRR" },
+      { "cap03-home-padrao", N20_DEV_LG, 0, "RRRO" },
+      { "cap04-titulo-serie", N20_DEV_LG, 0, "RRRRO" },
+      { "cap05-player-lg", N20_DEV_LG, 0, "RRRRR" },
+      { "cap05-player-autosync", N20_DEV_ANDROID, 0, "RRRRRO" },
+      { "cap06-fontes", N20_DEV_LG, 0, "RRRRRR" },
+      { "cap06-memoria", N20_DEV_LG, 0, "RRRRRRO" },
+      { "cap07-social", N20_DEV_LG, 0, "RRRRRRR" },
+      { "cap07-social-enquete", N20_DEV_LG, 0, "RRRRRRRO" },
+      { "cap08-perfis", N20_DEV_LG, 0, "RRRRRRRR" },
+      { "cap08-perfis-pin", N20_DEV_LG, 0, "RRRRRRRROO" },
+      { "cap09-servidores", N20_DEV_LG, 0, "RRRRRRRRR" },
+      { "cap10-plugins-wgt", N20_DEV_WGT, 0, "RRRRRRRRRR" },
+      { "cap10-p2p-tpk", N20_DEV_TPK, 0, "RRRRRRRRRRO" },
+      { "cap11-ajustes", N20_DEV_LG, 0, "RRRRRRRRRRR" },
+      { "cap11-ajustes-avancado", N20_DEV_LG, 0, "RRRRRRRRRRRO" },
       { "resumo-lg", N20_DEV_LG, 0, "RB" },
       { "resumo-essencial-android", N20_DEV_ANDROID, 0, "DOB" },
       { "fim-novo", N20_DEV_LG, 1, "RBR" },

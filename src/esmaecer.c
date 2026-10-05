@@ -155,10 +155,13 @@ void esmaecer_desenhar(unsigned agora) {
       }
     }
     if (l.tex) {
-      float s = (float)agora / 1000.0f;
+      // Muda de lugar uma vez por minuto, em pixel inteiro (05/10: andar a
+      // cada quadro deixava o texto tremendo).
+      float s = (float)(t / 60) * 60.0f;
       float px = 0.5f + 0.5f * sinf(s / 41.0f), py = 0.5f + 0.5f * sinf(s / 67.0f + 1.3f);
-      float x = 120.0f + px * (NV_TELA_W - 240.0f - (float)l.w);
-      float y = 120.0f + py * (NV_TELA_H - 240.0f - (float)l.h);
+      float x = floorf(120.0f + px * (NV_TELA_W - 240.0f - (float)l.w));
+      float y = floorf(120.0f + py * (NV_TELA_H - 240.0f - (float)l.h));
+      (void)agora;
       txt_desenhar_alpha(l, x, y, (veu - 0.80f) / 0.12f);
     }
   }

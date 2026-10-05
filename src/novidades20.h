@@ -43,7 +43,7 @@ int novidades20_pedido(void);
 // ---- Para a captura e os testes.
 enum { N20_DEV_ANDROID = 0, N20_DEV_LG, N20_DEV_TPK, N20_DEV_WGT, N20_NDEV };
 enum { N20_HERO = -1, N20_RESUMO = -2, N20_FIM = -3 };
-#define N20_NCAP 10
+#define N20_NCAP 11
 void novidades20_aparelho(int dev);   // forca o aparelho (-1 = o da build)
 int  novidades20_dev(void);
 int  novidades20_telas(void);         // telas na lista atual (hero..fim)

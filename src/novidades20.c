@@ -66,6 +66,14 @@ static const Cap CAP[N20_NCAP] = {
       { "Textura", 0, 0, 0 }, { "Opacidade do vidro", "Em teste", TG_AMARELO, 0 }, { "Vidro fosco", "Em teste", TG_AMARELO, 0 } },
     { "Vidro · ciano", "Sólido · âmbar", "Vidro · lilás" },
     "Painéis em ilhas, 18 cores, logo novo." },
+  { 0, "aj_moon", "Tela de descanso", 1, 0, "05.jpg",
+    { { "Com a TV parada, a tela escurece e entra o <b>descanso</b>: Vitrine, Relógio ou Só escurecer.", 0, 0, 0 },
+      { "A Vitrine passa títulos do seu catálogo em tela cheia; <b>OK</b> abre o que está na tela.", 0, 0, 0 },
+      { "Nada fica parado no mesmo lugar, e o descanso nunca entra com o filme tocando.", 0, 0, 0 } },
+    { { "Relógio com a próxima estreia da Agenda", 0, 0, 0 }, { "Vitrine do catálogo ou da sua lista", 0, 0, 0 },
+      { "Padrão de 2 min, dá pra desligar", 0, 0, 0 }, { "Brilho dos controles do player", 0, 0, 0 } },
+    { "Vitrine", "Relógio", "Só escurecer" },
+    "Vitrine e relógio quando a TV fica parada." },
   { 1, "aj_house", "Home e menu", 1, 0, "03.jpg",
     { { "Na Moderna o menu é um trilho flutuante; na Padrão a barra vai de cima a baixo da tela.", 0, 0, 0 },
       { "A Dinâmica mostra um pedaço da fileira de cima, pra você saber que dá pra subir.", 0, 0, 0 },
@@ -81,7 +89,7 @@ static const Cap CAP[N20_NCAP] = {
       { "Abre na hora com o que o clique já sabia, sem esperar a ficha inteira chegar.", 0, 0, 0 } },
     { { "← → troca de temporada na fileira de episódios", 0, 0, 0 }, { "Logos das produtoras de volta", 0, 0, 0 },
       { "Gráficos de temporada nas séries", 0, 0, 0 }, { "Guia parental sai da ilha do relógio", 0, 0, 0 },
-      { "Zoom do trailer", "Em teste · Samsung .tpk", TG_AMARELO, DS } },
+      { "Zoom do trailer", "Em teste · Samsung .tpk", TG_AMARELO, DS }, { "Explorar: climas e títulos parecidos", 0, 0, 0 } },
     { "Filme", "Série · episódios", NULL },
     "Página nova, trailer, amigos e Notas." },
   { 2, "aj_captions", "Player e legendas", 1, 0, "08.jpg",
@@ -111,13 +119,14 @@ static const Cap CAP[N20_NCAP] = {
       { "Painel Social abre com o Azul", 0, 0, 0 }, { "Enquetes", "Depende do servidor", TG_CINZA, 0 } },
     { "Painel Social", "Amigos no pôster · enquete", NULL },
     "Pessoa única, amigos nos pôsteres, enquetes." },
-  { 3, "aj_user-round", "Perfis 2.0", 0, 0, "00.jpg",
-    { { "O seletor usa a arte do perfil em foco como fundo, com as dicas numa ilha de vidro.", 0, 0, 0 },
+  { 3, "aj_user-round", "Perfis 2.0", 1, 0, "00.jpg",
+    { { "Fundo novo: <b>Filmes</b>, uma parede com os cartazes do que cada perfil assistiu.", 0, 0, 0 },
       { "Mostra o <b>Continuar assistindo</b> de quem está em foco. Perfil com PIN não mostra.", 0, 0, 0 },
       { "Plugins, enquetes e servidor pessoal acompanham o perfil que você escolheu.", 0, 0, 0 } },
-    { { "Troca de perfil sem tela em branco", 0, 0, 0 }, { "Preferências de desempenho ficam por aparelho", 0, 0, 0 } },
+    { { "Troca de perfil sem tela em branco", 0, 0, 0 }, { "Preferências de desempenho ficam por aparelho", 0, 0, 0 },
+      { "Fundos Luz e Projetor", 0, 0, 0 } },
     { "Perfil 1", "Perfil 2", "Perfil com PIN" },
-    "Seletor com arte e Continuar de cada perfil." },
+    "Parede de filmes e Continuar de cada perfil." },
   { 3, "aj_server", "Servidores pessoais", 0, 0, "13.jpg",
     { { "<b>Jellyfin</b> (login ou Quick Connect), <b>Emby</b> e <b>Plex</b> (login por PIN) como fontes da sua casa.", 0, 0, 0 },
       { "Suas bibliotecas viram fileiras na Home, com detalhes e retomar de onde parou.", 0, 0, 0 },
@@ -140,7 +149,8 @@ static const Cap CAP[N20_NCAP] = {
       { "Um único <b>Mostrar opções avançadas</b> no lugar de um em cada seção.", 0, 0, 0 },
       { "Opção inativa explica por quê. E o <b>Guia de uso</b> mora aqui dentro.", 0, 0, 0 } },
     { { "Gráfico de memória das imagens", 0, 0, 0 }, { "Fileiras da Home", 0, 0, 0 }, { "Tamanho padrão 80%", 0, 0, 0 },
-      { "Textos faltantes traduzidos nos 28 idiomas", 0, 0, 0 }, { "Registro com consentimento", 0, 0, 0 } },
+      { "Textos faltantes traduzidos nos 28 idiomas", 0, 0, 0 }, { "Registro com consentimento", 0, 0, 0 },
+      { "Teclado novo, com QR para digitar no celular", 0, 0, 0 } },
     { "Índice com prévia", "Memória e avançado", NULL },
     "Ajustes mais curtos, com prévia e Guia de uso." },
 };
@@ -503,6 +513,32 @@ static void cenaVisual(int s) {
     sTxt(TXT_G18R, "Continuar assistindo · 58%", p.x + 26, p.y + 258, 0.55f); }
 }
 
+static void cenaDescanso(int s) {
+  if (s == 0) {   // Vitrine: arte inteira, logo/titulo e meta a esquerda
+    img("05.jpg", (GfxRect){ 0, 0, 1280, 720 }, 0, 1);
+    sVeu((GfxRect){ 0, 300, 1280, 420 }, 0, 0.75f);
+    gfx_cor((GfxRect){ 0, 0, 1280, 720 }, 0, 0, 0, 0, 0.18f);
+    sCaps("No seu catálogo", 70, 410, 1);
+    sTxt(TXT_W20_HERO, "Título", 66, 440, 1);
+    sTxt(TXT_G18R, "Filme", 70, 590, 0.6f);
+    { TxtLinha ok = txt(TXT_ILHA_APOIO, "OK para abrir");
+      GfxRect r = { 1280 - 70 - ok.w - 52, 620, ok.w + 52, 44 };
+      sIlha(r, 22); txtMeio(ok, r.x + 26, r.y, 44, 1); }
+  } else {
+    gfx_cor((GfxRect){ 0, 0, 1280, 720 }, 0, 0, 0, 0, 1);
+    if (s == 1) {   // Relogio: numeral fino, data e a proxima estreia
+      TxtLinha h = txt(TXT_DESC_HORA, "21:47"), d = txt(TXT_V2_26, "domingo"), p = txt(TXT_G18R, "Série · T1 E3");
+      txt_desenhar_alpha(h, 640 - h.w * 0.5f, 170, 0.62f);
+      txt_desenhar_alpha(d, 640 - d.w * 0.5f, 180 + h.h, 0.45f);
+      sCaps("Próxima estreia", 640 - capsLarg(TXT_AJ_CAPS13, "Próxima estreia", 2.2f) * 0.5f, 250 + h.h, 0.6f);
+      txt_desenhar_alpha(p, 640 - p.w * 0.5f, 280 + h.h, 0.45f);
+    } else {        // So escurecer: quase tudo apagado
+      TxtLinha h = txt(TXT_G26B, "21:47");
+      txt_desenhar_alpha(h, 880, 560, 0.35f);
+    }
+  }
+}
+
 static void cenaHome(int s) {
   int mod = s == 0, i;
   float L = mod ? 0 : 96, X = L + (mod ? 150 : 50), H = mod ? 520 : 400;
@@ -785,8 +821,22 @@ static void cenaPerfis(int s) {
   static const float C[3][3] = { { 0.533f, 0.878f, 0.965f }, { 0.949f, 0.804f, 0.392f }, { 0.780f, 0.733f, 0.941f } };
   int i;
   acR = C[s][0]; acG = C[s][1]; acB = C[s][2];
-  img(A[s], (GfxRect){ 0, 0, 1280, 720 }, 0, 1);
-  gfx_cor((GfxRect){ 0, 0, 1280, 720 }, 0, 0.02f, 0.024f, 0.03f, 0.55f);
+  (void)A;
+  // Fundo Filmes (psestilos.c): a parede de cartazes de quem esta em foco,
+  // girada como na tela de verdade, colunas alternadas. O de PIN nao tem parede.
+  gfx_cor((GfxRect){ 0, 0, 1280, 720 }, 0, 0.035f, 0.04f, 0.05f, 1);
+  if (s != 2) {
+    int col, lin;
+    gfx_girar(-0.16f, 640, 360);
+    for (col = 0; col < 9; col++)
+      for (lin = 0; lin < 4; lin++) {
+        char n[4];
+        snprintf(n, sizeof n, "%02d", (col * 4 + lin + s * 13) % 30);
+        sPoster(n, -170 + col * 186.0f, -230 + lin * 268.0f + (col & 1 ? 120.0f : 0.0f), 170);
+      }
+    gfx_sem_girar();
+  }
+  gfx_cor((GfxRect){ 0, 0, 1280, 720 }, 0, 0.02f, 0.024f, 0.03f, 0.62f);
   sVeu((GfxRect){ 0, 360, 1280, 360 }, 0, 0.6f);
   { float w = capsLarg(TXT_AJ_CAPS13, "Quem está assistindo?", 2.2f); sCaps("Quem está assistindo?", 640 - w * 0.5f, 90, 1.6f); }
   for (i = 0; i < 3; i++) {
@@ -970,7 +1020,7 @@ static void cenaAjustes(int s) {
 }
 
 typedef void (*CenaFn)(int s);
-static const CenaFn CENA[N20_NCAP] = { cenaVisual, cenaHome, cenaTitulo, cenaPlayer, cenaFontes,
+static const CenaFn CENA[N20_NCAP] = { cenaVisual, cenaDescanso, cenaHome, cenaTitulo, cenaPlayer, cenaFontes,
                                       cenaSocial, cenaPerfis, cenaServidores, cenaPlugins, cenaAjustes };
 static int nEst(int c) { return CAP[c].st[2] ? 3 : 2; }
 
@@ -1550,7 +1600,11 @@ static void telaResumo(float a, float dy) {
       int c;
       capsA(TXT_AJ_KBD, "Você vai notar logo", 3.0f, ix, iy, a);
       iy += 40;
-      for (c = 0; c < N20_NCAP; c++) if (!CAP[c].exp) { item3(CAP[c].nome, CAP[c].sum, 0, ix, iy, iw, a); iy += 55; }
+      int n = 0;
+      float passo;
+      for (c = 0; c < N20_NCAP; c++) if (!CAP[c].exp) n++;
+      passo = n > 9 ? (584.0f - 70.0f - 20.0f) / (float)n : 55.0f;   // 9 cabiam a 55
+      for (c = 0; c < N20_NCAP; c++) if (!CAP[c].exp) { item3(CAP[c].nome, CAP[c].sum, 0, ix, iy, iw, a); iy += passo; }
     } else if (i == 1) {
       static const char *const B[4] = { "Plugins", "Servidor P2P", "Opacidade do vidro / Vidro fosco", "Receber enquetes" };
       static const char *const S[4] = { "Desligado, experimental", "Desligado, experimental", "Opções de teste", "Ligado, dá pra desligar" };

@@ -2844,6 +2844,20 @@ void ajustes_dir(const char *dir) {
       gravar();
     } }
 #endif
+  // MIGRACAO UNICA (2.0): o fundo da escolha de perfil volta a Filmes (0, a
+  // parede de cartazes de cada perfil, PS_FUNDO_FILMES em psestilos.h) para
+  // todo mundo, uma vez. O dono decidiu: quem tinha Listras ou Arte do perfil
+  // de antes nunca veria a tela nova. Quem trocar depois, fica. Em GPU fraca
+  // perfilsel.c ainda desenha Luz no lugar.
+  { char *m = dados_ler("perfilfundo-20.txt");
+    if (m) free(m);
+    else {
+      if (valor[AJ_PS_FUNDO] != 0)
+        printf("[ajustes] fundo da escolha de perfil -> Filmes (migracao unica da 2.0)\n");
+      valor[AJ_PS_FUNDO] = 0;
+      dados_gravar("perfilfundo-20.txt", "1\n");
+      gravar();
+    } }
   // O limite mora em fileiras.c; esta linha e so o espelho dele. Ler daqui em
   // vez de gravar evita a divergencia: o arquivo de ajustes nao guarda o
   // numero, entao nao ha como os dois discordarem.
