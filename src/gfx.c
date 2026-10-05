@@ -1526,6 +1526,7 @@ int gfx_n_assados;
 static float ambChave[20];
 static int ambPendente, ambIntacta;
 static int foscoOk;   // este quadro assou fundo (gfx_ambiente_preparar): o vidro fosco tem fonte
+static int foscoBloq; // este quadro tem video vivo por baixo (gfx_vidro_fosco_bloquear)
 void gfx_novo_quadro(void) {
   gfx_n_rect = gfx_n_prog = gfx_n_bind = gfx_n_outros = 0;
   gfx_ms_rect = gfx_ms_outros = 0.0;
@@ -1533,7 +1534,7 @@ void gfx_novo_quadro(void) {
   memcpy(gfx_fill_modo_ult, gfx_fill_modo, sizeof gfx_fill_modo);
   memset(gfx_fill_modo, 0, sizeof gfx_fill_modo);
   desfGeradosQuadro = 0;
-  ambPendente = 0; ambIntacta = 0; foscoOk = 0;
+  ambPendente = 0; ambIntacta = 0; foscoOk = 0; foscoBloq = 0;
   gfx_n_assados = 0;
 }
 // Relogio dos pontos de GL que NAO sao gfx_rect: recorte, FBO do snapshot e as
@@ -2093,8 +2094,13 @@ void gfx_cartao_foco_vidro(GfxRect r, float raio, float foco, float alfa,
 // coordenada de tela — alinha com o que esta atras, como vidro jateado de
 // verdade. Um quad texturizado por painel, sem desfoque por quadro. Sem assado
 // neste quadro (player, fundo liso) nao desenha nada e o vidro fica normal.
+// COM VIDEO VIVO POR BAIXO o assado nao e o fundo: e a luz de 320x180 da arte
+// do titulo, e o fosco a pintaria OPACA por cima do plano de video, ampliada
+// ~6x pelo bilinear (elipse serrilhada das luzes e a luz do lado direito vira
+// uma faixa clara na folha, que fica a direita). O player avisa por quadro.
+void gfx_vidro_fosco_bloquear(void) { foscoBloq = 1; }
 void gfx_vidro_fosco(GfxRect r, float raio, float a) {
-  if (!ajustes_vidro_fosco() || !foscoOk || !ambTex || ambChave[0] < 0.0f ||
+  if (foscoBloq || !ajustes_vidro_fosco() || !foscoOk || !ambTex || ambChave[0] < 0.0f ||
       efeitosMinimos || snapAtivo || r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
   gfx_rect(r, ambTex, GFX_FOSCO, 0, 0, 0, raio, 1, 1, 1, a);
 }

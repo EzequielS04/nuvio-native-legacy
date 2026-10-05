@@ -522,6 +522,9 @@ void gfx_ambiente_preparar(void);
 // do fundo (o assado de gfx_ambiente_preparar) alinhada a tela. Nada se este
 // quadro nao assou fundo nenhum. Chamado por gfx_vidro_folha/painel, ANTES da tinta.
 void gfx_vidro_fosco(GfxRect r, float raio, float a);
+// O quadro tem video vivo (furo) por baixo: o fosco nao desenha ate o proximo
+// gfx_novo_quadro (o assado e a luz da arte, nao o que passa no video).
+void gfx_vidro_fosco_bloquear(void);
 // Fator da opacidade do vidro: 1,0 = os 78% de sempre (ajustes_vidro_opacidade / 0,78).
 float gfx_vidro_opacidade(void);
 void gfx_ambiente(float alfa);
