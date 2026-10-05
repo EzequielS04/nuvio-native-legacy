@@ -841,10 +841,10 @@ int main(int argc, char **argv) {
   // que aparece e PRETO ate o primeiro SwapWindow — medido no emulador Android
   // TV, ~700 ms entre a splash do sistema e a abertura; a TCL da #223 levou
   // 2,8 s para o primeiro quadro. Um clear + swap aqui, antes dos shaders, troca
-  // esse preto pela cor da arte (#190819, a mesma de values/cores.xml). So no
+  // esse preto pela cor lisa da abertura (#0E0F12, a mesma de values/cores.xml). So no
   // Android: na LG o sistema segura o splash.png ate o primeiro quadro, e uma
   // cor lisa aqui apagaria a marca.
-  glClearColor(25.0f / 255.0f, 8.0f / 255.0f, 25.0f / 255.0f, 1.0f);
+  glClearColor(14.0f / 255.0f, 15.0f / 255.0f, 18.0f / 255.0f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
   SDL_GL_SwapWindow(win);
 #endif
