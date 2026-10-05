@@ -29,6 +29,21 @@
 static GLuint fbo, fboTex;
 static int LW = 1920, LH = 1080;
 static char MKV[300];
+static char srtBom[300], ruim[300];
+// faixas.c de mentira: a "outra" legenda do mesmo idioma e a boa; ou nenhuma.
+static int trocadorBom(const char *idioma, const uint64_t *tent, int n, int voltar, char *nome, unsigned tam) {
+  (void)idioma;
+  if (voltar) return 0;
+  for (int k = 0; k < n; k++) if (tent[k] == legsync_hash_url(srtBom)) return 0;
+  snprintf(nome, tam, "OpenSubtitles");
+  legsync_primaria_externa(srtBom, "pt", "OpenSubtitles");
+  return 1;
+}
+static int trocadorNenhum(const char *idioma, const uint64_t *tent, int n, int voltar, char *nome, unsigned tam) {
+  (void)idioma; (void)tent; (void)n; (void)nome; (void)tam;
+  if (voltar) { legsync_primaria_externa(ruim, "pt", "SubDL"); return 1; }
+  return 0;
+}
 
 static void salvar(const char *saida, const char *sufixo) {
   char nome[700];
@@ -93,6 +108,8 @@ int main(int argc, char **argv) {
   assert(base);
   snprintf(MKV, sizeof MKV, "%s/ff.mkv", base);
   snprintf(srt, sizeof srt, "%s/ext_mais2500.srt", base);
+  snprintf(srtBom, sizeof srtBom, "%s", srt);
+  snprintf(ruim, sizeof ruim, "%s/ext_ruim.srt", base);
   SDL_SetHint("SDL_MAC_BACKGROUND_APP", "1");
   assert(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) == 0);
   IMG_Init(IMG_INIT_PNG | IMG_INIT_JPG);
@@ -131,35 +148,42 @@ int main(int argc, char **argv) {
   v = legsync_visao(0); assert(v.fase == LEGSYNC_INDISPONIVEL && v.acoes == 0);
   salvar(saida, "1-sem-externa");
 
-  // A externa (+2,5 s) escolhida: pronta, Rapida entre < >.
+  // R4: automatico. A externa (+2,5 s) escolhida sincroniza SOZINHA, sem menu.
   legsync_primaria_externa(srt, "pt", "OpenSubtitles");
-  v = esperar(LEGSYNC_PRONTA);
+  for (i = 0; i < 3000 && legsync_visao(0).autoFase != 2; i++) quadros(1);
+  v = legsync_visao(0);
+  printf("aceito: %+d ms (referencia %s)\n", v.offsetAutoMs, v.idiomaRef);
+  assert(v.autoFase == 2 && abs(v.offsetAutoMs - 2500) <= 25 && !v.autoTrocou);
   // A linha (slot principal) fica logo acima de "Mais opcoes", a ultima.
   for (i = 0; i < 12; i++) tecla(SDLK_DOWN);
   tecla(SDLK_UP);
-  quadros(20);
-  salvar(saida, "2-pronta-rapida");
-  tecla(SDLK_RIGHT);                           // Completa
-  quadros(20);
-  salvar(saida, "3-pronta-completa");
-  tecla(SDLK_LEFT);
-  tecla(SDLK_RETURN);                          // Rapida: le a faixa embutida e compara
-  v = esperar(LEGSYNC_ACEITA);
-  printf("aceito: %+d ms (referencia %s)\n", v.offsetAutoMs, v.idiomaRef);
-  assert(abs(v.offsetAutoMs - 2500) <= 25);
   quadros(30);
-  salvar(saida, "4-aceita-foco");              // Desfazer entre < >
-  tecla(SDLK_UP);                              // sem foco: o offset no acento a direita
-  quadros(30);
-  salvar(saida, "5-aceita-sem-foco");
-  tecla(SDLK_DOWN);
+  salvar(saida, "2-sincronizada");             // "Sincronizada" + Desfazer
   tecla(SDLK_RETURN);                          // Desfazer
   v = legsync_visao(0); assert(v.fase == LEGSYNC_DESFEITA);
   quadros(30);
-  salvar(saida, "6-desfeita");
+  salvar(saida, "3-desfeita");
+
+  // A escolhida nao fecha: troca sozinha por outra do mesmo idioma que sincroniza.
+  legsync_definir_trocador(trocadorBom);
+  legsync_primaria_externa(ruim, "pt", "SubDL");
+  for (i = 0; i < 3000 && legsync_visao(0).autoFase != 2; i++) quadros(1);
+  v = legsync_visao(0);
+  assert(v.autoFase == 2 && v.autoTrocou && abs(v.offsetAutoMs - 2500) <= 25);
+  quadros(30);
+  salvar(saida, "4-trocou");
+
+  // Nenhuma fecha: volta a original e diz que nao deu.
+  legsync_definir_trocador(trocadorNenhum);
+  legsync_primaria_externa(ruim, "pt", "SubDL");
+  for (i = 0; i < 3000 && legsync_visao(0).autoFase != 3; i++) quadros(1);
+  v = legsync_visao(0);
+  assert(v.autoFase == 3 && legsync_offset_ms(0) == 0);
+  quadros(30);
+  salvar(saida, "5-nao-deu");
   legsync_primaria_outra(1);                   // a embutida escolhida
   quadros(30);
-  salvar(saida, "7-embutida");
+  salvar(saida, "6-embutida");
   puts("legsync_shot: ok");
   return 0;
 }

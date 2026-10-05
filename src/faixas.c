@@ -161,7 +161,32 @@ static const char *motivoTV(int i) {
 // Chamada quando uma sessao de reproducao nova comeca: a legenda externa e da
 // sessao, nao do aparelho. Sem isto o titulo seguinte abriria a folha marcando
 // como ativa uma legenda que nao foi escolhida para ele.
+// R4: a sincronia automatica (legsync.c) pede OUTRA legenda do mesmo idioma
+// quando a escolhida nao fecha com a referencia. Liga pelo mesmo caminho da
+// escolha da pessoa. `voltar` devolve a primeira tentada (a escolha original).
+static int autoTroca(const char *idioma, const uint64_t *tent, int n, int voltar,
+                     char *nome, unsigned tamNome) {
+  Legenda v[LEG_MAX];
+  int nv = addons_legendas_copiar(v, LEG_MAX, NULL, NULL), j, k;
+  for (j = 0; j < nv; j++) {
+    int jaFoi = 0;
+    uint64_t h = legsync_hash_url(v[j].url);
+    if (!v[j].url[0]) continue;
+    if (voltar) { if (n < 1 || h != tent[0]) continue; }
+    else {
+      if (!idioma || !idioma[0] || strcasecmp(idioma, v[j].idioma)) continue;
+      for (k = 0; k < n; k++) if (tent[k] == h) jaFoi = 1;
+      if (jaFoi) continue;
+    }
+    snprintf(nome, tamNome, "%s", v[j].provedor[0] ? v[j].provedor : v[j].rotulo);
+    faixas_escolher_externa(&v[j]);
+    return 1;
+  }
+  return 0;
+}
+
 void faixas_reiniciar(void) {
+  legsync_definir_trocador(autoTroca);
   legExterna = -1; legExternaId[0] = 0; legOverlay = legOverlayNoGo = legOverlayEsperando = -1; aberta = 0;
   legOverlayFalhas = legOverlayRecusas = legOverlayNoGoEstado = 0; legOverlayRetomar = 0;
   legOverlayTV = legOverlayColhidos = 0;

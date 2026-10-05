@@ -365,6 +365,14 @@ float ajustes_tamanho_ui(void);
 // Settings only: 0.8/0.9/1.0, default 0.9; independent of global UI zoom.
 float ajustes_tamanho_ajustes(void);
 int   ajustes_esconder_logo_trailer(void);   // 1 = hide the corner title logo while a trailer plays
+// R4: second subtitle placement and own style (local). junto: 1 = stacked right above the
+// primary at the bottom, 0 = top band. tamanho: percent (60..160), 0 = automatic (90% of the
+// primary). cor/fundo/borda: the same indices as the primary style (VideoLegendaEstilo), -1 = same as primary.
+int   ajustes_leg2_junto(void);
+int   ajustes_leg2_tamanho(void);
+int   ajustes_leg2_cor(void);
+int   ajustes_leg2_fundo(void);
+int   ajustes_leg2_borda(void);
 int   ajustes_legenda_sync_audio(void);      // 1 = offer "Por audio" in subtitle AutoSync (F06; local, default off)
 int   ajustes_trailer_zoom_tpk(void);        // #241: 1 = experimental trailer zoom on the native .tpk (local, default off)
 int   ajustes_cache_seek_mb(void);           // F07: seek cache limit in MB for the next video (0 = off / not on this TV)

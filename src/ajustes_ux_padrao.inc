@@ -212,3 +212,4 @@
   1, /* experimental trailer zoom, .tpk only: Desligado (V_LIGA: 1 = Desligado) (#241) */
   0, /* plugins: action (state lives in plugins.c, F09) */
   1, 0, 0, 0, /* personal servers (F11): OFF (V_LIGA: 1 = Desligado); actions */
+  0, 0, 0, 0, 0, /* second subtitle (R4): No topo; Automatico; Igual a principal x3 */

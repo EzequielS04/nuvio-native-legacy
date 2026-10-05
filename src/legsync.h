@@ -12,7 +12,7 @@
 //      baixou (legenda_carregar_com), com idioma/origem/identidade opaca.
 //      Embutida, nativa ou nenhuma: AutoSync indisponivel (a embutida ja foi
 //      multiplexada com o video).
-//   3. So quando a pessoa pede (Rapida/Completa) o legref le a faixa de texto
+//   3. (R4: agora ELE COMECA SOZINHO, ver legsync_definir_trocador.) O legref le a faixa de texto
 //      embutida do MKV por Range, em segundo plano, com orcamento. Sem
 //      referencia COMPLETA: indisponivel, offset automatico zero.
 //   4. legsync_offset_ms(manual) devolve manual + automatico ACEITO, para ser
@@ -27,6 +27,7 @@
 #ifndef NV_LEGSYNC_H
 #define NV_LEGSYNC_H
 #include "legref.h"
+#include <stdint.h>
 
 #define LEGSYNC_ACAO_RAPIDA   1
 #define LEGSYNC_ACAO_COMPLETA 2
@@ -64,6 +65,10 @@ typedef struct {
   int audio;             // F06: o estado/resultado atual veio da referencia de AUDIO
   LegSyncMotivo motivoAudio;  // F06: Sincronia por audio ligada mas "Por audio" nao
                               // oferecido agora (plataforma/passthrough/sem audio)
+  // R4 (automatico): 0 sem plano, 1 trabalhando, 2 sincronizou, 3 nao deu.
+  int autoFase;
+  int autoTrocou;             // 1 = a escolhida nao sincronizou e outra legenda entrou no lugar
+  char autoNome[64];          // nome da legenda que entrou (autoTrocou)
 } LegSyncVisao;
 
 void legsync_iniciar(const char *urlMidia);
@@ -84,17 +89,34 @@ void legsync_audio_habilitar(int ligado);
 // F06: a pessoa trocou a faixa de AUDIO: a escuta em curso nao vale mais.
 void legsync_audio_trocou(void);
 
+// R4: SINCRONIA AUTOMATICA. Toda legenda externa que entra como principal
+// (escolha da pessoa ou a automatica de idioma) e sincronizada sozinha contra a
+// melhor referencia (faixa embutida; audio quando o ajuste esta ligado). Se a
+// escolhida nao fecha com confianca, legsync pede ao `trocador` (faixas.c) OUTRA
+// legenda do mesmo idioma; ela e comparada igual, ate 3 trocas. Esgotadas,
+// a escolha original volta (nada alterado) e o estado diz que nao deu.
+// O trocador roda na thread da UI, FORA de qualquer lock, e liga a legenda pelo
+// mesmo caminho da escolha da pessoa (legsync_primaria_externa). `voltar` = 1
+// pede a primeira da lista `tentadas`. Devolve 1 se ligou alguma, e o nome dela.
+typedef int (*LegSyncTrocador)(const char *idioma, const uint64_t *tentadas, int n, int voltar,
+                               char *nome, unsigned tamNome);
+void legsync_definir_trocador(LegSyncTrocador t);
+uint64_t legsync_hash_url(const char *url);   // identidade opaca usada em `tentadas`
+
 int  legsync_acao(int acao);            // 1 = aceita no estado atual
 LegSyncVisao legsync_visao(int slot);   // slot 1: LEGSYNC_DEPOIS
 
 // --- API DE APRESENTACAO (legsyncui.c) -------------------------------------
 void legsync_texto(const LegSyncVisao *v, char *dst, unsigned tam);  // i18n
-const char *legsync_acao_rotulo(int acao);                            // i18n
+const char *legsync_acao_rotulo(int acao);
+// R4: a linha unica e simples do seletor (sem menu). Vazio = esconder a linha.
+void legsync_texto_simples(const LegSyncVisao *v, char *dst, unsigned tam);                            // i18n
 // Liga o AutoSync como provedor da linha de sincronizacao do seletor de
 // legendas do F04 (legendasui_definir_sync). Idempotente; thread da UI.
 void legsync_ui_ligar(void);
 
 // So para testes: leitor do legref antes do primeiro legsync_iniciar.
 void legsync_teste_leitor(LegRefLer ler, void *u);
+void legsync_teste_auto(int ligado);   // so testes: 0 = so as acoes manuais
 
 #endif

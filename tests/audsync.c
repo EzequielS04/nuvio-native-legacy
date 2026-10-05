@@ -127,6 +127,7 @@ static LegSyncVisao esperar(LegSyncFase f) {
 
 // New player session with the external subtitle (cues of seed 99) active.
 static void abrirComExterna(void) {
+  legsync_teste_auto(0);   // R4: este teste exercita as acoes manuais
   legsync_iniciar(URL);
   legsync_audio_habilitar(1);
   legsync_primaria_externa("ext://legenda.srt", "en", "OpenSubtitles");

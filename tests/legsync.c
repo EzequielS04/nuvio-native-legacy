@@ -74,6 +74,47 @@ static LegSyncVisao esperarFase(const char *url, LegSyncFase f) {
 static const char *MKV = "https://cdn.example/a/ff.mkv";
 static const char *MKV2 = "https://cdn.example/b/mm.mkv";
 
+
+// --- R4: trocador de teste (faixas.c de mentira) ---------------------------------
+static const char *cand[8]; static int nCand, trocas, voltou; static const char *candIdioma = "pt";
+static const char *MKV3 = "https://cdn.example/c/semcues.mkv";
+static int trocadorTeste(const char *idioma, const uint64_t *tent, int n, int voltar, char *nome, unsigned tam) {
+  char url[300];
+  if (voltar) { voltou++; snprintf(nome, tam, "orig"); legsync_primaria_externa("ext://0/ext_ruim.srt", "pt", "Ruim"); return 1; }
+  if (strcmp(idioma, candIdioma)) return 0;
+  for (int i = 0; i < nCand; i++) {
+    snprintf(url, sizeof url, "ext://0/%s", cand[i]);
+    int jaFoi = 0; for (int k = 0; k < n; k++) if (tent[k] == legsync_hash_url(url)) jaFoi = 1;
+    if (jaFoi) continue;
+    trocas++;
+    snprintf(nome, tam, "Prov-%s", cand[i]);
+    legsync_primaria_externa(url, idioma, "Prov");
+    return 1;
+  }
+  return 0;
+}
+// Cues de duracao e intervalo irregulares: nenhum atraso fecha com a referencia.
+static void gerarRuim(const char *nome) {
+  char c[700]; FILE *f; unsigned x = 12345u; double t = 5.0;
+  snprintf(c, sizeof c, "%s/%s", DIR, nome); f = fopen(c, "wb"); assert(f);
+  for (int i = 1; i <= 160; i++) {
+    double d; int h, m, s, ms, h2, m2, s2, ms2;
+    x = x * 1103515245u + 12345u; t += 0.4 + (double)((x >> 16) % 5000) / 1000.0;
+    x = x * 1103515245u + 12345u; d = 0.3 + (double)((x >> 16) % 3000) / 1000.0;
+    h = (int)(t / 3600); m = (int)(t / 60) % 60; s = (int)t % 60; ms = (int)((t - (int)t) * 1000);
+    h2 = (int)((t + d) / 3600); m2 = (int)((t + d) / 60) % 60; s2 = (int)(t + d) % 60; ms2 = (int)(((t + d) - (int)(t + d)) * 1000);
+    fprintf(f, "%d\n%02d:%02d:%02d,%03d --> %02d:%02d:%02d,%03d\nTexto qualquer %d\n\n", i, h, m, s, ms, h2, m2, s2, ms2, i);
+  }
+  fclose(f);
+}
+static LegSyncVisao esperarAuto(const char *url, int autoFase) {
+  LegSyncVisao v;
+  for (int i = 0; i < 6000; i++) { passo(url, 0); v = legsync_visao(0); if (v.autoFase == autoFase) return v; usleep(1000); }
+  fprintf(stderr, "esperava autoFase %d, ficou %d (fase %d motivo %d)\n", autoFase, v.autoFase, v.fase, v.motivo);
+  assert(!"timeout");
+  return v;
+}
+
 // O documento de referencia em `t` e o que a pessoa ve com o offset total.
 static void conferirNaTela(int total) {
   long n; char *b = arquivo("emb.srt", &n); LegendaDocumentoInfo i = { .flags = LEGENDA_DOC_COMPLETO };
@@ -97,6 +138,7 @@ int main(int argc, char **argv) {
   LegSyncVisao v; int casos = 0;
   DIR = argc > 1 ? argv[1] : "/tmp/nv-legref-fx";
   legsync_teste_leitor(lerMkv, NULL);
+  legsync_teste_auto(0);   // as secoes 1..11 testam as ACOES manuais; o automatico e a secao 12
 
   // Antes de criar e no slot 1: honesto.
   assert(legsync_visao(0).fase == LEGSYNC_INDISPONIVEL);
@@ -272,18 +314,61 @@ int main(int argc, char **argv) {
     esperarFase(MKV, LEGSYNC_PRONTA);
     assert(prov.estado(0, prov.u) && !prov.estado(1, prov.u));         // segundo idioma: depois
     canalId = "xtream:1:2"; assert(!prov.estado(0, prov.u)); canalId = "";
-    n = prov.acoes(0, rot, 8, prov.u);
-    assert(n == 2 && !strcmp(rot[0], "R\xc3\xa1pida") && !strcmp(rot[1], "Completa"));
+    assert(strstr(prov.estado(0, prov.u), "Sincronizando"));            // R4: uma linha so, sem menu
+    assert(prov.acoes(0, rot, 8, prov.u) == 0);                         // nada a escolher antes de sincronizar
     assert(prov.acoes(1, rot, 8, prov.u) == 0);
-    prov.executar(0, 1, prov.u);                                        // Completa
+    assert(legsync_acao(LEGSYNC_ACAO_COMPLETA));
     v = esperarFase(MKV, LEGSYNC_ACEITA); assert(abs(v.offsetAutoMs - 2500) <= 25);
-    assert(strstr(prov.estado(0, prov.u), "Sincronizada"));
+    assert(!strcmp(prov.estado(0, prov.u), "Sincronizada"));
     n = prov.acoes(0, rot, 8, prov.u);
-    assert(n >= 1 && !strcmp(rot[0], "Desfazer"));
+    assert(n == 1 && !strcmp(rot[0], "Desfazer"));
     prov.executar(0, 0, prov.u);                                        // Desfazer
     assert(legsync_visao(0).fase == LEGSYNC_DESFEITA && legsync_offset_ms(0) == 0);
     prov.executar(0, 99, prov.u);                                       // indice velho: nada
     casos++; }
+
+  // 12. R4: SINCRONIA AUTOMATICA, sem a pessoa operar nada.
+  legsync_teste_auto(1);
+  gerarRuim("ext_ruim.srt"); gerarRuim("ext_ruim2.srt");
+  legsync_definir_trocador(trocadorTeste);
+  { const char *rot[8];
+    // 12a. A boa de primeira: sincroniza sozinha, sem trocar nada.
+    legsync_iniciar(MKV); trocas = 0;
+    legsync_primaria_externa("ext://0/ext_mais2500.srt", "pt", "Boa");
+    v = esperarAuto(MKV, 2);
+    assert(v.fase == LEGSYNC_ACEITA && abs(v.offsetAutoMs - 2500) <= 25 && !v.autoTrocou && trocas == 0);
+    assert(!strcmp(prov.estado(0, prov.u), "Sincronizada"));
+    assert(prov.acoes(0, rot, 8, prov.u) == 1 && !strcmp(rot[0], "Desfazer"));
+    prov.executar(0, 0, prov.u);
+    for (int k = 0; k < 50; k++) passo(MKV, 0);                         // desfeita: nao reinicia sozinha
+    v = legsync_visao(0); assert(v.fase == LEGSYNC_DESFEITA && legsync_offset_ms(0) == 0 && trocas == 0);
+
+    // 12b. A escolhida (ruim) nao fecha: troca para outra do mesmo idioma que sincroniza.
+    legsync_iniciar(MKV); trocas = 0; cand[0] = "ext_ruim2.srt"; cand[1] = "ext_mais2500.srt"; nCand = 2;
+    legsync_primaria_externa("ext://0/ext_ruim.srt", "pt", "Ruim");
+    v = esperarAuto(MKV, 2);
+    assert(v.autoTrocou && !strcmp(v.autoNome, "Prov-ext_mais2500.srt") && abs(v.offsetAutoMs - 2500) <= 25);
+    assert(trocas == 2 && strstr(prov.estado(0, prov.u), "Prov-ext_mais2500.srt"));
+
+    // 12c. Nenhuma sincroniza: volta a escolha original, nada alterado, estado honesto.
+    legsync_iniciar(MKV); trocas = 0; voltou = 0; cand[0] = "ext_ruim2.srt"; nCand = 1;
+    legsync_primaria_externa("ext://0/ext_ruim.srt", "pt", "Ruim");
+    v = esperarAuto(MKV, 3);
+    assert(voltou == 1 && !v.autoTrocou && legsync_offset_ms(0) == 0);
+    assert(!strcmp(prov.estado(0, prov.u), "N\xc3\xa3o deu para sincronizar"));
+    assert(prov.acoes(0, rot, 8, prov.u) == 0);
+
+    // 12d. Arquivo sem referencia (sem faixa de texto): nao ha como julgar, nao troca nada.
+    legsync_iniciar(MKV3); trocas = 0; cand[0] = "ext_mais2500.srt"; nCand = 1;
+    legsync_primaria_externa("ext://0/ext_ruim.srt", "pt", "Ruim");
+    v = esperarAuto(MKV3, 3); assert(trocas == 0 && legsync_offset_ms(0) == 0);
+
+    // 12e. Outro idioma nao entra: sem candidata do mesmo idioma, volta sozinha ao fim.
+    legsync_iniciar(MKV); trocas = 0; cand[0] = "ext_mais2500.srt"; nCand = 1; candIdioma = "en";
+    legsync_primaria_externa("ext://0/ext_ruim.srt", "pt", "Ruim");
+    v = esperarAuto(MKV, 3); assert(trocas == 0); candIdioma = "pt";
+    casos++; }
+  legsync_teste_auto(0); legsync_definir_trocador(NULL);
 
   // 10. Fim de sessao e corridas de teardown: leitura presa, download pendente,
   //     analise em curso, 40 sessoes seguidas; depois destruir com tudo no ar.
