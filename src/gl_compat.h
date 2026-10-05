@@ -8,7 +8,9 @@
 #ifndef NV_GL_COMPAT_H
 #define NV_GL_COMPAT_H
 
-#ifdef __APPLE__
+// NV_GLES_NO_MAC: o teste tests/fundo_assado.sh compila o nucleo no Mac
+// contra o GLES2 do ANGLE (o dialeto e as regras de FBO da TV), nao o GL 2.1.
+#if defined(__APPLE__) && !defined(NV_GLES_NO_MAC)
   #define GL_SILENCE_DEPRECATION 1
   #include <OpenGL/gl.h>
   #include <OpenGL/glext.h>
