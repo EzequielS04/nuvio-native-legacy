@@ -26,6 +26,7 @@ void servidores_esquecer_todos(void);   // servidores.c: wipe every profile's to
 #include "catalogo.h"
 #include "vistoep.h"
 #include "progresso.h"
+#include "perfilcont.h"
 #include "syncprog.h"
 #include "ajustes.h"
 #include "catordem.h"
@@ -1911,6 +1912,7 @@ void sync_esquecer_usuario(void) {
   perfilAplicado = 0;
   perfis_esquecer();
   prog_esquecer_tudo();
+  perfilcont_esquecer();
   syncprog_esquecer();
 
   // As caixas que o fio preenche tambem: um ciclo que terminou logo antes do

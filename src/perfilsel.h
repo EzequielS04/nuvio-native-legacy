@@ -54,6 +54,7 @@ typedef struct {
   int burst_desenhado;
   float amb_t;        /* cross-fade do ambiente do perfil, 0..1 */
   int amb_atual, amb_ant;
+  int cont_tem[8];    /* cartao "continuar" montado por perfil */
 } PerfilSelTesteEstado;
 void perfilsel_teste_estado(PerfilSelTesteEstado *estado);
 #endif

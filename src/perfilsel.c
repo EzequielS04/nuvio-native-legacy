@@ -17,6 +17,7 @@
 #include "cachearte.h"
 #include "ponteiro.h"
 #include "plrui.h"
+#include "perfilcont.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -56,6 +57,15 @@
 #define PS_ILHA_H        68.0f
 #define PS_ILHA_PAD      30.0f
 #define PS_ARTE_H       648.0f   // faixa da arte de fundo do perfil focado
+// CARTAO "CONTINUAR" sob o perfil em foco (2.0, variante B): a peca da ilha
+// (material vidro/solido, mini capa, trilho) com o ultimo item da pessoa.
+#define PS_CONT_W      520.0f
+#define PS_CONT_H       96.0f
+#define PS_CONT_RAIO    30.0f
+#define PS_CONT_CAPA_W  44.0f
+#define PS_CONT_CAPA_H  64.0f
+#define PS_CONT_TRILHO 200.0f
+#define PS_CONT_Y_MAX  792.0f   // topo, com o avatar no teto; abaixo disso sobe com o avatar
 #define PS_HALO_N            3   // poucos aneis suaves, sem efeito de alvo
 #define PS_HALO_ATE      0.66f   // quanto o ultimo anel passa do avatar
 #define PS_HALO_ALFA     0.040f
@@ -97,6 +107,17 @@ static PSBurst muralBurst[PS_BURST_MAX];
 static GLuint muralTexturas[PS_MURAL_MAX];
 static float muralFade[PS_MURAL_MAX];
 static int muralN;
+// Cartao "continuar" de cada perfil: calculado UMA vez por abertura (ou quando a
+// lista de perfis muda), nunca por quadro.
+typedef struct {
+  int tem;
+  PerfilCont c;
+  char meta[128];      // "T2E4 · nome do episodio", ja traduzido
+  char restante[64];   // "34 min restantes"
+  GLuint tex;          // so e consultada no update
+} PSCont;
+static PSCont contCard[CONTA_PERFIL_MAX];
+static int contN = -1;
 static int muralPartN;
 static int muralBurstN;
 #ifdef NV_PERFILSEL_TEST
@@ -508,6 +529,80 @@ static float vaoDe(int m, float d) {
   return g < PS_VAO_MIN ? PS_VAO_MIN : g;
 }
 
+// --- CARTAO CONTINUAR (2.0, variante B) --------------------------------------
+static void contMontar(PSCont *k) {
+  const PerfilCont *c = &k->c;
+  k->meta[0] = 0;
+  if (c->serie && c->t > 0 && c->e > 0) {
+    snprintf(k->meta, sizeof k->meta, i18n("T%dE%d"), c->t, c->e);
+    if (c->epNome[0]) {
+      size_t n = strlen(k->meta);
+      snprintf(k->meta + n, sizeof k->meta - n, " \xc2\xb7 %s", c->epNome);
+    }
+  }
+  if (c->restanteMin >= 60 && c->restanteMin % 60)
+    snprintf(k->restante, sizeof k->restante, i18n("%dh %dmin Restantes"),
+             c->restanteMin / 60, c->restanteMin % 60);
+  else snprintf(k->restante, sizeof k->restante, i18n("%d min restantes"), c->restanteMin);
+}
+
+static void contAtualizar(void) {
+  int i, m = perfis_n();
+  if (contN != m) {
+    perfilcont_registrar();
+    memset(contCard, 0, sizeof contCard);
+    for (i = 0; i < m && i < CONTA_PERFIL_MAX; i++) {
+      contCard[i].tem = perfilcont_de(perfis_item(i), &contCard[i].c);
+      if (contCard[i].tem) contMontar(&contCard[i]);
+    }
+    contN = m;
+  }
+  // O pedido de textura fica aqui (o desenho so le GLuint), e so para quem esta
+  // aparecendo ou sumindo.
+  for (i = 0; i < m && i < CONTA_PERFIL_MAX; i++)
+    contCard[i].tex = contCard[i].tem && contCard[i].c.poster[0] && animFoco[i] > 0.02f
+      ? tex_obter_larg(contCard[i].c.poster, PS_CONT_CAPA_W) : 0;
+}
+
+static void contDesenhar(int i, float cx, float yTopo, float f, float a) {
+  const PSCont *k = &contCard[i];
+  GfxRect r;
+  float af = (f > 1.0f ? 1.0f : f) * a, x, avail, yc, cr, cg, cb;
+  TxtLinha meta, tit, rest;
+  if (!k->tem || af < 0.01f) return;
+  r.w = PS_CONT_W; r.h = PS_CONT_H;
+  r.x = cx - r.w * 0.5f;
+  if (r.x < 40.0f) r.x = 40.0f;
+  if (r.x + r.w > NV_TELA_W - 40.0f) r.x = NV_TELA_W - 40.0f - r.w;
+  r.y = yTopo + (1.0f - (f > 1.0f ? 1.0f : f)) * 14.0f;   // sobe ao entrar no foco
+  plrui_material(r, PS_CONT_RAIO, 0, af);
+  yc = r.y + r.h * 0.5f;
+  { GfxRect capa = { r.x + 20.0f, yc - PS_CONT_CAPA_H * 0.5f, PS_CONT_CAPA_W, PS_CONT_CAPA_H };
+    if (k->tex) {
+      gfx_tex_aspect_atual = tex_aspecto(k->c.poster);
+      gfx_card_forcar_cover_atual = 1.0f;
+      gfx_rect(capa, k->tex, GFX_CARD, 0.0f, 0.0f, 0.0f, 8.0f / PS_CONT_CAPA_H, 0, 0, 0, af);
+      gfx_card_forcar_cover_atual = 0.0f;
+      gfx_tex_aspect_atual = 0.0f;
+    } else gfx_cor(capa, 8.0f / PS_CONT_CAPA_H, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G,
+                   NV_COR_ESQUELETO_B, af); }
+  x = r.x + 20.0f + PS_CONT_CAPA_W + 18.0f;
+  avail = r.x + r.w - 26.0f - x;
+  meta = k->meta[0] ? txt_linha_corta(TXT_CAPTION2, k->meta, 176, 180, 190, 255, avail * 0.6f)
+                    : (TxtLinha){ 0 };
+  tit = txt_linha_corta(TXT_BODY, k->c.titulo, 240, 242, 246, 255,
+                        avail - (meta.w ? (float)meta.w + 12.0f : 0.0f));
+  txt_desenhar_alpha(tit, x, yc - 14.0f - (float)tit.h * 0.5f, af);
+  if (meta.w)
+    txt_desenhar_alpha(meta, x + (float)tit.w + 12.0f, yc - 14.0f - (float)meta.h * 0.5f, af);
+  ajustes_acento(&cr, &cg, &cb);
+  { float pr = k->c.progresso > 1.0f ? 1.0f : k->c.progresso;
+    plrui_trilho((GfxRect){ x, yc + 14.0f - 2.0f, PS_CONT_TRILHO, 4.0f }, pr, cr, cg, cb, af); }
+  rest = txt_linha_corta(TXT_CAPTION2, k->restante, 176, 180, 190, 255,
+                         avail - PS_CONT_TRILHO - 14.0f);
+  txt_desenhar_alpha(rest, x + PS_CONT_TRILHO + 14.0f, yc + 14.0f - (float)rest.h * 0.5f, af);
+}
+
 // --- AMBIENTE DO PERFIL (2.0, variante A) ------------------------------------
 //
 // Com AJ_PS_FUNDO = 2 o fundo e a arte propria do perfil em foco
@@ -616,6 +711,7 @@ void perfilsel_iniciar(void) {
   // O cursor nasce no perfil ativo. A regra vive em perfis.c porque e ela que
   // um teste sem SDL consegue provar.
   foco = perfis_indice_sugerido();
+  contN = -1;
   ambAtual = ambAnt = -1; ambT = 1.0f; ambAtualPronto = 0;
   for (i = 0; i < CONTA_PERFIL_MAX; i++) animFoco[i] = (i == foco) ? 1.0f : 0.0f;
   muralAtualizarAlvosLuz();
@@ -770,6 +866,7 @@ void perfilsel_atualizar(float dt, Uint32 agora) {
 
   ambAtualizar(dt, reduzida);
   muralRecriar();
+  contAtualizar();
   // O pedido acontece no ciclo de atualização, nunca no draw. Assim a capa
   // compartilha o tex_cache da Home e o quadro só consulta GLuint pronto.
   for (i = 0; i < muralN; i++) {
@@ -1208,6 +1305,12 @@ void perfilsel_desenhar(Uint32 agora) {
       gfx_cor(pilula, NV_RAIO_PILL, 1.0f, 1.0f, 1.0f, (0.10f + 0.10f * f) * a);
       txt_desenhar_alpha(sel, pilula.x + 16.0f, pilula.y + 5.0f, a);
     }
+    // O cartao so existe para perfil sem PIN (perfilcont_de), e some quando o
+    // teclado do PIN ou o "preparando" estao na tela.
+    if (!preparando && pinDe < 0 && f > 0.02f) {
+      float cy = PS_FILA_Y + d + PS_NOME_GAP + 44.0f + 28.0f - NV_FOCO_LIFT * f * 0.5f;
+      contDesenhar(i, px + d * 0.5f, (cy > PS_CONT_Y_MAX ? PS_CONT_Y_MAX : cy) + subida, f, a);
+    }
   }
 
   // A dica DIZ O QUE O VOLTAR FAZ. A tela agora aparece a cada arranque, e sem
@@ -1267,6 +1370,7 @@ void perfilsel_teste_estado(PerfilSelTesteEstado *e) {
 #ifdef NV_PERFILSEL_TEST
   e->burst_desenhado = muralBurstDesenhado;
 #endif
+  for (i = 0; i < 8; i++) e->cont_tem[i] = contCard[i].tem;
   e->amb_t = ambT; e->amb_atual = ambAtual; e->amb_ant = ambAnt;
 }
 #endif

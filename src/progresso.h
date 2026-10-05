@@ -54,6 +54,12 @@ void prog_content_id(char *dst, unsigned n, const char *imdb, int *temporada, in
 // Registros do PERFIL ATIVO, do mais recente para o mais antigo. Devolve quantos.
 int  prog_ler(ProgRegistro *saida, int max);
 
+// O item mais recente AINDA NAO TERMINADO de um perfil qualquer (ativo ou nao),
+// pelos mesmos limites de "Continuar assistindo": duracao >= 60 s, entre 1% e
+// `pctConcluido` (ajustes_cw_concluido), e fora do que a pessoa tirou da fileira
+// (prog_marcar_removido). Le so o disco/cache local. 1 se achou.
+int  prog_continuar_de_perfil(int perfil, int pctConcluido, ProgRegistro *saida);
+
 // Copia para `saida` o registro do perfil ativo com essa chave. 1 se havia.
 // Copia, e nao ponteiro: dois fios leem aqui, e um ponteiro para o cache
 // interno valeria so ate a proxima escrita do outro.

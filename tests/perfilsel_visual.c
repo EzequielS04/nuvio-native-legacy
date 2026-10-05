@@ -21,6 +21,7 @@
 #include "tex_cache.h"
 #include "catalogo.h"
 #include "ajustes.h"
+#include "progresso.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -333,6 +334,62 @@ int main(void) {
   captura("/tmp/nuvio-perfilsel-preparando.bmp");
   perfilsel_iniciar();
   assert(!perfilsel_preparando());
+
+  // CARTAO "CONTINUAR" (2.0, variante B): o que cada pessoa estava vendo, sob o
+  // perfil em foco. Henrique: serie; Alvaro: filme; Infantil tem PIN (sem
+  // cartao); Visitas nao viu nada. Funciona com qualquer fundo.
+  { static CatItem it[11];
+    PerfilSelTesteEstado e;
+    int i;
+    for (i = 0; i < 9; i++) it[i] = *cat_item(i);
+    snprintf(it[9].imdb, sizeof it[9].imdb, "tt-cont-a");
+    snprintf(it[9].tipo, sizeof it[9].tipo, "series");
+    snprintf(it[9].titulo, sizeof it[9].titulo, "Cidade Submersa");
+    snprintf(it[9].poster, sizeof it[9].poster, "deploy/app/art/poster/03.jpg");
+    it[9].temporada = 2; it[9].episodio = 4;
+    snprintf(it[9].nomeEpisodio, sizeof it[9].nomeEpisodio, "A maré");
+    snprintf(it[10].imdb, sizeof it[10].imdb, "tt-cont-b");
+    snprintf(it[10].tipo, sizeof it[10].tipo, "movie");
+    snprintf(it[10].titulo, sizeof it[10].titulo, "Verão em Lisboa");
+    snprintf(it[10].poster, sizeof it[10].poster, "deploy/app/art/poster/05.jpg");
+    cat_definir_tudo(it, 11, NULL, 0);
+    perfis_esquecer(); dados_iniciar(NULL); prog_invalidar();
+    escreverCache("1\t0\t1\t0\t#1E88E5\tHenrique\t\tdeploy/app/art/03.jpg\n"
+                  "2\t0\t0\t1\t#E53935\tÁlvaro\t\tdeploy/app/art/05.jpg\n"
+                  "3\t1\t0\t0\t#43A047\tInfantil\t\tdeploy/app/art/07.jpg\n"
+                  "4\t0\t0\t0\t#8E24AA\tVisitas\t\t\n", 1);
+    perfis_carregar_ativo();
+    perfis_definir_ativo(3); assert(prog_gravar_local("tt-cont-b", 0, 0, 1000, 6000));
+    perfis_definir_ativo(2); assert(prog_gravar_local("tt-cont-b", 0, 0, 2300, 6000));
+    perfis_definir_ativo(1); assert(prog_gravar_local("tt-cont-a", 2, 4, 1560, 2640));
+    ajustesDeTeste(0);
+    perfilsel_iniciar();
+    captura("/tmp/nuvio-perfilsel-continuar-1.bmp");
+    perfilsel_teste_estado(&e);
+    assert(e.cont_tem[0] && e.cont_tem[1] && !e.cont_tem[2] && !e.cont_tem[3]);
+    tecla(SDLK_RIGHT);
+    captura("/tmp/nuvio-perfilsel-continuar-2.bmp");
+    tecla(SDLK_RIGHT);   // Infantil: PIN, sem cartao
+    captura("/tmp/nuvio-perfilsel-continuar-pin.bmp");
+    tecla(SDLK_LEFT); tecla(SDLK_LEFT); tecla(SDLK_LEFT);
+    /* meio da entrada: Henrique volta ao foco, o cartao esta subindo */
+    tecla(SDLK_RIGHT);
+    for (i = 0; i < 4; i++) {
+      txt_novo_quadro(); tex_novo_quadro(); tex_bombear(6); gfx_novo_quadro();
+      perfilsel_atualizar(1.0f / 60.0f, SDL_GetTicks());
+    }
+    glClearColor(0.051f, 0.051f, 0.051f, 1); glClear(GL_COLOR_BUFFER_BIT);
+    txt_novo_quadro(); tex_novo_quadro(); gfx_novo_quadro();
+    perfilsel_desenhar(SDL_GetTicks());
+    salvarTela(shotPath("/tmp/nuvio-perfilsel-continuar-meio.bmp"));
+    tecla(SDLK_LEFT);
+    /* animacoes reduzidas: o cartao ja nasce no lugar */
+    ajustesDeTeste(1);
+    perfilsel_iniciar();
+    perfilsel_atualizar(0.016f, SDL_GetTicks());
+    captura("/tmp/nuvio-perfilsel-continuar-reduzido.bmp");
+    ajustesDeTeste(0);
+  }
 
   // AMBIENTE DO PERFIL (2.0, variante A): Henrique e Infantil tem arte, Alvaro
   // nao. So roda com NUVIO_PERFILSEL_FUNDO=2.
