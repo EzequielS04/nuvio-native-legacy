@@ -3086,7 +3086,12 @@ void detail_atualizar(float dt, Uint32 agora) {
   // .4,0,.2,1), e a mola de NV_MOLA_TELA assenta em ~330ms.
   // Temporadas e episodios da serie moram na PRIMEIRA tela (Glass UI): com o
   // foco neles a pagina nao rola e a arte nao apaga.
-  pg = anim_mola(pg, nivel >= 1 && !focoNoTopo() ? 1.0f : 0.0f, dt, NV_MOLA_PAGINA);
+  // A VOLTA ao topo (de Notas, Elenco...) reacende a arte no dobro da
+  // velocidade: enquanto a pagina e a arte cheia se cruzam, a TV pinta quase
+  // cinco telas por quadro e cai para 40 FPS (medido na TCL, 05/10). A ida
+  // continua com o tempo do web.
+  { float alvoPg = nivel >= 1 && !focoNoTopo() ? 1.0f : 0.0f;
+    pg = anim_mola(pg, alvoPg, dt, alvoPg < pg ? NV_MOLA_PAGINA * 2.0f : NV_MOLA_PAGINA); }
   if (carro) {
     int k;
     carOff = anim_mola2(&carVel, carOff, (float)carPos, dt, CAR_MOLA);
@@ -3885,7 +3890,25 @@ static void heroWeb(float a, float desloc) {
   if (texLogo) {
     float asp = tex_aspecto(arqLogo);
     if (asp <= 0.0f) asp = 2.5f;
-    float h = fminf(NV_DETW_LOGO_H, espacoLogo), w = h * asp;
+    // ALTURA ASSENTA SUAVE: o espaco do logo depende do que esta empilhado
+    // embaixo (sinopse, amigos, retomar, agenda). Quando uma dessas linhas
+    // aparecia ou sumia, o logo trocava de tamanho num quadro ("cresce do
+    // nada", dono, 05/10). Agora persegue o alvo como a altura da sinopse.
+    static float hLogoVis;
+    static Uint32 hLogoTick;
+    static char hLogoDe[600];
+    float hAlvo = fminf(NV_DETW_LOGO_H, espacoLogo);
+    { Uint32 agoraL = SDL_GetTicks();
+      float dtL = hLogoTick ? (float)(Uint32)(agoraL - hLogoTick) : 0.0f;
+      hLogoTick = agoraL;
+      if (dtL > 100.0f) dtL = 100.0f;
+      if (strcmp(hLogoDe, arqLogo) || hLogoVis <= 0.0f || anim_politica_reduzida) hLogoVis = hAlvo;
+      else {
+        hLogoVis += (hAlvo - hLogoVis) * (1.0f - expf(-dtL / 90.0f));
+        if (fabsf(hAlvo - hLogoVis) < 0.5f) hLogoVis = hAlvo;
+      }
+      snprintf(hLogoDe, sizeof hLogoDe, "%s", arqLogo); }
+    float h = hLogoVis, w = h * asp;
     if (w > NV_DETW_LOGO_MAXW) { w = NV_DETW_LOGO_MAXW; h = w / asp; }
     GfxRect r = { NV_DETW2_X, baseLogo - h, w, h };
     gfx_tex_aspect_atual = 0.0f;   // o logo ja vem na proporcao certa
