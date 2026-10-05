@@ -159,6 +159,9 @@ typedef enum {
   TXT_V2_A3TIT,    // titulo da opcao sob a arte (46/700)
   // LISTA COM CAPA dos Salvos (painel lateral), ~17 % acima da escala da ilha.
   TXT_ILHA_NOME_L, TXT_ILHA_SUB_L, TXT_ILHA_HORA_L,
+  // GUIA DA 2.0 (novidades20.c): "Nuvio 2.0" do hero (mockup 120/800) e o
+  // negrito das frases dos capitulos (24/600, par do TXT_V2_24).
+  TXT_W20_HERO, TXT_W20_24B,
   TXT_NFONTES
 } TxtEstilo;
 
