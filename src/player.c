@@ -169,7 +169,9 @@ static void avisarCascaAberto(int v) { (void)v; }
 // Doze segundos nao consertam o fps, e nao e para isso que estao aqui: eles
 // fazem o aviso sobreviver a um aparelho lento, que e a unica coisa que este
 // numero pode fazer sozinho.
-#define PG_SEG_TOTAL      12.0f
+// 12 s -> 6 s (dono, 05/10: metade do tempo em tela; a pilula da hora segura
+// 1600 -> 800 ms em plrilha.c, a animacao em si nao mudou).
+#define PG_SEG_TOTAL      6.0f
 // Depois disto o aviso nao entra mais: e um aviso do comeco do filme, e a
 // resposta pode chegar tarde. Ver a nota no desenho.
 #define PG_LIMITE_SEG     45.0f
