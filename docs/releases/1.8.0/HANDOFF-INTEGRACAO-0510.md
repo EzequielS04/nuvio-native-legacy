@@ -57,14 +57,14 @@ Para desempenho há um documento à parte: [HANDOFF-PERFORMANCE.md](HANDOFF-PERF
 | Frost / Arte borrada na LG (fundo escuro, arte sumida) reaproveitando o caminho da luz ambiente da Home Dinâmica + dump único `/tmp/nuvio-fundo-<tipo>.bmp` | `/Volumes/ExternalSSD/nv-frostamb`, `fix/frost-ambiente-lg` | Opus | editando `fundo.c/h`, `gfx.c/h`, `tests/fluidez_perf.c`, sem commit | Merge, compilação, `tests/fundo_assado.sh`; **perguntar antes** de mandar para a LG |
 | Imagens distintas por submenu/seção de Ajustes + crossfade fluido | `/Volumes/ExternalSSD/nv-submenu`, `feat/ajustes-imagens-submenus` | Opus | sem mudanças visíveis ainda | Merge; conferir `ajustes_ux_visual.inc` e assert de `tests/ajustes_ux_dados.c` |
 | Mockup da tela Explorar (única não redesenhada), 2–3 variações | sem worktree de código; saída `mockups-20/06-explorar.html` (já existe, 2,3 MB) | Sonnet | arquivo escrito, relatório não chegou | Ler o arquivo inteiro, publicar como artifact ("Explorar 2.0"), mandar link + resumo das variações ao dono |
+| What's New 2.0 conforme mockup aprovado (abre 1x para todos na 1ª abertura da 2.0, inclusive instalação nova) | `/Volumes/ExternalSSD/nv-wn20`, `feat/whatsnew-20` | Opus | começando | Merge, fixture, i18n; conferir assert de Ajustes |
 | Social: ligar Simkl e Letterboxd à pessoa única (tela na aba Amigos; servidor já aceita, ver `F08-SOCIAL-IDENTIDADE.md`) | `/Volumes/ExternalSSD/nv-simklbox`, `feat/social-simkl-letterboxd` | Sonnet | começando | Merge. Simkl precisa do secret `SIMKL_CLIENT_ID` no worker (pedir ok; nunca imprimir o valor) |
 
 Se um agente sumiu sem commit (limite de tokens), retomar a partir da worktree parcial com um agente novo apontando o que já está feito (`git -C <wt> diff`).
 
 ## Esperando o dono
 
-- Aprovar o mockup What's New 2.0 → depois implementar (o conteúdo por capítulo está no próprio mockup).
-- Aprovar o mockup do Explorar.
+- Escolher a variação do Explorar: https://claude.ai/artifact/TMzk2mta36E4PhFPbbH6GR (recomendação: B + grade C como entrada + botão no Detalhe).
 - Deploy do worker da enquete + semear enquete.
 - Secret `SIMKL_CLIENT_ID` no worker.
 - Página de perfil/estatísticas (refazer; mockup v2 foi achado "mal feito", adiado).
