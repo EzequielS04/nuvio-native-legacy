@@ -819,8 +819,77 @@ static TTF_Font *fonteLegendaDe(TxtEstilo estilo, const char *s,
   return fonteDe(familia, estilo, s);
 }
 
+// NEGRITO DA LEGENDA COM A FACE BOLD DE VERDADE. A folha de legenda liga o
+// negrito por TTF_STYLE_BOLD sobre a face Regular. Nem o SDL_ttf da C9
+// (2.0.14, /usr/lib: nenhum FT_*Embolden entre os simbolos que ele carrega)
+// nem o 2.24 do Mac emboldam o contorno: o negrito sintetico sai do BITMAP ja
+// rasterizado, o glifo engorda SO na horizontal e a rampa de antialias some
+// (tests/legenda_negrito_shot.c). Medido em
+// Montserrat 36 px ("Nao depois do que aconteceu no vale."): 789 px de largura
+// contra 718 da Montserrat-Bold (+9,9%, a "legenda esticada"), rampa de borda
+// de 1,20 px contra 1,55 e 26% de pixels de borda intermediarios contra 35%
+// (a "legenda pixelada"). Onde a familia traz o arquivo Bold, a linha em
+// negrito usa ESSA face, aberta sob demanda sobre os bytes ja lidos e no mesmo
+// corpo. LG Display, Droid e as reservas (CJK, arabe) nao tem o arquivo e
+// seguem no sintetico.
+static TTF_Font  *fontesNegCam[TXT_NCAM][TXT_FAMILIA_N][TXT_LEG_N];
+static SDL_RWops *rwNegCam[TXT_NCAM][TXT_FAMILIA_N][TXT_LEG_N];
+static unsigned char tentouNegCam[TXT_NCAM][TXT_FAMILIA_N][TXT_LEG_N];
+
+static void fecharNegrito(int c, int f) {
+  for (int i = 0; i < TXT_LEG_N; i++) {
+    if (fontesNegCam[c][f][i]) TTF_CloseFont(fontesNegCam[c][f][i]);
+    if (rwNegCam[c][f][i]) SDL_FreeRW(rwNegCam[c][f][i]);
+    fontesNegCam[c][f][i] = NULL; rwNegCam[c][f][i] = NULL; tentouNegCam[c][f][i] = 0;
+  }
+}
+
+// A face Bold que substitui o TTF_STYLE_BOLD de `fonte`, ou NULL (fica o
+// sintetico). So quando `fonte` e a face principal da familia naquele estilo.
+static TTF_Font *fonteNegritoReal(TxtFamilia familia, TxtEstilo estilo, TTF_Font *fonte) {
+  int i = estilo - TXT_LEG_50;
+  if (familia < TXT_FAMILIA_INTER || familia >= TXT_FAMILIA_N ||
+      familia == TXT_FAMILIA_LG || familia == TXT_FAMILIA_DROID) return NULL;
+  if (estilo < TXT_LEG_50 || estilo > TXT_LEG_200 || ESTILOS[estilo].peso == PESO_BOLD) return NULL;
+  if (!fonte || fonte != fontes[familia][estilo]) return NULL;
+  if (!bytesPeso[familia][PESO_BOLD] ||
+      bytesPeso[familia][PESO_BOLD] == bytesPeso[familia][PESO_REGULAR]) return NULL;
+  if (!fontesNegCam[camada][familia][i] && !tentouNegCam[camada][familia][i]) {
+    SDL_RWops *rw = SDL_RWFromConstMem(bytesPeso[familia][PESO_BOLD], (int)tamPeso[familia][PESO_BOLD]);
+    tentouNegCam[camada][familia][i] = 1;
+    if (rw) {
+      fontesNegCam[camada][familia][i] = TTF_OpenFontRW(rw, 0, (int)(ESTILOS[estilo].corpo * ESC_T + 0.5f));
+      if (fontesNegCam[camada][familia][i]) {
+        rwNegCam[camada][familia][i] = rw;
+        // Uma vez por familia/tamanho: a prova na TV de que o negrito saiu da
+        // face Bold e nao do borrao do SDL_ttf.
+        printf("[leg] negrito: face Bold real de %s, %d px (nao TTF_STYLE_BOLD)\n",
+               TXT_FAMILIAS_PT[familia], (int)(ESTILOS[estilo].corpo * ESC_T + 0.5f));
+        fflush(stdout);
+      } else SDL_FreeRW(rw);
+    }
+  }
+  return fontesNegCam[camada][familia][i];
+}
+
+// A fonte e o estilo TTF de uma linha com enfase: troca a Regular pela Bold
+// real quando ha, e tira dela o bit de negrito (a face ja e negrita).
+static TTF_Font *fonteComEnfase(TxtFamilia familia, TxtEstilo estilo, TTF_Font *fonte,
+                                int enfase, int *estiloTtf) {
+  int novo = TTF_GetFontStyle(fonte);
+  if (enfase & TXT_ENF_NEGRITO) {
+    TTF_Font *real = fonteNegritoReal(familia, estilo, fonte);
+    if (real) { fonte = real; novo = TTF_GetFontStyle(fonte); }
+    else novo |= TTF_STYLE_BOLD;
+  }
+  if (enfase & TXT_ENF_ITALICO) novo |= TTF_STYLE_ITALIC;
+  *estiloTtf = novo;
+  return fonte;
+}
+
 static void liberarFamilia(TxtFamilia familia) {
   fdEsquecer();
+  for (int c = 0; c < TXT_NCAM; c++) fecharNegrito(c, familia);
   for (int c = 0; c < TXT_NCAM; c++)
     for (int i = 0; i < TXT_NFONTES; i++) {
       if (fontesCam[c][familia][i]) TTF_CloseFont(fontesCam[c][familia][i]);
@@ -941,6 +1010,7 @@ static void fecharCamadaAmpliada(int k) {
       if (rwFonteCam[k][f][i]) SDL_FreeRW(rwFonteCam[k][f][i]);
       rwFonteCam[k][f][i] = NULL;
     }
+  for (int f = 0; f < TXT_FAMILIA_N; f++) fecharNegrito(k, f);
   for (int i = 0; i < TXT_LEG_N; i++) {
     if (fontesLegendaLGCam[k][i]) TTF_CloseFont(fontesLegendaLGCam[k][i]);
     fontesLegendaLGCam[k][i] = NULL;
@@ -1244,15 +1314,12 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
   // SOMA ao estilo que a fonte ja tem, e RESTAURA depois. As familias de
   // reserva nascem com TTF_STYLE_BOLD ligado (ver txt_iniciar); zerar aqui
   // tiraria delas o peso que o app inteiro conta com.
-  int estiloAnt = TTF_GetFontStyle(fonte);
-  if (enfase) {
-    int novo = estiloAnt;
-    if (enfase & TXT_ENF_NEGRITO) novo |= TTF_STYLE_BOLD;
-    if (enfase & TXT_ENF_ITALICO) novo |= TTF_STYLE_ITALIC;
-    if (novo != estiloAnt) TTF_SetFontStyle(fonte, novo);
-  }
+  int estiloAnt, novo = 0;
+  if (enfase) fonte = fonteComEnfase(familia, estilo, fonte, enfase, &novo);
+  estiloAnt = TTF_GetFontStyle(fonte);
+  if (enfase && novo != estiloAnt) TTF_SetFontStyle(fonte, novo);
   SDL_Surface *sf = TTF_RenderUTF8_Blended(fonte, s, cor);
-  if (enfase) TTF_SetFontStyle(fonte, estiloAnt);
+  if (enfase && novo != estiloAnt) TTF_SetFontStyle(fonte, estiloAnt);
   if (!sf) return vazia;
   SDL_Surface *cv = SDL_ConvertSurfaceFormat(sf, SDL_PIXELFORMAT_ABGR8888, 0);
   SDL_FreeSurface(sf);
@@ -1338,16 +1405,13 @@ static int larguraLinhaMedir(TxtEstilo estilo, const char *s, TxtFamilia familia
   }
   TTF_Font *fonte = fonteLegendaDe(estilo, s, familia);
   if (!fonte) return 0;
-  int estiloAnt = TTF_GetFontStyle(fonte);
-  if (enfase) {
-    int novo = estiloAnt;
-    if (enfase & TXT_ENF_NEGRITO) novo |= TTF_STYLE_BOLD;
-    if (enfase & TXT_ENF_ITALICO) novo |= TTF_STYLE_ITALIC;
-    if (novo != estiloAnt) TTF_SetFontStyle(fonte, novo);
-  }
+  int estiloAnt, novo = 0;
+  if (enfase) fonte = fonteComEnfase(familia, estilo, fonte, enfase, &novo);
+  estiloAnt = TTF_GetFontStyle(fonte);
+  if (enfase && novo != estiloAnt) TTF_SetFontStyle(fonte, novo);
   int w = 0, h = 0;
   int ok = TTF_SizeUTF8(fonte, s, &w, &h);
-  if (enfase) TTF_SetFontStyle(fonte, estiloAnt);
+  if (enfase && novo != estiloAnt) TTF_SetFontStyle(fonte, estiloAnt);
   if (ok != 0) return 0;
   return (int)(w / ESC_T + 0.5f);
 }
