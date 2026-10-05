@@ -67,6 +67,10 @@ static char atvIcone[32];       // "" = o ponto que respira
 static Uint32 atvVisto;         // SDL_GetTicks da ultima renovacao
 
 static int relogioQuer;
+// Bolinha de acento no relogio em repouso: "ha enquete aberta" (enquete.c).
+static int pontoEnquete;
+static int pontoPediu;
+#define PONTO_ENQ 10.0f
 static int ancDef, ancDir;
 static float ancX, ancY;
 
@@ -351,6 +355,8 @@ void ilha_atividade_carga(const IlhaAtvCarga *c) {
 int ilha_atividade_expansivel(void) { return atvDetalhes[0] && atvVisto && SDL_GetTicks() - atvVisto < 400u; }
 
 void ilha_relogio_visivel(int visivel) { relogioQuer = visivel; }
+void ilha_ponto_enquete(int aberto) { pontoEnquete = aberto ? 1 : 0; if (!pontoEnquete) pontoPediu = 0; }
+int  ilha_ponto_pediu(void) { int p = pontoPediu; pontoPediu = 0; return p; }
 
 void ilha_cartao(int qual, const IlhaCartao *c) {
   if (qual < 0 || qual >= ILHA_N_CARTOES) return;
@@ -539,6 +545,14 @@ int ilha_evento(const SDL_Event *e) {
         teclaAzul(e->key.keysym.sym, e->key.keysym.scancode) &&
         A > 0.5f && mostra == M_AVISO && abrirDoAviso())
       return 1;
+    // AZUL/CH+ COM A BOLINHA NO RELOGIO PARADO: reabre a enquete. Quem a tem
+    // (enquete.c) le o pedido por ilha_ponto_pediu e poe o convite de novo.
+    if (e->type == SDL_KEYDOWN && !e->key.repeat && pontoEnquete && relogioQuer &&
+        teclaAzul(e->key.keysym.sym, e->key.keysym.scancode) &&
+        A > 0.5f && mostra == M_RELOGIO) {
+      pontoPediu = 1;
+      return 1;
+    }
     return 0;
   }
   if (e->type != SDL_KEYDOWN) return e->type == SDL_KEYUP;
@@ -920,7 +934,7 @@ static float larguraConteudo(int m, TxtLinha *t1, TxtLinha *t2) {
   t1->w = t1->h = 0; t2->w = t2->h = 0;
   if (m == M_RELOGIO) {
     *t1 = txt_linha(TXT_PG_RELOGIO, hora, 244, 245, 248, 255);
-    return (float)t1->w;
+    return (float)t1->w + (pontoEnquete ? 12.0f + PONTO_ENQ : 0.0f);
   }
   if (atvV2) {
     // v2: recuo de 30 dos dois lados (a diferenca para PAD_E/PAD_D entra aqui).
@@ -966,7 +980,12 @@ static void desenharConteudo(int m, GfxRect r, float a, Uint32 agora) {
     if (bh > 0.0f) yc = r.y + NV_ILHA_H * 0.5f;
     x = dsMostra == DS_GRANDE ? r.x + 28.0f : r.x + (r.w - cw - dw) * 0.5f;
     txt_desenhar_alpha(t1, x, yc - (float)t1.h * 0.5f, a);
-    desempenho_linha(dsMostra, x + (float)t1.w, yc, a);
+    if (pontoEnquete) {
+      float cr, cg, cb;
+      ajustes_acento(&cr, &cg, &cb);
+      gfx_cor((GfxRect){ x + (float)t1.w + 12.0f, yc - PONTO_ENQ * 0.5f, PONTO_ENQ, PONTO_ENQ }, 0.5f, cr, cg, cb, a);
+    }
+    desempenho_linha(dsMostra, x + (float)t1.w + (pontoEnquete ? 12.0f + PONTO_ENQ : 0.0f), yc, a);
     if (bh > 0.0f) desempenho_corpo(dsMostra, (GfxRect){ r.x, r.y + NV_ILHA_H, r.w, r.h - NV_ILHA_H }, a);
     return;
   }
@@ -1251,9 +1270,15 @@ static float layoutModalAviso(GfxRect m, float a, int desenha) {
       if (vale) txt_tracking(TXT_MINI, up, 124, 124, 124, kx, y, aa, 1.8f);
       y += 18.0f + 8.0f;
     }
-    { TxtLinha t = txt_linha_corta(TXT_TITULO3, c->titulo, 246, 247, 252, 255, cw);
-      if (vale) txt_desenhar_alpha(t, cx, y, aa);
-      y += (float)t.h; }
+    { TxtLinha t = txt_linha(TXT_TITULO3, c->titulo, 246, 247, 252, 255);
+      if ((float)t.w <= cw) {
+        if (vale) txt_desenhar_alpha(t, cx, y, aa);
+        y += (float)t.h;
+      } else {
+        // Titulo que nao cabe em uma linha (a pergunta da enquete, "Voce nao vai
+        // mais receber enquetes") quebra em ate duas, em vez de virar reticencias.
+        y += txt_bloco_corta(TXT_TITULO3, c->titulo, 246, 247, 252, cx, y, cw, (float)t.h * 1.02f, vale ? aa : 0.0f, 2);
+      } }
     if (c->linha[0]) {
       TxtLinha t = txt_linha_corta(TXT_DET_META2, c->linha, 190, 192, 198, 255, cw);
       y += 10.0f;
@@ -1277,7 +1302,28 @@ static float layoutModalAviso(GfxRect m, float a, int desenha) {
       if (vale) gfx_cor((GfxRect){ cx, y + 2.0f, 3.0f, h - 4.0f }, 0.0f, 1.0f, 1.0f, 1.0f, 0.16f * aa);
       y += h;
     }
-    if (c->lista[0][0]) {
+    if (c->lista[0][0] && c->resultado) {
+      // RESULTADO DA ENQUETE: texto, porcentagem na ponta e o trilho de 6 px.
+      y += 14.0f;
+      for (i = 0; i < 3 && c->lista[i][0]; i++) {
+        char pc[8];
+        int p = c->pct[i] < 0 ? 0 : c->pct[i] > 100 ? 100 : c->pct[i];
+        float pw, cr, cg, cb;
+        snprintf(pc, sizeof pc, "%d%%", p);
+        { TxtLinha n = txt_linha(TXT_CAPTION, pc, c->escolha == i + 1 ? 246 : 190, c->escolha == i + 1 ? 247 : 192, c->escolha == i + 1 ? 252 : 198, 255);
+          TxtLinha t = txt_linha_corta(TXT_CAPTION, c->lista[i], c->escolha == i + 1 ? 246 : 190, c->escolha == i + 1 ? 247 : 192, c->escolha == i + 1 ? 252 : 198, 255, cw - (float)n.w - 24.0f);
+          pw = (float)n.w;
+          if (vale) {
+            txt_desenhar_alpha(t, cx, y, aa);
+            txt_desenhar_alpha(n, cx + cw - pw, y, aa);
+            ajustes_acento(&cr, &cg, &cb);
+            gfx_cor((GfxRect){ cx, y + (float)t.h + 8.0f, cw, 6.0f }, 0.5f, 1.0f, 1.0f, 1.0f, 0.12f * aa);
+            if (p > 0) gfx_cor((GfxRect){ cx, y + (float)t.h + 8.0f, cw * (float)p / 100.0f < 6.0f ? 6.0f : cw * (float)p / 100.0f, 6.0f }, 0.5f, cr, cg, cb, (c->escolha == i + 1 ? 1.0f : 0.55f) * aa);
+          }
+          y += (float)t.h + 8.0f + 6.0f + 16.0f;
+        }
+      }
+    } else if (c->lista[0][0]) {
       y += 12.0f;
       for (i = 0; i < 3 && c->lista[i][0]; i++) {
         TxtLinha t = txt_linha_corta(TXT_CAPTION, c->lista[i], 190, 192, 198, 255, cw - 22.0f);

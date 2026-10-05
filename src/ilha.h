@@ -85,6 +85,12 @@ typedef struct {
   // cabecalho de 64 com o icone, o `kicker` e a hora, e embaixo titulo, texto
   // e botoes, sem ladrilho. A queda da sessao anterior usa.
   int  cabecalho;
+  // RESULTADO (enquete, N3): com `resultado` = 1, `lista[i]` vira linha de
+  // resultado — texto, `pct[i]` (0..100) na ponta e um trilho de 6 px; `escolha`
+  // (1..3, 0 = nenhuma) destaca a opcao da pessoa.
+  int  resultado;
+  int  pct[3];
+  int  escolha;
 } IlhaModal;
 
 // O aviso completo. `texto` aceita ENFASE: o trecho entre dois ILHA_FORTE sai
@@ -169,6 +175,12 @@ void ilha_atividade_detalhes(const char *titulo, const char *texto);
 typedef struct { const char *etapa; unsigned ms; int prontos, total, fileiras, falhas, ativo; } IlhaAtvCarga;
 void ilha_atividade_carga(const IlhaAtvCarga *c);
 int ilha_atividade_expansivel(void);
+
+// Bolinha de acento no relogio em repouso: "ha enquete aberta" (enquete.c).
+// Com ela, AZUL/CH+ no relogio parado nao abre a central: ilha_ponto_pediu()
+// devolve 1 uma vez para quem a liga reabrir a enquete.
+void ilha_ponto_enquete(int aberto);
+int  ilha_ponto_pediu(void);
 
 // Onde o relogio pode ficar, decidido por quadro por app.c (a home tem o topo
 // esquerdo livre; Ajustes e Explorar tem titulo ali).

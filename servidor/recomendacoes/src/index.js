@@ -16,6 +16,7 @@ import { rotaNoticia, rotaNoticiaImg } from "./noticia.js";
 import { rotaAmigos, limpezaAmigos, despublicar, garantirPerfil, avatarPublico, limitar } from "./amigos.js";
 import { rotaEuNome, rotaAlcance, rotaEvento, rotaFeed, rotaAmigo, limpezaSocial,
          limparNome, avatarPerfilOk, resolverNome, rotaRecResposta } from "./social.js";
+import { rotaEnquete } from "./enquete.js";
 import { resolverCanonica, canonizarEntrada, identidadesDe, rotaIdentidades, idSimkl,
          perfilExiste, RECURSO } from "./identidade.js";
 
@@ -770,6 +771,10 @@ export default {
     if (rota === "/v1/rec/resposta" && req.method === "POST")
       return rotaRecResposta(env, quem, corpo, h, limitar, limparTexto);
     if (rota === "/v1/registro" && req.method === "POST")   return rotaRegistro(env, quem, corpo);
+
+    // Enquete na ilha (enquete.js; exige migracao-009).
+    const enq = await rotaEnquete(rota, req.method, env, quem, corpo, h);
+    if (enq) return enq;
 
     // Perfil publico, busca, pedidos, bloqueio e atividade (amigos.js).
     const amigos = await rotaAmigos(rota, req.method, env, quem, corpo, h);
