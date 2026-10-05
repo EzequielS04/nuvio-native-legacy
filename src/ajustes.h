@@ -240,6 +240,7 @@ int   ajustes_home_layout(void);
 int   ajustes_hero_fonte(void);         // origem local da arte do hero (ARTEHERO_*)
 // 1 = destaque/detalhe com foto diferente da do card (regra em artehero.h).
 int   ajustes_hero_arte_diferente(void);
+int   ajustes_ps_fundo(void);            // 0 mural, 1 listras, 2 arte do perfil
 int   ajustes_ps_fundo_automatico(void); // #90: fundo da escolha de perfil (psfundo.c)
 // Teto de memoria para imagens escolhido em Ajustes, em MB; 0 = automatico.
 int   ajustes_tex_mb(void);

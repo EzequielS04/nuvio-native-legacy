@@ -88,6 +88,15 @@ static void ajustesDeTeste(int reduzidas) {
   f = fopen(caminho, "w");
   assert(f);
   fprintf(f, "animacoes %d\n", reduzidas);
+  // Convencoes das capturas: NUVIO_SHOT_FONTE=3 (Montserrat, a da TV),
+  // NUVIO_PERFILSEL_FUNDO (0 mural, 1 listras, 2 arte do perfil) e
+  // NUVIO_PERFILSEL_VIDRO (0 vidro, 1 solido).
+  if (getenv("NUVIO_SHOT_FONTE") && *getenv("NUVIO_SHOT_FONTE"))
+    fprintf(f, "fonteInterface %d\n", atoi(getenv("NUVIO_SHOT_FONTE")));
+  if (getenv("NUVIO_PERFILSEL_FUNDO"))
+    fprintf(f, "perfilFundoLocal %d\n", atoi(getenv("NUVIO_PERFILSEL_FUNDO")));
+  if (getenv("NUVIO_PERFILSEL_VIDRO"))
+    fprintf(f, "vidroLocal %d\n", atoi(getenv("NUVIO_PERFILSEL_VIDRO")));
   fclose(f);
   ajustes_dir(dados_dir());
 }
@@ -324,6 +333,44 @@ int main(void) {
   captura("/tmp/nuvio-perfilsel-preparando.bmp");
   perfilsel_iniciar();
   assert(!perfilsel_preparando());
+
+  // AMBIENTE DO PERFIL (2.0, variante A): Henrique e Infantil tem arte, Alvaro
+  // nao. So roda com NUVIO_PERFILSEL_FUNDO=2.
+  if (ajustes_ps_fundo() == 2) {
+    PerfilSelTesteEstado e;
+    int i;
+    perfis_esquecer(); dados_iniciar(NULL);
+    escreverCache("1\t0\t1\t0\t#1E88E5\tHenrique\t\tdeploy/app/art/03.jpg\n"
+                  "2\t0\t0\t1\t#E53935\tÁlvaro\t\t\n"
+                  "3\t1\t0\t0\t#43A047\tInfantil\t\tdeploy/app/art/07.jpg\n", 1);
+    perfis_carregar_ativo();
+    ajustesDeTeste(0);
+    perfilsel_iniciar();
+    captura("/tmp/nuvio-perfilsel-amb-arte.bmp");
+    perfilsel_teste_estado(&e);
+    assert(e.amb_t == 1.0f && e.amb_atual == 0);
+    // Meio da troca: Henrique -> Infantil, ~0,2 s de 0,45 s.
+    tecla(SDLK_RIGHT); tecla(SDLK_RIGHT);
+    for (i = 0; i < 12; i++) {
+      txt_novo_quadro(); tex_novo_quadro(); tex_bombear(6); gfx_novo_quadro();
+      perfilsel_atualizar(1.0f / 60.0f, SDL_GetTicks());
+    }
+    perfilsel_teste_estado(&e);
+    assert(e.amb_ant == 0 && e.amb_atual == 2 && e.amb_t > 0.2f && e.amb_t < 0.6f);
+    glClearColor(0.051f, 0.051f, 0.051f, 1); glClear(GL_COLOR_BUFFER_BIT);
+    txt_novo_quadro(); tex_novo_quadro(); gfx_novo_quadro();
+    perfilsel_desenhar(SDL_GetTicks());
+    salvarTela(shotPath("/tmp/nuvio-perfilsel-amb-meio.bmp"));
+    for (i = 0; i < 60; i++) {
+      txt_novo_quadro(); tex_novo_quadro(); tex_bombear(6); gfx_novo_quadro();
+      perfilsel_atualizar(1.0f / 60.0f, SDL_GetTicks());
+    }
+    perfilsel_teste_estado(&e);
+    assert(e.amb_t == 1.0f);
+    // Perfil sem arte: o mural volta.
+    tecla(SDLK_LEFT);
+    captura("/tmp/nuvio-perfilsel-amb-sem-arte.bmp");
+  }
 
   tex_encerrar(); txt_encerrar(); gfx_encerrar();
   SDL_GL_DeleteContext(gl); SDL_DestroyWindow(win); SDL_Quit();
