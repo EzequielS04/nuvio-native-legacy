@@ -53,3 +53,37 @@ The first time you open it, a short guide walks through what changed. It stays i
 Tested on an LG C9 and a TCL Android TV. The Samsung builds were not run on a Samsung TV before release: if something breaks there, send the log from Settings › About and help.
 
 Not in this release: Arabic interface and RTL layout (#250, #260), DTS on webOS (#259).
+
+## A look at 2.0
+
+**Home.** The spotlight with the title's logo, and Continue watching right below.
+
+![Home](https://raw.githubusercontent.com/iqui27/nuvio-native-legacy/master/docs/releases/2.0.0/home.jpg)
+
+**Trailer in the spotlight.** After a moment on a title, its trailer plays behind the text.
+
+![Trailer playing in the Home spotlight](https://raw.githubusercontent.com/iqui27/nuvio-native-legacy/master/docs/releases/2.0.0/hero-trailer.jpg)
+
+**Menu.** Floating rail with Search, Explore, TV Guide, Schedule, Library and your streaming services.
+
+![Side menu](https://raw.githubusercontent.com/iqui27/nuvio-native-legacy/master/docs/releases/2.0.0/menu.jpg)
+
+**Title page.** Logo, Play and + to save, then genres, ratings, runtime and director in one place.
+
+![Title page](https://raw.githubusercontent.com/iqui27/nuvio-native-legacy/master/docs/releases/2.0.0/title-page.jpg)
+
+**Opening a source.** The chosen source shows its quality and audio badges while it opens.
+
+![Opening a source](https://raw.githubusercontent.com/iqui27/nuvio-native-legacy/master/docs/releases/2.0.0/opening-source.jpg)
+
+**Player.** Subtitles, audio, picture, sources and episodes from the island in the corner, with the end time on the clock.
+
+![Player controls](https://raw.githubusercontent.com/iqui27/nuvio-native-legacy/master/docs/releases/2.0.0/player.jpg)
+
+**Social panel.** Saved, Activity, Friends and Alerts in one panel. Press Up at the top of Home or a title page.
+
+![Social panel](https://raw.githubusercontent.com/iqui27/nuvio-native-legacy/master/docs/releases/2.0.0/social-panel.jpg)
+
+**Settings.** Grouped by screen, with search, a live preview of each section and an Advanced switch.
+
+![Settings with live preview](https://raw.githubusercontent.com/iqui27/nuvio-native-legacy/master/docs/releases/2.0.0/settings.jpg)
