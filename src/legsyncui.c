@@ -146,6 +146,50 @@ int legsync_pilula_final(const LegSyncVisao *v, const char *provedor, char *dst,
   return 0;
 }
 
+int legsync_pil_passo(LegSyncPil *p, const LegSyncVisao *v, unsigned agora, const char *provedor, char *texto, unsigned tam) {
+  int quer, r = 0;
+  // Fechada, esperando o fim do plano: so o fim reabre. 2/3 = terminou (aceito,
+  // desistiu/recusou/sem referencia); 1 segue; 0 = cancelado (sem plano): nada.
+  if (p->espera && p->estado == LEGSYNC_PIL_OFF) {
+    if (v->autoFase == 2 || v->autoFase == 3) {
+      p->espera = 0; p->rastreia = 0;
+      p->final = legsync_pilula_final(v, provedor, texto, tam);
+      p->estado = LEGSYNC_PIL_APLICADA; p->desde = agora | 1u;
+      r |= LEGSYNC_PIL_FINAL_TARDE | (v->autoFase == 2 ? LEGSYNC_PIL_LEMBRAR : 0);
+    } else if (v->autoFase != 1) p->espera = 0;
+    return r;
+  }
+  if (p->estado == LEGSYNC_PIL_OFF) return 0;
+  if (p->rastreia) {
+    if (v->fase == LEGSYNC_AGUARDANDO) quer = LEGSYNC_PIL_PROCURANDO;
+    else if (v->autoFase == 1) quer = LEGSYNC_PIL_SINCRONIZANDO;
+    else quer = LEGSYNC_PIL_APLICADA;
+    if (quer == LEGSYNC_PIL_PROCURANDO && agora - p->iniciou > LEGSYNC_PIL_BAIXAR_TETO) return LEGSYNC_PIL_BAIXAR;
+    if (quer == LEGSYNC_PIL_APLICADA && v->autoFase == 2) r |= LEGSYNC_PIL_LEMBRAR;
+    // Leitura longa: a ilha encolhe de volta no relogio e o plano segue; o
+    // aviso final reabre quando a sessao terminar.
+    if (p->estado == LEGSYNC_PIL_SINCRONIZANDO && quer == LEGSYNC_PIL_SINCRONIZANDO && agora - p->desde >= LEGSYNC_PIL_SINC_MS) {
+      p->espera = 1; p->troca = 0; p->estado = LEGSYNC_PIL_OFF;
+      return r | LEGSYNC_PIL_ESCONDEU;
+    }
+    // so avanca (nunca volta a "Procurando" por oscilacao) e respeita o tempo minimo
+    if (quer != p->estado && (p->estado == LEGSYNC_PIL_PROCURANDO || (p->estado == LEGSYNC_PIL_SINCRONIZANDO && quer == LEGSYNC_PIL_APLICADA) ||
+                              (p->estado == LEGSYNC_PIL_APLICADA && quer == LEGSYNC_PIL_SINCRONIZANDO && p->troca)) &&
+        agora - p->desde >= LEGSYNC_PIL_MIN_MS) {
+      p->estado = quer; p->desde = agora | 1u;
+    }
+    // O texto final sai do estado REAL ("sincronizada" so com o offset aceito).
+    if (p->estado == LEGSYNC_PIL_APLICADA) {
+      int antes = p->final;
+      p->final = legsync_pilula_final(v, provedor, texto, tam);
+      if (p->final && !antes) p->desde = agora | 1u;
+    }
+  }
+  if (p->estado == LEGSYNC_PIL_APLICADA && agora - p->desde >= (p->final == 0 ? LEGSYNC_PIL_SEMSYNC_MS : LEGSYNC_PIL_APLICADA_MS))
+    r |= LEGSYNC_PIL_ZERAR;
+  return r;
+}
+
 static int acoesAgora(int slot, int *lista, int max) {
   LegSyncVisao v;
   int n = 0;

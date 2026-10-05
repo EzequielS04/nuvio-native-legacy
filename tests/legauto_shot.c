@@ -190,6 +190,7 @@ int main(int argc, char **argv) {
   estado(0);
   faixas_shot_pilula(1, "pt", "", relogio); quadros(40); salvar("pilula-1-procurando");
   faixas_shot_pilula(2, "pt", "OpenSubtitles", relogio); quadros(40); salvar("pilula-2-sincronizando");
+  faixas_shot_pilula(0, "pt", "OpenSubtitles", relogio); quadros(60); salvar("pilula-2b-so-relogio-sincronizando");
   faixas_shot_pilula(3, "pt", "OpenSubtitles", relogio); quadros(40); salvar("pilula-3-aplicada");
   faixas_shot_pilula(4, "pt", "", relogio); quadros(40); salvar("pilula-4-nenhuma");
   faixas_shot_pilula(5, "pt", "OpenSubtitles", relogio); quadros(40); salvar("pilula-5-nao-sincronizada");
