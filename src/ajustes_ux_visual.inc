@@ -146,6 +146,7 @@ static const char *ajVisualIcone(int op) {
     case AJ_AVANCADAS: return "aj_eye";
     case AJ_LOGO_TRAILER: return "aj_eye-off";
     case AJ_LEG_SYNC_AUDIO: return "aj_audio-lines";
+    case AJ_LEG2_POS: case AJ_LEG2_TAMANHO: case AJ_LEG2_COR: case AJ_LEG2_FUNDO: case AJ_LEG2_BORDA: return "aj_captions";
     case AJ_ICONE_APP: return "aj_image-plus";
     case AJ_DISCORD: return "aj_message-square";
     case AJ_ANIM: return "aj_activity";

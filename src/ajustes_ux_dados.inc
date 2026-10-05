@@ -151,6 +151,8 @@ static const char *uxSinonimos(int op) {
     case AJ_IDIOMA: return "idioma interface menus language portugues ingles espanhol";
     case AJ_AUD_LINGUA: return "idioma audio dublado dublagem original voz language";
     case AJ_LEG_LINGUA: return "idioma legenda legendado subtitle subtitles cc closed captions";
+    case AJ_LEG2_POS: case AJ_LEG2_TAMANHO: case AJ_LEG2_COR: case AJ_LEG2_FUNDO: case AJ_LEG2_BORDA:
+      return "legenda secundaria segunda dupla dual posicao topo junto empilhada tamanho cor fundo borda contorno estilo second subtitle position size color";
     case AJ_LEG_LINGUA2: return "idioma legenda secundaria segunda dupla dual second subtitle subtitles";
     case AJ_TRAILER_ZOOM_TPK: return "trailer zoom barras pretas tarja ampliar recorte tela preta samsung experimental";
     case AJ_CACHE_SEEK: return "cache seek buffer disco armazenamento voltar avancar travando carregando";

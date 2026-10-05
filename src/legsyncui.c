@@ -10,10 +10,6 @@
 #include <stdio.h>
 #include <string.h>
 
-static const int ORDEM[] = { LEGSYNC_ACAO_RAPIDA, LEGSYNC_ACAO_COMPLETA, LEGSYNC_ACAO_AUDIO, LEGSYNC_ACAO_DESFAZER,
-                             LEGSYNC_ACAO_OUTRA, LEGSYNC_ACAO_PARAR };
-#define N_ACOES ((int)(sizeof ORDEM / sizeof *ORDEM))
-
 const char *legsync_acao_rotulo(int a) {
   switch (a) {
     case LEGSYNC_ACAO_RAPIDA:   return i18n("R\xc3\xa1pida");
@@ -102,15 +98,40 @@ static void textoBase(const LegSyncVisao *v, char *dst, unsigned tam) {
 }
 
 // --- provedor do seletor (legendasui.c) ----------------------------------------
-// So o slot PRINCIPAL e so com legenda EXTERNA ativa (embutida ja acompanha o
-// video; nenhuma nao tem o que sincronizar); nunca em canal ao vivo. O segundo
-// idioma ainda nao sincroniza: a linha dele nao aparece.
+// R4: UMA linha so, sem menu. A sincronia e automatica (legsync.c); aqui ela
+// aparece como estado ("Sincronizando…", "Sincronizada", "Não deu para
+// sincronizar", ou "…usando <outra>") e, se houver algo corrigido, "Desfazer".
+// So o slot PRINCIPAL e so com legenda EXTERNA ativa; nunca em canal ao vivo.
+// Onde nao ha como sincronizar nunca (plataforma sem referencia), a linha some.
+void legsync_texto_simples(const LegSyncVisao *v, char *dst, unsigned tam) {
+  if (!dst || !tam) return;
+  dst[0] = 0;
+  if (v->fase == LEGSYNC_DESFEITA) {
+    snprintf(dst, tam, "%s", i18n("Corre\xc3\xa7\xc3\xa3o desfeita; o atraso manual continua")); return;
+  }
+  if (v->autoFase == 3) { snprintf(dst, tam, "%s", i18n("N\xc3\xa3o deu para sincronizar")); return; }
+  if (v->fase == LEGSYNC_ACEITA || v->autoFase == 2) {
+    if (v->autoTrocou && v->autoNome[0]) snprintf(dst, tam, i18n("N\xc3\xa3o deu para sincronizar \xe2\x80\x94 usando %s"), v->autoNome);
+    else snprintf(dst, tam, "%s", i18n("Sincronizada"));
+    return;
+  }
+  switch (v->fase) {
+    case LEGSYNC_AGUARDANDO: case LEGSYNC_PRONTA: case LEGSYNC_LENDO: case LEGSYNC_ANALISANDO:
+    case LEGSYNC_OUVINDO: case LEGSYNC_PAUSADA:
+      snprintf(dst, tam, "%s", i18n("Sincronizando\xe2\x80\xa6")); return;
+    case LEGSYNC_RECUSADA:
+      snprintf(dst, tam, "%s", i18n("N\xc3\xa3o deu para sincronizar")); return;
+    default: break;
+  }
+  if (v->autoFase == 1) snprintf(dst, tam, "%s", i18n("Sincronizando\xe2\x80\xa6"));
+}
+
 static int acoesAgora(int slot, int *lista, int max) {
   LegSyncVisao v;
-  int i, n = 0;
-  if (slot != 0) return 0;
+  int n = 0;
+  if (slot != 0 || max < 1) return 0;
   v = legsync_visao(0);
-  for (i = 0; i < N_ACOES && n < max; i++) if (v.acoes & ORDEM[i]) lista[n++] = ORDEM[i];
+  if (v.acoes & LEGSYNC_ACAO_DESFAZER) lista[n++] = LEGSYNC_ACAO_DESFAZER;
   return n;
 }
 
@@ -120,21 +141,20 @@ static const char *pEstado(int slot, void *u) {
   (void)u;
   if (slot != 0 || player_id_canal()[0]) return NULL;
   v = legsync_visao(0);
-  if (v.fase == LEGSYNC_INDISPONIVEL && (v.motivo == LEGSYNC_M_SEM_EXTERNA || v.motivo == LEGSYNC_M_EMBUTIDA))
-    return NULL;
-  legsync_texto(&v, b, sizeof b);
-  return b;
+  if (v.fase == LEGSYNC_INDISPONIVEL && v.autoFase == 0) return NULL;
+  legsync_texto_simples(&v, b, sizeof b);
+  return b[0] ? b : NULL;
 }
 
 static int pAcoes(int slot, const char **rot, int max, void *u) {
-  int l[N_ACOES], n = acoesAgora(slot, l, max < N_ACOES ? max : N_ACOES), i;
+  int l[2], n = acoesAgora(slot, l, max < 2 ? max : 2), i;
   (void)u;
   for (i = 0; i < n; i++) rot[i] = legsync_acao_rotulo(l[i]);
   return n;
 }
 
 static void pExecutar(int slot, int acao, void *u) {
-  int l[N_ACOES], n = acoesAgora(slot, l, N_ACOES);
+  int l[2], n = acoesAgora(slot, l, 2);
   (void)u;
   if (acao >= 0 && acao < n) legsync_acao(l[acao]);
 }

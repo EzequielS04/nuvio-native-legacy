@@ -13,6 +13,16 @@ cc "${sources[@]}" tests/legsync_shot.c -Isrc -DLS_RITMO=0 -o /tmp/nuvio-legsync
   -O1 -g -I/opt/homebrew/include -I/opt/homebrew/include/SDL2 \
   -L/opt/homebrew/lib -lSDL2 -lSDL2_image -lSDL2_ttf -lz -framework OpenGL \
   -Wno-deprecated-declarations -Wno-macro-redefined
+# R4: uma legenda que nao fecha com nenhuma referencia (tempos irregulares).
+python3 - "$FX/ext_ruim.srt" <<'PY'
+import sys, random
+r = random.Random(7); t = 5.0; o = []
+def f(x): return "%02d:%02d:%02d,%03d" % (x // 3600, x // 60 % 60, x % 60, int((x - int(x)) * 1000))
+for i in range(1, 161):
+    t += 0.4 + r.random() * 5; d = 0.3 + r.random() * 3
+    o.append("%d\n%s --> %s\nTexto qualquer %d\n" % (i, f(t), f(t + d), i))
+open(sys.argv[1], "w").write("\n".join(o) + "\n")
+PY
 P=$((20000 + RANDOM % 20000))
 D=$(mktemp -d)
 python3 tests/legref_rangesrv.py "$FX" $P & S=$!

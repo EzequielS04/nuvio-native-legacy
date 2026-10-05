@@ -583,7 +583,15 @@ static void desenharLinha(const LuiLinha *l, int sel, float x, float y, float w,
     // The chosen action between < > discs; a disc dims with nothing beyond it.
     const char *rot[4];
     int n = nAcoes(l->slot, rot, 4);
-    if (n > 0) {
+    if (n == 1) {
+      // R4: a unica acao (Desfazer) e um botao, nao um seletor com setas.
+      TxtLinha t = txt_linha(TXT_G16B, rot[0], 243, 242, 239, 255);
+      float cy = y + LU_LN_H * 0.5f, bw = (float)t.w + 28.0f;
+      dir -= bw;
+      gfx_cor((GfxRect){ dir, cy - 15.0f, bw, 30.0f }, 0.5f, 1, 1, 1, 0.10f * a);
+      txt_desenhar_alpha(t, dir + 14.0f, cy - (float)t.h * 0.5f, a);
+      dir -= 12.0f;
+    } else if (n > 1) {
       int k = syncAcao < n ? syncAcao : 0;
       TxtLinha t = txt_linha(TXT_G16B, rot[k], 243, 242, 239, 255);
       float cy = y + LU_LN_H * 0.5f, dw = 30.0f, ad = k < n - 1 ? 1.0f : 0.3f, ae = k > 0 ? 1.0f : 0.3f;
@@ -660,7 +668,9 @@ void legendasui_corpo(GfxRect c, float a) {
         const char *rot[4], *ks[3] = { "OK", "\xe2\x86\x90 \xe2\x86\x92", "Voltar" };
         int n = nAcoes(linhas[foco].slot, rot, 4);
         const char *rs[3] = { n ? rot[syncAcao < n ? syncAcao : 0] : "", "Op\xc3\xa7\xc3\xa3o", "Fechar" };
-        if (n) plrui_dicas(ks, rs, 3, x0 + w - 10.0f, yc, 1, a);
+        if (n == 1) { const char *k2[2] = { "OK", "Voltar" }, *r2[2] = { rot[0], "Fechar" };
+          plrui_dicas(k2, r2, 2, x0 + w - 10.0f, yc, 1, a); }
+        else if (n) plrui_dicas(ks, rs, 3, x0 + w - 10.0f, yc, 1, a);
         else plrui_dicas(ks + 2, rs + 2, 1, x0 + w - 10.0f, yc, 1, a);
       }
     } }
@@ -724,12 +734,29 @@ static int quebrar(const LegendaCue *c, TxtEstilo est, int r, int g, int b, int 
   return n;
 }
 
+void legendasui_banda_zerar(void) { bandaFim = 0.0f; }
+
+// Estilo proprio da segunda legenda (Ajustes): cada campo "igual a principal"
+// (0 / -1) segue o estilo da principal, como era antes.
+static void estiloSecundario(const VideoLegendaEstilo *e, TxtEstilo *est, int *r, int *g, int *b,
+                             int *fundo, int *borda) {
+  int pct = ajustes_leg2_tamanho(), c = ajustes_leg2_cor(), f = ajustes_leg2_fundo(), bd = ajustes_leg2_borda();
+  if (pct <= 0) pct = e->tamanho * 9 / 10;
+  if (pct < 50) pct = 50;
+  if (pct > 200) pct = 200;
+  pct = (pct / 10) * 10;
+  *est = (TxtEstilo)(TXT_LEG_50 + (pct - 50) / 10);
+  corEstilo(c >= 0 ? c : e->cor, r, g, b);
+  *fundo = f >= 0 ? f : e->fundo;
+  *borda = bd >= 0 ? bd : e->borda;
+}
+
 void legendasui_desenhar_secundaria(const LegendasGeo *g) {
   LegendaCue cues[LEGENDA_SIMULTANEAS];
   Leg2Linha ln[LEG2_LINHAS];
   const VideoLegendaEstilo *e = player_leg_estilo();
-  int n, i, nl = 0, r, gg, b, pct;
-  float topo, x0 = 60.0f, x1 = 1860.0f, alpha, y;
+  int n, i, nl = 0, r, gg, b, fundo, borda;
+  float topo, x0 = 60.0f, x1 = 1860.0f, alpha, y, altura = 0.0f;
   TxtEstilo est;
   GfxRect il;
   bandaFim = 0.0f;
@@ -738,16 +765,11 @@ void legendasui_desenhar_secundaria(const LegendasGeo *g) {
   if (!g || g->videoW < 1920.0f * 0.6f) return;
   n = legenda2_cues(g->pos, cues, LEGENDA_SIMULTANEAS);
   if (n <= 0) return;
-  pct = e->tamanho * 9 / 10;
-  if (pct < 50) pct = 50;
-  if (pct > 200) pct = 200;
-  pct = (pct / 10) * 10;
-  est = (TxtEstilo)(TXT_LEG_50 + (pct - 50) / 10);
-  corEstilo(e->cor, &r, &gg, &b);
+  estiloSecundario(e, &est, &r, &gg, &b, &fundo, &borda);
   alpha = (e->opacidade == 3 ? .25f : e->opacidade == 2 ? .5f : e->opacidade == 1 ? .75f : 1.f) * g->alpha;
   topo = 48.0f + 72.0f * (g->osd < 0 ? 0 : g->osd > 1 ? 1 : g->osd);
   if (g->videoY > topo) topo = g->videoY + 24.0f;   // letterbox: start on the picture
-  if (plrilha_rect(&il)) {
+  if (!g->junto && plrilha_rect(&il)) {
     float s = gfx_escala_ui();
     il.x *= s; il.y *= s; il.w *= s; il.h *= s;
     if (il.y < topo + 260.0f && il.y + il.h > topo) {
@@ -758,16 +780,23 @@ void legendasui_desenhar_secundaria(const LegendasGeo *g) {
     }
   }
   for (i = 0; i < n && nl < LEG2_LINHAS; i++)
-    nl += quebrar(&cues[i], est, r, gg, b, e->borda, x1 - x0, ln + nl, LEG2_LINHAS - nl);
+    nl += quebrar(&cues[i], est, r, gg, b, borda, x1 - x0, ln + nl, LEG2_LINHAS - nl);
+  if (g->junto) {
+    // Stacked: the whole block ends just above the primary (2-line cues grow
+    // upward, never over it) and stays inside the picture.
+    for (i = 0; i < nl; i++) altura += (float)ln[i].cor.h + (i ? 5.0f : 0.0f);
+    topo = g->baseY - 10.0f - altura;
+    if (topo < 8.0f) topo = 8.0f;
+  }
   y = topo;
   for (i = 0; i < nl; i++) {
     TxtLinha l = ln[i].cor;
     float x = (x0 + x1) * 0.5f - (float)l.w * 0.5f;
-    if (e->fundo) gfx_cor((GfxRect){ x - 18, y - 6, (float)l.w + 36, (float)l.h + 12 }, .16f, 0, 0, 0, e->fundo * .16f * alpha);
+    if (fundo) gfx_cor((GfxRect){ x - 18, y - 6, (float)l.w + 36, (float)l.h + 12 }, .16f, 0, 0, 0, fundo * .16f * alpha);
     if (ln[i].borda.tex) {
-      float d = e->borda == 2 ? 4.f : 2.f;
+      float d = borda == 2 ? 4.f : 2.f;
       txt_desenhar_alpha(ln[i].borda, x + d, y + d, .82f * alpha);
-      if (e->borda == 1) {
+      if (borda == 1) {
         txt_desenhar_alpha(ln[i].borda, x - d, y, .82f * alpha);
         txt_desenhar_alpha(ln[i].borda, x, y - d, .82f * alpha);
       }
@@ -775,7 +804,7 @@ void legendasui_desenhar_secundaria(const LegendasGeo *g) {
     txt_desenhar_alpha(l, x, y, alpha);
     y += (float)l.h + 5.0f;
   }
-  bandaFim = y;
+  if (!g->junto) bandaFim = y;
 }
 
 float legendasui_topo_livre(float minimo) {

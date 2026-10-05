@@ -3141,7 +3141,37 @@ static double escalaFonteAss(void) {
   return pct / 120.0;
 }
 
-static void desenharLegendaExterna(void){
+// Base (y) da pilha de baixo da legenda principal: posicao da folha, barra de
+// controles e botao de proximo episodio. Compartilhada com a segunda legenda
+// em modo "Junto da principal" (R4).
+static float baseLegendaPrincipal(void) {
+  float base = visivel && !faixas_estilo_topo() ? 760.f : 1000.f;
+  if (ofertaProximo()) base = 690.f;
+  // Abaixo do padrao (3) o passo e de 20 e nao de 48: com 48 as posicoes 1 e 2
+  // punham a base em 1144 e 1096, fora da tela de 1080 — a legenda sumia, e a
+  // previa da barra de estilo mostrou isso na primeira captura.
+  if (legEstilo.posicao >= 3) base -= (legEstilo.posicao - 3) * 48.f;
+  else base += (3 - legEstilo.posicao) * 20.f;
+  return base;
+}
+
+static void desenharLegendaPrincipal(float *topoPilha);
+static void desenharLegendaExterna(void) {
+  /* F04: SECOND SUBTITLE (legendasui.h). Before every primary early return
+   * (libass, no cues) so both show in every branch; its own document and
+   * offset. R4: "No topo" draws it first, in the top band; "Junto da
+   * principal" draws it AFTER the primary, stacked right above it, so it needs
+   * where the primary's bottom stack starts (topo). Geometry is explicit. */
+  PlrRect av = areaVideoLegenda();
+  int junto = ajustes_leg2_junto();
+  LegendasGeo g2 = { av.x, av.y, av.w, av.h, anim * entrada, entrada, posLegenda(), junto, 0.0f };
+  float topo = -1.0f;
+  if (junto) legendasui_banda_zerar(); else legendasui_desenhar_secundaria(&g2);
+  desenharLegendaPrincipal(&topo);
+  if (junto) { g2.baseY = topo >= 0.0f ? topo : baseLegendaPrincipal(); legendasui_desenhar_secundaria(&g2); }
+}
+
+static void desenharLegendaPrincipal(float *topoPilha){
   /* ASS completo: libass devolve uma lista de bitmaps por camada, preservando
    * karaoke, movimento, desenho vetorial, fontes e todas as tags do arquivo.
    * Da folha, so chegam ao ASS o que nao desmonta o estilo do autor: tamanho
@@ -3153,12 +3183,6 @@ static void desenharLegendaExterna(void){
   // F05: manual + automatico aceito, UMA vez, so para o documento dono do
   // overlay (sem ele, o manual intacto). Positivo adianta, como sempre.
   int atraso = legsync_offset_ms(legEstilo.atrasoMs);
-  /* F04: SECOND SUBTITLE (legendasui.h). Before every primary early return
-   * (libass, no cues) so both show in every branch; its own document and
-   * offset, in the top band. Geometry is passed explicitly. */
-  { PlrRect av = areaVideoLegenda();
-    LegendasGeo g2 = { av.x, av.y, av.w, av.h, anim * entrada, entrada, posLegenda() };
-    legendasui_desenhar_secundaria(&g2); }
   assrender_aplicar_invalidacao();
   assrender_definir_cor(0, 0, 0, 0);
   if (assrender_ativo()) {
@@ -3169,6 +3193,9 @@ static void desenharLegendaExterna(void){
                              video_largura(), video_altura(), escalaFonteAss());
     assrender_desenhar(posLegenda(), atraso, alpha,
                         0, 0, NV_TELA_W, NV_TELA_H);
+    // R4: libass nao informa onde pintou. Estima duas linhas no tamanho da
+    // folha acima da base, para a segunda legenda empilhada nao cobri-las.
+    *topoPilha = baseLegendaPrincipal() - (2.0f * 58.0f + 5.0f) * (float)escalaFonteAss();
     return;
   }
   LegendaCue cues[LEGENDA_SIMULTANEAS];
@@ -3198,13 +3225,8 @@ static void desenharLegendaExterna(void){
   // cima a partir da base da folha, como o SRT sempre fez.
   // Com a barra de estilo no topo a base e a da reproducao sem controles: a
   // previa mostra onde a legenda vai tocar, nao onde ela fica com a barra.
-  float base=visivel && !faixas_estilo_topo()?760.f:1000.f;
-  if(ofertaProximo())base=690.f;
-  // Abaixo do padrao (3) o passo e de 20 e nao de 48: com 48 as posicoes 1 e 2
-  // punham a base em 1144 e 1096, fora da tela de 1080 — a legenda sumia, e a
-  // previa da barra de estilo mostrou isso na primeira captura.
-  if(legEstilo.posicao>=3) base-=(legEstilo.posicao-3)*48.f;
-  else base+=(3-legEstilo.posicao)*20.f;
+  float base = baseLegendaPrincipal();
+  *topoPilha = base;
   float baseTopo = legendasui_topo_livre(80.f);  // pilha do \an8 (letreiros), abaixo da 2a legenda (F04)
   float baseMeio = NV_TELA_H * .5f;
   for (i = 0; i < n; i++) {
@@ -3230,7 +3252,7 @@ static void desenharLegendaExterna(void){
       float x = alinha == 0 ? margem : alinha == 1 ? NV_TELA_W * .5f : NV_TELA_W - margem;
       if (fila == 2)      { desenharBloco(&bl, x, baseTopo, alpha, alinha); baseTopo += bl.h + 10.f; }
       else if (fila == 1) { desenharBloco(&bl, x, baseMeio - bl.h * .5f, alpha, alinha); baseMeio += bl.h + 10.f; }
-      else                { base -= bl.h; desenharBloco(&bl, x, base, alpha, alinha); base -= 10.f; } }
+      else                { base -= bl.h; desenharBloco(&bl, x, base, alpha, alinha); *topoPilha = base; base -= 10.f; } }
   }
 }
 

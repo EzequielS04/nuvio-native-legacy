@@ -156,6 +156,11 @@ int main(int argc, char **argv) {
     // Main = Portugues (2), second = Ingles (3) in the language list.
     // Interface font Montserrat (3): the owner's TV.
     fprintf(f, "idioma 0\nselected_theme 2\nfonteInterface 3\nlegendaIdioma 2\nlegendaSecundariaIdioma 3\n");
+    // R4: NUVIO_SHOT_LEG2="pos tam cor fundo borda" (indices de Ajustes) para ver a segunda legenda
+    // empilhada e com estilo proprio; vazio = padrao (no topo, igual a principal).
+    { const char *e = getenv("NUVIO_SHOT_LEG2"); int p2 = 0, t2 = 0, c2 = 0, f2 = 0, b2 = 0;
+      if (e && sscanf(e, "%d %d %d %d %d", &p2, &t2, &c2, &f2, &b2) == 5)
+        fprintf(f, "legenda2PosLocal %d\nlegenda2TamanhoLocal %d\nlegenda2CorLocal %d\nlegenda2FundoLocal %d\nlegenda2BordaLocal %d\n", p2, t2, c2, f2, b2); }
     fclose(f);
     ajustes_dir(getenv("NUVIO_DADOS")); }
   ajustes_iniciar();
@@ -201,7 +206,7 @@ int main(int argc, char **argv) {
   ler(); comSec = brancos(300, 30, 1620, 260);
   salvar("legendas-duas-sem-controles");
   fprintf(stderr, "top band white pixels: without second %d, with second %d\n", semSec, comSec);
-  assert(comSec > semSec + 2000);   // the second document is really drawn in the top band
+  if (!ajustes_leg2_junto()) assert(comSec > semSec + 2000);   // the second document is really drawn in the top band
   { int prim = brancos(200, 700, 1720, 1060);
     fprintf(stderr, "bottom band white pixels (primary): %d\n", prim);
     assert(prim > 2000); }         // and the primary is still there, at the bottom

@@ -46,10 +46,17 @@ typedef struct {
   float osd;       // 0..1 controls on screen (the clock island moves the band)
   float alpha;     // player fade-in
   double pos;      // playback position used by the primary overlay (s)
+  // R4: "Junto da principal". 1 = stacked: the block ends `baseY` (y of the TOP of
+  // the primary's bottom stack, 1080 coordinates) minus a gap and grows upward.
+  int   junto;
+  float baseY;
 } LegendasGeo;
 // Draws the second document in the TOP band (primary stays at the bottom).
 // Must run before any primary early return so both show in every branch.
 void  legendasui_desenhar_secundaria(const LegendasGeo *g);
+// R4: forgets the top band of the previous frame. The stacked mode draws the second
+// subtitle AFTER the primary, so the primary must not read last frame's band.
+void  legendasui_banda_zerar(void);
 // Lowest y the primary's TOP-anchored stack (\an7-9) may start at so it does
 // not collide with the second band drawn this frame. `minimo` when no band.
 float legendasui_topo_livre(float minimo);
