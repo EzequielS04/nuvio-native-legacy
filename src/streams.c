@@ -563,6 +563,55 @@ static int cabeNoTeto(const Stream *s) {
   return !teto || !s->altura || s->altura <= teto;
 }
 
+// PLUGIN / EMBED (R9, 04/10). Fonte de scraper QuickJS (MegaEmbed etc.): o
+// bingeGroup que o adaptador de plugins poe e "nuvio-plugin|<id>|<q>". A
+// resolucao que ela anuncia e o rotulo do embed, nunca medida, e o link e de
+// hospedagem de terceiros. Nos logs da C9 (build 178dc061) o rotulo
+// "MegaEmbed - 1080" liderava a lista de addon/debrid: pontos() nao conhecia a
+// ORIGEM da fonte e ainda dava +5000 ao MP4 (os embeds sao MP4).
+static int ehPlugin(const Stream *s) {
+  return !strncmp(s->bingeGroup, "nuvio-plugin|", 13);
+}
+
+// StreamFit no automatico (R9): so uma fonte MEDIDA como pesada demais para a
+// conexao desce. Exige o mesmo que a folha exige — bytes exatos, duracao real
+// do alvo, janela de medida fresca no host final — e portanto sem medida, sem
+// tamanho ou sem duracao a resposta e "nao sei" e a qualidade manda.
+// Nunca chama a fonte de metadados (so a UI a chama): usa a duracao ja
+// guardada em fitDur.
+static pthread_mutex_t autoFotoTrava = PTHREAD_MUTEX_INITIALIZER;
+static StreamfitFoto autoFoto;
+static uint64_t autoFotoMs;
+static StreamfitResultado fitAutoResultado(const Stream *s) {
+  StreamfitResultado r = {0};
+  uint64_t agora = streamfit_agora_ms();
+  double seg = 0;
+  if (!s->tamanhoBytes) { r.razao = SF_SEM_TAMANHO; return r; }
+  pthread_mutex_lock(&fitMetaTrava);
+  if (alvoLista[0])
+    for (int i = 0; i < FIT_DUR_SLOTS; i++)
+      if (!strcmp(fitDur[i].alvo, alvoLista)) {
+        seg = fitDur[i].midiaSeg ? fitDur[i].midiaSeg : fitDur[i].metaSeg;
+        break;
+      }
+  pthread_mutex_unlock(&fitMetaTrava);
+  pthread_mutex_lock(&autoFotoTrava);
+  if (!autoFotoMs || agora < autoFotoMs || agora - autoFotoMs > 200) {
+    streamfit_foto(&autoFoto, agora);
+    autoFotoMs = agora;
+  }
+  streamfit_classificar(&autoFoto, s->url, s->tamanhoBytes, seg, &r);
+  pthread_mutex_unlock(&autoFotoTrava);
+  return r;
+}
+static int fitPesadaAuto(const Stream *s) {
+  // Com a folha aberta vale a classe congelada dela (o selo "Melhor" nao muda
+  // de linha por uma medida que chegou com a folha na tela).
+  if (aberta && fitClasses && s >= lista && s < lista + n && (int)(s - lista) < fitN)
+    return fitClasses[s - lista] == SF_PESADA;
+  return fitAutoResultado(s).classe == SF_PESADA;
+}
+
 static long pontos(const Stream *s) {
   long p = 0;
   // DOLBY VISION SO VALE PONTO EM MP4 — e isto e medida, nao teoria.
@@ -614,6 +663,14 @@ static long pontos(const Stream *s) {
   // toca-lo (nao ha debrid que o resolva), mas a ORDEM da folha tambem conta:
   // link direto primeiro, torrent sem garantia de peers por ultimo.
   if (soP2P(s)) p -= 600000;
+  // ORIGEM, depois de qualidade/HDR/cache (R9): o plugin so ganha de uma fonte
+  // de addon que esta FORA do cache (-500000, que so abre um aviso de 8 s) ou
+  // que estoura o teto; de qualquer fonte de addon em cache, de qualquer
+  // altura, ele perde. Sem outra opcao ele toca como sempre.
+  if (ehPlugin(s)) p -= 200000;
+  // MEDIDA PESADA PARA A CONEXAO: abaixo de toda fonte normal (4K DV MP4
+  // inteiro soma 137 mil), acima do plugin. So com medida confiavel.
+  else if (fitPesadaAuto(s)) p -= 140000;
   return p;
 }
 
@@ -902,6 +959,49 @@ int stream_resolver_escolhida(int i, unsigned geracao, char *url, unsigned nu,
   return r;
 }
 
+// UMA LINHA QUE EXPLICA A ESCOLHA (R9): vencedora, por que ela ficou na frente,
+// o orcamento do StreamFit com a confianca dele, e a vice. Em ingles, como o
+// resto do log de diagnostico novo. So le a lista; nunca muda a escolha.
+static void faixaPontos(const Stream *s, char *dst, size_t tam) {
+  snprintf(dst, tam, "%dp%s%s%s%s%s", s->altura, s->mp4 ? " mp4" : "", s->dolbyVision ? " DV" : "",
+           s->foraCache ? " uncached" : " cached", ehPlugin(s) ? " plugin" : " addon",
+           cabeNoTeto(s) ? "" : " over-cap");
+}
+static void logarEscolha(int escolhida, int pref, int modoPrimeira) {
+  char a[96], b[96] = "none", fit[96];
+  int vice = -1, i, k;
+  long pv = 0, pe;
+  StreamfitResultado r;
+  const Stream *w;
+  pthread_mutex_lock(&verTrava);
+  if (escolhida < 0 || escolhida >= n) { pthread_mutex_unlock(&verTrava); return; }
+  w = &lista[escolhida];
+  pe = pontos(w);
+  for (k = 0; k < n; k++) {
+    long p;
+    i = ORD(k);
+    if (i == escolhida || automaticaExcluida(i)) continue;
+    p = pontos(&lista[i]);
+    if (vice < 0 || p > pv) { vice = i; pv = p; }
+  }
+  faixaPontos(w, a, sizeof a);
+  if (vice >= 0) faixaPontos(&lista[vice], b, sizeof b);
+  r = fitAutoResultado(w);
+  if (r.razao == SF_BITRATE_ESTIMADO)
+    snprintf(fit, sizeof fit, "%s need=%.0fkbps budget=%dkbps (%d samples)",
+             r.classe == SF_PESADA ? "heavy" : "fits", r.necessarioKbps, r.otimoKbps, r.amostras);
+  else
+    snprintf(fit, sizeof fit, "unknown (%s, quality not downgraded)",
+             r.razao == SF_SEM_REDE ? "no network epoch" : r.razao == SF_SEM_TAMANHO ? "no exact size" :
+             r.razao == SF_SEM_DURACAO ? "no runtime" : r.razao == SF_SEM_HOST ? "no host" : "no measurement");
+  printf("[fonte] auto pick: \"%s\" [%s] points=%ld reason=%s | fit=%s | runner-up=",
+         w->rotulo, a, pe, escolhida == pref ? "remembered for this title" : modoPrimeira ? "first in addon order"
+         : "best score (quality/HDR > cached > addon over plugin)", fit);
+  if (vice >= 0) printf("\"%s\" [%s] points=%ld\n", lista[vice].rotulo, b, pv);
+  else printf("none\n");
+  pthread_mutex_unlock(&verTrava);
+}
+
 int stream_primeira_boa(int tentativas) {
   int fila[VER_MAX], nf, q, tocadas = 0, escolhida, total, pref;
   int modo = ajustes_fonte_primeira() ? FONTEAUTO_PRIMEIRA : FONTEAUTO_MELHOR;
@@ -955,7 +1055,7 @@ int stream_primeira_boa(int tentativas) {
   printf("[fonte] verificacao (%s): %d de %d candidata(s) conferida(s)%s\n",
          modo == FONTEAUTO_PRIMEIRA ? "primeira da lista" : "melhor fonte",
          tocadas, nf, c.abortou ? ", lista trocada no meio" : "");
-  if (escolhida >= 0) printf("[fonte] %d ok\n", escolhida);
+  if (escolhida >= 0) { printf("[fonte] %d ok\n", escolhida); logarEscolha(escolhida, pref, modo == FONTEAUTO_PRIMEIRA); }
   return escolhida;
 }
 
