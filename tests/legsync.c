@@ -153,6 +153,41 @@ static void conferirFilme(int total) {
   legenda_documento_liberar(emb);
 }
 
+// A ilha de narracao (legsync_pil_passo): "Sincronizando…" curto, fechada
+// enquanto roda, UM aviso final (ok ou nao sincronizada), nada ao cancelar.
+static LegSyncVisao pv(int fase, int autoFase) { LegSyncVisao x; memset(&x, 0, sizeof x); x.fase = fase; x.autoFase = autoFase; x.offsetAutoMs = 2500; return x; }
+static void pilula_sequencia(int fim, int ok, int cancela) {
+  LegSyncPil p; char t[200]; unsigned now = 1000; int r, aberturas = 0, ant = 0, visivel;
+  LegSyncVisao rodando = pv(LEGSYNC_LENDO, 1), v;
+  memset(&p, 0, sizeof p); t[0] = 0;
+  p.rastreia = 1; p.estado = LEGSYNC_PIL_PROCURANDO; p.desde = now; p.iniciou = now;
+  // Procurando -> Sincronizando
+  now += 1000; LegSyncVisao ag = pv(LEGSYNC_AGUARDANDO, 0); legsync_pil_passo(&p, &ag, now, "OS", t, sizeof t); assert(p.estado == LEGSYNC_PIL_PROCURANDO);
+  now += 100; legsync_pil_passo(&p, &rodando, now, "OS", t, sizeof t); assert(p.estado == LEGSYNC_PIL_SINCRONIZANDO);
+  // 3 s depois a ilha fecha (espera) e fica fechada por minutos
+  now += LEGSYNC_PIL_SINC_MS - 1; legsync_pil_passo(&p, &rodando, now, "OS", t, sizeof t); assert(p.estado == LEGSYNC_PIL_SINCRONIZANDO);
+  now += 2; r = legsync_pil_passo(&p, &rodando, now, "OS", t, sizeof t);
+  assert((r & LEGSYNC_PIL_ESCONDEU) && p.estado == LEGSYNC_PIL_OFF && p.espera);
+  for (int i = 0; i < 400; i++) {
+    now += 500; r = legsync_pil_passo(&p, &rodando, now, "OS", t, sizeof t);
+    assert(!r && p.estado == LEGSYNC_PIL_OFF);   // nenhuma reabertura intermediaria
+  }
+  if (cancela) {
+    v = pv(LEGSYNC_INDISPONIVEL, 0);
+    for (int i = 0; i < 20; i++) { now += 500; r = legsync_pil_passo(&p, &v, now, "OS", t, sizeof t); assert(!r && p.estado == LEGSYNC_PIL_OFF); }
+    assert(!p.espera); return;
+  }
+  v = ok ? pv(LEGSYNC_ACEITA, 2) : pv(LEGSYNC_RECUSADA, fim);
+  now += 500; r = legsync_pil_passo(&p, &v, now, "OS", t, sizeof t);
+  assert((r & LEGSYNC_PIL_FINAL_TARDE) && p.estado == LEGSYNC_PIL_APLICADA && !p.espera);
+  assert(p.final == (ok ? 1 : 0));
+  assert(ok ? strstr(t, "sincronizada") && strstr(t, "+2") : strstr(t, "n\xc3\xa3o sincronizada"));
+  // o aviso fica o tempo normal e some; sem nova abertura
+  unsigned dur = ok ? LEGSYNC_PIL_APLICADA_MS : LEGSYNC_PIL_SEMSYNC_MS;
+  now += dur - 10; r = legsync_pil_passo(&p, &v, now, "OS", t, sizeof t); assert(!(r & LEGSYNC_PIL_ZERAR));
+  now += 20; r = legsync_pil_passo(&p, &v, now, "OS", t, sizeof t); assert(r & LEGSYNC_PIL_ZERAR);
+}
+
 int main(int argc, char **argv) {
   LegSyncVisao v; int casos = 0;
   DIR = argc > 1 ? argv[1] : "/tmp/nv-legref-fx";
@@ -511,6 +546,7 @@ int main(int argc, char **argv) {
   v = legsync_visao(0);
   assert(v.fase == LEGSYNC_INDISPONIVEL && v.motivo == LEGSYNC_M_PLATAFORMA && !legsync_acao(LEGSYNC_ACAO_RAPIDA));
   legsync_destruir(); casos++;
+  pilula_sequencia(3, 1, 0); pilula_sequencia(3, 0, 0); pilula_sequencia(1, 0, 1); casos += 3;
   printf("legsync: %d casos ok\n", casos);
   return 0;
 }

@@ -117,6 +117,24 @@ void legsync_texto_simples(const LegSyncVisao *v, char *dst, unsigned tam);     
 // 45 s cap, no plan, undone) is "Legenda aplicada · <provedor> · não
 // sincronizada". Returns 1 when synced. i18n.
 int legsync_pilula_final(const LegSyncVisao *v, const char *provedor, char *dst, unsigned tam);
+// A narracao da ilha sem GL (faixas.c a usa; testavel sozinha). Estados:
+// "Procurando" -> "Sincronizando…" (LEGSYNC_PIL_SINC_MS, depois a ilha fecha) ->
+// fechada enquanto o plano trabalha (espera) -> UM aviso final (sincronizada ou
+// "nao sincronizada") pelo tempo normal -> some. Cancelar nao diz nada.
+enum { LEGSYNC_PIL_OFF = 0, LEGSYNC_PIL_PROCURANDO, LEGSYNC_PIL_SINCRONIZANDO, LEGSYNC_PIL_APLICADA, LEGSYNC_PIL_FALHOU };
+#define LEGSYNC_PIL_MIN_MS      900u
+#define LEGSYNC_PIL_SINC_MS     3000u   // "Sincronizando…" na ilha antes de ela voltar ao relogio
+#define LEGSYNC_PIL_APLICADA_MS 3600u
+#define LEGSYNC_PIL_SEMSYNC_MS  6000u   // "nao sincronizada" fica mais: e um aviso, nao um sucesso
+#define LEGSYNC_PIL_BAIXAR_TETO 20000u  // a legenda escolhida nao baixou: desiste da narracao
+enum { LEGSYNC_PIL_ESCONDEU = 1, LEGSYNC_PIL_FINAL_TARDE = 2, LEGSYNC_PIL_LEMBRAR = 4,
+       LEGSYNC_PIL_BAIXAR = 8, LEGSYNC_PIL_ZERAR = 16 };
+typedef struct {
+  int estado, rastreia, espera, final, troca;   // final: 0 nao sincronizada, 1 sincronizada, 2 embutida
+  unsigned desde, iniciou;
+} LegSyncPil;
+// Um passo (so com rastreia ou espera). Devolve bits LEGSYNC_PIL_*.
+int legsync_pil_passo(LegSyncPil *p, const LegSyncVisao *v, unsigned agora, const char *provedor, char *texto, unsigned tam);
 // Liga o AutoSync como provedor da linha de sincronizacao do seletor de
 // legendas do F04 (legendasui_definir_sync). Idempotente; thread da UI.
 void legsync_ui_ligar(void);
