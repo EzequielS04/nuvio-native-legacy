@@ -44,12 +44,12 @@ int main(void) {
     float minTop = lay == 2 ? 54 : 24;
     for (int caption = 0; caption < 2; caption++) {
       float hc = caption ? NV_LD_HERO_META : 0;
-      HeroCopyLayout p = heroCopyLayout(bases[lay], sinH, 1, 1, hc, logos[lay], bh, gap, minTop, 1.0f, 0);
+      HeroCopyLayout p = heroCopyLayout(bases[lay], sinH, 1, 1, hc, logos[lay], bh, gap, minTop, 1.0f);
       ordered(p, bh, gap, hc, sinH, bases[lay]);
       assert(p.logo >= minTop - 0.01f);
       assert(p.logoHeight <= logos[lay]);
       // Real synopsis arrival keeps the bottom boundary and ordered actions.
-      HeroCopyLayout empty = heroCopyLayout(bases[lay], 0, 0, 0, 0, logos[lay], bh, gap, minTop, 1.0f, 0);
+      HeroCopyLayout empty = heroCopyLayout(bases[lay], 0, 0, 0, 0, logos[lay], bh, gap, minTop, 1.0f);
       assert(empty.synopsis == bases[lay]);
       assert(empty.logo + empty.logoHeight + gap <= empty.action + 0.01f);
       assert(empty.action + bh <= bases[lay]);
@@ -61,12 +61,12 @@ int main(void) {
     for (int hl = 0; hl < 2; hl++) {
       float lh = hl ? NV_LOGO_HERO_H : 90.0f, sh = syn ? 3 * NV_LD_HERO_SIN : 0;
       float b = NV_SHELF_TOP - NV_HERO_COPY_GAP - 24;
-      HeroCopyLayout on = heroCopyLayout(b, sh, 1, 1, 0, lh, NV_HERO_BOTAO_H, NV_HOME_HERO_BOTAO_GAP, 24, 1.0f, 0);
-      HeroCopyLayout off = heroCopyLayout(b, sh, 1, 1, 0, lh, NV_HERO_BOTAO_H, NV_HOME_HERO_BOTAO_GAP, 24, 0.0f, 0);
+      HeroCopyLayout on = heroCopyLayout(b, sh, 1, 1, 0, lh, NV_HERO_BOTAO_H, NV_HOME_HERO_BOTAO_GAP, 24, 1.0f);
+      HeroCopyLayout off = heroCopyLayout(b, sh, 1, 1, 0, lh, NV_HERO_BOTAO_H, NV_HOME_HERO_BOTAO_GAP, 24, 0.0f);
       assert(off.logoHeight == on.logoHeight);
       assert(fabsf(off.logo + off.logoHeight + NV_HERO_COPY_LINHA - off.caption) < 0.01f);
       assert(off.logo > on.logo);
-      HeroCopyLayout mid = heroCopyLayout(b, sh, 1, 1, 0, lh, NV_HERO_BOTAO_H, NV_HOME_HERO_BOTAO_GAP, 24, 0.5f, 0);
+      HeroCopyLayout mid = heroCopyLayout(b, sh, 1, 1, 0, lh, NV_HERO_BOTAO_H, NV_HOME_HERO_BOTAO_GAP, 24, 0.5f);
       assert(mid.logo > on.logo && mid.logo < off.logo);
     }
   puts("ok layout: Moderna logo hugs the text when the button slot collapses");
