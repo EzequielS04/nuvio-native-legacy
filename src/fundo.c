@@ -411,6 +411,16 @@ static void frostTela(GfxRect r, float raioPx, float a) {
   float k[15];
   GLuint t = 0;
   if (!telaCheia(r) || raioPx > 0.0f) { frost(r, raioPx, a); return; }
+  // NA IMERSIVA O FROST E A LUZ DE AMBIENTE (dono, 05/10: "queria que o fundo
+  // frost seguisse a mesma dinamica do fundo do layout Apple TV no filme"). E
+  // o que a pagina do titulo ja pinta sem Frost: o chao do app e a luz das
+  // regioes da cena por cima (gfx_ambiente, o assado da Home). As tres manchas
+  // do Frost ficavam quase pretas ao lado disso.
+  if (nv_ambiente_forca > 0.5f) {
+    gfx_cor(r, 0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, a);
+    gfx_ambiente(a * 0.998f);
+    return;
+  }
   frostLuzes(k);
   k[12] = NV_COR_FUNDO_R; k[13] = NV_COR_FUNDO_G; k[14] = NV_COR_FUNDO_B;
   if (conferido[K_FROST] != 0) t = gfx_luz_canal(CANAL_FROST, k, 15, pintarFrost, NULL);

@@ -60,12 +60,12 @@
 #define PS_ARTE_H       648.0f   // faixa da arte de fundo do perfil focado
 // CARTAO "CONTINUAR" sob o perfil em foco (2.0, variante B): a peca da ilha
 // (material vidro/solido, mini capa, trilho) com o ultimo item da pessoa.
-#define PS_CONT_W      760.0f
-#define PS_CONT_H      172.0f
+#define PS_CONT_W      860.0f
+#define PS_CONT_H      200.0f
 #define PS_CONT_RAIO    36.0f
-#define PS_CONT_CAPA_W  92.0f
-#define PS_CONT_CAPA_H 132.0f
-#define PS_CONT_Y_MAX  812.0f   // topo, com o avatar no teto; abaixo disso sobe com o avatar
+#define PS_CONT_CAPA_W 108.0f
+#define PS_CONT_CAPA_H 156.0f
+#define PS_CONT_Y_MAX  800.0f   // topo, com o avatar no teto; abaixo disso sobe com o avatar
 #define PS_HALO_N            3   // poucos aneis suaves, sem efeito de alvo
 #define PS_HALO_ATE      0.66f   // quanto o ultimo anel passa do avatar
 #define PS_HALO_ALFA     0.040f
@@ -603,7 +603,7 @@ static void contDesenhar(int i, float cx, float yTopo, float f, float a) {
   r.y = yTopo + (1.0f - (f > 1.0f ? 1.0f : f)) * 14.0f;   // sobe ao entrar no foco
   plrui_material(r, PS_CONT_RAIO, 0, af);
   // CARTAO GRANDE (dono, 05/10: "a informacao do que foi visto maior e mais
-  // bonita"): capa de 92x132, "Continuar assistindo" no destaque, o titulo em
+  // bonita"): capa de 108x156, "Continuar assistindo" no destaque, o titulo em
   // letra de titulo, episodio embaixo e a barra na largura toda com o tempo
   // que falta. Era uma tira de 96 de altura com capa de 44.
   yc = r.y + r.h * 0.5f;
@@ -621,18 +621,18 @@ static void contDesenhar(int i, float cx, float yTopo, float f, float a) {
   ajustes_acento_marca(&cr, &cg, &cb);
   { TxtLinha kick = txt_linha_corta(TXT_CAPTION2, "Continuar assistindo",
                                     (int)(cr * 255.0f), (int)(cg * 255.0f), (int)(cb * 255.0f), 255, avail);
-    float y = r.y + 24.0f;
+    float y = r.y + 26.0f;
     txt_desenhar_alpha(kick, x, y, af);
-    y += (float)kick.h + 8.0f;
+    y += (float)kick.h + 6.0f;
     tit = txt_linha_corta(TXT_TITULO3, k->c.titulo, 244, 245, 248, 255, avail);
     txt_desenhar_alpha(tit, x, y, af);
-    y += (float)tit.h + 6.0f;
+    y += (float)tit.h + 2.0f;
     meta = k->meta[0] ? txt_linha_corta(TXT_CALLOUT, k->meta, 190, 193, 202, 255, avail) : (TxtLinha){ 0 };
     if (meta.w) txt_desenhar_alpha(meta, x, y, af); }
   rest = txt_linha_corta(TXT_CAPTION2, k->restante, 200, 203, 212, 255, avail * 0.5f);
   ajustes_acento(&cr, &cg, &cb);
   { float pr = k->c.progresso > 1.0f ? 1.0f : k->c.progresso;
-    float ty = r.y + r.h - 34.0f, tw = avail - (rest.w ? (float)rest.w + 18.0f : 0.0f);
+    float ty = r.y + r.h - 30.0f, tw = avail - (rest.w ? (float)rest.w + 18.0f : 0.0f);
     plrui_trilho((GfxRect){ x, ty - 3.0f, tw, 6.0f }, pr, cr, cg, cb, af);
     if (rest.w) txt_desenhar_alpha(rest, x + tw + 18.0f, ty - (float)rest.h * 0.5f, af); }
 }

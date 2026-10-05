@@ -186,7 +186,10 @@ static void parDesenhar(const ParSet *s, float alfa) {
     float off = fmodf(tempo * vel * (float)dir, passoY);
     float x = NV_TELA_W * 0.5f + ((float)col - PAR_COLS * 0.5f) * (PAR_CW + PAR_GAP);
     float dist = fabsf((float)col - (PAR_COLS - 1) * 0.5f) / ((PAR_COLS - 1) * 0.5f);
-    float a = (0.95f - dist * 0.35f) * alfa;
+    // As colunas das pontas apagam AQUI (0,95 no meio, 0,30 na borda), e nao
+    // mais por dois veus radiais de 1400x2200 por cima: na C9 a tela ficava em
+    // 34 fps e, sem esses dois quads, em 60 (medido peca por peca, 05/10/2026).
+    float a = (0.95f - dist * dist * 0.65f) * alfa;
     if (off < 0.0f) off += passoY;
     for (k = -3; k < 3; k++) {
       float y = NV_TELA_H * 0.5f + (float)k * passoY + off - passoY * 0.5f;
@@ -216,7 +219,7 @@ static void desenharFilmes(const PSCena *c, float alfa) {
   gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0, 0, 0, 0, 1);
   if (parTemAnt) parDesenhar(&parAnt, (1.0f - k) * PAR_ALFA * alfa);
   parDesenhar(&parAtual, (parTemAnt ? k : 1.0f) * PAR_ALFA * alfa);
-  veusBordas(0.92f, 0.95f, 0.70f, alfa);
+  veusBordas(0.92f, 0.95f, 0.0f, alfa);
   // A luz do perfil sobe do chao, na cor dele.
   gfx_rect((GfxRect){ NV_TELA_W * 0.5f - 1250.0f, NV_TELA_H + 54.0f - 1250.0f, 2500.0f, 2500.0f },
            0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, c->luz[0], c->luz[1], c->luz[2], 0.50f * alfa);
