@@ -1384,13 +1384,14 @@ int main(int argc, char **argv) {
           setlocale(LC_NUMERIC, "C");
         } }
       printf("FPS=%.1f pior=%.1fms janks=%d | pior-quadro: texto %.1fms em %d linhas"
-             " | gpu-cache=%d %.1fMB tela=%d/%.1fMB fila-tex=%d tex-despejos=%d(q=%d)"
+             " | gpu-cache=%d %.1fMB tela=%d/%.1fMB fila-tex=%d tex-despejos=%d(q=%d) disco-direto=%d neg-arte=%d"
              " | despejos=%d | cache-arte=%ld/%ldB hit=%ld miss=%ld grav=%ld err=%ld essenciais=%ld/%ld"
              " | fs-backend=%s idbfs=%s sync=%s ok=%d err=%d pend=%d custo=%d/%.1fms recovery=%d"
              " | cache-disco=%.1fMB | rss=%.0fMB%s\n",
              quadros * 1000.0 / (double)(agora - ultRelato), pior, janks,
              piorTxtMs, piorTxtN, itens, bytes / 1048576.0,
              quentes, bytesQ / 1048576.0, pend, tex_despejos, tex_despejos_quentes,
+             tex_disco_direto, tex_negativas_poupadas(),
              txt_despejos,
              cacheArteStats.itens, cacheArteStats.bytes,
              cacheArteStats.hits, cacheArteStats.misses, cacheArteStats.gravacoes, cacheArteStats.falhas,
