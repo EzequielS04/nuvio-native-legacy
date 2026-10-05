@@ -1966,6 +1966,7 @@
   T("Mais rápida", "Snelste"),
   T("Mais tarde", "Later"),
   T("Mais vistos", "Meest bekeken"),
+  T("Maiúsculas", "Hoofdletters"),
   T("Malásia", "Maleisië"),
   T("Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.", "Stuurt de laatste 200 KB van het log van deze sessie (zonder wachtwoorden of sleutels) naar de maker van de app. Gebruik het als er nú iets mis is."),
   T("Mandar uma mensagem para %s?", "%s een bericht sturen?"),

@@ -1965,6 +1965,7 @@
   { "Mais rápida", "Fastest" },
   { "Mais tarde", "Later" },
   { "Mais vistos", "Most watched" },
+  { "Maiúsculas", "Caps" },
   { "Malásia", "Malaysia" },
   { "Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.", "Sends the last 200 KB of this session's log (no passwords or keys) to the app's maker. Use it when something is wrong right now." },
   { "Mandar uma mensagem para %s?", "Send %s a message?" },

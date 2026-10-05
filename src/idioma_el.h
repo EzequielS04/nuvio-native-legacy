@@ -1966,6 +1966,7 @@
   T("Mais rápida", "Η πιο γρήγορη"),
   T("Mais tarde", "Αργότερα"),
   T("Mais vistos", "Οι πιο δημοφιλείς"),
+  T("Maiúsculas", "Κεφαλαία"),
   T("Malásia", "Μαλαισία"),
   T("Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.", "Στέλνει τα τελευταία 200 KB του αρχείου καταγραφής αυτής της συνεδρίας (χωρίς κωδικούς ή κλειδιά) στον δημιουργό της εφαρμογής. Χρησιμοποίησέ το όταν κάτι δεν πάει καλά αυτή τη στιγμή."),
   T("Mandar uma mensagem para %s?", "Αποστολή μηνύματος στον/στην %s;"),

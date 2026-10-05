@@ -1965,6 +1965,7 @@
   T("Mais rápida", "Найшвидше джерело"),
   T("Mais tarde", "Пізніше"),
   T("Mais vistos", "Найпопулярніші"),
+  T("Maiúsculas", "Великі літери"),
   T("Malásia", "Малайзія"),
   T("Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.", "Надсилає останні 200 КБ журналу цього сеансу (без паролів і ключів) розробнику застосунку. Використовуйте, коли щось не працює просто зараз."),
   T("Mandar uma mensagem para %s?", "Надіслати повідомлення %s?"),

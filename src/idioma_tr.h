@@ -1966,6 +1966,7 @@
   T("Mais rápida", "En hızlı"),
   T("Mais tarde", "Daha sonra"),
   T("Mais vistos", "En çok izlenenler"),
+  T("Maiúsculas", "Büyük harf"),
   T("Malásia", "Malezya"),
   T("Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.", "Bu oturumun günlüğünün son 200 KB'ını (şifre veya anahtar yok) uygulamanın geliştiricisine gönderir. Tam şu an bir sorun varsa kullan."),
   T("Mandar uma mensagem para %s?", "%s kişisine mesaj gönderilsin mi?"),

@@ -1966,6 +1966,7 @@
   T("Mais rápida", "Raskeste"),
   T("Mais tarde", "Senere"),
   T("Mais vistos", "Mest sette"),
+  T("Maiúsculas", "Store bokstaver"),
   T("Malásia", "Malaysia"),
   T("Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.", "Sender de siste 200 KB av denne øktens logg (uten passord eller nøkler) til appens utvikler. Bruk den når noe er galt akkurat nå."),
   T("Mandar uma mensagem para %s?", "Sende en melding til %s?"),

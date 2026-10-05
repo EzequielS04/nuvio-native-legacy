@@ -1965,6 +1965,7 @@
   T("Mais rápida", "Schnellste"),
   T("Mais tarde", "Später"),
   T("Mais vistos", "Meistgesehen"),
+  T("Maiúsculas", "Großbuchstaben"),
   T("Malásia", "Malaysia"),
   T("Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.", "Sendet die letzten 200 KB des Protokolls dieser Sitzung (ohne Passwörter oder Schlüssel) an die Macher der App. Nutze es, wenn gerade etwas nicht stimmt."),
   T("Mandar uma mensagem para %s?", "%s eine Nachricht senden?"),

@@ -1966,6 +1966,7 @@
   T("Mais rápida", "最速"),
   T("Mais tarde", "今後"),
   T("Mais vistos", "最も視聴された作品"),
+  T("Maiúsculas", "大文字"),
   T("Malásia", "マレーシア"),
   T("Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.", "このセッションのログの直近 200 KB（パスワードやキーは含みません）を、アプリの開発者に送信します。今まさに問題が起きているときにお使いください。"),
   T("Mandar uma mensagem para %s?", "%sにメッセージを送りますか？"),

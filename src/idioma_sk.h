@@ -1966,6 +1966,7 @@
   T("Mais rápida", "Najrýchlejšie"),
   T("Mais tarde", "Neskôr"),
   T("Mais vistos", "Najsledovanejšie"),
+  T("Maiúsculas", "Veľké písmená"),
   T("Malásia", "Malajzia"),
   T("Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.", "Odošle posledných 200 KB logu tejto relácie (bez hesiel a kľúčov) autorovi aplikácie. Použite, keď je niečo práve teraz zle."),
   T("Mandar uma mensagem para %s?", "Poslať správu používateľovi %s?"),
