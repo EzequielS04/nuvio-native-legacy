@@ -188,6 +188,11 @@ static int  pessoaFoco;
 // linhas na tela; sem isto o resto dos creditos era cortado sem aviso.
 static int  pessoaLinha;
 static int  pedAbrir = -1;
+// DE ONDE SE VEIO, quando um titulo e aberto de dentro de outro (Recomendacoes,
+// filmografia, colecao). Sem isto o Voltar fechava a pagina e caia na Home em
+// vez de voltar ao titulo anterior (dono, 05/10/2026). Zerada quando a pagina
+// nasce de fora; app.c avisa cada troca por detail_volta_notar.
+static int  voltaPilha[8], nVolta, voltando;
 // Foco DENTRO da aba "Mais como este", que e uma lista vertical propria e nao
 // uma das fileiras horizontais do focus.c.
 static int  relFoco;
@@ -1369,6 +1374,7 @@ void detail_mostrar_pessoa(long tmdb, const char *nome, const char *foto) {
 
 void detail_abrir(const HomeItem *it) {
   int replacing = aberto && !saindo;
+  if (!replacing) { nVolta = 0; voltando = 0; }
   maisAcoes = 0;
   int pos = -1, n = 0;
   // CARROSSEL: so quando a pagina NASCE de um cartaz de fileira da Dinamica
@@ -2467,6 +2473,7 @@ void detail_evento(const SDL_Event *e) {
     if (acoesAgrupadas() && maisAcoes && nivel == 0) { maisAcoes = 0; botao = temInicio() ? 1 : 0; }
     else if (nivel > 0) nivel = 0;
     else if (carro && carCheia) carCheia = 0;   // tela cheia no topo -> cartao
+    else if (nVolta > 0) { pedAbrir = voltaPilha[--nVolta]; voltando = 1; }   // volta ao titulo de onde veio
     else { saindo = 1; pediuMenu = 0; }   // Voltar nao abre um menu pedido antes
     return;
   }
@@ -6789,6 +6796,15 @@ int detail_pediu_reproduzir(void) { int v = pedReproduzir; pedReproduzir = 0; re
 // detail_pediu_reproduzir do app.c, com a pagina ja aberta por baixo.
 void detail_pedir_reproduzir(void) { pedReproduzir = 1; }
 int detail_pediu_abrir(void) { int v = pedAbrir; pedAbrir = -1; return v; }
+void detail_volta_notar(int novo) {
+  if (voltando) { voltando = 0; return; }       // esta troca E a volta: nao empilha
+  if (!aberto || saindo || novo == idx || idx < 0) return;
+  if (nVolta == (int)(sizeof voltaPilha / sizeof *voltaPilha)) {
+    memmove(voltaPilha, voltaPilha + 1, sizeof voltaPilha - sizeof *voltaPilha);
+    nVolta--;
+  }
+  voltaPilha[nVolta++] = idx;
+}
 int detail_pediu_assistido(void) { int v = pedAssistido; pedAssistido = 0; return v; }
 int detail_pediu_marcar(void)     { int v = pedMarcar;     pedMarcar = 0;     return v; }
 int detail_pediu_amigos(char *imdb, size_t tam) {

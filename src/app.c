@@ -2161,7 +2161,7 @@ static void marcarAssistidoSeSolicitado(void) {
 
 static void trocaDeTituloSeSolicitada(void) {
   int alvo = detail_pediu_abrir();
-  if (alvo >= 0) { abrirPorIndice(alvo); return; }
+  if (alvo >= 0) { detail_volta_notar(alvo); abrirPorIndice(alvo); return; }
   // Titulo que veio de FORA do catalogo: a descoberta buscou o meta num fio e
   // avisa aqui quando ele entrou. Abrir no fio da rede seria mexer na tela de
   // outro fio; este e o unico lugar que abre titulo.
@@ -2172,6 +2172,7 @@ static void trocaDeTituloSeSolicitada(void) {
     // encerra o player antes; este faz o mesmo.
     if (novo >= 0) {
       if (player_aberto() || player_retido()) player_encerrar();
+      detail_volta_notar(novo);
       abrirPorIndice(novo);
       if (spotPessoaDepois.tmdb > 0) {
         if (SDL_GetTicks() - spotPessoaDesde < SPOT_PESSOA_PRAZO_MS)

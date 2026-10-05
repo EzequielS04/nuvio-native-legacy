@@ -54,6 +54,9 @@ void detail_pedir_reproduzir(void);   // arma o pedido (OK no card de retomada)
 // app.c, nao esta tela: reabrir a si mesma no meio do proprio desenho e o tipo
 // de coisa que quebra em silencio.
 int  detail_pediu_abrir(void);
+// Chamar ANTES de abrir outro titulo com a pagina aberta: guarda o atual para o
+// Voltar retornar a ele em vez de fechar a pagina.
+void detail_volta_notar(int novo);
 
 // O botao do olho: marcar o titulo como ASSISTIDO. Nao e o mesmo que
 // detail_pediu_marcar, que e "adicionar a lista" — o olho caia no mesmo `else`
