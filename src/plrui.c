@@ -208,10 +208,20 @@ void plrui_trilho(GfxRect r, float frac, float cr, float cg, float cb, float a) 
     gfx_cor((GfxRect){ r.x, r.y, r.w * frac, r.h }, r.w * frac >= r.h ? 0.5f : 0.0f, cr, cg, cb, a);
 }
 
+static void anelPontos(float cx, float cy, float d, int cinza, int sombra, Uint32 agora, float a);
 void plrui_anel(float cx, float cy, float d, int cinza, Uint32 agora, float a) {
+  anelPontos(cx, cy, d, cinza, 0, agora, a);
+}
+// O ANEL SOLTO: so os pontos girando, sem disco por tras (dono, 05/10: "tira o
+// fundo cinza opaco"). Sem placa, o contraste sobre cena clara vem de uma
+// sombra suave sob CADA ponto (um disco preto maior e fraco), nao de um fundo.
+void plrui_anel_solto(float cx, float cy, float d, Uint32 agora, float a) {
+  anelPontos(cx, cy, d, 0, 1, agora, a);
+}
+static void anelPontos(float cx, float cy, float d, int cinza, int sombra, Uint32 agora, float a) {
   float cr = 0.953f, cg = 0.949f, cb = 0.937f, rp = d / 14.0f, ra = d * 0.5f - 6.0f;
   int k, giro;
-  if (!cinza) ajustes_acento(&cr, &cg, &cb);
+  if (!cinza && !sombra) ajustes_acento(&cr, &cg, &cb);   // solto: branco, o acento some em cena clara
   // Gira por passos de 1/12 (o desenho do mockup e parado; aqui a cauda anda).
   giro = ajustes_animacoes_reduzidas() ? 0 : (int)((agora / 83u) % 12u);
   for (k = 0; k < 12; k++) {
@@ -219,6 +229,10 @@ void plrui_anel(float cx, float cy, float d, int cinza, Uint32 agora, float a) {
     int idade = ((12 - k) + giro) % 12;
     float op = 0.15f + 0.85f * (float)idade / 11.0f;
     float px = cx + sinf(ang) * ra, py = cy - cosf(ang) * ra;
+    if (sombra) {
+      float rs = rp + 3.0f;
+      gfx_cor((GfxRect){ px - rs, py - rs + 1.0f, rs * 2.0f, rs * 2.0f }, 0.5f, 0, 0, 0, 0.30f * op * a);
+    }
     gfx_cor((GfxRect){ px - rp, py - rp, rp * 2.0f, rp * 2.0f }, 0.5f, cr, cg, cb,
             op * a * (cinza ? 0.7f : 1.0f));
   }

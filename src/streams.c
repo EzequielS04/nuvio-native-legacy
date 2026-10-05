@@ -227,6 +227,23 @@ static void fitMbps(char *dst, size_t n, double kbps) {
   vazao_fmt_mbps(dst, n, kbps > 2e9 ? 2000000000 : (int)(kbps + .5), '.');
   plrui_decimal(dst);
 }
+// As duas linhas de uma medida REAL (razao SF_BITRATE_ESTIMADO): de onde veio o
+// numero, a idade, a velocidade sustentada do host e a demanda estimada.
+static void fitLinhasDe(const StreamfitResultado *rp, char *l1, size_t n1, char *l2, size_t n2) {
+  const StreamfitResultado r = *rp;
+  char idade[48], sust[64], nec[24], orc[24], mb[24];
+  unsigned long min = (unsigned long)(r.idadeMs / 60000u);
+  if (min < 1) snprintf(idade, sizeof idade, "%s", i18n("agora"));
+  else if (min < 60) snprintf(idade, sizeof idade, i18n("há %d min"), (int)min);
+  else snprintf(idade, sizeof idade, i18n("há %d h"), (int)(min / 60));
+  fitMbps(mb, sizeof mb, r.sustentadoKbps);
+  snprintf(sust, sizeof sust, i18n("%s Mbps sustentados"), mb);
+  snprintf(l1, n1, "%s · %s · %s",
+           i18n(r.origem == SF_ORIGEM_PASSIVA ? "Reprodução recente" : "Diagnóstico"), idade, sust);
+  fitMbps(nec, sizeof nec, r.necessarioKbps);
+  fitMbps(orc, sizeof orc, r.otimoKbps);
+  if (l2 && n2) snprintf(l2, n2, i18n("precisa ~%s de %s Mbps disponíveis"), nec, orc);
+}
 // THE FOCUSED ROW'S CONNECTION LINES (F03). Only real evidence is spelled
 // out: where the number came from and how old it is, the sustained speed of
 // THIS source's host, then the estimated average demand against the budget.
@@ -237,18 +254,7 @@ static StreamfitClasse fitTexto2(int i, char *l1, size_t n1, char *l2, size_t n2
   StreamfitClasse c = stream_fit_folha_estado(i, &r);
   if (l2 && n2) l2[0] = 0;
   if (r.razao == SF_BITRATE_ESTIMADO) {
-    char idade[48], sust[64], nec[24], orc[24], mb[24];
-    unsigned long min = (unsigned long)(r.idadeMs / 60000u);
-    if (min < 1) snprintf(idade, sizeof idade, "%s", i18n("agora"));
-    else if (min < 60) snprintf(idade, sizeof idade, i18n("há %d min"), (int)min);
-    else snprintf(idade, sizeof idade, i18n("há %d h"), (int)(min / 60));
-    fitMbps(mb, sizeof mb, r.sustentadoKbps);
-    snprintf(sust, sizeof sust, i18n("%s Mbps sustentados"), mb);
-    snprintf(l1, n1, "%s · %s · %s",
-             i18n(r.origem == SF_ORIGEM_PASSIVA ? "Reprodução recente" : "Diagnóstico"), idade, sust);
-    fitMbps(nec, sizeof nec, r.necessarioKbps);
-    fitMbps(orc, sizeof orc, r.otimoKbps);
-    if (l2 && n2) snprintf(l2, n2, i18n("precisa ~%s de %s Mbps disponíveis"), nec, orc);
+    fitLinhasDe(&r, l1, n1, l2, n2);
     return c;
   }
   switch (r.razao) {
@@ -2735,4 +2741,20 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
   // Na ilha, de volta ao recorte dela (plrilha corta a forma inteira).
   if (ilha) gfx_recorte(ilhaR.x,ilhaR.y,ilhaR.w,ilhaR.h);
   else gfx_sem_recorte();
+}
+
+// A MEDIDA DE REDE DA FONTE QUE ESTA ABRINDO (o player expande o cartao de
+// "Abrindo fonte"): a mesma evidencia da folha, agora, sem congelar nada. So
+// devolve 1 quando ha medida real do host desta fonte (SF_BITRATE_ESTIMADO);
+// qualquer outro caso (sem rede conhecida, sem tamanho, sem duracao, sem
+// medida) e 0 e as linhas ficam vazias — nada de numero inventado.
+int stream_fit_abrindo(const Stream *s, char *l1, size_t n1, char *l2, size_t n2) {
+  StreamfitResultado r;
+  if (n1) l1[0] = 0;
+  if (n2) l2[0] = 0;
+  if (!s) return 0;
+  r = fitAutoResultado(s);
+  if (r.razao != SF_BITRATE_ESTIMADO) return 0;
+  fitLinhasDe(&r, l1, n1, l2, n2);
+  return 1;
 }

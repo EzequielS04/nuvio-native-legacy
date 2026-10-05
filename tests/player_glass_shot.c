@@ -73,6 +73,10 @@ static void salvar(const char *id) {
 static Uint32 relogio = 100000;
 // Telas fora do player (trailer, ao vivo, home): desenhadas por cima.
 static void (*extra)(void);
+// Fundo desenhado ANTES do player (o video claro/escuro por tras do anel).
+static void (*fundo)(void);
+static void fundoClaro(void) { gfx_cor((GfxRect){ 0, 0, 1920, 1080 }, 0, 0.92f, 0.90f, 0.82f, 1.0f); }
+static void fundoEscuro(void) { gfx_cor((GfxRect){ 0, 0, 1920, 1080 }, 0, 0.03f, 0.03f, 0.04f, 1.0f); }
 static void quadros(int n) {
   int i;
   for (i = 0; i < n; i++) {
@@ -83,6 +87,7 @@ static void quadros(int n) {
     stream_folha_atualizar(1.f / 60, relogio); faixas_atualizar(1.f / 60, relogio);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo); glViewport(0, 0, LW, LH);
     glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT);
+    if (fundo) fundo();
     player_desenhar(relogio);
     episodios_desenhar();
     stream_folha_desenhar(relogio);
@@ -468,6 +473,62 @@ int main(int argc, char **argv) {
     if (quer(argc, argv, "legenda-estilo")) salvar("legenda-estilo");
     faixas_evento(&(SDL_Event){ .key = { .type = SDL_KEYDOWN, .keysym = { .sym = SDLK_ESCAPE } } });
     quadros(60);
+  }
+  if (quer(argc, argv, "buffering-claro") || quer(argc, argv, "buffering-escuro")) {
+    int q;
+    for (q = 0; q < 2; q++) {
+      const char *id = q ? "buffering-escuro" : "buffering-claro";
+      if (!quer(argc, argv, id)) continue;
+      abrir(&filme); simular(3840, 1606, "", 1, 1);
+      quadros(10);
+      { VideoSimulacao v; memset(&v, 0, sizeof v);
+        v.largura = 3840; v.altura = 1606; v.pronto = 1; v.bufferandoMs = 900; v.duracao = 9420; v.pos = 4360;
+        video_simular(&v); }
+      player_shot_video(1);
+      fundo = q ? fundoEscuro : fundoClaro;
+      quadros(40);
+      salvar(id);
+      fundo = NULL;
+      player_shot_video(0); simular(0, 0, "", 0, 0);
+    }
+  }
+  if (quer(argc, argv, "abrindo-compacto") || quer(argc, argv, "abrindo-expandido") ||
+      quer(argc, argv, "abrindo-fim")) {
+    // A fonte abrindo: o estado compacto, o expandido (BAIXO) e o fim da
+    // abertura em tres quadros (comeco, meio, perto do fim).
+    Stream st;
+    int q;
+    memset(&st, 0, sizeof st);
+    snprintf(st.rotulo, sizeof st.rotulo, "Fallout.S01E03.The.Head.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR10.H265-NTb");
+    snprintf(st.provedor, sizeof st.provedor, "AIOStreams");
+    snprintf(st.url, sizeof st.url, "http://exemplo/fallout.mkv");
+    st.tamanhoMB = (long)(18.2 * 1024);
+    st.badges = badges_bit("r-4k") | badges_bit("v-hdr10") | badges_bit("a-atmos");
+    for (q = 0; q < 3; q++) {
+      static const char *ids[3] = { "abrindo-compacto", "abrindo-expandido", "abrindo-fim" };
+      if (!quer(argc, argv, ids[q])) continue;
+      stream_definir_lista(&st, 1);
+      abrir(&serie); simular(0, 0, "", 0, 0);
+      stream_definir_atual(0);
+      player_definir_tentativa(2, 3);
+      player_shot_carregando(1);
+      quadros(90);
+      if (q >= 1) {
+        SDL_Event e; memset(&e, 0, sizeof e);
+        e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_DOWN;
+        player_evento(&e);
+        quadros(120);
+      }
+      if (q == 0 || q == 1) salvar(ids[q]);
+      if (q == 2) {
+        player_shot_carregando(0);
+        quadros(3);  salvar("abrindo-fim-1");
+        quadros(7);  salvar("abrindo-fim-2");
+        quadros(10); salvar("abrindo-fim-3");
+        quadros(40);
+      }
+      player_definir_tentativa(0, 0);
+    }
   }
   if (quer(argc, argv, "carregando")) {
     Stream st;
