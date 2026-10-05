@@ -80,6 +80,7 @@ int nuvem_configurar(const char *dirArte) {
   return 1;
 }
 
+const char *nuvem_ultimo_erro(void) { return rede_ultimo_erro(); }
 int         nuvem_pronta(void)     { return url[0] && anon[0]; }
 const char *nuvem_url(void)        { return url; }
 const char *nuvem_anon(void)       { return anon; }

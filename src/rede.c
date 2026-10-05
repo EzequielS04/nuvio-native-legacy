@@ -495,6 +495,7 @@ char *rede_postar_st(const char *url, int segundos, const char *const *cab,
 }
 
 void rede_discord_ca(const char *caminho) { (void)caminho; }
+const char *rede_ultimo_erro(void) { return ""; }
 
 char *rede_postar_seguro_st(const char *url, int segundos, const char *const *cab,
                             const char *corpo, int *status) {
@@ -667,6 +668,16 @@ void rede_tls_fechar(RedeTls *t) { (void)t; }
 // Codigo da libcurl do ultimo pedido DESTE fio (0 = transporte ok). So o
 // rede_baixar_trecho_st le: o resto do modulo segue devolvendo NULL e logando.
 static _Thread_local int redeCurlLocal;
+#endif
+// Texto do ultimo erro de TRANSPORTE deste fio ("curl 35: ..."), para a tela de
+// login e o log do APK de release (#223): o stderr da libcurl nao chega a lugar
+// nenhum la. Sem segredo: a libcurl so descreve a falha, nunca o corpo.
+static _Thread_local char redeErroTxt[200];
+static _Thread_local char redeErroBuf[256];   // CURLOPT_ERRORBUFFER (>= 256 bytes)
+// CA bundle (Mozilla, art/discord-ca.pem) configured once at startup. Android's
+// libcurl+mbedTLS is built with no CA path at all.
+static char discordCa[600];
+#ifndef NV_TPK40
 // Destino do endereco final do proximo pedido (so rede_baixar_trecho_st liga).
 static _Thread_local char *redeFinalDst;
 static _Thread_local unsigned redeFinalTam;
@@ -724,6 +735,7 @@ static _Thread_local int redeParcialOk;
 #define INFO_REDIRECT_URL 1048607
 #define INFO_SIZE_DOWNLOAD 3145736
 #define OPT_CAINFO 10065
+#define OPT_ERRORBUFFER 10010
 #define OPT_POSTFIELDSIZE 60
 #define OPT_PROTOCOLS 181
 
@@ -961,7 +973,21 @@ static void opcoesComuns(void *c, unsigned long prazoMs) {
   curl_setopt(c, OPT_SSL_VERIFYPEER, (long)0);
   curl_setopt(c, OPT_SSL_VERIFYHOST, (long)0);
   curl_setopt(c, OPT_USERAGENT, "Nuvio/1.0 (webOS)");
+  // Bundle embarcado como fallback: a verificacao esta desligada acima, mas se
+  // um dia ligar (ou a lib ignorar o VERIFYPEER) nao ha "sem CA" no Android.
+  if (discordCa[0]) curl_setopt(c, OPT_CAINFO, discordCa);
+  redeErroBuf[0] = 0;
+  redeErroTxt[0] = 0;
+  curl_setopt(c, OPT_ERRORBUFFER, redeErroBuf);
 }
+
+// Guarda o texto da falha (so o codigo e a frase da libcurl, sem URL nem corpo).
+static void anotarErro(int r) {
+  if (!r) { redeErroTxt[0] = 0; return; }
+  snprintf(redeErroTxt, sizeof redeErroTxt, "curl %d%s%.150s", r,
+           redeErroBuf[0] ? ": " : "", redeErroBuf);
+}
+const char *rede_ultimo_erro(void) { return redeErroTxt; }
 
 // VIGIA DE PROGRESSO. A libcurl chama isto ao menos uma vez por segundo
 // durante a transferencia, chegue byte ou nao.
@@ -1275,7 +1301,6 @@ void rede_preparar(void) { abrir(); }
 /* Request novo isolado do handle/controles por fio dos wrappers. */
 // Trusted Mozilla bundle configured once at startup. Android's libcurl has
 // no system CA fallback; strict per-request TLS also needs this bundle.
-static char discordCa[600];
 #include "rede_pedido.inc"
 
 char *rede_baixar_bin(const char *url, int segundos, long *tam) {
@@ -1454,6 +1479,7 @@ static char *rede_baixar_interno3(const char *url, int segundos, long *tam,
   }
   if (r == 42 && vigia.parou) r = 28;      // para quem chama, e prazo
   redeCurlLocal = r;
+  anotarErro(r);
   if (redeFinalDst && redeFinalTam && curl_getinfo) {
     char *fim = NULL;
     curl_getinfo(c, INFO_URL_FINAL, &fim);
@@ -1518,9 +1544,10 @@ static char *rede_baixar_interno3(const char *url, int segundos, long *tam,
   // rede lenta (bytes > 0, prazo inteiro) e DNS/conexao que nao abriu (nova,
   // 0 bytes). O comeco da linha fica igual para quem ja procura por ele.
   if (r != 0) { char seg[120]; free(b.p);
-    printf("[rede] falha %d em %s (conexao %s, %ld bytes, %lu ms%s)\n", r,
+    printf("[rede] falha %d em %s (conexao %s, %ld bytes, %lu ms%s)%s%s\n", r,
            rede_url_publica(url, seg, sizeof seg), reusada ? "reusada" : "nova",
-           (long)b.n, gasto, tentativa ? ", 2a tentativa" : "");
+           (long)b.n, gasto, tentativa ? ", 2a tentativa" : "",
+           redeErroBuf[0] ? ": " : "", redeErroBuf);
     fflush(stdout);
     return NULL; }
   redeBytesLocal = (long)b.n;
@@ -1680,6 +1707,10 @@ static char *postarNativo(const char *url, int segundos, const char *const *cab,
     if (lista) curl_setopt(c, OPT_HTTPHEADER, lista);
   }
   r = curl_perform(c);
+  anotarErro(r);
+  if (r != 0) { char seg[120];
+    printf("[rede] POST falhou em %s: %s\n", rede_url_publica(url, seg, sizeof seg), redeErroTxt);
+    fflush(stdout); }
   // O codigo sai ANTES do cleanup: depois dele a alca nao existe mais.
   { long codigo = 0;
     if (!r && curl_getinfo) curl_getinfo(c, INFO_RESPONSE_CODE, &codigo);

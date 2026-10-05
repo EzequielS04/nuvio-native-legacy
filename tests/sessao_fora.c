@@ -57,6 +57,7 @@ const char *nuvem_base_login(void) { return "https://login.exemplo/tv"; }
 int nuvem_erro_ausente(const char *c) { (void)c; return 0; }
 void nuvem_falhou(void) { falhasFreio++; }
 void nuvem_ok(void) { }
+const char *nuvem_ultimo_erro(void) { return ""; }
 static char *resposta(int st, const char *corpo, int *status) {
   *status = st;
   if (!st) return NULL;
