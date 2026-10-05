@@ -7,6 +7,7 @@
 #include "idioma.h"
 #include "rede.h"
 #include "metaprov.h"
+#include "fichameta.h"
 #include "js.h"
 #include "nuvem.h"
 #include "cwordem.h"
@@ -492,11 +493,33 @@ static int enfeitar(CatItem *d, const char *tipo) {
   // 8 s e nao 20: ate oito destes em paralelo antes da primeira fileira.
   // Medido no Mac: 2,1 s no caso bom; com um item lento eram 20 s vazios.
   // Catalogo do Nuvio primeiro (5 s, e some por 1 min se cair), Cinemeta depois.
-  corpo = fichaBuscar(tipo, serie);
-  if (!corpo) {
-    corpo = metaprov_meta(tipo, serie, 8, NULL);
-    if (corpo) fichaGuardar(tipo, serie, corpo);
-  }
+  { int deCache = 0;
+    char dk[64];
+    corpo = fichaBuscar(tipo, serie);
+    if (!corpo) {
+      // Disco: a ficha de uma execucao anterior (6 h). Mostra titulo, sinopse e
+      // duracao na primeira volta sem rede; a memoria e a rede a renovam.
+      fichaChave(dk, sizeof dk, tipo, serie);
+      corpo = fichameta_ler(dk, 6 * 3600);
+      if (corpo) fichaGuardar(tipo, serie, corpo);
+    }
+    deCache = corpo != NULL;
+    // "A seguir" que o cache nao confirma pode ser episodio novo: pergunta a
+    // rede antes de descartar o item.
+    if (corpo && proximo &&
+        !episodioExiste(corpo, serie, d->temporada, d->episodio) &&
+        !episodioExiste(corpo, serie, d->temporada + 1, 1)) {
+      free(corpo); corpo = NULL; deCache = 0;
+    }
+    if (!corpo) {
+      corpo = metaprov_meta(tipo, serie, 8, NULL);
+      if (corpo) {
+        fichaGuardar(tipo, serie, corpo);
+        fichaChave(dk, sizeof dk, tipo, serie);
+        fichameta_gravar(dk, corpo);
+      }
+    }
+    (void)deCache; }
   marcarTentada(d->imdb);
   if (!corpo) {
     // "A seguir" sem meta: nao da para confirmar que o episodio existe.
