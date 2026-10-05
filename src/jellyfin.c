@@ -850,6 +850,7 @@ int jf_reportar(const JfConta *c, RedeJob *job, int evento, const JfSessaoPlay *
 typedef struct {
   int tipo;
   unsigned geracao;
+  unsigned entrada;   // cancelEntrada when queued: a cancel BEFORE the worker starts must still win
   char a[600];
   char b[288];
 } Tarefa;
@@ -1130,6 +1131,7 @@ static int enfileirarLocked(JfInst *I, int tipo, const char *a, const char *b) {
   memset(t, 0, sizeof *t);
   t->tipo = tipo;
   t->geracao = I->geracao;
+  t->entrada = I->cancelEntrada;
   copiar(t->a, sizeof t->a, a);
   copiar(t->b, sizeof t->b, b);
   I->nCtl++;
@@ -1474,9 +1476,7 @@ static void tarefaQc(JfInst *I, const Tarefa *t) {
   unsigned meu, inicio;
   int e;
   if (!j) return;
-  pthread_mutex_lock(&I->trava);
-  meu = I->cancelEntrada;
-  pthread_mutex_unlock(&I->trava);
+  meu = t->entrada;
   e = jf_qc_iniciar(&c, j, segredo, sizeof segredo, codigo, sizeof codigo);
   if (e) {
     pthread_mutex_lock(&I->trava);

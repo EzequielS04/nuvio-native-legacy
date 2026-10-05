@@ -35,7 +35,12 @@
 #define NV_PX_VERSAO "1.8.0"
 #endif
 #define PX_ARQ_FMT "plex-p%d.txt"
-#define PX_TV "https://plex.tv"
+// plex.tv. A build-time override exists only so tests/plex.sh can point it at a
+// local fake; no environment variable or setting can redirect it.
+#ifndef NV_PX_TV
+#define NV_PX_TV "https://plex.tv"
+#endif
+#define PX_TV NV_PX_TV
 #define PX_PRAZO_MS 15000u
 #define PX_PRAZO_LISTA_MS 20000u
 #define PX_PRAZO_SONDA_MS 4000u
@@ -984,6 +989,7 @@ int px_reportar(const PxConta *c, RedeJob *job, int evento, const PxSessaoPlay *
 typedef struct {
   int tipo;
   unsigned geracao;
+  unsigned entrada;   // cancelEntrada when queued: a cancel BEFORE the worker starts must still win
   char a[64];
 } Tarefa;
 enum { T_PIN = 1, T_RESOLVER, T_BIBLIOTECAS, T_FONTES };
@@ -1185,6 +1191,7 @@ static int enfileirarLocked(int tipo, const char *a) {
   memset(t, 0, sizeof *t);
   t->tipo = tipo;
   t->geracao = geracao;
+  t->entrada = cancelEntrada;
   copiar(t->a, sizeof t->a, a);
   nCtl++;
   pthread_cond_signal(&sinalCtl);
@@ -1511,9 +1518,7 @@ static void tarefaPin(const Tarefa *t) {
   unsigned meu;
   int e, exp = 0, nServidores = 0;
   if (!j) return;
-  pthread_mutex_lock(&trava);
-  meu = cancelEntrada;
-  pthread_mutex_unlock(&trava);
+  meu = t->entrada;
   e = px_pin_criar(&c, j, id, sizeof id, cod, sizeof cod, &exp);
   if (e != PX_OK) {
     pthread_mutex_lock(&trava);
@@ -1670,8 +1675,18 @@ static void tarefaBibliotecas(const Tarefa *t) {
 static void registrarSessoesLocked(const PxPlayback *pb) {
   int i, k;
   for (i = 0; i < pb->n; i++) {
-    int alvo = -1;
+    int alvo = -1, igual = 0;
     unsigned long long velho = ~0ull;
+    // A direct-play URL is the same every time the title is listed (unlike a
+    // Jellyfin PlaySessionId), so a repeat refreshes the waiting entry and
+    // never duplicates one that is already playing.
+    for (k = 0; k < PX_SESSOES; k++)
+      if (sessoes[k].ativo && sessoes[k].geracao == geracao && !strcmp(sessoes[k].s.url, pb->sessao[i].url)) {
+        igual = 1;
+        if (!sessoes[k].iniciado) { sessoes[k].s = pb->sessao[i]; sessoes[k].criadoMs = agoraMs(); }
+        break;
+      }
+    if (igual) continue;
     for (k = 0; k < PX_SESSOES; k++) {
       if (!sessoes[k].ativo) { alvo = k; break; }
       if (!sessoes[k].iniciado && sessoes[k].criadoMs < velho) { velho = sessoes[k].criadoMs; alvo = k; }
