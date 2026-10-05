@@ -232,7 +232,27 @@ static void pintarBorradaArte(const Borrada *b, float a) {
   gfx_rect(coverTela(b->asp), b->d, GFX_ARTE, 0, 0, 0, 0.0f, 1, 1, 1, a);
   gfx_tex_aspect_atual = aspAnt; gfx_arte_opaca_atual = opAnt;
 }
-static void pintarBorrada(void *ctx) { pintarBorradaArte(ctx, 1.0f); }
+// O ASSADO: a copia de 96x54 esticada ate a tela mostra as emendas do bilinear
+// (cada texel vira uma rampa de 20 px com quina nas duas pontas, e a arte de
+// contraste alto saia em faixas — dono, 05/10: "degrade duro"). Aqui ela e
+// pintada 25 vezes numa grade de +-32 px, cada uma com alfa 1/n: a media de
+// todas, um filtro de caixa de ~3 texels que desfaz as quinas. So no assado,
+// que refaz quando a arte muda; o desenho direto continua com uma passada.
+static void pintarBorrada(void *ctx) {
+  const Borrada *b = ctx;
+  float aspAnt = gfx_tex_aspect_atual;
+  int opAnt = gfx_arte_opaca_atual, i, n = 0;
+  GfxRect cv = coverTela(b->asp);
+  gfx_tex_aspect_atual = 0.0f; gfx_arte_opaca_atual = 0;
+  for (i = 0; i < 25; i++) {
+    GfxRect r = cv;
+    r.x += (float)(i % 5 - 2) * 16.0f; r.y += (float)(i / 5 - 2) * 16.0f;
+    // a borda da copia deslocada nao pode deixar o clear aparecer
+    r.x -= 40.0f; r.y -= 40.0f; r.w += 80.0f; r.h += 80.0f;
+    gfx_rect(r, b->d, GFX_ARTE, 0, 0, 0, 0.0f, 1, 1, 1, 1.0f / (float)++n);
+  }
+  gfx_tex_aspect_atual = aspAnt; gfx_arte_opaca_atual = opAnt;
+}
 // Avisos de uma vez por sessao: porque a Borrada nao saiu pelo caminho normal.
 static void avisoBorrada(int *visto, const char *msg) {
   if (*visto) return;
@@ -276,7 +296,7 @@ static void depoisDaBorrada(GLuint t, const Borrada *b, float a) {
   }
   // A copia (96x54) e o assado (320x180) sao lidos no texel mais perto: perto
   // de uma borda da arte desfocada eles diferem alguns niveis pelo bilinear.
-  if (conferir) conferido[k] = erroTela <= 6 && erroAssado <= 28;
+  if (conferir) conferido[k] = erroTela <= 6 && erroAssado <= 72;   // 72: o assado e a MEDIA de 25 copias deslocadas (pintarBorrada), nao a copia
   printf("[cor] fundo borrada %s: tela %d,%d,%d esperado %.0f,%.0f,%.0f (erro %d); quadro pequeno %d,%d,%d, "
          "copia desfocada %d,%d,%d (erro %d); desvio do fundo liso %d%s\n",
          !t ? "direto" : conferido[k] == 1 ? "conferido" : conferido[k] == 0 ? "CONFERIDO ERRADO (desenho direto)" : "lido",
