@@ -33,8 +33,8 @@ void descanso_rota(float s, float *px, float *py) {
 #ifndef DESCANSO_SEM_GFX
 
 #define DESC_ARTE_LARG   1920.0f
-#define DESC_LOGO_W       760.0f
-#define DESC_LOGO_H       190.0f
+#define DESC_LOGO_W       820.0f
+#define DESC_LOGO_H       220.0f
 #define DESC_X            120.0f
 #define DESC_BASE        (NV_TELA_H - 132.0f)
 #define DESC_TEXTO_W     1080.0f
