@@ -152,6 +152,7 @@ int   cat_gravar_cache(const char *d)      { (void)d; return 0; }
 int   cat_indice_por_imdb(const char *s)   { (void)s; return -1; }
 const CatItem *cat_item(int i)             { (void)i; return NULL; }
 int   cat_n_episodios(int i)               { (void)i; return 0; }
+double cat_relogio_ms(void)                { return 0.0; }   // descoberta.c times publicarMontagem; the value is only logged
 void  fil_gravar_registro(void)            { }
 int   fil_podar_catalogos(const char *const *ids, const char *const *bases, int n,
                           int perfilDaLista) {
