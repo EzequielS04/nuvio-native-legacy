@@ -4,6 +4,7 @@
 #   webp-tizen                     -> sobe um servidor e NUNCA sai (trava tudo)
 #   tizen-clock                    -> depende do relogio do alvo
 #   fluidez_perf_player            -> idem, custo de desenho do player por estado
+#   fluidez_perf_guia              -> idem, custo de desenho do Guia de TV por estado
 #   salvospainel_perf              -> medida por quadro para comparar arvores;
 #                                     nao passa nem falha (a trava e salvospainel.sh)
 # A EXCECAO DA home.sh SAIU. Ela falhava de proposito em nFileiras == 17 com
@@ -23,7 +24,7 @@ semProva=0
 for f in tests/*.sh; do
   n=$(basename "$f")
   case "$n" in
-    *_shot.sh|cinematic.sh|director.sh|webp-tizen.sh|tizen-clock.sh|salvospainel_perf.sh|fluidez_perf_player.sh) pulados=$((pulados + 1)); continue;;
+    *_shot.sh|cinematic.sh|director.sh|webp-tizen.sh|tizen-clock.sh|salvospainel_perf.sh|fluidez_perf_player.sh|fluidez_perf_guia.sh) pulados=$((pulados + 1)); continue;;
   esac
   if bash "$f" >"$LOGS/$n.log" 2>&1; then
     # SKIP (ex.: p2pmotor_real.sh sem o motor compilado) sai com 0 mas NAO
