@@ -612,6 +612,69 @@ static int fitPesadaAuto(const Stream *s) {
   return fitAutoResultado(s).classe == SF_PESADA;
 }
 
+// CAPACIDADE DA TELA (R9b). Nenhuma plataforma sabe responder ANTES de tocar se
+// a TV mostra HDR/Dolby Vision (video_tem_dolby_vision so existe com o
+// pipeline aberto), entao o padrao e -1 = desconhecido, e desconhecido NAO
+// penaliza: so um 0 explicito tira o formato da conta.
+static int telaHdr = -1, telaDv = -1;
+void stream_definir_tela(int hdr, int dv) { telaHdr = hdr; telaDv = dv; }
+
+static int acha(const char *t, const char *termo) {
+  size_t n = strlen(termo);
+  for (; *t; t++) if (!strncasecmp(t, termo, n)) return 1;
+  return 0;
+}
+static int perfil5(const Stream *s) {
+  const char *c[3] = { s->rotulo, s->descricao, s->arquivo };
+  for (int i = 0; i < 3; i++)
+    if (acha(c[i], "profile 5") || acha(c[i], "profile5") || acha(c[i], "dvhe.05")) return 1;
+  return 0;
+}
+
+// Nivel de HDR que a fonte ENTREGA nesta TV: 4 Dolby Vision, 3 HDR10+, 2 HDR10,
+// 1 HDR generico/HLG, 0 SDR. Antes disto o HDR nem existia na pontuacao (so o
+// DV em MP4), e as duas opcoes de Ajustes "Dolby Vision"/"Dolby Atmos" nao
+// eram lidas por ninguem. DV so conta ligado em Ajustes, em tela que o aceita e
+// onde o container toca (MP4; no Android qualquer um — na LG o MKV cai em
+// HDR10, medido). Perfil 5 nao tem camada base HDR10: fora de TV Dolby Vision
+// sai com cor errada, entao fica ABAIXO do HDR10.
+static int nivelHdr(const Stream *s) {
+  int flag = badges_fonte_hdr_marca(s->badges), nivel = 0;
+  if (telaHdr == 0) return 0;
+  if (flag == FMT_HDR10P) nivel = 3;
+  else if (flag == FMT_HDR10) nivel = 2;
+  else if (flag >= 0) nivel = 1;
+  if (s->dolbyVision) {
+    int toca = ajustes_dolby_vision() && telaDv != 0;
+#ifndef NV_ANDROID
+    toca = toca && (s->mp4 || strstr(s->url, ".mp4"));
+#endif
+    if (perfil5(s)) { if (nivel < 1) nivel = 1; }
+    else if (toca) nivel = 4;
+    else if (nivel < 2) nivel = 2;        // perfil 8: a base HDR10 toca
+  }
+  return nivel;
+}
+static int degrauRes(const Stream *s) {
+  return s->altura >= 2160 ? 3 : s->altura >= 1080 ? 2 : s->altura >= 720 ? 1 : 0;
+}
+
+// QUALIDADE do modo Equilibrio e Qualidade maxima, sempre < 50000 (as multas de
+// origem/cache/teto abaixo sao >= 140000, entao nenhum HDR compensa um plugin
+// ou uma fonte fora de cache).
+static long qualidade(const Stream *s, int modo) {
+  int h = nivelHdr(s), pref = ajustes_fonte_hdr(), d = degrauRes(s);
+  long q;
+  if (pref == 1) h = 0;                                   // Indiferente
+  if (pref == 2) { q = d * 10000L - (h ? 3000 : 0); h = 0; }   // Evitar: SDR no mesmo degrau
+  else if (modo == 0) q = (d + (h > 0)) * 10000L + h * 1200L;  // Equilibrio: HDR vale um degrau
+  else q = d * 10000L + h * 1500L;                             // Maxima: resolucao, depois formato
+  q += s->altura / 10;
+  if (s->mp4) q += 300;
+  if (s->dolbyAtmos && ajustes_dolby_atmos()) q += 200;
+  return q;
+}
+
 static long pontos(const Stream *s) {
   long p = 0;
   // DOLBY VISION SO VALE PONTO EM MP4 — e isto e medida, nao teoria.
@@ -632,20 +695,22 @@ static long pontos(const Stream *s) {
   // resolve descartando a camada de realce e reescrevendo o RPU, o que exige
   // demuxar e alimentar o pipeline por buffer — outro projeto, ja registrado em
   // video.c. O que ESTA ao alcance e parar de premiar a fonte que nao serve.
-  if (s->mp4 && s->altura >= 2160 && s->dolbyVision) p += 100000;
-  if (s->altura >= 2160)                             p +=  20000;
-  if (s->mp4 && s->dolbyVision)                      p +=  10000;
-  // MP4 NA FRENTE DENTRO DA MESMA FAIXA DE RESOLUCAO, pedido do dono (19/09):
-  // na LG o MP4 e o container que toca Dolby Vision de verdade e o que menos
-  // engasga no pipeline; entre um MP4 e um MKV da mesma altura, o MP4. Fica
-  // ABAIXO da faixa de 4K (20000) de proposito: um MP4 1080p nao passa na
-  // frente de um MKV 4K — trocar resolucao por container e outra decisao.
-  // Nao vale no Tizen: la o AVPlay le MKV sem esse rebaixamento.
-#ifndef __EMSCRIPTEN__
-  if (s->mp4)                                        p +=   5000;
-#endif
-  if (s->dolbyAtmos)                                 p +=   2000;
-  p += s->altura;
+  { int modo = ajustes_fonte_prioridade();
+    if (modo == 2) {
+      // COMECAR RAPIDO: o que abre depressa na conexao desta TV. Resolucao
+      // conta por degrau (nao pula 4K na frente de tudo), e cada GB do arquivo
+      // custa 4000, ate 40000: um 1080p de 4 GB passa na frente de um 4K de
+      // 60 GB. Cache e origem seguem decidindo antes (multas abaixo) e o
+      // StreamFit rebaixa a fonte que a medida confiavel diz que nao cabe. O
+      // formato so desempata (Preferir +, Evitar -).
+      long gb = (long)(s->tamanhoBytes >> 30);
+      p += degrauRes(s) * 10000L + s->altura / 10;
+      if (s->mp4) p += 300;
+      p -= gb > 10 ? 40000 : gb * 4000;
+      { int pref = ajustes_fonte_hdr(), h = nivelHdr(s);
+        if (pref == 0) p += h * 50; else if (pref == 2 && h) p -= 50; }
+    } else p += qualidade(s, modo);
+  }
   // ACIMA DO TETO vai para o fim da fila, e nao para fora dela: o teto e
   // preferencia, nao filtro. Uma lista em que so ha 4K e com teto de 1080p tem
   // de continuar tocando — em 4K, com uma linha no log dizendo por que.
@@ -670,7 +735,7 @@ static long pontos(const Stream *s) {
   if (ehPlugin(s)) p -= 200000;
   // MEDIDA PESADA PARA A CONEXAO: abaixo de toda fonte normal (4K DV MP4
   // inteiro soma 137 mil), acima do plugin. So com medida confiavel.
-  else if (fitPesadaAuto(s)) p -= 140000;
+  else if (ajustes_fonte_prioridade() != 1 && fitPesadaAuto(s)) p -= 140000;
   return p;
 }
 
@@ -963,7 +1028,8 @@ int stream_resolver_escolhida(int i, unsigned geracao, char *url, unsigned nu,
 // o orcamento do StreamFit com a confianca dele, e a vice. Em ingles, como o
 // resto do log de diagnostico novo. So le a lista; nunca muda a escolha.
 static void faixaPontos(const Stream *s, char *dst, size_t tam) {
-  snprintf(dst, tam, "%dp%s%s%s%s%s", s->altura, s->mp4 ? " mp4" : "", s->dolbyVision ? " DV" : "",
+  static const char *const hdrNome[] = { "SDR", "HDR", "HDR10", "HDR10+", "DV" };
+  snprintf(dst, tam, "%dp %s%s%s%s%s", s->altura, hdrNome[nivelHdr(s)], s->mp4 ? " mp4" : "",
            s->foraCache ? " uncached" : " cached", ehPlugin(s) ? " plugin" : " addon",
            cabeNoTeto(s) ? "" : " over-cap");
 }
@@ -994,9 +1060,12 @@ static void logarEscolha(int escolhida, int pref, int modoPrimeira) {
     snprintf(fit, sizeof fit, "unknown (%s, quality not downgraded)",
              r.razao == SF_SEM_REDE ? "no network epoch" : r.razao == SF_SEM_TAMANHO ? "no exact size" :
              r.razao == SF_SEM_DURACAO ? "no runtime" : r.razao == SF_SEM_HOST ? "no host" : "no measurement");
-  printf("[fonte] auto pick: \"%s\" [%s] points=%ld reason=%s | fit=%s | runner-up=",
+  printf("[fonte] auto pick: \"%s\" [%s] points=%ld reason=%s | prefs: priority=%s hdr=%s dv=%s | fit=%s | runner-up=",
          w->rotulo, a, pe, escolhida == pref ? "remembered for this title" : modoPrimeira ? "first in addon order"
-         : "best score (quality/HDR > cached > addon over plugin)", fit);
+         : "best score (quality/HDR > cached > addon over plugin)",
+         ajustes_fonte_prioridade() == 1 ? "max-quality" : ajustes_fonte_prioridade() == 2 ? "smoothness" : "balanced",
+         ajustes_fonte_hdr() == 1 ? "indifferent" : ajustes_fonte_hdr() == 2 ? "avoid" : "prefer",
+         ajustes_dolby_vision() ? "on" : "off", fit);
   if (vice >= 0) printf("\"%s\" [%s] points=%ld\n", lista[vice].rotulo, b, pv);
   else printf("none\n");
   pthread_mutex_unlock(&verTrava);

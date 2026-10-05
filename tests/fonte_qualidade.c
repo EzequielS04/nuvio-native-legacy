@@ -6,6 +6,7 @@
 #include "streams.h"
 #include "streamfit.h"
 #include "ajustes.h"
+#include "badges.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,6 +26,23 @@ static void plugin(Stream *s, const char *rot, int altura) {
   fonte(s, "MegaEmbed", rot, altura, 1, 0, 0, "streamtape.invalid");
   snprintf(s->bingeGroup, sizeof s->bingeGroup, "nuvio-plugin|megaembed|%d", altura);
 }
+static char dirAj[256];
+// prio 0 Equilibrio / 1 Maxima / 2 Fluidez; hdr 0 Preferir / 1 Indiferente / 2 Evitar; dv 0 = ligado (V_LIGA).
+static void cfg(int prio, int hdr, int dv) {
+  char c[300]; FILE *f;
+  snprintf(c, sizeof c, "%s/ajustes.txt", dirAj);
+  f = fopen(c, "w"); assert(f);
+  fprintf(f, "fontePrioridadeLocal %d\nfonteHdrLocal %d\ndolbyVision %d\n", prio, hdr, dv);
+  fclose(f);
+  ajustes_dir(dirAj);
+  assert(ajustes_fonte_prioridade() == prio && ajustes_fonte_hdr() == hdr && ajustes_dolby_vision() == !dv);
+}
+// Fonte de debrid em cache com o selo vindo do proprio rotulo, como o parser faz.
+static void deb(Stream *s, const char *rot, int altura, int mp4, int dolbyVision) {
+  fonte(s, "Torrentio", rot, altura, mp4, 0, 0, "td.invalid");
+  s->dolbyVision = dolbyVision;
+  s->badges = badges_detectar(rot);
+}
 static const char *vence(const Stream *l, int n) {
   int i;
   usleep(250000);   // a foto do StreamFit no automatico vale 200 ms
@@ -39,7 +57,9 @@ static const char *vence(const Stream *l, int n) {
 int main(void) {
   Stream l[8];
   int kb[8] = {5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000}, n;
-  ajustes_dir("/tmp");   // qualidade "Automatica" por padrao
+  snprintf(dirAj, sizeof dirAj, "%s/nv-fq-aj", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp");
+  { char m[300]; snprintf(m, sizeof m, "mkdir -p %s", dirAj); (void)!system(m); }
+  cfg(0, 0, 0);   // padroes: Equilibrio, Preferir, DV ligado; qualidade Automatica
   streamfit_limpar();
 
   // 1) A LISTA DO DONO, sem medida nenhuma (hosts=0 na C9).
@@ -97,6 +117,88 @@ int main(void) {
   { Stream m[2]; plugin(&m[0], "MegaEmbed - 1080", 1080);
     fonte(&m[1], "Torrentio", "Torrentio 4k", 2160, 0, 0, GB(60), "td.invalid");
     assert(!strcmp(vence(m, 2), "Torrentio 4k")); }
+
+  // 3) R9b: A LISTA DO DONO COM HDR/DV. "Pegando sem HDR, sem Dolby Vision."
+  //    4K DV (mp4), 4K HDR10, 4K SDR, 1080p SDR MP4 de plugin, 4K DV fora de cache.
+  { Stream m[6];
+    deb(&m[0], "Torrentio 4k SDR", 2160, 0, 0);
+    deb(&m[1], "Torrentio 4k HDR10", 2160, 0, 0);
+    deb(&m[2], "Torrentio 4k DV HDR", 2160, 1, 1);
+    plugin(&m[3], "MegaEmbed - 1080", 1080);
+    deb(&m[4], "Debridio 4k DV uncached", 2160, 1, 1); m[4].foraCache = 1;
+    deb(&m[5], "Torrentio 1080p DV HDR10", 1080, 1, 1);
+    for (int prio = 0; prio < 3; prio++) {
+      cfg(prio, 0, 0);
+      assert(!strcmp(vence(m, 6), "Torrentio 4k DV HDR"));    // DV ganha em todo modo
+    }
+    // sem a de DV: HDR10 4K ganha do SDR 4K em todo modo
+    cfg(0, 0, 0); assert(!strcmp(vence(m, 2), "Torrentio 4k HDR10"));
+    cfg(1, 0, 0); assert(!strcmp(vence(m, 2), "Torrentio 4k HDR10"));
+    cfg(2, 0, 0); assert(!strcmp(vence(m, 2), "Torrentio 4k HDR10"));
+    // Indiferente: o formato nao conta, fica a ordem da lista (SDR veio primeiro)
+    cfg(0, 1, 0); assert(!strcmp(vence(m, 2), "Torrentio 4k SDR"));
+    // Evitar: SDR na mesma resolucao, mesmo com HDR vindo antes na lista
+    { Stream e[2] = { m[1], m[0] };
+      cfg(0, 2, 0); assert(!strcmp(vence(e, 2), "Torrentio 4k SDR")); }
+    // DV desligado em Ajustes: a de DV vira HDR10 de base e perde para o HDR10 4K mkv so no empate
+    // (mesmo nivel); com Preferir e DV ligado ela ganhava, desligada o mp4 desempata igual.
+    cfg(1, 0, 1); assert(!strcmp(vence(m, 6), "Torrentio 4k DV HDR") || !strcmp(vence(m, 6), "Torrentio 4k HDR10"));
+    assert(stream_pontos(&m[2]) <= stream_pontos(&m[1]) + 300);
+  }
+  // Equilibrio: 1080p HDR10 vence 4K SDR (um degrau abaixo), 720p HDR10 nao. Maxima: 4K SDR vence 1080p DV.
+  { Stream m[2];
+    deb(&m[0], "Torrentio 4k SDR", 2160, 0, 0);
+    deb(&m[1], "Torrentio 1080p HDR10", 1080, 0, 0);
+    cfg(0, 0, 0); assert(!strcmp(vence(m, 2), "Torrentio 1080p HDR10"));
+    cfg(1, 0, 0); assert(!strcmp(vence(m, 2), "Torrentio 4k SDR"));
+    cfg(2, 0, 0); assert(!strcmp(vence(m, 2), "Torrentio 4k SDR"));
+    deb(&m[1], "Torrentio 720p HDR10", 720, 0, 0);
+    cfg(0, 0, 0); assert(!strcmp(vence(m, 2), "Torrentio 4k SDR"));
+    // TV sem HDR conhecida: HDR nao vale nada
+    deb(&m[1], "Torrentio 4k HDR10", 2160, 0, 0);
+    stream_definir_tela(0, 0); cfg(0, 0, 0);
+    { Stream e[2] = { m[1], m[0] }; assert(!strcmp(vence(e, 2), "Torrentio 4k HDR10")); }  // empate: ordem da lista
+    stream_definir_tela(-1, -1);
+  }
+  // Perfil 5 (sem base HDR10) fica atras do HDR10; DV mkv na LG toca como HDR10.
+  { Stream m[2];
+    deb(&m[0], "Torrentio 4k DV Profile 5", 2160, 1, 1);
+    deb(&m[1], "Torrentio 4k HDR10", 2160, 0, 0);
+    cfg(0, 0, 0); assert(!strcmp(vence(m, 2), "Torrentio 4k HDR10"));
+    cfg(1, 0, 0); assert(!strcmp(vence(m, 2), "Torrentio 4k HDR10"));
+  }
+  // O que o dono viu: nunca um embed 1080 SDR na frente de debrid HDR em cache.
+  { Stream m[3];
+    plugin(&m[0], "MegaEmbed - 1080", 1080);
+    deb(&m[1], "Debridio 1080p HDR10", 1080, 0, 0);
+    deb(&m[2], "Torrentio 4k DV HDR", 2160, 1, 1);
+    for (int prio = 0; prio < 3; prio++) { cfg(prio, 0, 0); assert(!strcmp(vence(m, 3), "Torrentio 4k DV HDR")); }
+  }
+  // StreamFit: Maxima nunca rebaixa por velocidade; Equilibrio e Fluidez rebaixam com medida confiavel.
+  { Stream m[2];
+    deb(&m[0], "Torrentio 4k DV HDR", 2160, 1, 1); m[0].tamanhoBytes = GB(60);
+    deb(&m[1], "Torrentio 1080p", 1080, 0, 0); m[1].tamanhoBytes = GB(1.5);
+    streamfit_limpar(); streamfit_rede(9);
+    stream_fit_duracao("tt6933238", 7200, SF_DUR_METADATA);
+    assert(streamfit_diagnostico(9, "https://td.invalid/x", kb, 8, streamfit_agora_ms()) == 8);
+    cfg(1, 0, 0); assert(!strcmp(vence(m, 2), "Torrentio 4k DV HDR"));
+    cfg(0, 0, 0); assert(!strcmp(vence(m, 2), "Torrentio 1080p"));
+    cfg(2, 0, 0); assert(!strcmp(vence(m, 2), "Torrentio 1080p"));
+  }
+
+  // Comecar rapido: o 1080p leve em cache passa na frente do 4K pesado; Maxima/Equilibrio mantem o 4K.
+  // A fonte fora de cache nunca vence a em cache, nem aqui.
+  { Stream m[3];
+    deb(&m[0], "Torrentio 4k DV HDR", 2160, 1, 1); m[0].tamanhoBytes = GB(60);
+    deb(&m[1], "Torrentio 1080p HDR10", 1080, 0, 0); m[1].tamanhoBytes = GB(4);
+    deb(&m[2], "Debridio 1080p uncached", 1080, 0, 0); m[2].foraCache = 1; m[2].tamanhoBytes = GB(1);
+    streamfit_limpar();
+    cfg(2, 0, 0); assert(!strcmp(vence(m, 3), "Torrentio 1080p HDR10"));
+    cfg(1, 0, 0); assert(!strcmp(vence(m, 3), "Torrentio 4k DV HDR"));
+    cfg(0, 0, 0); assert(!strcmp(vence(m, 3), "Torrentio 4k DV HDR"));
+    // tamanho desconhecido (0) nao custa nada: sem medida o 4K nao perde por "peso"
+    m[0].tamanhoBytes = 0; cfg(2, 0, 0); assert(!strcmp(vence(m, 3), "Torrentio 4k DV HDR"));
+  }
 
   streamfit_limpar();
   puts("fonte_qualidade: ok");
