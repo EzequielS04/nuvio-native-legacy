@@ -357,7 +357,7 @@ static void aj2DesenharResumo(float a) {
     abaixo = 24.0f + descH + (chipsH > 0 ? 18.0f + chipsH : 0);
     fimUtil = r.y + r.h - 40.0f - 40.0f - 24.0f;   // acima das dicas
     if (y + ph + abaixo > fimUtil) ph = fimUtil - abaixo - y;
-    aj2PreviaCategoria(sec, x, y, w, ph);
+    ajCenaTroca(AJ_TROCA_RESUMO, sec, -1, x, y, w, ph);
     y += ph + 24.0f;
     ajBloco(TXT_V2_26, desc, x, y, descW, LH, 0.66f, 2);
     { float base = y + ln.h * 0.80f, nx = x + w - numW;
@@ -610,6 +610,7 @@ static void aj2Atualizar(float dt) {
   int deg = aj2Degrau(), red = ajustes_animacoes_reduzidas();
   float a1 = deg >= 1 ? 1.0f : 0.0f, a2 = deg >= 2 ? 1.0f : 0.0f;
   ajMovAtualizar(dt);
+  ajCenaTrocaAtualizar(dt);
   aj2MenuAtualizar(dt);
   if (red) { aj2N1 = a1; aj2N2 = a2; aj2V1 = aj2V2 = 0; }
   else {

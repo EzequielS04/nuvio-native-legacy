@@ -235,15 +235,52 @@ static const char *ajVisualIcone(int op) {
 enum { AJS_HOME = 0, AJS_TITULO, AJS_CARTAZES, AJS_TRAILERS, AJS_APARENCIA, AJS_REPRODUCAO,
        AJS_IDIOMAS, AJS_TVAOVIVO, AJS_CONTAS, AJS_DESEMPENHO, AJS_SOBRE };
 static float ajPreviaHome(float x, float y, float w);
+static float ajPreviaHomeArte(float x, float y, float w, int arte);
 static const char *ajTituloN(int n);
 static const char *ajMetaTitulo(int n);
 static void ajTextoMini(const char *s, float px, int forte, float x, float y, int r, int g, int b, float a);
 static TxtEstilo ajEstiloPx(float px, int forte);
 static TxtEstilo ajEstiloPxS(float px, int forte) { return ajEstiloPx(px < 6.0f ? 6.0f : px, forte); }
-// A amostra de arte de cada categoria (o indice de ajArte).
+// A amostra de arte de cada categoria e de cada SUBMENU dela (o indice de
+// ajArte). Linha = categoria (AJS_*), coluna = o bloco (ROT) na ordem de
+// ajustes_ux_tela.inc; a coluna 0 e a imagem da categoria, e vale tambem para
+// o primeiro bloco (entrar na categoria nao troca a imagem). Nenhum indice se
+// repete: sao 34 das 40 amostras de deploy/app/art (sobram 11, 24, 28, 29, 34
+// e 36). -1 = a categoria nao tem esse bloco.
+#define AJ_ARTE_BLOCOS 6
+static const signed char AJ_ARTE_SEC[11][AJ_ARTE_BLOCOS] = {
+  { 12,  0, 20,  1, 31, -1 },   // Tela inicial: Estilo, Fileiras, Continuar, Barra lateral, Escolha de perfil
+  {  3,  4, 17,  5, -1, -1 },   // Pagina do titulo: O que aparece, Notas, Dados do titulo, Busca
+  { 13, 35, 27, -1, -1, -1 },   // Cartazes e arte: Cartaz em foco, Forma, De onde vem a arte
+  { 15, 16, -1, -1, -1, -1 },   // Trailers: Onde toca, Som e imagem
+  {  9, 39, 38,  6, -1, -1 },   // Aparencia: Cores e vidro, Logo e abertura, Texto e tamanho, Movimento e relogio
+  {  7, 18, 22, 32, -1, -1 },   // Reproducao: Escolha da fonte, Imagem e som, Durante e depois, Seekr
+  { 21, -1, -1, -1, -1, -1 },   // Idiomas e legendas
+  {  2, 14, -1, -1, -1, -1 },   // TV ao vivo: Provedor, Se o canal nao abre
+  { 23,  8, 33, 37, 19, 10 },   // Contas: Conta e perfis, Notificacoes, Trakt e Simkl, Chaves, P2P, Servidores
+  { 26, -1, -1, -1, -1, -1 },   // Desempenho desta TV
+  { 30, 25, -1, -1, -1, -1 },   // Sobre e ajuda: (guia e) App, Registro
+};
 static int ajCenaArteN(int sec) {
-  static const int N[11] = { 12, 3, 13, 15, 9, 7, 21, 2, 13, 21, 3 };
-  return sec >= 0 && sec < 11 ? N[sec] : 12;
+  return sec >= 0 && sec < 11 ? AJ_ARTE_SEC[sec][0] : 12;
+}
+// A arte do submenu (bloco) da opcao. As opcoes antes do primeiro bloco e as
+// do primeiro bloco ficam com a imagem da categoria.
+static int ajCenaArteOp(int op) {
+  static int cOp = -1, cN = 12;
+  int i, j, sec, g = -1, n;
+  if (op < 0) return 12;
+  if (op == cOp) return cN;
+  for (i = 0; i < AJ_N_TELA; i++) if (TELA[i].tipo == IT_OPC && TELA[i].op == op) break;
+  if (i >= AJ_N_TELA) return 12;
+  sec = secDoItem[i];
+  for (j = secIni[sec] + 1; j < i; j++) if (TELA[j].tipo == IT_ROT) g++;
+  if (g < 0) g = 0;
+  if (g >= AJ_ARTE_BLOCOS) g = AJ_ARTE_BLOCOS - 1;
+  n = sec >= 0 && sec < 11 ? AJ_ARTE_SEC[sec][g] : 12;
+  if (n < 0) n = ajCenaArteN(sec);
+  cOp = op; cN = n;
+  return n;
 }
 // Arte cobrindo o quadro (ou o cinza das ilhas se ela ainda nao chegou) e o
 // escurecimento por cima.
@@ -310,6 +347,8 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
   float s = w / 640.0f, h = w * 9.0f / 16.0f, rr = 22.0f, ar, ag, ab;
   GfxRect q = { x, y, w, h };
   int i, j;
+  // A arte do quadro: a do submenu da opcao em foco, ou a da categoria.
+  int A = op >= 0 ? ajCenaArteOp(op) : ajCenaArteN(sec);
 #define PX(a) (x + (a) * s)
 #define PY(b) (y + (b) * s)
 #define RR(a,b,c,d) (GfxRect){ PX(a), PY(b), (c) * s, (d) * s }
@@ -319,18 +358,21 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
 #define ICON(n,a,b,d,al) ajIcone(n, PX(a), PY(b), (d) * s, al)
 #define TXT(t,px,f,a,b,al) ajTextoMini(t, (px) * s, f, PX(a), PY(b), 243, 242, 239, al)
   ajustes_acento(&ar, &ag, &ab);
-  if (sec == AJS_HOME) return ajPreviaHome(x, y, w);   // a Home dela, em miniatura
+  if (sec == AJS_HOME) {   // a Home dela, em miniatura (o destaque muda com o submenu)
+    if (op < 0 || A == ajCenaArteN(AJS_HOME)) return ajPreviaHome(x, y, w);
+    return ajPreviaHomeArte(x, y, w, A);
+  }
   gfx_recorte(x, y, w, h);
   switch (sec) {
     case AJS_TITULO: {   // pagina do titulo: arte, logo, meta, notas e botoes
       float veu = 0.6f + 0.4f * valor[AJ_DET_VEU] / 100.0f;
       int ti = ajTinta();
-      ajCenaArte(ajArte(AJA_FUNDO, 3), q, rr, 0);
+      ajCenaArte(ajArte(AJA_FUNDO, A), q, rr, 0);
       gfx_veu_css((GfxRect){ x, y, w * 0.72f, h }, 2, 0, 1.0f, 0.9f * veu);
       gfx_veu_css((GfxRect){ x, y + h * 0.45f, w, h * 0.55f }, 0, 0, 1.0f, 0.6f * veu);
-      if (ajLogo(ajArte(AJA_LOGO, 3), PX(36), PY(52), 260 * s, 84 * s, 1) <= 0)
-        TXT(ajTituloN(3), 30, 1, 36, 84, 1);
-      TXT(ajMetaTitulo(3), 13, 0, 36, 150, 0.78f);
+      if (ajLogo(ajArte(AJA_LOGO, A), PX(36), PY(52), 260 * s, 84 * s, 1) <= 0)
+        TXT(ajTituloN(A), 30, 1, 36, 84, 1);
+      TXT(ajMetaTitulo(A), 13, 0, 36, 150, 0.78f);
       ajCenaNotas(op >= AJ_NT_IMDB && op <= AJ_NT_SCORE ? op : (op >= AJ_MDB_LIGADO && op <= AJ_MDB_MAL) ? op : -1,
                   PX(36), PY(186), s, ar, ag, ab);
       { TxtEstilo e = ajEstiloPxS(15 * s, 1);
@@ -352,9 +394,10 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
           VID(bx, 240, 44, 44, 22); ICON("aj_bookmark", bx + 12, 252, 20, 0.9f); } }
       break; }
     case AJS_CARTAZES: {   // uma fileira de cartazes com o cartaz em foco
-      static const int P[5] = { 12, 13, 15, 2, 21 };
+      int P[5] = { 12, 13, 15, 2, 21 };
       int exp = ajustes_expandir_poster(), borda = ajustes_borda_foco(), prof = ajustes_profundidade();
       float pw = 100, ph = 150, gap = 18, by = 150;
+      P[1] = A;   // o cartaz em foco e o do submenu
       ajCenaArte(ajArte(AJA_FUNDO, P[1]), q, rr, 0.25f);
       gfx_veu_css((GfxRect){ x, y, w * 0.7f, h }, 2, 0, 1.0f, 0.8f);
       gfx_veu_css((GfxRect){ x, y + h * 0.35f, w, h * 0.65f }, 0, 0, 1.0f, 0.85f);
@@ -377,7 +420,7 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
       break; }
     case AJS_TRAILERS: {   // o trailer tocando no destaque
       int semLogo = lig(AJ_LOGO_TRAILER);
-      ajCenaArte(ajArte(AJA_FUNDO, 15), q, rr, 0);
+      ajCenaArte(ajArte(AJA_FUNDO, A), q, rr, 0);
       gfx_veu_css((GfxRect){ x, y + h * 0.4f, w, h * 0.6f }, 0, 0, 1.0f, 0.8f);
       { TxtEstilo e = ajEstiloPxS(13 * s, 1);
         TxtLinha t = (int)e >= 0 ? txt_linha(e, "Trailer", 243, 242, 239, 255) : (TxtLinha){ 0 };
@@ -386,15 +429,15 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
         gfx_icone((GfxRect){ PX(40), PY(35), 14 * s, 14 * s }, "aj_play", 0.953f, 0.949f, 0.937f, 0.9f);
         if (t.w) txt_desenhar(t, PX(60), PY(26) + (32 * s - t.h) * 0.5f); }
       VID(572, 26, 40, 40, 20); ICON("aj_audio-lines", 581, 35, 22, 0.9f);
-      if (!semLogo && ajLogo(ajArte(AJA_LOGO, 15), PX(36), PY(214), 220 * s, 66 * s, 1) <= 0)
-        TXT(ajTituloN(15), 24, 1, 36, 240, 1);
+      if (!semLogo && ajLogo(ajArte(AJA_LOGO, A), PX(36), PY(214), 220 * s, 66 * s, 1) <= 0)
+        TXT(ajTituloN(A), 24, 1, 36, 240, 1);
       gfx_cor(RR(36, 312, 568, 5), 0.5f, 1, 1, 1, 0.25f);
       ACC(36, 312, 238, 5, 1);
       break; }
     case AJS_APARENCIA: {   // a cor, o vidro, a fonte e o relogio sobre a arte
       char hora[8], fam[96];
       int tema = valor[AJ_TEMA];
-      ajCenaArte(ajArte(AJA_FUNDO, 9), q, rr, 0.18f);
+      ajCenaArte(ajArte(AJA_FUNDO, A), q, rr, 0.18f);
       gfx_rect(RR(26, 50, 320, 290), 0, GFX_SOMBRA, 1, 0, 0, 0.5f, 0, 0, 0, 0.4f);
       VID(36, 44, 300, 272, 26);
       TXT("Aa", 64, 1, 60, 62, 1);
@@ -414,7 +457,7 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
         VID(486, 26, 126, 46, 23);
         TXT(hora, 20, 1, 506, 35, 1);
       }
-      ajImg(ajArte(AJA_POSTER, 9), RR(400, 104, 156, 234), 14 * s, 1);
+      ajImg(ajArte(AJA_POSTER, A), RR(400, 104, 156, 234), 14 * s, 1);
       VID(400, 262, 156, 76, 14);
       BAR(416, 282, 100, 0.8f); BAR(416, 300, 70, 0.45f);
       break; }
@@ -423,10 +466,10 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
       int on[3];
       float bx = 36;
       on[0] = valor[AJ_QUALIDADE] <= 1; on[1] = lig(AJ_DV); on[2] = lig(AJ_ATMOS);
-      ajCenaArte(ajArte(AJA_FUNDO, 7), q, rr, 0);
+      ajCenaArte(ajArte(AJA_FUNDO, A), q, rr, 0);
       gfx_veu_css((GfxRect){ x, y + h * 0.35f, w, h * 0.65f }, 0, 0, 1.0f, 0.9f);
-      TXT(ajTituloN(7), 22, 1, 36, 206, 1);
-      TXT(ajMetaTitulo(7), 12, 0, 36, 236, 0.65f);
+      TXT(ajTituloN(A), 22, 1, 36, 206, 1);
+      TXT(ajMetaTitulo(A), 12, 0, 36, 236, 0.65f);
       for (i = 0; i < 3; i++) {
         float mh = 24, mw = marca_formato_largura(M[i], mh * s) / s;
         int foco = (op == AJ_QUALIDADE && i == 0) || (op == AJ_DV && i == 1) || (op == AJ_ATMOS && i == 2);
@@ -446,7 +489,7 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
       static const char *const ico[3] = { "aj_languages", "aj_audio-lines", "aj_captions" };
       static const char *const cod[3] = { "PT", "EN", "ES" };
       int foco = op == AJ_IDIOMA || op == AJ_TMDB_IDIOMA ? 0 : op == AJ_AUD_LINGUA ? 1 : op == AJ_LEG_LINGUA || op == AJ_LEG_LINGUA2 ? 2 : -1;
-      ajCenaArte(ajArte(AJA_FUNDO, 21), q, rr, 0.45f);
+      ajCenaArte(ajArte(AJA_FUNDO, A), q, rr, 0.45f);
       for (i = 0; i < 3; i++) {
         float by = 36 + i * 100;
         const char *v = textoValor(OP3[i]);
@@ -470,7 +513,7 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
       }
       break; }
     case AJS_TVAOVIVO: {   // o canal tocando em cima e o guia embaixo
-      ajCenaArte(ajArte(AJA_FUNDO, 2), q, rr, 0);
+      ajCenaArte(ajArte(AJA_FUNDO, A), q, rr, 0);
       gfx_veu_css((GfxRect){ x, y + h * 0.18f, w, h * 0.82f }, 0, 0, 0.62f, 0.96f);
       VID(28, 26, 92, 32, 16); ACC(42, 37, 10, 10, 1); BAR(60, 38, 44, 0.85f);
       for (i = 0; i < 4; i++) {
@@ -498,7 +541,7 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
     case AJS_CONTAS: {   // perfis e servicos conectados
       const ContaPerfil *ativo = perfis_item_ativo();
       int n = perfis_n(), qtd = n > 0 ? (n < 3 ? n : 3) : 1;
-      ajCenaArte(ajArte(AJA_FUNDO, 13), q, rr, 0.55f);
+      ajCenaArte(ajArte(AJA_FUNDO, A), q, rr, 0.55f);
       for (i = 0; i < qtd; i++) {
         const ContaPerfil *p = n > 0 ? perfis_item(i) : ativo;
         int f = (p && p->indice == perfis_ativo()) || (n == 0 && i == 0);
@@ -526,7 +569,7 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
       static const char *const ic9[4] = { "aj_memory-stick", "aj_images", "aj_zap", "aj_database" };
       static const float pc[4] = { 0.46f, 0.72f, 0.34f, 0.58f };
       static const float fps[16] = { 58, 60, 60, 59, 60, 54, 60, 60, 60, 57, 60, 60, 59, 60, 60, 60 };
-      ajCenaArte(ajArte(AJA_FUNDO, 21), q, rr, 0.6f);
+      ajCenaArte(ajArte(AJA_FUNDO, A), q, rr, 0.6f);
       VID(36, 36, 260, 288, 24);
       TXT("60", 64, 1, 60, 56, 1);
       TXT("fps", 18, 0, 160, 92, 0.6f);
@@ -546,7 +589,7 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
       static const unsigned QR[21] = { 0x1FC07F, 0x104A41, 0x175B5D, 0x174A5D, 0x1754DD, 0x104C41, 0x1FD57F, 0x000600,
                                        0x1B6D3A, 0x0A9145, 0x15B6CB, 0x08592A, 0x1D2EB5, 0x0005A2, 0x1FCB4C, 0x1046D3,
                                        0x175A28, 0x174D97, 0x1752AC, 0x104B55, 0x1FC93A };
-      ajCenaArte(ajArte(AJA_FUNDO, 3), q, rr, 0.6f);
+      ajCenaArte(ajArte(AJA_FUNDO, A), q, rr, 0.6f);
       VID(36, 36, 344, 288, 24);
       { const char *marca = logoapp_caminho(logoapp_atual(), LOGO_F_HORIZONTAL);
         ajLogo(marca, PX(62), PY(64), 170 * s, 48 * s, 0.96f); }
