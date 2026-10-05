@@ -22,6 +22,7 @@
 #include "novidadesfila.h"
 #include "ajustes.h"
 #include "anim.h"
+#include "corviva.h"
 #include "dados.h"
 #include "fundo.h"
 #include "gfx.h"
@@ -203,14 +204,15 @@ static void acento8(int *r, int *g, int *b) {
   *r = (int)(ar * 255.0f + 0.5f); *g = (int)(ag * 255.0f + 0.5f); *b = (int)(ab * 255.0f + 0.5f);
 }
 // Ilha: o material de Ajustes (sombra curta, miolo vidro/solido, luz do canto).
+static int ilhaModal;   // 1 = a ilha por cima de outra tela (o dialogo): miolo quase opaco
 static void ilhaM(GfxRect r, float raioPx, float a) {
   float raio = raioPx / r.h;
   if (a <= 0.003f) return;
   gfx_sombra_sob((GfxRect){ r.x - 20, r.y - 6, r.w + 40, r.h + 46 }, 1.0f, 0.0f, 0.5f, 0, 0, 0,
                  (vid() ? 0.36f : 0.45f) * a, r, raioPx, !vid() && a >= 0.999f ? 1.0f : 0.0f);
   if (vid()) {
-    float m = 0.80f * gfx_vidro_opacidade();
-    gfx_vidro_miolo(r, raio, 0.055f, 0.059f, 0.071f, (m > 1.0f ? 1.0f : m) * a, a);
+    float m = (ilhaModal ? 1.17f : 0.80f) * gfx_vidro_opacidade();
+    gfx_vidro_miolo(r, raio, 0.055f, 0.059f, 0.071f, (m > 0.97f ? 0.97f : m) * a, a);
     gfx_luz_canto(r, raio, r.w * 0.22f, -r.h * 0.40f, r.h * 0.62f, 1, 1, 1, 0.10f * a);
   } else gfx_cor(r, raio, 0.082f, 0.086f, 0.102f, a);
 }
@@ -283,10 +285,19 @@ static float marca(const char *c, float x, float y, float maxW, float maxH, int 
   gfx_tex_aspect_atual = 0.0f;
   return w;
 }
+// O "Borrada" de fundo.c precisa da PALETA da arte, e a paleta so e anotada
+// quando a arte e decodificada como heroi (tex_cache.c). A tela cheia do guia
+// pede a arte do capitulo assim (uma de cada vez, despejavel); a cena so
+// espera a paleta chegar (sem ela, a arte nitida com veu, e a cena nao congela).
 static void fundoArte(const char *rel, GfxRect r, float raioPx, float a) {
   const char *c = arte(rel);
-  if (!tex_obter_larg(c, 640.0f) && !tex_falhou(c)) faltas++;
-  fundo_desenhar_modo(FUNDO_BORRADA, r, raioPx, c, a);
+  CorvivaPaleta p;
+  int tela = r.w >= NV_TELA_W - 1.0f, tem = corviva_paleta(c, &p);
+  if (!(tela ? tex_obter_hero(c) : tex_obter_larg(c, 640.0f)) && !tex_falhou(c)) faltas++;
+  if (tem && p.ok) fundo_desenhar_modo(FUNDO_BORRADA, r, raioPx, c, a);
+  // Arte sem cor (quase preta ou cinza): o Frost, que e a luz do acento.
+  else if (tem || tex_falhou(c)) fundo_desenhar_modo(FUNDO_FROST, r, raioPx, NULL, a);
+  else { faltas++; gfx_cor(r, raioPx / r.h, 0.039f, 0.043f, 0.055f, a); }
 }
 static void pedirArtes(void) {
   static const char *const A[] = { "00.jpg", "03.jpg", "05.jpg", "08.jpg", "13.jpg", "21.jpg" };
@@ -299,7 +310,9 @@ static void pedirArtes(void) {
 // mede; devolve a altura e, em *fimX, onde a ultima linha terminou (para a
 // etiqueta que vem logo depois). Cada linha vira no maximo um punhado de
 // trechos (regular/negrito alternados), nao uma textura por palavra.
-typedef struct { char s[240]; int neg; float w; } Trecho;
+typedef struct { char s[240]; int neg; float w, gap; } Trecho;
+// Largura de um espaco no estilo: o texto nao desenha espaco na ponta da linha.
+static float espacoW(TxtEstilo e) { return (float)(txt_largura(e, "a a") - txt_largura(e, "aa")); }
 static float rico(const char *s, TxtEstilo reg, TxtEstilo neg, float x, float y, float w, float lead,
                   float aReg, float aNeg, float *fimX, int maxL) {
   Trecho tr[8];
@@ -311,6 +324,7 @@ static float rico(const char *s, TxtEstilo reg, TxtEstilo neg, float x, float y,
 #define FECHA_LINHA() do { int k; float xx = x; \
     if (aReg >= 0 && (maxL <= 0 || linhas < maxL)) for (k = 0; k < nt; k++) { \
       TxtLinha l = tr[k].neg ? txt_linha(neg, tr[k].s, 255, 255, 255, 255) : txt_linha(reg, tr[k].s, TX, 255); \
+      xx += tr[k].gap; \
       txt_desenhar_alpha(l, xx, y + linhas * lead + (lead - l.h) * 0.5f, tr[k].neg ? aNeg : aReg); xx += tr[k].w; } \
     if (fimX) *fimX = x + usado; linhas++; nt = 0; usado = 0; } while (0)
   while (*p) {
@@ -328,16 +342,18 @@ static float rico(const char *s, TxtEstilo reg, TxtEstilo neg, float x, float y,
       float wc;
       int novo = !nt || tr[nt - 1].neg != b;
       const char *base = novo ? "" : tr[nt - 1].s;
-      snprintf(cand, sizeof cand, "%s%s%.*s", base, (espaco && (nt || usado > 0)) ? " " : "", (int)n, p);
+      float gap = novo && nt && espaco ? espacoW(b ? neg : reg) : 0.0f;
+      snprintf(cand, sizeof cand, "%s%s%.*s", base, (!novo && espaco) ? " " : "", (int)n, p);
       wc = (float)txt_largura(b ? neg : reg, cand);
-      if (nt && usado - (novo ? 0 : tr[nt - 1].w) + wc > w) {
+      if (nt && usado - (novo ? 0 : tr[nt - 1].w) + gap + wc > w) {
         FECHA_LINHA();
         snprintf(cand, sizeof cand, "%.*s", (int)n, p);
         wc = (float)txt_largura(b ? neg : reg, cand);
         novo = 1;
+        gap = 0;
       }
       if (novo) {
-        if (nt < 8) { snprintf(tr[nt].s, sizeof tr[nt].s, "%s", cand); tr[nt].neg = b; tr[nt].w = wc; nt++; usado += wc; }
+        if (nt < 8) { snprintf(tr[nt].s, sizeof tr[nt].s, "%s", cand); tr[nt].neg = b; tr[nt].w = wc; tr[nt].gap = gap; nt++; usado += wc + gap; }
       } else {
         usado += wc - tr[nt - 1].w;
         snprintf(tr[nt - 1].s, sizeof tr[nt - 1].s, "%s", cand);
@@ -537,8 +553,8 @@ static void cenaTitulo(int s) {
   sVeu((GfxRect){ 0, 0, 1280 * 0.7f, 720 }, 2, 0.94f);
   sVeu((GfxRect){ 0, 720 * 0.45f, 1280, 720 * 0.55f + 1 }, 0, 0.95f);
   sRelogio();
-  sTxt(TXT_W20_HERO, "TÍTULO", 56, 52, 1);
-  sTxt(TXT_G20M, ser ? "2 temporadas · 2024 · TV-MA" : "2h 14min · 2023 · 14 anos", 60, 164, 0.6f);
+  sTxt(TXT_AJ_NUM64, "TÍTULO", 58, 72, 1);
+  sTxt(TXT_G20M, ser ? "2 temporadas · 2024 · TV-MA" : "2h 14min · 2023 · 14 anos", 60, 156, 0.6f);
   { float cx = 60;
     cx += sChip(ser ? "Continuar T1 E3" : "Assistir", cx, 196, 54, 1, TXT_G21B) + 12;
     cx += sChip("Assistir trailer", cx, 196, 54, 0, TXT_G21B) + 12;
@@ -705,7 +721,7 @@ static void cenaSocial(int s) {
   static const float C[4][3] = { { 0.533f, 0.878f, 0.965f }, { 0.996f, 0.710f, 0.694f }, { 0.949f, 0.804f, 0.392f }, { 0.780f, 0.733f, 0.941f } };
   fundoArte("21.jpg", (GfxRect){ 0, 0, 1280, 720 }, 0, 1);
   if (s == 0) {
-    GfxRect r = { 150, 36, 980, 648 };
+    GfxRect r = { 110, 36, 960, 648 };
     float y = r.y + 28, cx = r.x + 34;
     sRelogio();
     sIlha(r, 44);
@@ -1382,34 +1398,34 @@ static float etiqueta(const char *s, int tipoTag, float x, float y, float a) {
   }
   return w;
 }
+static float faixaItem(int k, int c) {
+  return k == c ? 20 + 22 + 9 + (float)txt_largura(TXT_AJ_16B, CAP[k].nome) + 20 : 50;
+}
 static void faixa(int c, float a) {
   GfxRect r = { 96, 858, 1728, 104 };
   float x = r.x + 20;
-  int i, g = -1, ini = 1;
+  int i = 1;
   ilhaM(r, 34, a);
-  for (i = 1; i < nLista - 2; i++) {
-    int k = lista[i];
-    if (CAP[k].g != g) {
-      if (g >= 0) x += 26;
-      g = CAP[k].g;
-      caps(TXT_AJ_MINI12, GRUPO[g], 2.2f, x + 4, r.y + 14, TX, 0.5f * a);
-      ini = 1;
-    }
-    { float y = r.y + 44, w;
-      if (!ini) x += 6;
-      ini = 0;
+  while (i < nLista - 2) {
+    int g = CAP[lista[i]].g, j, ini = i;
+    float wi = 0, wl = capsLarg(TXT_AJ_MINI12, GRUPO[g], 2.2f) + 4, gx = x;
+    for (j = i; j < nLista - 2 && CAP[lista[j]].g == g; j++) wi += faixaItem(lista[j], c) + (j > i ? 6 : 0);
+    caps(TXT_AJ_MINI12, GRUPO[g], 2.2f, x + 4, r.y + 14, TX, 0.5f * a);
+    for (j = ini; j < nLista - 2 && CAP[lista[j]].g == g; j++) {
+      int k = lista[j];
+      float y = r.y + 44, w = faixaItem(k, c);
+      if (j > ini) gx += 6;
       if (k == c) {
         TxtLinha t = txtT(TXT_AJ_16B, CAP[k].nome);
-        w = 20 + 22 + 9 + t.w + 20;
-        pilulaAc((GfxRect){ x, y, w, 48 }, a);
-        iconeT(CAP[k].ic, (GfxRect){ x + 20, y + 13, 22, 22 }, a);
-        txtMeio(t, x + 51, y, 48, a);
-      } else {
-        w = 50;
-        icone(CAP[k].ic, (GfxRect){ x + 14, y + 13, 22, 22 }, 0.62f * a);
-      }
-      if (aberto && !saindo) ponteiro_alvo(x, y, w, 48, ponteiroNada, ptIr, i, 0);
-      x += w; }
+        pilulaAc((GfxRect){ gx, y, w, 48 }, a);
+        iconeT(CAP[k].ic, (GfxRect){ gx + 20, y + 13, 22, 22 }, a);
+        txtMeio(t, gx + 51, y, 48, a);
+      } else icone(CAP[k].ic, (GfxRect){ gx + 14, y + 13, 22, 22 }, 0.62f * a);
+      if (aberto && !saindo) ponteiro_alvo(gx, y, w, 48, ponteiroNada, ptIr, j, 0);
+      gx += w;
+    }
+    x += (wi > wl ? wi : wl) + 26;
+    i = j;
   }
 }
 static void telaCap(int c, float a, float dx) {
@@ -1480,17 +1496,18 @@ static void telaCap(int c, float a, float dx) {
       int tem = temAqui(e->so);
       char s[200];
       TxtLinha t, tg = { 0 };
-      float cw;
+      float cw, sp;
       snprintf(s, sizeof s, "%s", i18n(e->t));
       t = txt(TXT_ILHA_APOIO, s);
-      if (e->tag) { char tt[100]; snprintf(tt, sizeof tt, " · %s", i18n(tem ? e->tag : "Não neste aparelho")); tg = txt(TXT_ILHA_APOIO, tt); }
-      else if (!tem) tg = txt(TXT_ILHA_APOIO, " · Não neste aparelho");
-      cw = 16 + t.w + tg.w + 16;
+      if (e->tag) { char tt[100]; snprintf(tt, sizeof tt, "· %s", i18n(tem ? e->tag : "Não neste aparelho")); tg = txt(TXT_ILHA_APOIO, tt); }
+      else if (!tem) { char tt[100]; snprintf(tt, sizeof tt, "· %s", i18n("Não neste aparelho")); tg = txt(TXT_ILHA_APOIO, tt); }
+      sp = tg.w ? espacoW(TXT_ILHA_APOIO) : 0;
+      cw = 16 + t.w + sp + tg.w + 16;
       if (cx + cw > x + w) { cx = x; y += ch + 8; }
       neutro((GfxRect){ cx, y, cw, ch }, ch * 0.5f, 0.085f, (tem ? 1.0f : 0.4f) * a);
       txtMeio(t, cx + 16, y, ch, (tem ? 0.85f : 0.4f) * a);
-      if (tg.w) txtMeio(tg, cx + 16 + t.w, y, ch, (tem ? 0.6f : 0.35f) * a);
-      if (!tem) gfx_cor((GfxRect){ cx + 14, y + ch * 0.5f, t.w + tg.w + 4, 1.5f }, 0, 1, 1, 1, 0.45f * a);
+      if (tg.w) txtMeio(tg, cx + 16 + t.w + sp, y, ch, (tem ? 0.6f : 0.35f) * a);
+      if (!tem) gfx_cor((GfxRect){ cx + 14, y + ch * 0.5f, t.w + sp + tg.w + 4, 1.5f }, 0, 1, 1, 1, 0.45f * a);
       cx += cw + 8;
     } }
   faixa(c, a0);
@@ -1525,14 +1542,14 @@ static void telaResumo(float a, float dy) {
   cw[0] = (1728 - 52) * 1.15f / 3.15f; cw[1] = cw[2] = (1728 - 52) / 3.15f;
   cx = x;
   for (i = 0; i < 3; i++) {
-    GfxRect r = { cx, y, cw[i], 560 };
+    GfxRect r = { cx, y, cw[i], 584 };
     float iy = y + 30, ix = cx + 34, iw = cw[i] - 68;
     ilhaM(r, 36, a);
     if (i == 0) {
       int c;
       capsA(TXT_AJ_KBD, "Você vai notar logo", 3.0f, ix, iy, a);
       iy += 40;
-      for (c = 0; c < N20_NCAP; c++) if (!CAP[c].exp) { item3(CAP[c].nome, CAP[c].sum, 0, ix, iy, iw, a); iy += 54; }
+      for (c = 0; c < N20_NCAP; c++) if (!CAP[c].exp) { item3(CAP[c].nome, CAP[c].sum, 0, ix, iy, iw, a); iy += 55; }
     } else if (i == 1) {
       static const char *const B[4] = { "Plugins", "Servidor P2P", "Opacidade do vidro / Vidro fosco", "Receber enquetes" };
       static const char *const S[4] = { "Desligado, experimental", "Desligado, experimental", "Opções de teste", "Ligado, dá pra desligar" };
@@ -1577,19 +1594,19 @@ static void telaFim(float a, float dy) {
     for (i = 0; i < 4; i++) {
       icone(IC[i], (GfxRect){ x + 24, y + 24, 30, 30 }, 0.85f * a);
       txtMeio(txt(TXT_V2_24, N[i]), x + 72, y, 78, 0.85f * a);
-      y += 84;
+      y += 80;
     } }
   gfx_cor((GfxRect){ x, y, p.w - 68, 78 }, 26.0f / 78, 1, 1, 1, 0.12f * a);
   icone("aj_book-open", (GfxRect){ x + 24, y + 24, 30, 30 }, a);
   txtMeio(txt(TXT_W20_24B, "Sobre e ajuda"), x + 72, y, 78, a);
   { TxtLinha t = txt(TXT_G18R, "›"); txtMeio(t, x + p.w - 68 - 24 - t.w, y, 78, 0.6f * a); }
-  y += 96;
+  y += 92;
   caps(TXT_AJ_KBD, "Sobre e ajuda", 3.0f, x + 8, y, TX, 0.55f * a);
-  y += 30;
+  y += 28;
   icone("aj_star", (GfxRect){ x + 58, y + 25, 28, 28 }, 0.85f * a);
   txtMeio(txt(TXT_V2_24, "Novidades 2.0"), x + 104, y, 78, 0.85f * a);
   { TxtLinha t = txt(TXT_G18R, "este guia"); txtMeio(t, x + p.w - 68 - 24 - t.w, y, 78, 0.6f * a); }
-  y += 84;
+  y += 82;
   { GfxRect r = { x + 34, y, p.w - 68 - 34, 78 };
     TxtLinha t = txtT(TXT_W20_24B, "Guia de uso"), s = txtT(TXT_G18R, "tudo explicado");
     pilulaAc(r, a);
@@ -1654,7 +1671,9 @@ static void dialogo(void) {
   r.w = iw + (alvo.w - iw) * s; r.h = ih + (alvo.h - ih) * s;
   gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0, 0.02f, 0.024f, 0.03f, 0.62f * s);
   ponteiro_camada();
-  ilhaM(r, 44 + (1 - s) * 0, s);
+  ilhaModal = 1;
+  ilhaM(r, 44, s);
+  ilhaModal = 0;
   if (s < 0.6f) return;
   { float a = (s - 0.6f) / 0.4f;
     float x = r.x + 48;
