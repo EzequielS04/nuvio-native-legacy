@@ -70,8 +70,9 @@ static int aj2Degrau(void) {
 // mais ficam nas medidas cheias e a lista rola.
 #define AJ2_MENU_LN    aj2Ln
 #define AJ2_MENU_GAP   aj2Gap
-#define AJ2_MENU_CHIP  56.0f   // as duas pilulas do alto (Buscar, Diferentes do padrao)
-#define AJ2_MENU_TOPOL 77.0f   // onde comeca a lista: chips 56 + 10 + fio 1 + 10
+#define AJ2_MENU_CHIP  62.0f   // as tres pilulas do alto (Buscar, Diferentes do padrao, Avancadas); era 56
+#define AJ2_MENU_CHIP_GAP 8.0f // vao entre as fileiras de pilulas, quando elas quebram
+#define AJ2_MENU_TOPOL aj2ChipsTopo()   // onde comeca a lista: pilulas + 10 + fio 1 + 10
 #define AJ2_MENU_GT    30.0f   // titulo de grupo (Telas, Assistir, Conta e sistema)
 #define AJ2_MENU_GT_EX aj2GtEx // respiro extra antes do 2o e do 3o grupo
 #define AJ2_MENU_FADE  aj2Fade
@@ -83,7 +84,83 @@ static float aj2MH[AJ2_NMENU], aj2MV[AJ2_NMENU], aj2MDesc[AJ2_NMENU], aj2MTempo[
 static float aj2MRol, aj2MRolV, aj2SupY, aj2SupYv, aj2SupH, aj2SupHv;
 static int aj2MIni;
 static float aj2Ln = 58.0f, aj2Gap = 3.0f, aj2GtEx = 18.0f, aj2Fade = 70.0f;
-// f = 1: medidas cheias (58 / 3 / 18); f = 0: as compactas (50 / 2 / 10).
+
+// --- AS TRES PILULAS DO ALTO ----------------------------------------------------------
+// Buscar, Diferentes do padrao e Avancadas. O ROTULO NUNCA SOME: a largura de
+// cada uma vem do texto traduzido, medido na fonte da vez (a Montserrat da TV
+// e mais larga que a Inter do Mac), e o arranjo se adapta nesta ordem:
+//   1. as tres numa fileira, se cabem;
+//   2. Buscar sozinha em cima e as duas de filtro embaixo;
+//   3. Buscar + Diferentes em cima e Avancadas embaixo;
+//   4. uma por fileira.
+// Se nem sozinha a pilula cabe na largura da ilha, o corpo do texto desce um
+// degrau (28 > 26 > 25) e, por ultimo, o rotulo e cortado com reticencias —
+// cortado, nunca escondido. Com mais de uma fileira, as pilulas de cada
+// fileira se esticam ate a largura da ilha (sem "dente" a direita).
+// Antes (ate 05/10): fileira unica, e a terceira virava so o icone quando nao
+// cabia — em ingles com Montserrat nao cabia nunca (captura do dono).
+// Cada pilula tem a sua cor, tirada dos acentos do app (TEMA_ACENTO: Oceano,
+// Ambar, Violeta): o `fill` tinge o fundo e a `marca` (a versao clara do
+// matiz, feita para o escuro) pinta o icone. Nao dependem do acento escolhido.
+#define AJ2_CHIP_ICO 28.0f
+static const unsigned char AJ2_CHIP_TEMA[3] = { 2, 5, 3 };   // Oceano, Ambar, Violeta
+static struct {
+  float x[3], w[3];        // posicao (relativa ao miolo da ilha) e largura abertas
+  int lin[3], linhas;      // a fileira de cada uma
+  TxtEstilo e;
+  int idioma, fonte, pronto;
+} aj2Chips = { { 0 }, { 0 }, { 0, 0, 0 }, 1, TXT_V2_SEG, -1, -1, 0 };
+static const char *aj2ChipRotulo(int c) {
+  return i18n(c == 0 ? "Buscar" : c == 1 ? "Diferentes do padrão" : "Avançadas");
+}
+static float aj2ChipNatural(int c, TxtEstilo e) {
+  return 20.0f + AJ2_CHIP_ICO + 10.0f + (float)txt_largura(e, aj2ChipRotulo(c)) + 22.0f;
+}
+static void aj2ChipsMedir(void) {
+  static const TxtEstilo E[3] = { TXT_ILHA_NOME_L, TXT_V2_LN_B, TXT_V2_SEG };
+  static const signed char ARR[4][3] = { { 0, 0, 0 }, { 0, 1, 1 }, { 0, 0, 1 }, { 0, 1, 2 } };
+  const float livre = AJ2_MENU_W - 2 * AJ2_MENU_PAD, vao = 10.0f;
+  float nat[3];
+  int k, a, c, achou = 0;
+  if (aj2Chips.pronto && aj2Chips.idioma == ajustes_idioma() && aj2Chips.fonte == valor[AJ_FONTE_UI]) return;
+  for (k = 0; k < 3 && !achou; k++) {
+    for (c = 0; c < 3; c++) nat[c] = aj2ChipNatural(c, E[k]);
+    for (a = 0; a < 4 && !achou; a++) {
+      float soma[3] = { 0, 0, 0 };
+      int n[3] = { 0, 0, 0 }, cabe = 1, l;
+      // No corpo grande so valem os arranjos de ate duas fileiras; tres fileiras
+      // e o ultimo recurso, ja no corpo menor.
+      if (a == 3 && k < 2) continue;
+      for (c = 0; c < 3; c++) { l = ARR[a][c]; soma[l] += nat[c] + (n[l] ? vao : 0); n[l]++; }
+      for (l = 0; l < 3; l++) if (soma[l] > livre + 0.5f) cabe = 0;
+      if (!cabe && !(a == 3 && k == 2)) continue;
+      aj2Chips.e = E[k]; aj2Chips.linhas = ARR[a][2] + 1;
+      for (l = 0; l < 3; l++) {
+        float x = 0, folga = livre - soma[l];
+        for (c = 0; c < 3; c++) {
+          float w;
+          if (ARR[a][c] != l) continue;
+          // Estica so quando quebrou (fileira unica fica a esquerda, como era);
+          // a que nao cabe nem sozinha fica na largura da ilha e corta o texto.
+          w = nat[c] + (aj2Chips.linhas > 1 && n[l] ? folga / (float)n[l] : 0.0f);
+          if (w > livre) w = livre;
+          aj2Chips.lin[c] = l; aj2Chips.x[c] = x; aj2Chips.w[c] = w;
+          x += w + vao;
+        }
+      }
+      achou = 1;
+    }
+  }
+  for (c = 0; c < 3; c++) uxChipLinha[c] = aj2Chips.lin[c];
+  aj2Chips.idioma = ajustes_idioma(); aj2Chips.fonte = valor[AJ_FONTE_UI]; aj2Chips.pronto = 1;
+}
+// Altura do cabecalho do indice (as pilulas e o fio), que empurra a lista.
+static float aj2ChipsTopo(void) {
+  aj2ChipsMedir();
+  return (float)aj2Chips.linhas * AJ2_MENU_CHIP + (float)(aj2Chips.linhas - 1) * AJ2_MENU_CHIP_GAP + 21.0f;
+}
+// f = 1: medidas cheias (58 / 3 / 18); f = 0: as compactas (50 / 2 / 10);
+// f = -0,35: o piso (47 / 1,65 / 7).
 // R6 (04/10): o indice estava "enorme" — linha, icone e corpo menores.
 static float aj2MenuNecessario(float f, int nLin) {
   float ln = 50.0f + 8.0f * f, gap = 2.0f + f, ex = 10.0f + 8.0f * f;
@@ -95,8 +172,11 @@ static void aj2MenuMedir(void) {
   int nLin = nSecoes > 0 ? nSecoes : 11;
   n0 = aj2MenuNecessario(0.0f, nLin); n1 = aj2MenuNecessario(1.0f, nLin);
   aj2Fade = 70.0f;
-  if (n1 > janela && n0 <= janela) { f = (janela - n0) / (n1 - n0); aj2Fade = 0.0f; }
-  else if (n1 <= janela) aj2Fade = 0.0f;
+  // Com as pilulas em duas fileiras o cabecalho cresceu ~76: a linha pode
+  // descer ate 47 (f = -0,35) antes de a lista passar a rolar — a 100% o
+  // indice continua inteiro na tela, com as pilulas sempre a vista.
+  if (n1 <= janela) aj2Fade = 0.0f;
+  else if (n1 > n0 && (janela - n0) / (n1 - n0) >= -0.35f) { f = (janela - n0) / (n1 - n0); aj2Fade = 0.0f; }
   aj2Ln = 50.0f + 8.0f * f; aj2Gap = 2.0f + f; aj2GtEx = 10.0f + 8.0f * f;
 }
 static const char *aj2MenuTitulo(int j) {
@@ -129,12 +209,12 @@ static int aj2ContaOpcoes(int sec) {
   return n;
 }
 static float aj2MenuAltura(int j) { return j < 2 ? AJ2_MENU_CHIP : AJ2_MENU_LN; }
-// y do alto da linha j relativo ao topo do conteudo (sem a rolagem). As duas
-// pilulas dividem o mesmo y.
+// y do alto da linha j relativo ao topo do conteudo (sem a rolagem). Cada
+// pilula fica na sua fileira (aj2Chips).
 static float aj2MenuY(int j) {
   float y;
   int k, g;
-  if (j < 2) return 0;
+  if (j < 2) { aj2ChipsMedir(); return (float)aj2Chips.lin[j] * (AJ2_MENU_CHIP + AJ2_MENU_CHIP_GAP); }
   y = AJ2_MENU_TOPOL;
   for (k = 2; k < j; k++) y += aj2MH[k] + AJ2_MENU_GAP;
   g = aj2Grupo(j - 2);
@@ -213,44 +293,59 @@ static void aj2DesenharMenu(const Aj2Pose *p) {
     }
     gfx_cor(r, 38.0f / r.h, ar, ag, ab, 0.14f);   // um toque leve do acento
   }
-  // As duas pilulas do alto. Recolhido (rotulos a 0) viram so o icone, lado a
-  // lado, para caberem na coluna de icones.
-  { float cy = topo - aj2MRol, cx = m.x + AJ2_MENU_PAD, mkc = aj2MenuMascara(cy + AJ2_MENU_CHIP * 0.5f, base);
-    float livre = AJ2_MENU_W - 2 * AJ2_MENU_PAD, rot = p->mRot < 0 ? 0 : p->mRot > 1 ? 1 : p->mRot;
-    float fio = aj2MenuMascara(cy + AJ2_MENU_CHIP + 10.0f, base);
+  // As tres pilulas do alto (aj2Chips). Recolhido (rotulos a 0) viram so o
+  // icone, cada uma no comeco da sua fileira, para caberem na coluna de
+  // icones; a terceira some junto com os rotulos.
+  { float rot = p->mRot < 0 ? 0 : p->mRot > 1 ? 1 : p->mRot;
+    float altura = AJ2_MENU_TOPOL - 21.0f, fio = aj2MenuMascara(topo - aj2MRol + altura + 10.0f, base);
+    float xl[3] = { 0, 0, 0 };   // o x corrente de cada fileira (as pilulas encolhem com `rot`)
     int c;
     for (c = 0; c < 3 && n >= 2; c++) {
-      const char *rot_ = i18n(c == 0 ? "Buscar" : c == 1 ? "Diferentes do padrão" : "Avançadas");
-      float wc = AJ2_MENU_CHIP, wf, w, ac = c == 2 ? rot : 1.0f;
-      TxtLinha tl;
-      GfxRect r;
+      const AcentoFixo *cor = &TEMA_ACENTO[AJ2_CHIP_TEMA[c]];
+      float fr = ((cor->fill >> 16) & 255) / 255.0f, fg = ((cor->fill >> 8) & 255) / 255.0f, fb = (cor->fill & 255) / 255.0f;
+      float mr = ((cor->marca >> 16) & 255) / 255.0f, mg = ((cor->marca >> 8) & 255) / 255.0f, mb = (cor->marca & 255) / 255.0f;
+      int l = aj2Chips.lin[c];
+      float cy = topo - aj2MRol + (float)l * (AJ2_MENU_CHIP + AJ2_MENU_CHIP_GAP);
+      float mkc = aj2MenuMascara(cy + AJ2_MENU_CHIP * 0.5f, base), ac = c == 2 ? rot : 1.0f;
+      float wc = AJ2_MENU_CHIP, w = wc + (aj2Chips.w[c] - wc) * rot, cx = m.x + AJ2_MENU_PAD + xl[l];
       int sel = c == uxIndice, fc = c == 2 ? focoIndice && uxChipAv : sel && focoIndice && !uxChipAv;
       int lig_ = c == 2 && lig(AJ_AVANCADAS);
-      if (c == 2 && rot <= 0.003f) break;   // recolhido: so as duas primeiras cabem na coluna
-      wf = 18.0f + 26.0f + 8.0f + 14.0f;
-      tl = ajTxtC(TXT_V2_SEG, rot_, 400.0f);
-      wf += tl.w;
-      if (c == 1 && cx + wf > m.x + AJ2_MENU_PAD + livre) wf = m.x + AJ2_MENU_PAD + livre - cx;
-      w = wc + (wf - wc) * rot;
-      if (c == 2 && cx + w > m.x + AJ2_MENU_PAD + livre) w = wc;   // idioma longo: so o icone
-      r = (GfxRect){ cx, cy, w, AJ2_MENU_CHIP };
+      // LIGADA: a busca/diferencas aberta (a entrada do indice selecionada) ou
+      // as avancadas ligadas. E o estado que fica quando o foco sai.
+      int ativa = c == 2 ? lig_ : sel;
+      GfxRect r = { cx, cy, w, AJ2_MENU_CHIP };
+      xl[l] += w + 10.0f;
+      if (c == 2 && rot <= 0.003f) continue;   // recolhido: a terceira nao cabe na coluna
       if (mkc > 0.003f) {
-        float mc = mkc * ac;
-        if (c < 2 && sel) ajNeutro(r, 28.0f, fc ? 0.16f : 0.11f, 0.169f, 0.176f, 0.204f, mc);
-        else if (fc) ajNeutro(r, 28.0f, 0.16f, 0.169f, 0.176f, 0.204f, mc);
-        else ajNeutro(r, 28.0f, 0.10f, AJ_CHIP_SOL, mc);
-        if (fc) gfx_cor(r, 28.0f / r.h, ar, ag, ab, 0.14f * mc);   // toque leve do acento no chip em foco
-        else if (lig_) gfx_cor(r, 28.0f / r.h, ar, ag, ab, 0.22f * mc);   // ligado: o acento do app
-        ajIcone(c == 0 ? "aj_search" : c == 1 ? "aj_rotate-ccw-clock" : lig_ ? "aj_eye" : "aj_eye-off",
-                cx + 15.0f + 3.0f * rot, cy + (AJ2_MENU_CHIP - 26.0f) * 0.5f, 26.0f, ((sel || fc || lig_) ? 1.0f : 0.86f) * mc);
+        float mc = mkc * ac, raio = AJ2_MENU_CHIP * 0.5f;
+        // Foco = preenchimento e elevacao (sem contorno): a sombra, o fundo
+        // quase cheio na cor da pilula e o icone branco. Ligada sem foco =
+        // o fundo tingido a meio caminho. Em repouso = so um veu da cor.
+        if (fc) gfx_rect((GfxRect){ r.x - 10, r.y + 2, r.w + 20, r.h + 26 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, 0, 0, 0, 0.34f * mc);
+        ajNeutro(r, raio, 0.10f, AJ_CHIP_SOL, mc);
+        gfx_cor(r, raio / r.h, fr, fg, fb, (fc ? 0.78f : ativa ? 0.42f : 0.20f) * mc);
+        { const char *ic = c == 0 ? "aj_search" : c == 1 ? "aj_rotate-ccw-clock" : lig_ ? "aj_eye" : "aj_eye-off";
+          GfxRect ri = { cx + (wc - AJ2_CHIP_ICO) * 0.5f + (20.0f - (wc - AJ2_CHIP_ICO) * 0.5f) * rot,
+                         cy + (AJ2_MENU_CHIP - AJ2_CHIP_ICO) * 0.5f, AJ2_CHIP_ICO, AJ2_CHIP_ICO };
+          if (fc) gfx_icone(ri, ic, 1, 1, 1, mc);
+          else gfx_icone(ri, ic, mr, mg, mb, (ativa ? 1.0f : 0.92f) * mc); }
         if (rot > 0.003f && w > wc + 4.0f) {
-          TxtLinha tc = ajTxtC(TXT_V2_SEG, rot_, w - 18.0f - 26.0f - 8.0f - 14.0f);
-          txt_desenhar_alpha(tc, cx + 52.0f, cy + (AJ2_MENU_CHIP - tc.h) * 0.5f, ((sel || fc || lig_) ? 1.0f : 0.9f) * mc * rot);
+          // O estado das avancadas por extenso ("Ligado"/"Desligado") a direita,
+          // quando a pilula esticada tem lugar para ele sem apertar o rotulo.
+          float tx = cx + 20.0f + AJ2_CHIP_ICO + 10.0f, tmax = w - (20.0f + AJ2_CHIP_ICO + 10.0f) - 22.0f;
+          if (c == 2) {
+            TxtLinha st = ajTxt(TXT_V2_24, lig_ ? "Ligado" : "Desligado");
+            if (tmax - (float)txt_largura(aj2Chips.e, aj2ChipRotulo(c)) >= st.w + 18.0f) {
+              txt_desenhar_alpha(st, cx + w - 22.0f - st.w, cy + (AJ2_MENU_CHIP - st.h) * 0.5f, (lig_ || fc ? 0.92f : 0.6f) * mc * rot);
+              tmax -= st.w + 18.0f;
+            }
+          }
+          { TxtLinha tc = ajTxtC(aj2Chips.e, aj2ChipRotulo(c), tmax);
+            txt_desenhar_alpha(tc, tx, cy + (AJ2_MENU_CHIP - tc.h) * 0.5f, ((fc || ativa) ? 1.0f : 0.9f) * mc * rot); }
         }
       }
-      cx += w + 10.0f;
     }
-    if (fio > 0.003f) gfx_cor((GfxRect){ m.x + AJ2_MENU_PAD + 24.0f, cy + AJ2_MENU_CHIP + 10.0f, m.w - 2 * AJ2_MENU_PAD - 48.0f, 1 }, 0, 1, 1, 1, 0.08f * fio);
+    if (fio > 0.003f) gfx_cor((GfxRect){ m.x + AJ2_MENU_PAD + 24.0f, topo - aj2MRol + altura + 10.0f, m.w - 2 * AJ2_MENU_PAD - 48.0f, 1 }, 0, 1, 1, 1, 0.08f * fio);
   }
   for (j = 0; j < n; j++) {
     float y = topo + aj2MenuY(j) - aj2MRol, h = aj2MH[j];
