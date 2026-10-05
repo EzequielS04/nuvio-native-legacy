@@ -23,6 +23,9 @@
 
 static char token[128], cliente[80];
 static int  ligado;
+// Sessao confirmada morta (401 e o refresh tambem recusado): nenhum pedido
+// autenticado sai ate um token novo (trakt_definir) — cada um era um 401 no log.
+static int  sessaoMorta;
 // Cabecalho e geracao pertencem a mesma credencial. Trocar/desvincular o
 // Trakt no mesmo perfil tambem invalida respostas sem apagar provas da conta.
 static pthread_mutex_t travaCred = PTHREAD_MUTEX_INITIALIZER;
@@ -98,7 +101,7 @@ static int cabecalhosPedido(HistoricoPedido p, const char **cab,
                             char *aut, size_t nAut, char *chave, size_t nChave) {
   int atual;
   pthread_mutex_lock(&travaCred);
-  atual = ligado && p.credencial == credGeracao && p.mapa == cat_historico_geracao();
+  atual = ligado && !sessaoMorta && p.credencial == credGeracao && p.mapa == cat_historico_geracao();
   if (atual) {
     snprintf(aut, nAut, "Authorization: Bearer %s", token);
     snprintf(chave, nChave, "trakt-api-key: %s", cliente);
@@ -117,6 +120,16 @@ int trakt_operacao_estado(int tipo) {
 }
 
 int trakt_ativo(void) { return ligado; }
+
+void trakt_sessao_morta(void) {
+  pthread_mutex_lock(&travaCred);
+  if (ligado && !sessaoMorta) {
+    sessaoMorta = 1;
+    printf("[trakt] sessao expirada: sem pedidos ate reconectar\n");
+  }
+  pthread_mutex_unlock(&travaCred);
+}
+int trakt_sessao_e_morta(void) { return sessaoMorta; }
 
 // Definida junto de trakt_social; declarada aqui porque trakt_definir a chama.
 void trakt_social_reavaliar(void);
@@ -157,6 +170,7 @@ void trakt_esquecer(void) {
   pthread_mutex_lock(&travaCred);
   if (!++credGeracao) ++credGeracao;
   filmesAtiv[0] = 0;
+  sessaoMorta = 0;
   token[0] = 0;
   cliente[0] = 0;
   ligado = 0;
@@ -188,6 +202,7 @@ int trakt_definir(const char *tk, const char *cli) {
       (cli && strlen(cli) >= sizeof cliente)) return 0;
   pthread_mutex_lock(&travaCred);
   if (!++credGeracao) ++credGeracao;
+  sessaoMorta = 0;
   filmesAtiv[0] = 0;   // conta nova: o mapa de filmes vistos vem de novo
   snprintf(token, sizeof token, "%s", tk);
   if (cli && *cli) snprintf(cliente, sizeof cliente, "%s", cli);
@@ -208,7 +223,7 @@ int trakt_definir(const char *tk, const char *cli) {
 int trakt_cabecalhos(const char **cab, char *aut, size_t nAut,
                      char *chave, size_t nChave) {
   pthread_mutex_lock(&travaCred);
-  if (!ligado) { pthread_mutex_unlock(&travaCred); return 0; }
+  if (!ligado || sessaoMorta) { pthread_mutex_unlock(&travaCred); return 0; }
   snprintf(aut, nAut, "Authorization: Bearer %s", token);
   snprintf(chave, nChave, "trakt-api-key: %s", cliente);
   cab[0] = aut; cab[1] = "trakt-api-version: 2"; cab[2] = chave; cab[3] = NULL;

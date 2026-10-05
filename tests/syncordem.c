@@ -522,6 +522,18 @@ int main(int argc, char **argv) {
     printf("  credencial recusada perguntada uma vez por provedor\n");
     return 0;
   }
+  if (argc > 1 && !strcmp(argv[1], "credencial-reabrir")) {
+    // Outro arranque, mesmo disco: a recusa gravada vale, nenhum RPC sai.
+    int a = sync_empurrar_credencial("trakt", "{\"access_token\":\"x\"}");
+    int c = sync_empurrar_credencial("simkl", "{\"access_token\":\"z\"}");
+    printf("-- sessao: reabre depois da recusa\n");
+    if (a != -1 || c != -1 || rpcCredencial != 0) {
+      printf("  FALHOU: %d %d, %d RPCs (esperado -1 -1, 0)\n", a, c, rpcCredencial);
+      return 1;
+    }
+    printf("  recusa lembrada do disco, sem pergunta\n");
+    return 0;
+  }
   if (argc > 1 && !strcmp(argv[1], "troca")) {
     // Perfil 1 ja escolhido; a pessoa volta ao 2 com o ciclo do 1 no ar. Nada
     // do ciclo do 1 pode ser aplicado no 2 (C9 do dono, 24/09: colecoes,

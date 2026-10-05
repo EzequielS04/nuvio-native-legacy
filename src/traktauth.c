@@ -533,13 +533,13 @@ static void *fioRenovar(void *u) {
       printf("[trakt] credencial renovada pelo refresh token\n");
     } else {
       snprintf(erro, sizeof erro, "a renovacao veio sem token");
-      estado = TRA_INVALIDO;
+      estado = TRA_INVALIDO; trakt_sessao_morta();
     }
   } else if (st == 400 || st == 401 || st == 403 || st == 404) {
     // invalid_grant: o refresh tambem morreu — so re-pareando.
     snprintf(erro, sizeof erro, "%s",
              i18n("a sessão do Trakt expirou — conecte de novo"));
-    estado = TRA_INVALIDO;
+    estado = TRA_INVALIDO; trakt_sessao_morta();
   }
   // Falha de TRANSPORTE (st==0): estado nao muda; traktauth_passo tenta de
   // novo, porque uma TV sem rede por um minuto nao e sessao morta.
@@ -600,7 +600,7 @@ void traktauth_passo(unsigned agoraMs) {
     } else {
       snprintf(erro, sizeof erro, "%s",
                i18n("a sessão do Trakt expirou — conecte de novo"));
-      estado = TRA_INVALIDO;
+      estado = TRA_INVALIDO; trakt_sessao_morta();
     }
   }
 

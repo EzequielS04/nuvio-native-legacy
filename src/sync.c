@@ -1686,8 +1686,41 @@ void        sync_sujar_addons(void) {
 static char credRecusada[SY_CRED_RECUSADAS][16];
 static int nCredRecusadas;
 
+// A recusa tambem vai para DISCO (cred-recusada.txt, "provedor epoch"), por 7
+// dias: so a memoria da sessao deixava cada arranque repetir o mesmo 400
+// (D1 de 22/09 a 05/10: 18 pessoas). Passados 7 dias pergunta de novo, caso o
+// servidor passe a aceitar.
+#define SY_CRED_VALE_S (7L * 24L * 3600L)
+static int credDiscoLido;
+
+static void credLerDisco(void) {
+  char *t, *p;
+  if (credDiscoLido) return;
+  credDiscoLido = 1;
+  t = dados_ler("cred-recusada.txt");
+  for (p = t; p && *p; ) {
+    char prov[16]; long quando;
+    if (sscanf(p, "%15s %ld", prov, &quando) == 2 && (long)time(NULL) - quando < SY_CRED_VALE_S &&
+        (long)time(NULL) - quando >= 0 && nCredRecusadas < SY_CRED_RECUSADAS)
+      snprintf(credRecusada[nCredRecusadas++], sizeof credRecusada[0], "%s", prov);
+    p = strchr(p, '\n');
+    if (p) p++;
+  }
+  free(t);
+}
+
+static void credGravarDisco(void) {
+  char buf[SY_CRED_RECUSADAS * 40 + 1];
+  int i, n = 0;
+  for (i = 0; i < nCredRecusadas; i++)
+    n += snprintf(buf + n, sizeof buf - (size_t)n, "%s %ld\n", credRecusada[i], (long)time(NULL));
+  buf[n] = 0;
+  dados_gravar("cred-recusada.txt", buf);
+}
+
 static int credJaRecusada(const char *provider) {
   int i;
+  credLerDisco();
   for (i = 0; i < nCredRecusadas; i++)
     if (!strcmp(credRecusada[i], provider)) return 1;
   return 0;
@@ -1720,7 +1753,8 @@ int sync_empurrar_credencial(const char *provider, const char *credJson) {
     printf("[sync] push de credencial %s falhou (HTTP %d): %.200s\n", provider, st, r ? r : "");
     if (st == 400 && r && strstr(r, "Unsupported provider") && nCredRecusadas < SY_CRED_RECUSADAS) {
       snprintf(credRecusada[nCredRecusadas++], sizeof credRecusada[0], "%s", provider);
-      printf("[sync] servidor nao aceita credencial %s: nao tento de novo nesta sessao\n", provider);
+      credGravarDisco();
+      printf("[sync] servidor nao aceita credencial %s: nao tento de novo por 7 dias\n", provider);
     }
   } else printf("[sync] credencial %s guardada na conta\n", provider);
   free(r);

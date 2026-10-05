@@ -429,9 +429,14 @@ typedef void (*FnSemArg)(void);
 typedef void (*FnTexto)(const char *);
 static FnSemArg tpkListar;
 static FnTexto tpkAbrir, tpkLoja;
+// visibility("default") e OBRIGATORIO: tools/tpk.sh compila tudo com
+// -fvisibility=hidden, e sem isto o simbolo nao sai da .so — o host .NET
+// (Apps.cs) levava EntryPointNotFoundException em "apps-init" (8 TVs na 1.7.4).
+__attribute__((visibility("default")))
 void nv_tpk_apps_registrar(FnSemArg listar, FnTexto abrir, FnTexto loja) {
   tpkListar = listar; tpkAbrir = abrir; tpkLoja = loja;
 }
+__attribute__((visibility("default")))
 void nv_tpk_app(const char *id, const char *nome) { ondever_app_visto(id, nome); }
 #endif
 

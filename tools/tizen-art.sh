@@ -109,6 +109,15 @@ if find "$DESTINO" -name '*.webp' | grep -q .; then
   echo "tizen-art.sh: $N webp converted to png (via $CONV)" >&2
 fi
 
+# CONFERE QUE A ARTE DE MARCA ENTROU (D1 de logs: "res/art/marcas/abertura.jpg"
+# e "login-fundo.jpg" faltando no .tpk em 5 TVs). marcas/ e copiada inteira
+# acima, mas um estagio sem estes arquivos nao pode virar pacote em silencio:
+# abertura e login caem no fundo liso, e os logos do 2.0 voltam ao Classico.
+for f in abertura.jpg login-fundo.jpg logo-classico.png logo-novo-marca.png \
+         logo-novo-simbolo.png logo-novo-horizontal.png nuvio_wordmark.png; do
+  [ -s "$DESTINO/marcas/$f" ] || { echo "tizen-art.sh: marcas/$f ausente do estagio — abortado" >&2; exit 1; }
+done
+
 # CONFERE QUE NADA DE PESSOA ENTROU. Nao e paranoia: o .ipk ja saiu uma vez com
 # art/trakt.txt dentro, entregando o token do dono a quem instalasse. A checagem
 # vale mais que a intencao de quem editar este script depois.

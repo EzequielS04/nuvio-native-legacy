@@ -1,4 +1,6 @@
 #include "rede.h"
+#include "negcache.h"
+#include "negcache.inc"
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -327,6 +329,7 @@ static char *pedir2(const char *metodo, const char *url, const char *const *cab,
   if (status) *status = 0;
   if (retryAfter) *retryAfter = 0;
   if (!url || !*url) return NULL;
+  if (!status && (!metodo || !strcmp(metodo, "GET")) && negcache_barra(url, (long)time(NULL))) return NULL;
   cabs = juntarCabs(cab, extraCab);
   corpoResp = nv_http(metodo, url, cabs, corpo, &n, &http,
                       redeFinalDst, (int)redeFinalTam, etag, (int)tamEtag, retryAfter);
@@ -337,6 +340,7 @@ static char *pedir2(const char *metodo, const char *url, const char *const *cab,
   if (avisoSaude) avisoSaude(corpoResp || http ? 0 : 6, url);
   if (avisoHost) avisoHost(url, corpoResp || http ? 0 : 6, http, 0);
   if (http == 401 && aviso401) aviso401(url);
+  negcache_nota(url, corpoResp || http ? 0 : 6, http, (long)time(NULL));
   if (!corpoResp) { char seg[120];
     printf("[rede] falhou em %s\n", rede_url_publica(url, seg, sizeof seg));
     return NULL; }
@@ -1388,7 +1392,11 @@ static char *rede_baixar_interno3(const char *url, int segundos, long *tam,
   if (retry) *retry = 0;
   if (etag && tamEtag) etag[0] = 0;
   if (status) *status = 0;
-  if (!url || !*url || !abrir()) return NULL;
+  if (!url || !*url) return NULL;
+  // Endereco de API de metadados que ja respondeu "nao existe" (ou host em
+  // recuo por timeout): nao pede de novo — ver negcache.h.
+  if (!status && negcache_barra(url, (long)time(NULL))) return NULL;
+  if (!abrir()) return NULL;
   inicio = redeAgoraMs();
   prazoMs = (unsigned long)(segundos > 0 ? segundos : 30) * 1000UL;
   for (tentativa = 0; ; tentativa++) {
@@ -1478,6 +1486,7 @@ static char *rede_baixar_interno3(const char *url, int segundos, long *tam,
     if (curl_getinfo) curl_getinfo(c, INFO_RESPONSE_CODE, &http);
     if (status) *status = (int)http;
     if (http == 401 && aviso401) aviso401(url);
+    negcache_nota(url, r, (int)http, (long)time(NULL));
     if (!r && http >= 400 && !status) {
       if (lista) { curl_setopt(c, OPT_HTTPHEADER, (void *)0); if (slist_free) slist_free(lista); }
       soltarHandleR(c, r, url);

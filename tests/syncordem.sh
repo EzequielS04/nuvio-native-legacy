@@ -50,8 +50,11 @@ echo "$SAIDA" | grep -qF '[sync] ciclo do perfil 1 descartado' \
 # 8. Servidor que nao aceita credencial trakt/simkl (400 "Unsupported provider
 #    credential"): uma pergunta por provedor na sessao, nao uma por ciclo.
 sessao credencial
-echo "$SAIDA" | grep -qF 'nao tento de novo nesta sessao' \
+echo "$SAIDA" | grep -qF 'nao tento de novo por 7 dias' \
   || { echo "FALHOU: sessao 8 nao anotou a recusa"; exit 1; }
+sessao credencial-reabrir
+echo "$SAIDA" | grep -qF 'recusa lembrada do disco' \
+  || { echo "FALHOU: recusa nao sobreviveu ao arranque"; exit 1; }
 sessao addons
 # Fila de addon entre PROCESSOS: uma sessao cai em 500 e termina; a seguinte
 # parte so do disco. O nome vazio e estado desligado tambem devem sobreviver.
