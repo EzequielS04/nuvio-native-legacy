@@ -1,5 +1,5 @@
 #!/bin/bash
-# Fundo assado (Frost / Arte borrada): o quadro pequeno recebe a pintura e a tela
+# Fundo pelo caminho da luz imersiva (Frost / Arte borrada): o quadro pequeno recebe a pintura e a tela
 # assada bate com o desenho direto. Ver tests/fundo_assado.c.
 #
 #   bash tests/fundo_assado.sh        # GL 2.1 do Mac
@@ -30,6 +30,6 @@ if [ "${1:-}" = gles ]; then   # o ANGLE do emulador se chama ./libEGL.dylib
   codesign -f -s - "$work/test" 2>/dev/null || true
 fi
 mkdir -p "$work/dados"
-NUVIO_DADOS="$work/dados" NUVIO_TESTE_DIR="$work/dados" "$work/test" 2>&1 |
+NUVIO_DUMP_FUNDO_DIR="$work" NUVIO_DADOS="$work/dados" NUVIO_TESTE_DIR="$work/dados" "$work/test" 2>&1 |
   grep -vE "^\[(tex|arte|cat|desc|home|txt|corviva|ajustes|dados|perfil|badges)[a-z-]*\]"
 exit "${PIPESTATUS[0]}"

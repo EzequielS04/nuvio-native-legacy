@@ -22,6 +22,8 @@
 //             (Android 14, Mali-G52; [gpu-modos] layout=2 cor-viva=4 vidro=1)
 //   c9        Dinamica + "Dinamica imersiva" SEM vidro: a LG C9 do dono
 //             ([gpu-modos] layout=2 cor-viva=4 vidro=0, 04/10)
+//   frost     o c9 com Ajustes > Fundo = Frost (paginas do titulo e Ajustes)
+//   borrada   o c9 com Ajustes > Fundo = Arte borrada
 //
 // Cada fase sai com media, p95 e o PIOR quadro (des+upd) com o que ele fez:
 // texto rasterizado, artes enviadas a GPU, desenhos. Depois da home de cada
@@ -193,10 +195,12 @@ static void povoar(void) {
 static void ajusta(const char *cenario) {
   char cam[700];
   FILE *a;
-  int layout = 0, vidro = 0, tema = 0, cheio = 1;
+  int layout = 0, vidro = 0, tema = 0, cheio = 1, fundo = 0;
   if (!strcmp(cenario, "imersiva")) { vidro = 1; tema = 15; }
   else if (!strcmp(cenario, "dono")) { layout = 2; vidro = 1; tema = 15; }
   else if (!strcmp(cenario, "c9")) { layout = 2; vidro = 0; tema = 15; }
+  else if (!strcmp(cenario, "frost")) { layout = 2; vidro = 0; tema = 15; fundo = 2; }
+  else if (!strcmp(cenario, "borrada")) { layout = 2; vidro = 0; tema = 15; fundo = 1; }
   else if (!strcmp(cenario, "padrao")) layout = 1;
   else if (!strcmp(cenario, "dinamica")) layout = 2;
   snprintf(cam, sizeof cam, "%s/ajustes.txt", dirDados);
@@ -205,8 +209,8 @@ static void ajusta(const char *cenario) {
   // No arquivo, 0 = LIGADO nos ajustes de liga/desliga (V_LIGA).
   fprintf(a, "idioma 0\ntrailerHero 1\nhomeLayoutLocal %d\nvidroLocal %d\n"
              "modernLandscapePostersEnabled 1\nmodernHeroFullScreenBackdropEnabled %d\n"
-             "selected_theme %d\ncardDepthEnabled 0\nposterLabelsEnabled 0\n",
-          layout, vidro ? 0 : 1, cheio ? 0 : 1, tema);
+             "selected_theme %d\ncardDepthEnabled 0\nposterLabelsEnabled 0\nfundoLocal %d\n",
+          layout, vidro ? 0 : 1, cheio ? 0 : 1, tema, fundo);
   if (getenv("NV_AJ")) fprintf(a, "%s\n", getenv("NV_AJ"));
   fclose(a);
   ajustes_dir(dirDados);
@@ -380,7 +384,8 @@ static void cenario(SDL_Window *w, const char *cen) {
 }
 
 int main(int argc, char **argv) {
-  static const char *const todos[] = { "moderna", "imersiva", "padrao", "dinamica", "dono", "c9" };
+  static const char *const todos[] = { "moderna", "imersiva", "padrao", "dinamica", "dono", "c9", "frost",
+                                       "borrada" };
   const char *so = getenv("NV_CENARIO");
   SDL_Window *w;
   SDL_GLContext gl;
@@ -416,7 +421,7 @@ int main(int argc, char **argv) {
   ajusta(so ? so : "moderna");
   assert(home_iniciar("deploy/app/art"));
   povoar();
-  for (i = 0; i < 6; i++)
+  for (i = 0; i < 8; i++)
     if (!so || !strcmp(so, todos[i])) cenario(w, todos[i]);
   SDL_GL_DeleteContext(gl);
   SDL_DestroyWindow(w);

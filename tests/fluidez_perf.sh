@@ -22,4 +22,4 @@ cc "${sources[@]}" "$aqui/tests/fluidez_perf.c" -Isrc -o "$tmp/perf" \
   -O2 -g -I/opt/homebrew/include -I/opt/homebrew/include/SDL2 \
   -L/opt/homebrew/lib -lSDL2 -lSDL2_image -lSDL2_ttf -lz -framework OpenGL \
   -Wno-deprecated-declarations -Wno-macro-redefined
-NUVIO_DADOS="$tmp/dados" "$tmp/perf" 2>&1 | grep -vE "^\[(tex|arte|cat|desc|home|txt|hero|col|cor|corviva|fileiras|ajustes|dados|gif|perfil|badges|rev)[a-z-]*\]"
+NUVIO_DUMP_FUNDO_DIR="$tmp" NUVIO_DADOS="$tmp/dados" "$tmp/perf" 2>&1 | grep -vE "^\[(tex|arte|cat|desc|home|txt|hero|col|cor|corviva|fileiras|ajustes|dados|gif|perfil|badges|rev)[a-z-]*\]"
