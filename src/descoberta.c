@@ -1378,7 +1378,24 @@ static struct {
   char *corpo;
   int   ativo, erro;
   int   pronto;      // 1 = tentativa terminada (corpo pode ser NULL)
+  int   largado;     // 1 = a montagem desistiu de esperar por ele nesta volta
 } mani[MANI_MAX];
+// A MONTAGEM NAO ESPERA UM MANIFESTO LENTO PARA SEMPRE (B2, arranque). Os
+// manifestos eram lidos em ordem e cada um esperava ate o download de 20 s: um
+// addon pendurado (baby-beamup, "falha 28 ... 20009 ms" no log da C9) segurava
+// TODOS os catalogos, que so comecam depois de "manifestos lidos". Agora a
+// espera por um manifesto acaba em MANI_ESPERA_MS contados da largada (com
+// MANI_ESPERA_FOLGA_MS minimos a partir do pedido); o addon segue baixando, o
+// corpo entra na cache, e a volta seguinte o encontra pronto. Addon lento mas
+// valido nao se perde: ele so entra uma volta depois.
+#ifndef MANI_ESPERA_MS
+#define MANI_ESPERA_MS 6000
+#endif
+#ifndef MANI_ESPERA_FOLGA_MS
+#define MANI_ESPERA_FOLGA_MS 1500
+#endif
+static unsigned long long maniLargadaMs;
+static unsigned long long descAgoraMs(void);
 
 // CACHE DE CORPO DE MANIFESTO ENTRE CICLOS.
 //
@@ -1548,9 +1565,6 @@ static void *fioManifesto(void *u) {
     if (minha != maniGeracao) {
       pthread_mutex_unlock(&maniTrava); free(corpo); return NULL;
     }
-    mani[meu].corpo = corpo;
-    mani[meu].erro = !corpo;
-    mani[meu].pronto = 1;
     // ARMAZENA NA CACHE uma copia propria, se o corpo couber no teto de
     // memoria. A copia vive enquanto a versao da lista nao mudar; o corpo
     // original e consumido por maniPegar/lerManifesto e liberado por eles.
@@ -1561,6 +1575,23 @@ static void *fioManifesto(void *u) {
         if (copia) { memcpy(copia, corpo, n + 1); maniCacheColocar(url, addons_versao(), copia); }
       }
     }
+    if (mani[meu].largado && corpo) {
+      // Chegou depois de a montagem seguir sem ele: ninguem o consome nesta
+      // volta. Fica na cache para a proxima; se nao ha volta no ar, pede uma
+      // (silenciosa) para o addon entrar agora e nao so em 5 min.
+      free(corpo);
+      corpo = NULL;
+      mani[meu].pronto = 1;
+      pthread_cond_broadcast(&maniCond);
+      pthread_mutex_unlock(&maniTrava);
+      printf("[desc] manifesto lento chegou depois da montagem seguir sem ele; fica para a proxima volta\n");
+      fflush(stdout);
+      if (!buscando) desc_repetir_silencioso();
+      continue;
+    }
+    mani[meu].corpo = corpo;
+    mani[meu].erro = !corpo;
+    mani[meu].pronto = 1;
     pthread_cond_broadcast(&maniCond);
     pthread_mutex_unlock(&maniTrava);
   }
@@ -1602,6 +1633,8 @@ static void maniLargar(void) {
   }
   maniProx = 0;
   maniGeracao++;
+  maniLargadaMs = descAgoraMs();
+  for (i = 0; i < maniN; i++) mani[i].largado = 0;
   // Ninguem mais espera por um `pronto` que a volta passada deixou pendente.
   pthread_cond_broadcast(&maniCond);
   int pendentes = 0;
@@ -1641,8 +1674,24 @@ static char *maniPegar(const char *url, int esperar, int *tentado) {
     unsigned g = maniGeracao;
     // A espera acaba tambem quando a volta vira: nesse caso o corpo daqui nao
     // serve mais a ninguem e quem chamou baixa por conta propria.
-    while (esperar && !mani[i].pronto && g == maniGeracao)
-      pthread_cond_wait(&maniCond, &maniTrava);
+    // Espera em fatias de 10 ms (portavel, sem relogio absoluto de pthread)
+    // ate o prazo de MANI_ESPERA_MS da largada, com a folga minima a partir de
+    // agora para quem chega tarde (o Trakt costuma levar mais que isso).
+    { unsigned long long prazo = maniLargadaMs + MANI_ESPERA_MS,
+                         minimo = descAgoraMs() + MANI_ESPERA_FOLGA_MS;
+      if (prazo < minimo) prazo = minimo;
+      while (esperar && !mani[i].pronto && g == maniGeracao) {
+        if (descAgoraMs() >= prazo) {
+          mani[i].largado = 1;
+          printf("[desc] manifesto lento: %s; a montagem segue sem ele (%llu ms desde a largada)\n",
+                 url, (unsigned long long)(descAgoraMs() - maniLargadaMs));
+          fflush(stdout);
+          break;
+        }
+        pthread_mutex_unlock(&maniTrava);
+        SDL_Delay(10);
+        pthread_mutex_lock(&maniTrava);
+      } }
     if (g == maniGeracao) {
       *tentado = 1;
       if (mani[i].pronto) { corpo = mani[i].corpo; mani[i].corpo = NULL; }
@@ -3439,6 +3488,14 @@ static void publicarParcial(CatItem **lote, int *cap, int n,
   parcialNaTela = 1;
 }
 
+typedef struct { pthread_t fio; int viva, n; CatItem itens[8]; } SocialFio;
+static void *fioSocial(void *u) {
+  SocialFio *f = (SocialFio *)u;
+  f->n = trakt_social(f->itens, 8);
+  f->n = recomenda_social_mesclar(f->itens, f->n, 8);
+  return NULL;
+}
+
 static void *montar(void *u) {
   // O lote tambem cresce: era dimensionado por CAT_MAX e por isso herdava o
   // mesmo teto arbitrario.
@@ -3548,6 +3605,15 @@ static void *montar(void *u) {
   // AS DUAS FONTES, UNIDAS. Ver o cabecalho de montarContinuar: com Trakt
   // vinculado esta fileira ignorava o progresso da conta Nuvio, que e o que
   // chega do celular do dono.
+  // A ATIVIDADE DOS AMIGOS SAI JUNTO COM O CONTINUAR (B2, arranque). Eram em
+  // fila: o social so comecava depois do Continuar inteiro (medido na LG: 7 s,
+  // Android 2,7 s, em cima de 9-18 s do Continuar) e os catalogos esperam os
+  // dois. Nao dependem um do outro: o social vai para um buffer proprio num fio
+  // e entra no lote logo depois do Continuar, na mesma ordem de antes.
+  socialGeracao = recomenda_geracao();
+  SocialFio socFio;
+  memset(&socFio, 0, sizeof socFio);
+  socFio.viva = pthread_create(&socFio.fio, NULL, fioSocial, &socFio) == 0;
   pthread_mutex_lock(&contTrava);
   nContinuar = montarContinuar(lote, CONT_MAX);
   cwGerMontar = cwGer;
@@ -3555,6 +3621,7 @@ static void *montar(void *u) {
   marco("trakt continuar assistindo");
   if (CONDENADA("depois do continuar assistindo")) {
     pthread_mutex_unlock(&contTrava);
+    if (socFio.viva) pthread_join(socFio.fio, NULL);
     goto condenada;
   }
   // O feed social oficial e uma fileira propria, logo depois do retorno ao
@@ -3562,15 +3629,14 @@ static void *montar(void *u) {
   // addons e usa a mesma credencial Trakt ja carregada.
   // Sob a MESMA trava: trakt_social e montarContinuar compartilham os buffers
   // de trakt_enfeitar_lote com o fio de desc_refazer_continuar.
-  socialGeracao = recomenda_geracao();
-  nSocial = trakt_social(lote + n, 8);
   // ... E OS AMIGOS DO NUVIO. 251 das 310 contas do servico social nao tem
   // Trakt (docs/ANALISE-ADDONS-AMIGOS.md): para elas a fileira so existia vazia.
-  // A uniao vem do nosso servico (amigos MUTUOS que ligaram a atividade), um
-  // titulo uma vez so, e ainda sob a mesma trava: usa os mesmos buffers de
-  // enfeite que o Trakt acima.
-  nSocial = recomenda_social_mesclar(lote + n, nSocial, 8);
+  // A uniao (Trakt + amigos mutuos do nosso servico) ja vem pronta do fio.
   pthread_mutex_unlock(&contTrava);
+  if (socFio.viva) pthread_join(socFio.fio, NULL);
+  else fioSocial(&socFio);
+  nSocial = socFio.n;
+  if (nSocial > 0) memcpy(lote + n, socFio.itens, sizeof(CatItem) * (size_t)nSocial);
   n += nSocial;
   marco("trakt atividade dos amigos");
   if (CONDENADA("depois da atividade dos amigos")) goto condenada;

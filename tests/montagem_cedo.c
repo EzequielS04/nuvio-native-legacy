@@ -202,7 +202,7 @@ int trakt_social(CatItem *s, int m) {
   int a = armadoSocial;
   (void)s; (void)m;
   armadoSocial = S_NADA;
-  fioDaMontagem = pthread_self(); temFioDaMontagem = 1;
+  // (fioDaMontagem e marcado em trakt_continuar: o social corre em fio proprio.)
   // Lista nova = versao nova: o manifesto largado no comeco nao serve mais.
   if (a == S_ADDONS) { versaoAddons++; desc_repetir_addons(); }
   else if (a == S_CREDENCIAL) desc_repetir();
@@ -294,6 +294,7 @@ int   simkl_plantowatch(CatItem *s, int m) { (void)s; (void)m; return 0; }
 int   ajustes_salvos_no_simkl(void)        { return 0; }
 int   trakt_enfeitar_lote(CatItem *s, int n) { (void)s; return n; }
 int trakt_continuar(CatItem *s, int m) {
+  fioDaMontagem = pthread_self(); temFioDaMontagem = 1;
   if (!fixtureCW || m < 1) return 0;
   memset(s, 0, sizeof *s);
   snprintf(s->imdb, sizeof s->imdb, "ttCW");
