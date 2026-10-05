@@ -641,14 +641,38 @@ enum { REC_IDENT_INDISPONIVEL = 0,  // servidor antigo, ou /v1/eu ainda nao resp
        REC_IDENT_PODE_UNIR,         // Trakt e conta Nuvio aqui; Trakt ainda nao ligado
        REC_IDENT_UNIDA };           // o Trakt esta ligado a este perfil
 enum { REC_IDENT_OP_NADA = 0, REC_IDENT_OP_INDO, REC_IDENT_OP_OK,
-       REC_IDENT_OP_CONFLITO,       // essa conta Trakt ja e de outro perfil (409)
-       REC_IDENT_OP_FALHA };
+       REC_IDENT_OP_CONFLITO,       // essa conta ja e de outro perfil (409)
+       REC_IDENT_OP_FALHA,
+       REC_IDENT_OP_SEM_SERVICO,    // 501: o servidor nao tem SIMKL_CLIENT_ID
+       REC_IDENT_OP_RECUSADO };     // 401/403: o servidor nao aceitou a prova
 int  recomenda_identidade_situacao(void);
 int  recomenda_identidade_op(void);
 const char *recomenda_identidade_trakt(void);   // slug ligado, "" se nao ha
 int  recomenda_identidade_unir(void);           // 1 = enfileirou
 int  recomenda_identidade_separar(void);        // 1 = enfileirou
 void recomenda_identidade_op_limpar(void);
+
+// SIMKL E LETTERBOXD (linhas da aba Amigos). Um servico por vez na fila (um
+// pedido unico em voo, qualquer que seja o servico), um resultado por servico.
+//  - Simkl: o token e o de Ajustes (nunca pedido de novo, nunca logado). So e
+//    oferecido com login do Simkl nesta TV ou se ja ha um ligado (para desligar).
+//    501 do servidor = REC_IDENT_E_SEM_SERVICO: a linha some depois do aviso.
+//  - Letterboxd: o usuario e DECLARADO; o servidor nao confere e so a propria
+//    pessoa o ve.
+enum { REC_IDENT_TRAKT = 0, REC_IDENT_SIMKL, REC_IDENT_LETTERBOXD, REC_IDENT_N };
+enum { REC_IDENT_E_INDISPONIVEL = 0, // servidor antigo, sem login do Simkl, ou nao registrado
+       REC_IDENT_E_SEM_SERVICO,      // o servidor respondeu 501 (so Simkl)
+       REC_IDENT_E_PODE,             // da para ligar
+       REC_IDENT_E_LIGADO };
+int  recomenda_identidade_estado(int prov);      // so SIMKL e LETTERBOXD
+int  recomenda_identidade_op_de(int prov);       // REC_IDENT_OP_* do servico
+void recomenda_identidade_op_limpar_de(int prov);
+const char *recomenda_identidade_usuario_letterboxd(void);  // "" se nao ha
+int  recomenda_identidade_simkl_unir(void);      // 1 = enfileirou
+int  recomenda_identidade_simkl_separar(void);
+// Normaliza (minusculas, a-z 0-9 _) e enfileira. 0 se invalido (2..30) ou ocupado.
+int  recomenda_identidade_letterboxd_declarar(const char *usuario);
+int  recomenda_identidade_letterboxd_separar(void);
 // Id de uma pessoa vinda de outra fonte ("trakt:<slug>") -> o id do CONTATO
 // que provou ser ela. 1 quando trocou. Sem ids do servidor (antigo), 0 sempre.
 int  recomenda_pessoa_canonica(const char *id, char *dst, size_t tam);
