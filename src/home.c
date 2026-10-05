@@ -3128,7 +3128,7 @@ static float desenhaCopiaHero(const CatItem *ci, int principal, float x,
   else if (lay == HOME_LAYOUT_DINAMICA) maxWLogo = NV_DIN_LOGO_MAX_W;
   // Durante a promoção para o hero, entregar a textura menor já pronta evita
   // um quadro vazio; o cache continua reprocessando para o teto final.
-  GLuint tlogo = urlLogo ? tex_obter_larg_qualquer(urlLogo, maxWLogo) : 0;
+  GLuint tlogo = urlLogo ? tex_obter_logo_larg_qualquer(urlLogo, maxWLogo) : 0;
   // COR VIVA: o logo do mesmo titulo do destaque ("Cor da logo").
   if (urlLogo && principal) corviva_definir_logo(urlLogo, CORVIVA_HOME);
   // Igual ao detalhe: nome escrito so quando nao ha logo ou o cache ja falhou.
@@ -3481,7 +3481,7 @@ static void desenhaHero(Uint32 agora, float saida) {
       // a proporcao da logo pede a altura maxima.
       const char *urlFl=(!ehDiretor && folder->logo[0])
         ?artehero_url_logo_larg(folder->logo,NV_COLLECTION_HERO_LOGO_MAX_W+40.0f):NULL;
-      GLuint logo=urlFl?tex_obter_larg(urlFl,NV_COLLECTION_HERO_LOGO_MAX_W+40.0f):0;
+      GLuint logo=urlFl?tex_obter_logo_larg(urlFl,NV_COLLECTION_HERO_LOGO_MAX_W+40.0f):0;
       float ap=logo?tex_aspecto(urlFl):0;
       float fimTitulo=NV_COLLECTION_HERO_LOGO_Y+NV_COLLECTION_HERO_LOGO_MAX_H;
       if(logo&&ap>0){
@@ -4596,7 +4596,7 @@ static void desenhaEditorialCard(const CatItem *cItem, TipoFileira tipo, float p
   // propria, e escrever o nome com a fonte da interface apaga isso.
   const CatItem *ci = cItem;
   const char *urlCl = ci ? artehero_logo_sessao_larg(ci, w * .65f) : NULL;
-  GLuint tlogo = urlCl ? tex_obter_larg(urlCl, w * .65f) : 0;
+  GLuint tlogo = urlCl ? tex_obter_logo_larg(urlCl, w * .65f) : 0;
   // Sem dado, sem texto — nao a lista de demonstracao que ficava
   // aqui e carimbava nome e genero de outro titulo no card.
   const char *nome   = (ci && ci->titulo[0]) ? ci->titulo : NULL;
@@ -4964,7 +4964,7 @@ static void pintarCartao(const CartaoFoco *k, float raio) {
             // nunca passa de ~65% do card, e decodificar o arquivo inteiro
             // so para encolher depois era cache e tempo jogados fora.
             const char *urlL = artehero_logo_sessao_larg(cItem, w * 0.65f);
-            GLuint tl = tex_obter_larg(urlL, w * 0.65f);
+            GLuint tl = tex_obter_logo_larg(urlL, w * 0.65f);
             if (tl) {
               float pad = 34.0f * esc;
               float ap = tex_aspecto(urlL);
@@ -5334,6 +5334,17 @@ void home_desenhar(Uint32 agora) {
             continue;
           }
           const CatItem *cItem = cat_item_exato(idxCat);
+          // LOGO DO CARD ABERTO JA NO FOCO. So era pedido quando o card abria
+          // (abre > 0), depois do atraso de expansao: o download so comecava
+          // ali, e o logo aparecia atras do card. Pedir agora, na largura do card
+          // ABERTO (a mesma do desenho abaixo), usa esse atraso para baixar e
+          // decodificar, e nao promove depois por largura diferente.
+          if (cItem && cItem->logo[0] && abre <= 0.01f && r == expFileira &&
+              c == expColuna && ajustes_expandir_poster() && podeExpandir(r)) {
+            float wFim = artH * (1.0f + escalaDe(tipo)) * NV_EXP_ASPECTO;
+            const char *uP = artehero_logo_sessao_larg(cItem, wFim * 0.65f);
+            if (uP) (void)tex_obter_logo_larg(uP, wFim * 0.65f);
+          }
           if(tipo==FILEIRA_SOCIAL && cItem) {
             if(foco.fileira==r)temItemFoco=0;
             // A atividade social precisa de contexto, nao de um segundo hero.

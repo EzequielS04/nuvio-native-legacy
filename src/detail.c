@@ -3569,7 +3569,7 @@ static void desenhaPonto(float x, float yCentro, float lum, float a) {
 // trailer toca: metade do tamanho do logo do heroi, base a 96 px do fundo.
 static void logoCinema(float a) {
   const char *arqLogo = logoDe(idx);
-  GLuint texLogo = arqLogo ? tex_obter_larg_qualquer(arqLogo, NV_DETW_LOGO_MAXW) : 0;
+  GLuint texLogo = arqLogo ? tex_obter_logo_larg_qualquer(arqLogo, NV_DETW_LOGO_MAXW) : 0;
   float baseY = trailercinema_base();
   if (a <= 0.005f || ajustes_esconder_logo_trailer()) return;
   if (texLogo) {
@@ -3802,7 +3802,7 @@ static void heroWeb(float a, float desloc) {
   // textura menor enquanto reprocessa se ela tiver ao menos metade do
   // pedido. Pedindo o teto, o logo sumia por um instante ao abrir o titulo;
   // pedindo a largura real, aparece na hora e troca pela nitida em seguida.
-  GLuint texLogo = arqLogo ? tex_obter_larg_qualquer(arqLogo, NV_DETW_LOGO_MAXW) : 0;
+  GLuint texLogo = arqLogo ? tex_obter_logo_larg_qualquer(arqLogo, NV_DETW_LOGO_MAXW) : 0;
   float baseLogo = ((temRetom > 0.0f || agLinha[0]) ? yEstado : yAcoes)
                    - NV_DETW_LOGO_GAP;
   float espacoLogo = baseLogo - 110.0f - (!nomeAbaixo ? hNome : 0);

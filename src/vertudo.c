@@ -337,7 +337,7 @@ static void painel(float a) {
 
   // LOGO no lugar do titulo quando existe (max 264x82 no web); o nome escrito
   // com a fonte da interface so quando nao ha logo.
-  { GLuint tl = it.logo[0] ? tex_obter_larg(it.logo, 264.0f) : 0;
+  { GLuint tl = it.logo[0] ? tex_obter_logo_larg(it.logo, 264.0f) : 0;
     float ap = it.logo[0] ? tex_aspecto(it.logo) : 0.0f;
     if (tl && ap > 0.0f) {
       float wL = 264.0f, hL = wL / ap;
@@ -463,7 +463,7 @@ static void themeHeader(float a,float x0) {
   // composto. No cabeçalho da filmografia, o nome textual e o retrato limpo
   // deixam a identidade legível sem duplicar a mesma informação visual.
   GLuint logo=!ehDiretor&&collection&&!collection->editorial&&collection->logo[0]
-             ?tex_obter_larg(collection->logo,560):0;
+             ?tex_obter_logo_larg(collection->logo,560):0;
   float aspect=logo?tex_aspecto(collection->logo):0;
   if(logo&&aspect>0) {
     // Wordmark oficial, grande o bastante para leitura a distancia. O PNG

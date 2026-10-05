@@ -392,9 +392,11 @@ static SDL_cond *condLivre;
 // mesmo e perderia a ordem de chegada dos demais, que e o que faz a fileira
 // aparecer da esquerda para a direita em vez de embaralhada.
 static int tirarFila(int *f, int *ini, int fim) {
-  int p = *ini, achou = -1, idx;
+  int p = *ini, achou = -1, idx, nivel = 0;
+  // NIVEL 2 = LOGO DE TITULO, 1 = tela cheia, 0 = o resto. O primeiro de maior
+  // nivel vence; empate fica na ordem de chegada.
   while (p != fim) {
-    if (itens[f[p]].urgente) { achou = p; break; }
+    if (itens[f[p]].urgente > nivel) { achou = p; nivel = itens[f[p]].urgente; }
     p = (p + 1) % MAX_FILA;
   }
   if (achou < 0) {
@@ -3019,6 +3021,9 @@ void tex_encerrar(void) {
 // Ver tex_obter_larg_qualquer: 1 durante essa chamada, e a textura menor que
 // ja existe e entregue enquanto a maior e reprocessada.
 static int aceitaMenor;
+// Pedido de LOGO DE TITULO em curso (ver tex_obter_logo_larg): sobe o item para
+// o nivel 2 da fila, a frente ate do fundo de tela cheia.
+static int pedidoLogo;
 // CAMINHO QUE NAO E TEXTO NAO VIRA PEDIDO. Guarda, nao conserto: o caso que a
 // trouxe (lixo binario como caminho, "[tex] decode falhou (Couldn't open
 // ���̑C)") era um ponteiro para bloco do catalogo ja liberado, consertado em
@@ -3037,6 +3042,7 @@ static int caminhoInvalido(const char *c) {
 static GLuint tex_obter_limite(const char *caminho, int limite, int urgente,
                                int passageiro) {
   if (!caminho || !*caminho) return 0;
+  if (pedidoLogo) urgente = 2;
   if (caminhoInvalido(caminho)) {
     static int avisos;
     if (avisos < 3) {
@@ -3060,7 +3066,7 @@ static GLuint tex_obter_limite(const char *caminho, int limite, int urgente,
   if (i >= 0 && itens[i].estado == FALHOU) {
     itens[i].ultimoQuadro = quadroAtual;
     itens[i].ultimoPedido = SDL_GetTicks();
-    if (urgente) itens[i].urgente = 1;
+    if (urgente > itens[i].urgente) itens[i].urgente = urgente;
     // Ja falhou: so volta para a fila quando o RECUO vencer, e no maximo
     // QUATRO vezes. Sem a espera o pedido voltava a cada quadro e a arte
     // quebrada tomava a frente da boa; sem o teto acontece coisa pior, e ela
@@ -3114,9 +3120,10 @@ static GLuint tex_obter_limite(const char *caminho, int limite, int urgente,
     // antes, como poster da fileira, e e exatamente esse item que precisa
     // furar a fila agora.
     if (urgente && itens[i].estado != PRONTO) {
-      if (!itens[i].urgente)
-        printf("[tex-trace] pedido hash=%08lx role=hero limite=%d\n", h, limite);
-      itens[i].urgente = 1;
+      if (urgente > itens[i].urgente)
+        printf("[tex-trace] pedido hash=%08lx role=%s limite=%d\n", h,
+               urgente > 1 ? "logo" : "hero", limite);
+      if (urgente > itens[i].urgente) itens[i].urgente = urgente;
     }
     // PROMOCAO: a mesma arte pode ser pedida como poster (960) e depois como
     // hero (1920). Se o teto novo e maior e a textura pronta ficou menor que
@@ -3200,7 +3207,7 @@ static GLuint tex_obter_limite(const char *caminho, int limite, int urgente,
       itens[novo].uso = ++relogio;
       itens[novo].ultimoQuadro = quadroAtual;
       itens[novo].ultimoPedido = SDL_GetTicks();
-      itens[novo].urgente = urgente ? 1 : 0;
+      itens[novo].urgente = urgente;
       itens[novo].passageiro = passageiro ? 1 : 0;
       itens[novo].localDireto = caminhoLocal(caminho);
       if (itens[novo].localDireto) {
@@ -3213,7 +3220,8 @@ static GLuint tex_obter_limite(const char *caminho, int limite, int urgente,
           fila[filaFim] = novo; filaFim = prox;
           itens[novo].filaRedeEm = SDL_GetTicks();
           if (urgente)
-            printf("[tex-trace] pedido hash=%08lx role=hero limite=%d\n", h, limite);
+            printf("[tex-trace] pedido hash=%08lx role=%s limite=%d\n", h,
+                   urgente > 1 ? "logo" : "hero", limite);
           acordarRede();
         }
         else { itens[novo].estado = VAZIO; itens[novo].caminho[0] = 0; } // fila cheia
@@ -3283,6 +3291,27 @@ GLuint tex_obter_larg_qualquer(const char *caminho, float largLayout) {
   aceitaMenor = 1;
   t = tex_obter_larg(caminho, largLayout);
   aceitaMenor = 0;
+  return t;
+}
+
+// LOGO DE TITULO: um PNG de dezenas de KB que a pessoa espera ao lado do nome.
+// MEDIDO na C9 (logcat de 04/10): a fila de rede e FIFO e o logo, pedido como
+// arte de card, esperava 0,5 a 0,85 s atras de cartazes e fundos de fileira
+// (fila-rede wait=..., urgente=0) antes de comecar a baixar; o decode (dois
+// fios, fundos de 3840x2160 de 300-500 ms) e a mesma fila. Nivel 2 fura as duas.
+GLuint tex_obter_logo_larg(const char *caminho, float largLayout) {
+  GLuint t;
+  pedidoLogo = 1;
+  t = tex_obter_larg(caminho, largLayout);
+  pedidoLogo = 0;
+  return t;
+}
+
+GLuint tex_obter_logo_larg_qualquer(const char *caminho, float largLayout) {
+  GLuint t;
+  pedidoLogo = 1;
+  t = tex_obter_larg_qualquer(caminho, largLayout);
+  pedidoLogo = 0;
   return t;
 }
 
