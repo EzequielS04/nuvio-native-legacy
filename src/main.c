@@ -51,6 +51,9 @@
 #include <stdatomic.h>
 #include <time.h>
 #include "nuvem.h"
+#ifdef NV_ANDROID
+#include <sys/system_properties.h>
+#endif
 #include "sessao.h"
 #include "perfis.h"
 #include "sync.h"
@@ -1554,6 +1557,16 @@ int main(int argc, char **argv) {
       { FILE *fo = fopen("/tmp/nuvio-gfx-off", "r");
         unsigned long long m = 0; int n;
         if (fo) { while (fscanf(fo, "%d", &n) == 1) if (n >= 0 && n < GFX_NMODOS) m |= 1ull << n; fclose(fo); }
+#ifdef NV_ANDROID
+        // No Android nao ha /tmp: `adb shell setprop debug.nuvio.gfxoff "33 1"`
+        // faz o mesmo (lista de modos, separados por espaco; "" religa).
+        { char pv[PROP_VALUE_MAX] = "";
+          if (__system_property_get("debug.nuvio.gfxoff", pv) > 0) {
+            const char *q = pv;
+            while (*q) { char *fim; long v = strtol(q, &fim, 10); if (fim == q) break;
+                         if (v >= 0 && v < GFX_NMODOS) m |= 1ull << v; q = fim; }
+          } }
+#endif
         if (m != gfx_modos_desligados) { printf("[gpu-modos] desligados=%llx\n", m); gfx_modos_desligados = m; }
         // NO CAMPO, SEM ARQUIVO: interface lenta (FPS < 50 com mais de 9
         // texturas na tela) solta a mesma linha, no maximo uma vez a cada 30 s,
