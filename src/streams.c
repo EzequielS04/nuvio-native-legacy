@@ -2208,12 +2208,12 @@ static void desenharOnde(GfxRect r, float tx, float tr, const OndeVer *o, int se
   const int c = selected ? 255 : 205;
   const int cd = selected ? 180 : 130;
   const int cp = selected ? 150 : 110;
-  const float side = 40.0f;
-  float colW, cy = r.y + 20.0f;
+  const float side = 56.0f;   // era 40 (dono, 05/10: "muito pequeno"); cabe nos 112 da linha
+  float colW, cy = r.y + 16.0f;
   const char *action;
   TxtLinha la;
   int state = ondever_estado(o->nome);
-  // Logo de servico pedido pela largura com que desenha (side=40, cap 128
+  // Logo de servico pedido pela largura com que desenha (side=56, cap 128
   // pelo piso) — o 640 unico decodificava ~1,6 MB para um selo de 40. Ver
   // tests/artemenor.c.
   GLuint logo = o->logo[0] ? tex_obter_larg(o->logo, side) : 0;
@@ -2223,11 +2223,11 @@ static void desenharOnde(GfxRect r, float tx, float tr, const OndeVer *o, int se
   colW = (float)la.w > side ? (float)la.w : side;
   if (logo) gfx_rect((GfxRect){tr - side, cy, side, side}, logo, GFX_CARD, 0, 0, 0, .2f, 1, 1, 1,
                      a * (selected ? 1.0f : .85f));
-  txt_desenhar_alpha(la, tr - la.w, cy + 46.0f, a);
-  txt_desenhar_alpha(txt_linha_corta(TXT_CALLOUT, o->nome, c, c, c - 2, 255, tr - tx - colW - 28.0f), tx, cy, a);
+  txt_desenhar_alpha(la, tr - la.w, cy + side + 6.0f, a);
+  txt_desenhar_alpha(txt_linha_corta(TXT_CALLOUT, o->nome, c, c, c - 2, 255, tr - tx - colW - 28.0f), tx, cy + 4.0f, a);
   txt_desenhar_alpha(txt_linha_corta(TXT_HERO_META, o->gratis ? "Grátis / com anúncios" : "Na assinatura",
                                      cd, cd, cd, 255, tr - tx - colW - 28.0f),
-                     tx, cy + 40.0f + (FOLHA_SELO_H - 26.0f) * .5f, a);
+                     tx, cy + 44.0f + (FOLHA_SELO_H - 26.0f) * .5f, a);
 }
 
 // Texto em maiusculas espacadas da linha de marca e dos cabecalhos de grupo.
@@ -2349,7 +2349,8 @@ static float caixaAlta(const char *s, int r, int g, int b, float x, float y, flo
 // acento com a tinta calculada, e `ligado` (o filtro MP4 ativo) num acento a
 // 22% com texto no acento: estado, nao foco.
 #define FOLHA_CHIP_H 56.0f
-#define FOLHA_LOGO_H 40.0f   // logo do titulo na linha: caixa da altura do nome
+#define FOLHA_LOGO_H 36.0f   // logo do titulo na linha: caixa da altura do nome
+#define FOLHA_LOGO_VAO 12.0f // folga da logo ate a fileira de selos (dono, 05/10: "grudada")
 #define FOLHA_LOGO_W 220.0f
 static void chipFolha(GfxRect r, const char *rot, const char *icone, int foco, int ligado, float a) {
   float ar, ag, ab;
@@ -2691,7 +2692,10 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
           float lh = FOLHA_LOGO_H, lw = lh * la;
           if (lw > FOLHA_LOGO_W) { lw = FOLHA_LOGO_W; lh = lw / la; }
           gfx_tex_aspect_atual = 0.0f;
-          gfx_rect((GfxRect){tx, cy + (l.h - lh) * .5f, lw, lh}, lt,
+          // A base da logo fica FOLHA_LOGO_VAO acima dos selos (que comecam em
+          // cy + 40), e nao no meio da altura do nome: centrada, a logo de 40 px
+          // encostava nos selos.
+          gfx_rect((GfxRect){tx, floorf(cy + 40.0f - FOLHA_LOGO_VAO - lh), lw, lh}, lt,
                    tex_marca_escura(lu) ? GFX_MARCA : GFX_TEXTO, 0, 0, 0, 0.0f, 1, 1, 1,
                    anim * (sel ? 1.0f : .80f));
           l.w = (int)(lw + .5f);
