@@ -823,6 +823,7 @@ void busca_evento(const SDL_Event *e) {
     // Letra do teclado FISICO com o foco nas pilulas: vai para o teclado da
     // tela e digita — o dono comecou uma busca nova, nao quer escolher pilula.
     if (!(e->key.keysym.mod & (KMOD_CTRL | KMOD_ALT | KMOD_GUI)) &&
+        e->key.keysym.scancode != NV_SCANCODE_BLUE &&   // a AZUL/CH+ do controle chega com sym "s"
         ((k >= SDLK_a && k <= SDLK_z) || (k >= SDLK_0 && k <= SDLK_9))) {
       painel = 0;
     } else {
@@ -869,6 +870,7 @@ void busca_evento(const SDL_Event *e) {
   }
   if (painel == 0) {
     if (!(e->key.keysym.mod & (KMOD_CTRL | KMOD_ALT | KMOD_GUI)) &&
+        e->key.keysym.scancode != NV_SCANCODE_BLUE &&
         ((k >= SDLK_a && k <= SDLK_z) || (k >= SDLK_0 && k <= SDLK_9) || k == SDLK_SPACE)) {
       if (nConsulta + 1 < BU_MAX_CONSULTA && (k != SDLK_SPACE || nConsulta)) {
         char um[2] = { (char)k, 0 };
