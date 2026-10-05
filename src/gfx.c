@@ -530,9 +530,14 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // uPar.y > 0.5 diz que a fonte e um FBO: como o alvo de render tem a origem
   // no canto INFERIOR e o resto do app trabalha com y crescendo para baixo, a
   // imagem sai de cabeca para baixo se lida direto.
+  // uFoco > 0: um veu de cor uCor.rgb com essa forca na MESMA passada (o veu
+  // de 28% da "Arte borrada", gfx_luz_canal_desenhar); mix com 0 devolve a
+  // textura exata. uPar.x > 0.5: a cor sai pelo nv_dither (o Frost). Os outros
+  // chamadores passam 0 nos dois.
   "void main(){\n"
   "  vec2 uv = (uPar.y > 0.5) ? vec2(vUv.x, 1.0 - vUv.y) : vUv;\n"
-  "  gl_FragColor = vec4(texture2D(uTex, uv).rgb, uCor.a);\n"
+  "  vec3 c = mix(texture2D(uTex, uv).rgb, uCor.rgb, uFoco);\n"
+  "  gl_FragColor = uPar.x > 0.5 ? nv_dither(c, uCor.a) : vec4(c, uCor.a);\n"
   "}\n",
 
   // GFX_PLAY — triangulo apontando para a direita. Existe como primitiva
@@ -1952,35 +1957,99 @@ static GLint fboLigado(void) {
   return f;
 }
 
+// OS QUADROS PEQUENOS DA LUZ: criacao e assado, os MESMOS para a luz imersiva
+// e para os canais de fundo (gfx_luz_canal: "Arte borrada" e "Frost"). Na C9
+// este e o caminho que a luz imersiva usa desde 26/09 e que sai certo: alvo
+// GL_RGB 320x180, LINEAR + CLAMP, clear na cor do fundo e o desenho por cima.
+// Cria `n` pares textura+FBO. Devolve 1 se todos ficaram completos; senao
+// apaga o que criou e devolve 0. Nenhuma textura fica ligada a unidade 0: elas
+// vao ser alvo (alvo ligado para leitura e o laco que o GLES deixa indefinido).
+static int ambCriarAlvos(GLuint *tex, GLuint *fbo, int n) {
+  GLint ant = fboLigado();
+  int k, ok = 1;
+  glActiveTexture(GL_TEXTURE0);
+  for (k = 0; k < n; k++) {
+    glGenTextures(1, &tex[k]);
+    glBindTexture(GL_TEXTURE_2D, tex[k]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, AMB_W, AMB_H, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glGenFramebuffers(1, &fbo[k]);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo[k]);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex[k], 0);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) ok = 0;
+  }
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)ant);
+  gfx_tex_esquecer(0);  // os binds acima foram por fora do gfx_rect
+  if (!ok) {
+    glDeleteFramebuffers(n, fbo); glDeleteTextures(n, tex);
+    memset(fbo, 0, sizeof(GLuint) * (size_t)n); memset(tex, 0, sizeof(GLuint) * (size_t)n);
+  }
+  return ok;
+}
+// Pinta `pintar(ctx)` (coordenadas de layout de tela cheia) no quadro pequeno
+// `fbo`, por cima do clear na cor do fundo. O estado do quadro em volta nao
+// entra no assado (recorte, opacidade de grupo, deslize, luz pendente, escala
+// da camada, mistura) e volta como estava.
+static void ambAssarEm(GLuint fbo, void (*pintar)(void *), void *ctx) {
+  GLint fboAnt, vpAnt[4];
+  int twAnt = telaW, thAnt = telaH, pend = ambPendente, intacta = ambIntacta, blendAnt = blendLigado;
+  float g = gfx_opacidade_grupo, desl = gfx_desliza_atual;
+  GLboolean tesoura;
+  GFX_OUTRO_INI();
+  glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fboAnt);
+  glGetIntegerv(GL_VIEWPORT, vpAnt);
+  tesoura = glIsEnabled(GL_SCISSOR_TEST);
+  if (tesoura) glDisable(GL_SCISSOR_TEST);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  texAtual = 0;
+  glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+  telaW = AMB_W; telaH = AMB_H;
+  glViewport(0, 0, AMB_W, AMB_H);
+  // A mistura e posta, nao lembrada: quem desliga por fora (gpunivel, player)
+  // nao passa pelo gfxBlend, e o cache pode mentir. Sem ela a luz SUBSTITUI o
+  // clear em vez de somar (tests/fundo_assado.sh, caso 3).
+  gfxBlend(1);
+  glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+  glClearColor(NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
+  glClear(GL_COLOR_BUFFER_BIT);
+  ambPendente = 0; ambIntacta = 0;   // a luz pendente e da tela, nao do assado
+  gfx_opacidade_grupo = 1.0f; gfx_desliza_atual = 0.0f;
+  { ESC_REAL_INI();
+    pintar(ctx);
+    ESC_REAL_FIM(); }
+  gfx_opacidade_grupo = g; gfx_desliza_atual = desl;
+  ambPendente = pend; ambIntacta = intacta;
+  gfxBlend(blendAnt);
+  telaW = twAnt; telaH = thAnt;
+  glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)fboAnt);
+  glViewport(vpAnt[0], vpAnt[1], vpAnt[2], vpAnt[3]);
+  if (tesoura) glEnable(GL_SCISSOR_TEST);
+  GFX_OUTRO_FIM();
+}
+// O desenho de um assado de luz: as quatro luzes de regiao (nv_ambiente_viva)
+// com a forca de agora.
+static void ambPintarLuz(void *ctx) {
+  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+  (void)ctx;
+  gfx_rect(tela, 0, GFX_AMBIENTE, 0, 0, 0, 0, 1, 1, 1, nv_ambiente_forca);
+}
+
 static int ambPreparar(void) {
-  GLenum st;
   if (ambFbo) return 1;
   if (ambFalhou) return 0;
-  // DOIS QUADROS PEQUENOS, alternados: o assado de um quadro escreve no que
-  // NAO foi lido no quadro anterior (ver ambAssar).
-  { int k; GLint ant = fboLigado(); st = GL_FRAMEBUFFER_COMPLETE;
-    for (k = 0; k < AMB_N; k++) {
-      glGenTextures(1, &ambTexPar[k]);
-      glBindTexture(GL_TEXTURE_2D, ambTexPar[k]);
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, AMB_W, AMB_H, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-      glGenFramebuffers(1, &ambFboPar[k]);
-      glBindFramebuffer(GL_FRAMEBUFFER, ambFboPar[k]);
-      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ambTexPar[k], 0);
-      if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) st = 0;
-    }
-    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)ant); }
-  gfx_tex_esquecer(0);  // os binds acima foram por fora do gfx_rect
-  ambLado = 0; ambTex = ambTexPar[0]; ambFbo = ambFboPar[0];
-  if (st != GL_FRAMEBUFFER_COMPLETE) {
+  // QUATRO QUADROS PEQUENOS, em rodizio: o assado de um quadro escreve no que
+  // NAO foi lido nos quadros anteriores (ver ambAssar).
+  if (!ambCriarAlvos(ambTexPar, ambFboPar, AMB_N)) {
     printf("[cor] luz imersiva sem quadro pequeno (fbo incompleto): desenho direto\n");
-    glDeleteFramebuffers(AMB_N, ambFboPar); glDeleteTextures(AMB_N, ambTexPar);
     ambFbo = ambTex = 0; ambFalhou = 1;
     return 0;
   }
+  ambLado = 0; ambTex = ambTexPar[0]; ambFbo = ambFboPar[0];
   memset(ambChave, 0, sizeof ambChave);
   ambChave[0] = -1.0f;
   return 1;
@@ -1989,9 +2058,6 @@ static int ambPreparar(void) {
 static void ambAssar(void) {
   float k[20];
   int i, j, n = 0;
-  GLint fboAnt, vpAnt[4];
-  int twAnt = telaW, thAnt = telaH;
-  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
   k[n++] = floorf(nv_tempo_viva * 12.0f);
   k[n++] = nv_ambiente_forca;
   k[n++] = NV_COR_FUNDO_R; k[n++] = NV_COR_FUNDO_G; k[n++] = NV_COR_FUNDO_B;
@@ -2003,23 +2069,7 @@ static void ambAssar(void) {
   // obriga o driver a esperar aquele desenho terminar antes de assar.
   ambLado = (ambLado + 1) % AMB_N; ambTex = ambTexPar[ambLado]; ambFbo = ambFboPar[ambLado];
   gfx_n_assados++;
-  {
-    GFX_OUTRO_INI();
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fboAnt);
-    glGetIntegerv(GL_VIEWPORT, vpAnt);
-    glBindFramebuffer(GL_FRAMEBUFFER, ambFbo);
-    telaW = AMB_W; telaH = AMB_H;
-    glViewport(0, 0, AMB_W, AMB_H);
-    glClearColor(NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    { ESC_REAL_INI();
-      gfx_rect(tela, 0, GFX_AMBIENTE, 0, 0, 0, 0, 1, 1, 1, nv_ambiente_forca);
-      ESC_REAL_FIM(); }
-    telaW = twAnt; telaH = thAnt;
-    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)fboAnt);
-    glViewport(vpAnt[0], vpAnt[1], vpAnt[2], vpAnt[3]);
-    GFX_OUTRO_FIM();
-  }
+  ambAssarEm(ambFbo, ambPintarLuz, NULL);
 }
 
 void gfx_ambiente_preparar(void) {
@@ -2180,201 +2230,158 @@ void gfx_vidro_fosco(GfxRect r, float raio, float a) {
 }
 void gfx_vidro_fosco_fonte(GLuint tex) { foscoFonte = tex; }
 
-// O FUNDO ASSADO (fundo.c: "Arte borrada" e "Frost" de tela cheia). MEDIDO no
-// Mac (tests/fluidez_perf.sh, Ajustes): o Frost pintava por quadro um clear,
-// um GFX_VEU_CSS e tres GFX_LUZ do tamanho da tela, todos com mistura — 4,1
-// telas misturadas so de fundo, contra UMA passada opaca do fundo da Dinamica.
-// A "Arte borrada" reaproveitava o quadro da luz imersiva: com a Imersiva ligada
-// as duas chaves se revezavam e o assado refazia DUAS vezes por quadro, mais o
-// quad da luz que ela cobria e o veu de 28% por cima.
-// Aqui cada fundo tem os SEUS quadros pequenos (320x180, como a luz imersiva):
-// o desenho inteiro (cores, luzes, veu) e assado so quando a chave muda — paleta,
-// acento, cor de fundo — e o quadro vira UM quad de tela cheia, opaco e sem
-// mistura com alfa 1, lido pelo GFX_FOSCO (o mesmo nv_dither dos degrades, entao
-// o painel de 8 bits nao faz faixa na ampliacao).
+// OS CANAIS DE FUNDO DA LUZ ASSADA (fundo.c: "Arte borrada" e "Frost" de tela
+// cheia). MEDIDO no Mac (tests/fluidez_perf.sh, Ajustes): o Frost direto pinta
+// por quadro um clear, um GFX_VEU_CSS e tres GFX_LUZ do tamanho da tela, todos
+// com mistura; a "Arte borrada" direta reaproveitava o quadro da luz imersiva,
+// e com a Imersiva ligada as duas chaves se revezavam (dois assados por quadro)
+// mais um quad da luz com mistura e o veu de 28% por cima.
 //
-// C9 (Mali-G71), 05/10/2026: os dois fundos sairam QUASE PRETOS (o clear do
-// quadro pequeno sem as luzes) e as capturas do Mac continuavam iguais. Mac (GL
-// 2.1) e ANGLE (GLES2) assam certo (tests/fundo_assado.sh), entao o assado aqui
-// nao confia no estado que o quadro deixou nem no formato:
-//   - alvo RGBA8 (GL_RGBA/GL_UNSIGNED_BYTE, o formato que todo GLES2 rende),
-//     nao o GL_RGB, que o GLES2 puro nem garante como cor renderizavel;
-//   - a textura que vai virar alvo NAO fica ligada a unidade 0 (a criacao a
-//     deixava ligada, e o PRIMEIRO assado — o unico do Frost — pintava nela:
-//     o laco de realimentacao que o GLES deixa indefinido; a luz imersiva so
-//     escapava porque reassa 12 vezes por segundo);
-//   - mistura LIGADA e na funcao de sempre, viewport, uTela e tamanho do alvo
-//     postos e devolvidos explicitamente, tesoura desligada;
-//   - na criacao, UMA conferencia: assa um padrao conhecido, le de volta pelo
-//     mesmo GFX_FOSCO que desenha a tela e compara. Errou: log "[cor] fundo
-//     assado CONFERIDO ERRADO" e o desenho direto de sempre pela sessao toda.
-//     Uma leitura de 2x1 px por sessao.
-//   - a chave inclui o nivel de efeitos e os modos desligados (instrumento de
-//     campo), e um nome de textura que deixou de existir (contexto perdido)
-//     refaz o par.
-#define FDO_N 3
-static GLuint fdoTex[FDO_N][2], fdoFbo[FDO_N][2];
-static int fdoLado[FDO_N], fdoPronto[FDO_N], fdoLeve[FDO_N], fdoFalhou, fdoConferido;
-static unsigned long long fdoModos[FDO_N];
-static float fdoChave[FDO_N][24];
+// C9 (Mali-G71), 05/10/2026: o assado proprio do 1bcd6ebe (gfx_fundo_assado:
+// RGBA, desenhado pelo GFX_FOSCO) saiu escuro na TV — a Borrada so com o veu,
+// o Frost so com a base — com a conferencia de um padrao de cor passando e o
+// Mac e o ANGLE iguais ao direto. A causa na TV nao foi provada. Por isso aqui
+// os fundos usam o caminho da LUZ IMERSIVA, o que a C9 ja mostra certo: os
+// MESMOS ambCriarAlvos/ambAssarEm (GL_RGB 320x180, clear na cor do fundo) e a
+// mesma passada de tela do ambPintar (GFX_SNAP, opaca e sem mistura com alfa
+// 1). Cada canal tem os seus quadros e a sua chave, entao a Borrada nao
+// disputa o quadro da Imersiva. O veu da Borrada nao e assado: entra na mesma
+// passada (uFoco do GFX_SNAP), e o quadro sem veu e a fonte do vidro fosco.
+// fundo.c ainda confere UMA vez o pixel da tela contra a conta feita no CPU
+// e, se errar, volta ao desenho direto pela sessao (ver fundo.c).
+#define CAN_N 2      // canais: 0 Arte borrada, 1 Frost (a imersiva e o ambTex)
+#define CAN_ALVOS 2  // conteudo parado: dois alvos alternados bastam
+static GLuint canTex[CAN_N][CAN_ALVOS], canFbo[CAN_N][CAN_ALVOS];
+static int canLado[CAN_N], canPronto[CAN_N], canLeve[CAN_N], canFalhou;
+static unsigned long long canModos[CAN_N];
+static float canChave[CAN_N][24];
 int gfx_n_fundo_assados;
 int gfx_fundo_assado_desligado;
-int gfx_fundo_assado_conferencia = -1;   // -1 nao feita, 1 ok, 0 errada
-// Pinta `pintar(ctx)` (coordenadas de layout de tela cheia) no alvo `fbo`
-// (AMB_W x AMB_H) com o estado posto aqui, e devolve o de antes.
-static void fdoPintarEm(GLuint fbo, GLuint alvoTex, void (*pintar)(void *), void *ctx) {
-  GLint fboAnt, vpAnt[4];
-  int twAnt = telaW, thAnt = telaH, pend = ambPendente, intacta = ambIntacta, blendAnt = blendLigado;
-  float utw = uTelaW, uth = uTelaH;
-  GLboolean tesoura;
-  GFX_OUTRO_INI();
-  glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fboAnt);
-  glGetIntegerv(GL_VIEWPORT, vpAnt);
-  tesoura = glIsEnabled(GL_SCISSOR_TEST);
-  if (tesoura) glDisable(GL_SCISSOR_TEST);
-  // O alvo nao pode estar ligado para leitura enquanto se pinta nele (o cache
-  // texAtual nao sabe de binds por fora: solta a unidade 0 sempre — uma
-  // chamada por assado).
-  (void)alvoTex;
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  texAtual = 0;
-  glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-  telaW = AMB_W; telaH = AMB_H;
-  uTelaW = NV_TELA_W; uTelaH = NV_TELA_H;
-  glViewport(0, 0, AMB_W, AMB_H);
-  gfxBlend(1);
-  glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-  glClearColor(NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
-  glClear(GL_COLOR_BUFFER_BIT);
-  // A luz imersiva pendente NAO entra no assado: ela e da tela.
-  ambPendente = 0; ambIntacta = 0;
-  { float g = gfx_opacidade_grupo, desl = gfx_desliza_atual;
-    ESC_REAL_INI();
-    gfx_opacidade_grupo = 1.0f; gfx_desliza_atual = 0.0f;
-    pintar(ctx);
-    gfx_opacidade_grupo = g; gfx_desliza_atual = desl;
-    ESC_REAL_FIM(); }
-  ambPendente = pend; ambIntacta = intacta;
-  gfxBlend(blendAnt);
-  telaW = twAnt; telaH = thAnt;
-  uTelaW = utw; uTelaH = uth;
-  glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)fboAnt);
-  glViewport(vpAnt[0], vpAnt[1], vpAnt[2], vpAnt[3]);
-  if (tesoura) glEnable(GL_SCISSOR_TEST);
-  GFX_OUTRO_FIM();
-}
-// O padrao da conferencia: metade esquerda com vermelho a 50% (precisa da
-// mistura), metade direita verde opaca.
-static void fdoPadrao(void *ctx) {
-  (void)ctx;
-  gfx_cor((GfxRect){ 0, 0, NV_TELA_W * 0.5f, NV_TELA_H }, 0.0f, 1.0f, 0.0f, 0.0f, 0.5f);
-  gfx_cor((GfxRect){ NV_TELA_W * 0.5f, 0, NV_TELA_W * 0.5f, NV_TELA_H }, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f);
-}
-static GLuint fdoLer;
-static void fdoCopiar(void *ctx) {
-  (void)ctx;
-  gfx_rect((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, fdoLer, GFX_FOSCO, 0, 0, 0, 0.0f, 1, 1, 1, 1.0f);
-}
-// Assa o padrao em tex[0], copia pelo GFX_FOSCO para tex[1] e le dois pixels.
-static int fdoConferir(int slot) {
-  unsigned char px[2][4];
-  GLint fboAnt;
-  float aspAnt = gfx_tex_aspect_atual;
-  int er, eg, eb, ok;
-  fdoPintarEm(fdoFbo[slot][0], fdoTex[slot][0], fdoPadrao, NULL);
-  fdoLer = fdoTex[slot][0];
-  gfx_tex_aspect_atual = 0.0f;
-  fdoPintarEm(fdoFbo[slot][1], fdoTex[slot][1], fdoCopiar, NULL);
-  gfx_tex_aspect_atual = aspAnt;
-  glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fboAnt);
-  glBindFramebuffer(GL_FRAMEBUFFER, fdoFbo[slot][1]);
-  glReadPixels(AMB_W / 4, AMB_H / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px[0]);
-  glReadPixels(AMB_W * 3 / 4, AMB_H / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px[1]);
-  glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)fboAnt);
-  // fundo*0,5 + vermelho*0,5 (o dither move +-1 nivel)
-  er = (int)((NV_COR_FUNDO_R * 0.5f + 0.5f) * 255.0f + 0.5f);
-  eg = (int)(NV_COR_FUNDO_G * 0.5f * 255.0f + 0.5f);
-  eb = (int)(NV_COR_FUNDO_B * 0.5f * 255.0f + 0.5f);
-  ok = abs(px[0][0] - er) <= 6 && abs(px[0][1] - eg) <= 6 && abs(px[0][2] - eb) <= 6 &&
-       px[1][0] <= 6 && px[1][1] >= 249 && px[1][2] <= 6;
-  printf("[cor] fundo assado %s: esperado %d,%d,%d | 0,255,0; lido %d,%d,%d | %d,%d,%d (glGetError 0x%x)\n",
-         ok ? "conferido" : "CONFERIDO ERRADO (desenho direto)", er, eg, eb,
-         px[0][0], px[0][1], px[0][2], px[1][0], px[1][1], px[1][2], (unsigned)glGetError());
-  fflush(stdout);
-  return ok;
-}
-static void fdoSoltar(int slot) {
-  if (fdoFbo[slot][0]) glDeleteFramebuffers(2, fdoFbo[slot]);
-  if (fdoTex[slot][0]) { gfx_tex_esquecer(fdoTex[slot][0]); gfx_tex_esquecer(fdoTex[slot][1]);
-                         glDeleteTextures(2, fdoTex[slot]); }
-  fdoFbo[slot][0] = fdoFbo[slot][1] = fdoTex[slot][0] = fdoTex[slot][1] = 0;
-  fdoPronto[slot] = 0;
-}
-GLuint gfx_fundo_assado(int slot, const float *chave, int n, void (*pintar)(void *), void *ctx) {
-  int k;
-  if (slot < 0 || slot >= FDO_N || n > 24 || fdoFalhou || gfx_fundo_assado_desligado ||
+GLuint gfx_luz_canal(int canal, const float *chave, int n, void (*pintar)(void *), void *ctx) {
+  if (canal < 0 || canal >= CAN_N || n > 24 || canFalhou || gfx_fundo_assado_desligado ||
       snapAtivo || miniAtiva) return 0;
-  // Contexto perdido/refeito: o nome deixou de ser textura. Refaz o par.
-  if (fdoTex[slot][0] && !glIsTexture(fdoTex[slot][0])) {
-    fdoFbo[slot][0] = fdoFbo[slot][1] = fdoTex[slot][0] = fdoTex[slot][1] = 0;
-    fdoPronto[slot] = 0;
+  // Contexto perdido/refeito: o nome deixou de ser textura. Refaz os alvos.
+  if (canTex[canal][0] && !glIsTexture(canTex[canal][0])) {
+    memset(canTex[canal], 0, sizeof canTex[canal]); memset(canFbo[canal], 0, sizeof canFbo[canal]);
+    canPronto[canal] = 0;
   }
-  if (!fdoTex[slot][0]) {
-    GLint ant = fboLigado();
-    int incompleto = 0;
-    glActiveTexture(GL_TEXTURE0);
-    for (k = 0; k < 2; k++) {
-      glGenTextures(1, &fdoTex[slot][k]);
-      glBindTexture(GL_TEXTURE_2D, fdoTex[slot][k]);
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, AMB_W, AMB_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-      glGenFramebuffers(1, &fdoFbo[slot][k]);
-      glBindFramebuffer(GL_FRAMEBUFFER, fdoFbo[slot][k]);
-      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fdoTex[slot][k], 0);
-      { GLenum st = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-        if (st != GL_FRAMEBUFFER_COMPLETE) {
-          printf("[cor] fundo assado sem quadro pequeno (fbo RGBA incompleto 0x%x): desenho direto\n", (unsigned)st);
-          incompleto = 1;
-        } }
+  if (!canTex[canal][0]) {
+    if (!ambCriarAlvos(canTex[canal], canFbo[canal], CAN_ALVOS)) {
+      printf("[cor] fundo de luz sem quadro pequeno (fbo incompleto): desenho direto\n");
+      fflush(stdout);
+      canFalhou = 1;
+      return 0;
     }
-    // Nenhuma das duas fica ligada para leitura: elas vao ser alvo.
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)ant);
-    gfx_tex_esquecer(0);
-    if (!incompleto && !fdoConferido) {
-      fdoConferido = 1;
-      gfx_fundo_assado_conferencia = fdoConferir(slot);
-      if (!gfx_fundo_assado_conferencia) incompleto = 1;
-    }
-    if (incompleto) { fdoFalhou = 1; fdoSoltar(slot); return 0; }
-    fdoPronto[slot] = 0;
+    canPronto[canal] = 0;
   }
   // Os efeitos leves tiram as GFX_LUZ do desenho; o instrumento de campo
   // desliga modos: os dois entram na chave.
-  if (fdoPronto[slot] && fdoLeve[slot] == efeitosLeves && fdoModos[slot] == gfx_modos_desligados &&
-      !memcmp(chave, fdoChave[slot], sizeof(float) * (size_t)n))
-    return fdoTex[slot][fdoLado[slot]];
-  memcpy(fdoChave[slot], chave, sizeof(float) * (size_t)n);
-  fdoPronto[slot] = 1; fdoLeve[slot] = efeitosLeves; fdoModos[slot] = gfx_modos_desligados;
-  // Alterna o alvo, como a luz imersiva: a GPU pode ainda ler o anterior.
-  fdoLado[slot] ^= 1;
+  if (canPronto[canal] && canLeve[canal] == efeitosLeves && canModos[canal] == gfx_modos_desligados &&
+      !memcmp(chave, canChave[canal], sizeof(float) * (size_t)n))
+    return canTex[canal][canLado[canal]];
+  memcpy(canChave[canal], chave, sizeof(float) * (size_t)n);
+  canPronto[canal] = 1; canLeve[canal] = efeitosLeves; canModos[canal] = gfx_modos_desligados;
+  canLado[canal] = (canLado[canal] + 1) % CAN_ALVOS;
   gfx_n_fundo_assados++;
-  fdoPintarEm(fdoFbo[slot][fdoLado[slot]], fdoTex[slot][fdoLado[slot]], pintar, ctx);
-  return fdoTex[slot][fdoLado[slot]];
+  ambAssarEm(canFbo[canal][canLado[canal]], pintar, ctx);
+  return canTex[canal][canLado[canal]];
 }
-void gfx_fundo_assado_desenhar(GLuint tex, float a) {
+// A passada de tela do ambPintar: GFX_SNAP de tela cheia (fonte FBO), opaca e
+// sem mistura com alfa 1. `veu` (rgb + forca) entra no fragmento; `pontilhar`
+// passa a cor pelo nv_dither (o Frost direto era pontilhado).
+void gfx_luz_canal_desenhar(GLuint tex, float a, const float *veu, int pontilhar) {
   GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-  float aspAnt = gfx_tex_aspect_atual;
+  float aspAnt = gfx_tex_aspect_atual, deslAnt = gfx_desliza_atual, coverAnt = gfx_card_forcar_cover_atual;
   if (!tex || a <= 0.003f) return;
-  gfx_tex_aspect_atual = 0.0f;
+  gfx_tex_aspect_atual = 0.0f; gfx_desliza_atual = 0.0f; gfx_card_forcar_cover_atual = 0.0f;
   { ESC_REAL_INI();
-    gfx_rect(tela, tex, GFX_FOSCO, 0, 0, 0, 0.0f, 1, 1, 1, a);
+    if (veu) gfx_rect(tela, tex, GFX_SNAP, veu[3], pontilhar ? 1.0f : 0.0f, 1.0f, 0.0f, veu[0], veu[1], veu[2], a);
+    else gfx_rect(tela, tex, GFX_SNAP, 0.0f, pontilhar ? 1.0f : 0.0f, 1.0f, 0.0f, 0, 0, 0, a);
     ESC_REAL_FIM(); }
-  gfx_tex_aspect_atual = aspAnt;
+  gfx_tex_aspect_atual = aspAnt; gfx_desliza_atual = deslAnt; gfx_card_forcar_cover_atual = coverAnt;
+}
+// DIAGNOSTICO (fundo.c, o despejo de uma vez por fundo por execucao): leituras
+// de uma vez, nunca por quadro.
+static int bmpGravar(const char *caminho, unsigned char *px, int w, int h) {
+  // 32 bits, linhas de baixo para cima (a ordem do glReadPixels), R<->B trocados.
+  unsigned char cab[54] = { 0 };
+  unsigned int n = (unsigned int)w * (unsigned int)h * 4u, tam = 54u + n, i;
+  char tmp[600];
+  FILE *f;
+  for (i = 0; i < n; i += 4) { unsigned char t = px[i]; px[i] = px[i + 2]; px[i + 2] = t; }
+  cab[0] = 'B'; cab[1] = 'M';
+  cab[2] = tam & 255; cab[3] = (tam >> 8) & 255; cab[4] = (tam >> 16) & 255; cab[5] = (tam >> 24) & 255;
+  cab[10] = 54; cab[14] = 40;
+  cab[18] = w & 255; cab[19] = (w >> 8) & 255;
+  cab[22] = h & 255; cab[23] = (h >> 8) & 255;
+  cab[26] = 1; cab[28] = 32;
+  cab[34] = n & 255; cab[35] = (n >> 8) & 255; cab[36] = (n >> 16) & 255; cab[37] = (n >> 24) & 255;
+  snprintf(tmp, sizeof tmp, "%s.tmp", caminho);
+  f = fopen(tmp, "wb");
+  if (!f) return 0;
+  fwrite(cab, 1, 54, f); fwrite(px, 1, n, f); fclose(f);
+  return rename(tmp, caminho) == 0;
+}
+int gfx_luz_canal_bmp(GLuint tex, const char *caminho) {
+  int canal, k, ok = 0;
+  unsigned char *px;
+  GLint ant;
+  for (canal = 0; canal < CAN_N; canal++) for (k = 0; k < CAN_ALVOS; k++)
+    if (tex && canTex[canal][k] == tex) goto achou;
+  return 0;
+achou:
+  px = malloc((size_t)AMB_W * AMB_H * 4);
+  if (!px) return 0;
+  ant = fboLigado();
+  glBindFramebuffer(GL_FRAMEBUFFER, canFbo[canal][k]);
+  glReadPixels(0, 0, AMB_W, AMB_H, GL_RGBA, GL_UNSIGNED_BYTE, px);
+  glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)ant);
+  ok = bmpGravar(caminho, px, AMB_W, AMB_H);
+  free(px);
+  return ok;
+}
+int gfx_luz_canal_px(GLuint tex, float u, float v, unsigned char rgb[3]) {
+  int canal, k;
+  unsigned char px[4];
+  GLint ant;
+  for (canal = 0; canal < CAN_N; canal++) for (k = 0; k < CAN_ALVOS; k++)
+    if (tex && canTex[canal][k] == tex) goto achou;
+  return 0;
+achou:
+  ant = fboLigado();
+  glBindFramebuffer(GL_FRAMEBUFFER, canFbo[canal][k]);
+  // u da esquerda, v de cima (layout); o FBO tem a origem embaixo
+  glReadPixels((int)(u * AMB_W), (int)((1.0f - v) * AMB_H), 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+  glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)ant);
+  rgb[0] = px[0]; rgb[1] = px[1]; rgb[2] = px[2];
+  return 1;
+}
+int gfx_tela_px(float u, float v, unsigned char rgb[3]) {
+  unsigned char px[4];
+  int x = (int)(u * (float)telaW), y = (int)((1.0f - v) * (float)telaH);
+  if (snapAtivo || miniAtiva || telaW <= 0 || telaH <= 0) return 0;
+  if (x >= telaW) x = telaW - 1;
+  if (y >= telaH) y = telaH - 1;
+  glReadPixels(x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+  rgb[0] = px[0]; rgb[1] = px[1]; rgb[2] = px[2];
+  return 1;
+}
+int gfx_tela_bmp(const char *caminho) {
+  // A tela inteira lida uma vez e gravada pela metade (um pixel de cada 2x2):
+  // ~2 MB num 1080p, no /tmp da TV.
+  int w = telaW, h = telaH, w2, h2, x, y, ok;
+  unsigned char *px, *meio;
+  if (snapAtivo || miniAtiva || w <= 1 || h <= 1) return 0;
+  w2 = w / 2; h2 = h / 2;
+  px = malloc((size_t)w * h * 4);
+  meio = malloc((size_t)w2 * h2 * 4);
+  if (!px || !meio) { free(px); free(meio); return 0; }
+  glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px);
+  for (y = 0; y < h2; y++) for (x = 0; x < w2; x++)
+    memcpy(meio + ((size_t)y * w2 + x) * 4, px + ((size_t)(y * 2) * w + x * 2) * 4, 4);
+  ok = bmpGravar(caminho, meio, w2, h2);
+  free(px); free(meio);
+  return ok;
 }
 // 78% e o vidro de sempre: o fator escala o alfa do miolo (folha e painel).
 float gfx_vidro_opacidade(void) { return ajustes_vidro_opacidade() / 0.78f; }

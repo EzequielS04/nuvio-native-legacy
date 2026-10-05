@@ -1,13 +1,20 @@
-// FUNDO ASSADO (gfx_fundo_assado, fundo.c): o "Frost" e a "Arte borrada" de
-// tela cheia saem de um quadro pequeno de 320x180 pintado so quando a chave
-// muda. Na C9 (Mali-G71) os dois sairam QUASE PRETOS depois do 1bcd6ebe, e as
-// capturas do Mac continuavam iguais. Este teste:
-//   (1) le de volta o PROPRIO quadro pequeno (glReadPixels num FBO dele) e
-//       confere que a pintura chegou la, nao so o clear;
-//   (2) compara a tela assada com o desenho direto de sempre (Frost e Borrada);
-//   (3) assa a Borrada com o estado de GL que um quadro de verdade deixa (a
-//       mistura desligada por quem desenhou antes) e confere que nao escurece;
-//   (4) arte sem paleta -> paleta chega: o assado sai na hora certa.
+// FUNDO PELO CAMINHO DA LUZ IMERSIVA (gfx_luz_canal, fundo.c): o "Frost" e a
+// "Arte borrada" de tela cheia saem de um quadro pequeno de 320x180 assado pelo
+// MESMO codigo da luz imersiva (ambCriarAlvos/ambAssarEm) so quando a chave
+// muda, e vao a tela pela passada do ambPintar (GFX_SNAP opaco). Na C9
+// (Mali-G71) o assado proprio do 1bcd6ebe saiu escuro e as capturas do Mac
+// continuavam iguais. Este teste:
+//   (1) le de volta o PROPRIO quadro pequeno e confere que a pintura chegou la;
+//   (2) compara a tela assada com o desenho direto de sempre (Frost e Borrada)
+//       e confere que a conferencia de uma vez do fundo.c (pixel da tela contra
+//       a conta do CPU) passa;
+//   (3) assa com a mistura desligada por fora: nao escurece;
+//   (4) com a Dinamica imersiva ligada (outra paleta na luz da cena) a Borrada
+//       assa UMA vez em varios quadros (nao disputa o quadro da imersiva) e sai
+//       igual;
+//   (5) arte sem paleta -> paleta chega: o assado sai na hora certa;
+//   (6) o despejo de uma vez (fundo.c) gravou a tela e o quadro pequeno dos dois
+//       fundos, sem pedido nenhum, e nao grava de novo.
 // Roda no GL 2.1 do Mac e, com NV_GLES_NO_MAC, no GLES2 do ANGLE (o dialeto e
 // as regras de FBO da TV): bash tests/fundo_assado.sh [gles]
 #include "gfx.h"
@@ -23,6 +30,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #ifdef NV_GLES_NO_MAC
 #include <EGL/egl.h>
 #endif
@@ -96,13 +105,12 @@ static double lumMax(double a[NA][3]) {
 }
 
 // Desenha o fundo `modo` duas vezes: assado e direto. Devolve a diferenca.
+// O assado vai primeiro: e o primeiro desenho opaco que o despejo de uma vez
+// grava, como no app.
 static double comparar(int modo, const char *chave, int misturaDesligada, const char *nome) {
   double a[NA][3], b[NA][3], d;
   int antes = gfx_n_fundo_assados;
   GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-  gfx_fundo_assado_desligado = 1;
-  quadro(); fundo_desenhar_modo(modo, tela, 0.0f, chave, 1.0f); grade(b);
-  gfx_fundo_assado_desligado = 0;
   quadro();
   // O estado que um quadro de verdade pode deixar: alguem desenhou antes com a
   // mistura desligada (o furo do video, gfx_ambiente opaco) — glDisable direto,
@@ -111,6 +119,9 @@ static double comparar(int modo, const char *chave, int misturaDesligada, const 
   fundo_desenhar_modo(modo, tela, 0.0f, chave, 1.0f);
   if (misturaDesligada) glEnable(GL_BLEND);
   grade(a);
+  gfx_fundo_assado_desligado = 1;
+  quadro(); fundo_desenhar_modo(modo, tela, 0.0f, chave, 1.0f); grade(b);
+  gfx_fundo_assado_desligado = 0;
   d = dif(a, b);
   printf("%s: assado %d vez(es), diferenca max %.1f niveis, luz max assado %.1f / direto %.1f\n", nome,
          gfx_n_fundo_assados - antes, d, lumMax(a), lumMax(b));
@@ -148,34 +159,28 @@ int main(void) {
 
   /* (1) O QUADRO PEQUENO EM SI: a pintura chega nele (nao so o clear). */
   { float k[1] = { 7.0f };
-    GLuint t, f2;
-    double esq[3], dir[3];
+    GLuint t;
+    unsigned char esq[3], dir[3];
     quadro();
-    t = gfx_fundo_assado(2, k, 1, pintarTeste, NULL);
+    t = gfx_luz_canal(1, k, 1, pintarTeste, NULL);
     assert(t && pintouCor == 1);
-    // a conferencia da criacao (padrao assado e lido pelo GFX_FOSCO) passou
-    printf("conferencia da criacao: %d\n", gfx_fundo_assado_conferencia);
-    if (gfx_fundo_assado_conferencia != 1) { printf("FALHA: conferencia\n"); falhas++; }
-    glGenFramebuffers(1, &f2); glBindFramebuffer(GL_FRAMEBUFFER, f2);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t, 0);
-    assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
-    media(f2, 320, 180, 20, 20, 100, 140, esq);
-    media(f2, 320, 180, 200, 20, 100, 140, dir);
-    glDeleteFramebuffers(1, &f2); gfx_tex_esquecer(0);
-    printf("quadro pequeno: esquerda %.0f,%.0f,%.0f  direita %.0f,%.0f,%.0f\n",
-           esq[0], esq[1], esq[2], dir[0], dir[1], dir[2]);
-    // esquerda: fundo + 50% vermelho; direita: verde opaco (dither: +-1)
+    assert(gfx_luz_canal_px(t, 0.25f, 0.5f, esq) && gfx_luz_canal_px(t, 0.75f, 0.5f, dir));
+    printf("quadro pequeno: esquerda %d,%d,%d  direita %d,%d,%d\n", esq[0], esq[1], esq[2], dir[0], dir[1], dir[2]);
+    // esquerda: fundo + 50% vermelho; direita: verde opaco
     if (!(esq[0] > 120 && esq[0] < 140 && dir[1] > 250 && dir[0] < 3)) {
       printf("FALHA: o quadro pequeno nao recebeu a pintura\n"); falhas++; }
     // mesma chave: nao repinta
-    quadro(); assert(gfx_fundo_assado(2, k, 1, pintarTeste, NULL) == t && pintouCor == 1);
+    quadro(); assert(gfx_luz_canal(1, k, 1, pintarTeste, NULL) == t && pintouCor == 1);
   }
 
-  /* (2) FROST: assado = direto (dither e ampliacao: alguns niveis). */
+  /* (2) FROST: assado = direto (dither e ampliacao: alguns niveis), e a
+   * conferencia do fundo.c passa. */
   d = comparar(FUNDO_FROST, NULL, 0, "frost");
   if (d > 4.0) { printf("FALHA: frost assado difere do direto\n"); falhas++; }
+  printf("conferencia frost: %d\n", fundo_conferencia(FUNDO_FROST));
+  if (fundo_conferencia(FUNDO_FROST) != 1) { printf("FALHA: conferencia do frost\n"); falhas++; }
 
-  /* (3) ARTE BORRADA, com a paleta de uma arte. */
+  /* (2b) ARTE BORRADA, com a paleta de uma arte. */
   memset(&p, 0, sizeof p);
   p.ok = 1;
   { const float r[4][3] = { { .80f, .25f, .20f }, { .20f, .45f, .85f }, { .85f, .70f, .20f }, { .30f, .75f, .40f } };
@@ -184,14 +189,48 @@ int main(void) {
   assert(corviva_paleta("teste://arte-a", &p) && p.ok);
   d = comparar(FUNDO_BORRADA, "teste://arte-a", 0, "borrada");
   if (d > 4.0) { printf("FALHA: borrada assada difere da direta\n"); falhas++; }
+  printf("conferencia borrada: %d\n", fundo_conferencia(FUNDO_BORRADA));
+  if (fundo_conferencia(FUNDO_BORRADA) != 1) { printf("FALHA: conferencia da borrada\n"); falhas++; }
 
-  /* (4) O MESMO COM A MISTURA DESLIGADA POR FORA quando o assado roda. Antes
-   * da correcao isto saia QUASE PRETO (luz max 6,9 contra 54,3): o veu de 28%
-   * substituia a luz. O assado agora poe o proprio estado (mistura, funcao,
-   * viewport, uTela, unidade 0 solta) e nao depende do que o quadro deixou. */
+  /* (3) O MESMO COM A MISTURA DESLIGADA POR FORA quando o assado roda (no
+   * 1bcd6ebe isto saia QUASE PRETO: o veu substituia a luz). */
   p.regiao[0][0] = .70f; corviva_anotar("teste://arte-b", &p);
   d = comparar(FUNDO_BORRADA, "teste://arte-b", 1, "borrada, mistura desligada antes");
   if (d > 4.0) { printf("FALHA: borrada assada com a mistura desligada difere\n"); falhas++; }
+
+  /* (4) COM A DINAMICA IMERSIVA LIGADA: a luz da cena tem OUTRA paleta e e
+   * assada por gfx_ambiente_preparar todo quadro (main.c). Antes a Borrada
+   * usava o mesmo quadro e as chaves se revezavam (dois assados por quadro).
+   * Agora: um assado da Borrada em seis quadros, e a tela igual a sem imersiva. */
+  { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+    double a1[NA][3], b1[NA][3];
+    float ambAnt[4][3], forcaAnt = nv_ambiente_forca;
+    int antes, i, j;
+    quadro(); fundo_desenhar_modo(FUNDO_BORRADA, tela, 0.0f, "teste://arte-b", 1.0f); grade(b1);
+    memcpy(ambAnt, nv_ambiente_viva, sizeof ambAnt);
+    for (i = 0; i < 4; i++) for (j = 0; j < 3; j++) nv_ambiente_viva[i][j] = 0.1f + 0.2f * (float)i;
+    nv_ambiente_forca = 1.0f;
+    antes = gfx_n_fundo_assados;
+    for (i = 0; i < 6; i++) {
+      glBindFramebuffer(GL_FRAMEBUFFER, fbo); glViewport(0, 0, LW, LH);
+      gfx_novo_quadro();
+      nv_tempo_viva = 0.2f * (float)i;   // a respiracao: a luz da cena reassa
+      gfx_ambiente_preparar();
+      glClearColor(NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
+      glClear(GL_COLOR_BUFFER_BIT);
+      gfx_ambiente(1.0f);
+      fundo_desenhar_modo(FUNDO_BORRADA, tela, 0.0f, "teste://arte-b", 1.0f);
+      gfx_ambiente_descarregar();
+    }
+    grade(a1);
+    d = dif(a1, b1);
+    printf("borrada com a imersiva: %d assado(s) em 6 quadros, diferenca max %.1f niveis\n",
+           gfx_n_fundo_assados - antes, d);
+    if (gfx_n_fundo_assados - antes > 0) { printf("FALHA: a borrada reassou com a imersiva\n"); falhas++; }
+    if (d > 4.0) { printf("FALHA: borrada com a imersiva difere\n"); falhas++; }
+    memcpy(nv_ambiente_viva, ambAnt, sizeof ambAnt);
+    nv_ambiente_forca = forcaAnt; nv_tempo_viva = 0.0f;
+  }
 
   /* (5) ARTE SEM PALETA AINDA -> PALETA CHEGA: sem paleta nada e assado (o
    * caminho da arte decide); com ela, o proximo quadro assa a cor certa. */
@@ -205,6 +244,33 @@ int main(void) {
     media(fbo, LW, LH, 20, 500, 60, 60, m);
     printf("borrada com a paleta que chegou: borda esquerda %.0f,%.0f,%.0f\n", m[0], m[1], m[2]);
     if (!(m[0] > m[2] + 15)) { printf("FALHA: a luz da esquerda (vermelha) nao apareceu\n"); falhas++; } }
+
+  /* (6) DESPEJO DE UMA VEZ: os desenhos acima ja gravaram, sem pedido, a tela
+   * e o quadro pequeno de cada fundo; apagados, mais 120 desenhos nao regravam. */
+  { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+    static const char *const nome[2] = { "frost", "borrada" };
+    char b1[2][700], b2[2][700];
+    struct stat st;
+    int i, k;
+    const char *dir = getenv("NUVIO_DUMP_FUNDO_DIR");
+    assert(dir);
+    for (k = 0; k < 2; k++) {
+      long t1, t2;
+      snprintf(b1[k], sizeof b1[k], "%s/nuvio-fundo-%s.bmp", dir, nome[k]);
+      snprintf(b2[k], sizeof b2[k], "%s/nuvio-fundo-%s-assado.bmp", dir, nome[k]);
+      t1 = stat(b1[k], &st) == 0 ? (long)st.st_size : -1L;
+      t2 = stat(b2[k], &st) == 0 ? (long)st.st_size : -1L;
+      printf("despejo %s: tela %ld bytes, quadro pequeno %ld bytes\n", nome[k], t1, t2);
+      if (t1 != 54 + 960 * 540 * 4 || t2 != 54 + 320 * 180 * 4) { printf("FALHA: despejo %s\n", nome[k]); falhas++; }
+      unlink(b1[k]); unlink(b2[k]);
+    }
+    for (i = 0; i < 60; i++) {
+      quadro(); fundo_desenhar_modo(FUNDO_FROST, tela, 0.0f, NULL, 1.0f);
+      quadro(); fundo_desenhar_modo(FUNDO_BORRADA, tela, 0.0f, "teste://arte-b", 1.0f);
+    }
+    for (k = 0; k < 2; k++)
+      if (stat(b1[k], &st) == 0 || stat(b2[k], &st) == 0) { printf("FALHA: o despejo de %s repetiu\n", nome[k]); falhas++; }
+  }
 
   if (falhas) { printf("fundo_assado: %d falha(s)\n", falhas); return 1; }
   printf("fundo_assado: ok\n");

@@ -39,4 +39,9 @@ void fundo_desenhar_modo(int modo, GfxRect area, float raioPx, const char *arteU
 // cena. Refaz so quando a paleta muda.
 void fundo_fosco_quadro(void);
 
+// A conferencia de uma vez do fundo de tela cheia `modo` (FUNDO_BORRADA ou
+// FUNDO_FROST, fundo.c): -1 ainda nao, 1 o pixel da tela bateu com a conta do
+// CPU, 0 errou (o fundo segue no desenho direto pela sessao).
+int fundo_conferencia(int modo);
+
 #endif

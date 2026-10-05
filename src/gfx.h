@@ -536,19 +536,26 @@ void gfx_vidro_fosco_bloquear(void);
 // Fonte do fosco ate o proximo gfx_novo_quadro: o fundo assado deste quadro
 // (fundo.c, "Arte borrada"), no lugar do assado da luz imersiva.
 void gfx_vidro_fosco_fonte(GLuint tex);
-// FUNDO ASSADO (fundo.c): o quadro pequeno (320x180) do `slot` (0..2), pintado
-// por `pintar(ctx)` em coordenadas de layout de tela cheia so quando `chave`
-// (n <= 24 floats) muda. Devolve a textura (0 = sem FBO: desenhe direto).
-GLuint gfx_fundo_assado(int slot, const float *chave, int n, void (*pintar)(void *), void *ctx);
-// Um quad de tela cheia com o assado (GFX_FOSCO, nv_dither): opaco e sem
-// mistura com alfa 1.
-void gfx_fundo_assado_desenhar(GLuint tex, float a);
+// CANAIS DE FUNDO DA LUZ ASSADA (fundo.c, "Arte borrada" e "Frost" de tela
+// cheia): o quadro pequeno (320x180, GL_RGB) do `canal` (0..1), pintado por
+// `pintar(ctx)` em coordenadas de layout de tela cheia pelo MESMO assado da luz
+// imersiva, so quando `chave` (n <= 24 floats) muda. Devolve a textura (0 =
+// sem FBO: desenhe direto).
+GLuint gfx_luz_canal(int canal, const float *chave, int n, void (*pintar)(void *), void *ctx);
+// A passada de tela da luz imersiva (GFX_SNAP de tela cheia, opaca e sem
+// mistura com alfa 1). `veu` = { r, g, b, forca } aplicado na mesma passada, ou
+// NULL; `pontilhar` = a cor pelo nv_dither.
+void gfx_luz_canal_desenhar(GLuint tex, float a, const float *veu, int pontilhar);
 extern int gfx_n_fundo_assados;
 // 1 = o desenho direto de sempre, sem quadro pequeno (testes comparam os dois).
 extern int gfx_fundo_assado_desligado;
-// A conferencia de criacao (gfx.c): -1 nao feita, 1 o padrao voltou certo, 0
-// errado (o fundo fica no desenho direto pela sessao).
-extern int gfx_fundo_assado_conferencia;
+// DIAGNOSTICO DE UMA VEZ (fundo.c): le um pixel do quadro pequeno `tex` ou do
+// alvo atual (u da esquerda, v de cima, 0..1), e grava em BMP o quadro pequeno
+// (320x180) ou o alvo atual (metade do tamanho). Devolvem 0 se nao deu.
+int gfx_luz_canal_px(GLuint tex, float u, float v, unsigned char rgb[3]);
+int gfx_tela_px(float u, float v, unsigned char rgb[3]);
+int gfx_luz_canal_bmp(GLuint tex, const char *caminho);
+int gfx_tela_bmp(const char *caminho);
 // Fator da opacidade do vidro: 1,0 = os 78% de sempre (ajustes_vidro_opacidade / 0,78).
 float gfx_vidro_opacidade(void);
 void gfx_ambiente(float alfa);
