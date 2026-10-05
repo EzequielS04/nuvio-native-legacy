@@ -414,6 +414,53 @@ static void marcarTentada(const char *imdb) {
   pthread_mutex_unlock(&tentadasTrava);
 }
 
+// MEMORIA DAS FICHAS DO CATALOGO (B2, arranque). O log da C9 mostra os MESMOS
+// ids sendo baixados de novo a cada volta da descoberta (tt4955642 tres vezes
+// nos primeiros 40 s, a lista inteira do "Continuar" refeita 3x): cada volta
+// pagava de novo uma ficha por titulo, ~12-20 GETs, para o texto e a duracao que
+// nao mudam em minutos. Guarda o corpo por (tipo, id, idioma) por 15 min, no
+// maximo 24 fichas e so as de ate 256 KB (o videos[] de serie longa e grande).
+// Falha nunca e guardada: o proximo ciclo tenta a rede de novo.
+#define TK_FICHA_MAX 24
+#define TK_FICHA_TTL_S 900
+#define TK_FICHA_BYTES (256 * 1024)
+static struct { char chave[64]; char *corpo; time_t quando; } fichas[TK_FICHA_MAX];
+static int fichaProx;
+static pthread_mutex_t fichaTrava = PTHREAD_MUTEX_INITIALIZER;
+
+static char *fichaChave(char *k, size_t n, const char *tipo, const char *id) {
+  snprintf(k, n, "%s/%s/%s", tipo, id, metaprov_idioma());
+  return k;
+}
+static char *fichaBuscar(const char *tipo, const char *id) {
+  char k[64], *r = NULL;
+  int i;
+  fichaChave(k, sizeof k, tipo, id);
+  pthread_mutex_lock(&fichaTrava);
+  for (i = 0; i < TK_FICHA_MAX && !r; i++)
+    if (fichas[i].corpo && !strcmp(fichas[i].chave, k) &&
+        time(NULL) - fichas[i].quando < TK_FICHA_TTL_S)
+      r = strdup(fichas[i].corpo);
+  pthread_mutex_unlock(&fichaTrava);
+  return r;
+}
+static void fichaGuardar(const char *tipo, const char *id, const char *corpo) {
+  char k[64], *c;
+  int i;
+  if (!corpo || strlen(corpo) > TK_FICHA_BYTES) return;
+  c = strdup(corpo);
+  if (!c) return;
+  fichaChave(k, sizeof k, tipo, id);
+  pthread_mutex_lock(&fichaTrava);
+  for (i = 0; i < TK_FICHA_MAX; i++)
+    if (fichas[i].corpo && !strcmp(fichas[i].chave, k)) break;
+  if (i == TK_FICHA_MAX) { i = fichaProx; fichaProx = (fichaProx + 1) % TK_FICHA_MAX; }
+  free(fichas[i].corpo);
+  snprintf(fichas[i].chave, sizeof fichas[i].chave, "%s", k);
+  fichas[i].corpo = c; fichas[i].quando = time(NULL);
+  pthread_mutex_unlock(&fichaTrava);
+}
+
 static int enfeitar(CatItem *d, const char *tipo) {
   char url[300], *corpo;
   char serie[24];
@@ -445,7 +492,11 @@ static int enfeitar(CatItem *d, const char *tipo) {
   // 8 s e nao 20: ate oito destes em paralelo antes da primeira fileira.
   // Medido no Mac: 2,1 s no caso bom; com um item lento eram 20 s vazios.
   // Catalogo do Nuvio primeiro (5 s, e some por 1 min se cair), Cinemeta depois.
-  corpo = metaprov_meta(tipo, serie, 8, NULL);
+  corpo = fichaBuscar(tipo, serie);
+  if (!corpo) {
+    corpo = metaprov_meta(tipo, serie, 8, NULL);
+    if (corpo) fichaGuardar(tipo, serie, corpo);
+  }
   marcarTentada(d->imdb);
   if (!corpo) {
     // "A seguir" sem meta: nao da para confirmar que o episodio existe.

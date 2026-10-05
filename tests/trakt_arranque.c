@@ -128,6 +128,11 @@ int main(void) {
   for (i = 1; i < n; i++) assert(v[i - 1].retomadoMs >= v[i].retomadoMs);
   (void)0;
   assert(nHist >= 2);          // historico + filmes vistos chegaram ao mapa
+  { double a = agoraMs(); int m;
+    static CatItem v2[12];
+    m = trakt_continuar(v2, 12);
+    printf("[arranque-trakt] 2a volta (memoria): %d itens em %.0f ms\n", m, agoraMs() - a);
+    assert(m == n); }
   puts("trakt_arranque: PASS");
   return 0;
 }
