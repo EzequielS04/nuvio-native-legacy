@@ -614,6 +614,7 @@
   T("Assistir", "Дивитися"),
   T("Assistir T%dE%d", "Дивитися S%dE%d"),
   T("Assistir do começo", "Дивитися з початку"),
+  T("Assistir trailer", "Дивитися трейлер"),
   T("Assistiu", "Переглянув"),
   T("Assistiu recentemente", "Нещодавно переглянуте"),
   T("Assistiu recentemente: %s", "Нещодавно переглянуте: %s"),

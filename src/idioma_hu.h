@@ -615,6 +615,7 @@
   T("Assistir", "Megnézés"),
   T("Assistir T%dE%d", "T%dE%d megnézése"),
   T("Assistir do começo", "Lejátszás az elejétől"),
+  T("Assistir trailer", "Előzetes megtekintése"),
   T("Assistiu", "Megnézte"),
   T("Assistiu recentemente", "Nemrég megnézve"),
   T("Assistiu recentemente: %s", "Nemrég nézte: %s"),

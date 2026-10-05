@@ -614,6 +614,7 @@
   { "Assistir", "Watch" },
   { "Assistir T%dE%d", "Watch S%dE%d" },
   { "Assistir do começo", "Play from beginning" },
+  { "Assistir trailer", "Watch trailer" },
   { "Assistiu", "Watched" },
   { "Assistiu recentemente", "Recently watched" },
   { "Assistiu recentemente: %s", "Watched recently: %s" },

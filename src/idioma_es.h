@@ -614,6 +614,7 @@
   T("Assistir", "Ver"),
   T("Assistir T%dE%d", "Ver T%dE%d"),
   T("Assistir do começo", "Ver desde el principio"),
+  T("Assistir trailer", "Ver tráiler"),
   T("Assistiu", "Vio"),
   T("Assistiu recentemente", "Visto recientemente"),
   T("Assistiu recentemente: %s", "Vio hace poco: %s"),

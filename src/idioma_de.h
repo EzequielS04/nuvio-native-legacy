@@ -614,6 +614,7 @@
   T("Assistir", "Schauen"),
   T("Assistir T%dE%d", "S%dE%d ansehen"),
   T("Assistir do começo", "Von Anfang an abspielen"),
+  T("Assistir trailer", "Trailer ansehen"),
   T("Assistiu", "Gesehen"),
   T("Assistiu recentemente", "Zuletzt gesehen"),
   T("Assistiu recentemente: %s", "Kürzlich gesehen: %s"),

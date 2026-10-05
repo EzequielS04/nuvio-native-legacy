@@ -615,6 +615,7 @@
   T("Assistir", "Se"),
   T("Assistir T%dE%d", "Se S%dE%d"),
   T("Assistir do começo", "Spill av fra begynnelsen"),
+  T("Assistir trailer", "Se traileren"),
   T("Assistiu", "Så"),
   T("Assistiu recentemente", "Sett nylig"),
   T("Assistiu recentemente: %s", "Så nylig: %s"),

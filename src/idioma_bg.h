@@ -615,6 +615,7 @@
   T("Assistir", "Гледай"),
   T("Assistir T%dE%d", "Гледай S%dE%d"),
   T("Assistir do começo", "Пусни от началото"),
+  T("Assistir trailer", "Гледай трейлъра"),
   T("Assistiu", "Гледа"),
   T("Assistiu recentemente", "Гледани наскоро"),
   T("Assistiu recentemente: %s", "Наскоро гледано: %s"),

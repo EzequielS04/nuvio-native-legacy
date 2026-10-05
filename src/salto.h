@@ -75,4 +75,17 @@ static inline float salto_tecla(SaltoEst *st, int novo, int flagRepeat,
   return salto_passo(agoraMs - st->inicio, duracaoSeg);
 }
 
+
+// QUANDO O AVANCO TERMINA (#235). O avanco ja e "escolher e depois confirmar":
+// video pausado, so a barra anda, UMA busca no fim, OK confirma na hora. O que
+// faltava e o tempo de espera: 420 ms nao davam folga para olhar a miniatura
+// do Seekr e acertar o ponto ("1 s de atraso antes de aplicar"). Com o Seekr
+// ligado a espera e 1 s; sem miniatura nao ha o que olhar e ficam os 420 ms,
+// para o filme voltar a tocar logo depois de um toque so.
+#define SALTO_FIM_MS        420u
+#define SALTO_FIM_SEEKR_MS 1000u
+static inline unsigned salto_fim_ms(int seekrLigado) {
+  return seekrLigado ? SALTO_FIM_SEEKR_MS : SALTO_FIM_MS;
+}
+
 #endif

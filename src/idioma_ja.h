@@ -615,6 +615,7 @@
   T("Assistir", "再生"),
   T("Assistir T%dE%d", "S%dE%d を再生"),
   T("Assistir do começo", "最初から再生"),
+  T("Assistir trailer", "予告編を見る"),
   T("Assistiu", "視聴済み"),
   T("Assistiu recentemente", "最近視聴した作品"),
   T("Assistiu recentemente: %s", "最近見た作品: %s"),

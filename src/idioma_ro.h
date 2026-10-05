@@ -614,6 +614,7 @@
   T("Assistir", "Vizionează"),
   T("Assistir T%dE%d", "Vizionează S%dE%d"),
   T("Assistir do começo", "Redă de la început"),
+  T("Assistir trailer", "Vezi trailerul"),
   T("Assistiu", "A vizionat"),
   T("Assistiu recentemente", "Vizionat recent"),
   T("Assistiu recentemente: %s", "A văzut recent: %s"),

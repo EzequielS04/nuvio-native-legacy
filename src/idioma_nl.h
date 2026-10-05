@@ -615,6 +615,7 @@
   T("Assistir", "Kijken"),
   T("Assistir T%dE%d", "Kijk S%dE%d"),
   T("Assistir do começo", "Afspelen vanaf het begin"),
+  T("Assistir trailer", "Trailer bekijken"),
   T("Assistiu", "Bekeken"),
   T("Assistiu recentemente", "Onlangs bekeken"),
   T("Assistiu recentemente: %s", "Onlangs bekeken: %s"),

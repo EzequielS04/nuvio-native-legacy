@@ -615,6 +615,7 @@
   T("Assistir", "Xem"),
   T("Assistir T%dE%d", "Xem S%dE%d"),
   T("Assistir do começo", "Phát từ đầu"),
+  T("Assistir trailer", "Xem trailer"),
   T("Assistiu", "Đã xem"),
   T("Assistiu recentemente", "Đã xem gần đây"),
   T("Assistiu recentemente: %s", "Vừa xem: %s"),

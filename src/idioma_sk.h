@@ -615,6 +615,7 @@
   T("Assistir", "Pozerať"),
   T("Assistir T%dE%d", "Pozrieť S%dE%d"),
   T("Assistir do começo", "Prehrať od začiatku"),
+  T("Assistir trailer", "Prehrať trailer"),
   T("Assistiu", "Videl(a)"),
   T("Assistiu recentemente", "Nedávno pozreté"),
   T("Assistiu recentemente: %s", "Nedávno pozerané: %s"),

@@ -615,6 +615,7 @@
   T("Assistir", "İzle"),
   T("Assistir T%dE%d", "S%dB%d izle"),
   T("Assistir do começo", "Baştan oynat"),
+  T("Assistir trailer", "Fragmanı izle"),
   T("Assistiu", "İzledi"),
   T("Assistiu recentemente", "Son izlenenler"),
   T("Assistiu recentemente: %s", "Son izlediği: %s"),

@@ -47,6 +47,16 @@ int main(void) {
   CHECK(salto_passo(1499, 7200.0f) == 10.0f && salto_passo(1500, 7200.0f) == 30.0f, "degrau 1");
   { float c = segurar(10000, 100, 1500.0f); printf("episodio 25 min, 10 s: %.0f s\n", c);
     CHECK(c < segurar(10000, 100, filme), "episodio curto deve andar menos"); }
+  // #235: janela de confirmacao. Com Seekr 1 s, sem ele 420 ms; a rajada a 100 ms
+  // nunca fecha o avanco no meio (a janela e maior que a repeticao), e uma
+  // rajada com pausa de 600 ms continua UMA so decisao com Seekr, duas sem.
+  CHECK(salto_fim_ms(1) == 1000u && salto_fim_ms(0) == 420u, "janela de fim");
+  CHECK(salto_fim_ms(0) > SALTO_REP_MS * 2, "janela maior que a repeticao");
+  { unsigned pausa = 600; int fim1 = pausa > salto_fim_ms(1), fim0 = pausa > salto_fim_ms(0);
+    CHECK(!fim1 && fim0, "pausa de 600 ms: com Seekr segue o mesmo avanco"); }
+  // Repeticoes rapidas (<300 ms) nao empilham passos: o backend recebe o total.
+  { SaltoEst st = {0}; float p = 0; for (int i = 0; i < 4; i++) p += salto_tecla(&st, i == 0, 0, 1000u + i * 90u, filme);
+    CHECK(p == 10.0f, "4 repeticoes em 270 ms valem um passo so, deu %.0f", p); }
   printf(falhas ? "salto: %d falha(s)\n" : "salto OK\n", falhas);
   return falhas != 0;
 }

@@ -1971,9 +1971,20 @@ static int temArte(void) {
   if (!ci || (!ci->imdb[0] && ci->tmdb <= 0)) return 0;
   return !strcmp(ci->tipo, "movie") || !strcmp(ci->tipo, "series");
 }
+// "ASSISTIR TRAILER" (#234): circular proprio na linha de acoes, o ULTIMO. So
+// existe quando ha trailer para tocar (fonte conhecida na ordem do ajuste, ou
+// um trailer do YouTube onde o navegador e o caminho) — sem fonte o botao some
+// em vez de prometer o que nao toca. Independe do "Trailer automatico": com o
+// autoplay desligado e justamente quando a pessoa o procura.
+static int temTrailer(void) {
+  const CatItem *ci = cat_item(idx);
+  if (!ci || (strcmp(ci->tipo, "movie") && strcmp(ci->tipo, "series"))) return 0;
+  if (trailer_suportado() && trailerFonte(0, NULL, 1)) return 1;
+  return extras_n_trailers() > 0;
+}
 static int nBotoesTodos(void) {
   return (ehSerie() ? 3 : 4) + (temInicio() ? 1 : 0) + (temLembrar() ? 1 : 0)
-         + (temRecomendar() ? 1 : 0) + (temArte() ? 1 : 0);
+         + (temRecomendar() ? 1 : 0) + (temArte() ? 1 : 0) + (temTrailer() ? 1 : 0);
 }
 
 static int acoesAgrupadas(void) {
@@ -1992,7 +2003,8 @@ static int nBotoes(void) {
 // "marcar assistido". Quando temInicio, a posicao 1 e o secundario de texto
 // e os circulares escorregam um para a direita.
 enum { ACAO_PRIMARIO = 0, ACAO_LISTA = 1, ACAO_ASSISTIDO = 2, ACAO_FONTES = 3,
-       ACAO_INICIO = 4, ACAO_RECOMENDAR = 5, ACAO_LEMBRAR = 6, ACAO_ARTE = 7 };
+       ACAO_INICIO = 4, ACAO_RECOMENDAR = 5, ACAO_LEMBRAR = 6, ACAO_ARTE = 7,
+       ACAO_TRAILER = 8 };
 static int acaoEm(int n) {
   if (n == 0) return ACAO_PRIMARIO;
   if (temInicio()) {
@@ -2017,11 +2029,41 @@ static int acaoEm(int n) {
   // abriria "assistir do comeco" a partir de um circular de enviar.
   // O "Trocar arte" vem DEPOIS do recomendar, e a conta e a mesma: a ultima
   // posicao da linha, antes do salto da serie.
+  // O "Assistir trailer" e o ultimo, depois do "Trocar arte".
+  if (temTrailer() && n == (ehSerie() ? 3 : 4) + (temRecomendar() ? 1 : 0) + (temArte() ? 1 : 0))
+    return ACAO_TRAILER;
   if (temArte() && n == (ehSerie() ? 3 : 4) + (temRecomendar() ? 1 : 0))
     return ACAO_ARTE;
   if (temRecomendar() && n == (ehSerie() ? 3 : 4)) return ACAO_RECOMENDAR;
   if (n >= 2 && ehSerie()) return n + 1;   // serie pula o olho
   return n;
+}
+
+// Toca o trailer `k` em TELA CHEIA (o OK numa miniatura da fileira e o botao
+// "Assistir trailer" da linha de acoes passam por aqui). Voltar fecha o trailer
+// (trailer_evento) e a pagina continua com o mesmo foco.
+static void tocarTrailerCheio(int k) {
+  const char *u = trailer_suportado() ? trailerFonte(k, NULL, 1) : NULL;
+  if (u) {
+    GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+    trailerEtapa = 0; trailerPrazo = 0;   // tela cheia: so o teclado fecha
+    trailer_abrir(u, tela, trailerfonte_com_som(trailerfonte_tizen()), 1);
+  }
+#ifdef __EMSCRIPTEN__
+  // SAMSUNG: NUNCA o navegador (#136). O window.open do wgt trocava a
+  // pagina do proprio app pelo youtube.com/watch — tocava, mas sem Voltar
+  // para o Nuvio. Sem fonte na ordem do ajuste (ex.: "IMDb" fixo e o
+  // titulo sem IMDb), o cartao focado ainda e um video do YouTube: toca
+  // AQUI, em tela cheia, e o Voltar fecha (trailer_evento).
+  else if (trailer_suportado() && k < extras_n_trailers() &&
+           extras_trailer_yt(k)[0]) {
+    GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+    trailerEtapa = 0; trailerPrazo = 0;
+    trailer_abrir(extras_trailer_yt(k), tela, 0, 1);
+  }
+#else
+  else extras_trailer_abrir(k);
+#endif
 }
 
 void detail_evento(const SDL_Event *e) {
@@ -2251,6 +2293,8 @@ void detail_evento(const SDL_Event *e) {
         pedMarcar = 1;
       } else if (acao == ACAO_ASSISTIDO) {
         pedAssistido = 1;
+      } else if (acao == ACAO_TRAILER) {
+        tocarTrailerCheio(0);
       } else if (acao == ACAO_ARTE) {
         // A tela de escolha come o teclado ate fechar (topo de detail_evento).
         trailer_fechar();
@@ -2327,27 +2371,7 @@ void detail_evento(const SDL_Event *e) {
       // Apple la e so video e o dono nao quer troca para o YouTube por som.
       // No .tpk a tela cheia tem som, e por isso o IMDb (MP4 com audio) vem
       // antes da Apple (so video) em Automatico — trailerFonte(..., 1), #178.
-      const char *u = trailer_suportado() ? trailerFonte(foco.coluna, NULL, 1) : NULL;
-      if (u) {
-        GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-        trailerEtapa = 0; trailerPrazo = 0;   // tela cheia: so o teclado fecha
-        trailer_abrir(u, tela, trailerfonte_com_som(trailerfonte_tizen()), 1);
-      }
-#ifdef __EMSCRIPTEN__
-      // SAMSUNG: NUNCA o navegador (#136). O window.open do wgt trocava a
-      // pagina do proprio app pelo youtube.com/watch — tocava, mas sem Voltar
-      // para o Nuvio. Sem fonte na ordem do ajuste (ex.: "IMDb" fixo e o
-      // titulo sem IMDb), o cartao focado ainda e um video do YouTube: toca
-      // AQUI, em tela cheia, e o Voltar fecha (trailer_evento).
-      else if (trailer_suportado() && foco.coluna < extras_n_trailers() &&
-               extras_trailer_yt(foco.coluna)[0]) {
-        GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-        trailerEtapa = 0; trailerPrazo = 0;
-        trailer_abrir(extras_trailer_yt(foco.coluna), tela, 0, 1);
-      }
-#else
-      else extras_trailer_abrir(foco.coluna);
-#endif
+      tocarTrailerCheio(foco.coluna);
     } else if (foco.fileira == SEC_ESTUDIOS) {
       // OK num logo abre o browse daquela produtora/rede no vertudo — e a
       // mesma pasta sintetica TMDB que as colecoes usam (issue #44), montada
@@ -3301,6 +3325,8 @@ static void desenhaBotao(GfxRect r, const char *rot, int icone, int focado, floa
       // so `progresso >= 90`, e filme visto em outro aparelho (ou marcado pelo
       // menu do cartaz, que zera o progresso) ficava com o olho riscado.
       gfx_icone(ig, cat_visto(cat_item(idx)) ? "visto" : "naovisto", ic, ic, ic, a);
+    } else if (icone == ACAO_TRAILER) {
+      gfx_icone(ig, "aj_clapperboard", ic, ic, ic, a);
     } else if (icone == ACAO_ARTE) {
       // MOLDURA COM MONTANHA: o glifo universal de "imagem". PNG de
       // deploy/app/art/icones como os vizinhos; arte.svg descreve o desenho.
@@ -3367,6 +3393,23 @@ static void desenhaBotao(GfxRect r, const char *rot, int icone, int focado, floa
     gfx_rect(tri, 0, GFX_PLAY, 0, 0, 0, 0.0f, tintaBotao, tintaBotao, tintaBotao, a);
     txt_desenhar_alpha(l, x + iw + NV_DETW2_BTN_GAPI * s,
                        r.y + (r.h - l.h) * 0.5f, a); }
+}
+
+// DICA DO CIRCULAR EM FOCO (so o "Assistir trailer"): o circular e mudo, e uma
+// acao que abre video nao pode ser adivinhada pelo glifo. Pilula escura com o
+// nome logo acima do botao, no mesmo vocabulario da legenda do carrossel.
+static void desenhaDicaBotao(GfxRect rc, const char *texto, float a) {
+  float ar, ag, ab;
+  TxtLinha label = txt_linha_corta(TXT_CAPTION2, texto, 232, 235, 240, 255,
+                                   NV_DETW2_TEXTO_W - 28.0f);
+  float w = label.w + 28.0f, h = 34.0f;
+  GfxRect pill = { rc.x + (rc.w - w) * 0.5f, rc.y - h - 14.0f, w, h };
+  if (pill.x < NV_DETW2_X) pill.x = NV_DETW2_X;
+  ajustes_acento(&ar, &ag, &ab);
+  gfx_cor(pill, .5f, ar, ag, ab, .16f * a);
+  gfx_cor((GfxRect){ pill.x + 1, pill.y + 1, pill.w - 2, pill.h - 2 }, .5f,
+          .075f, .08f, .095f, .76f * a);
+  txt_desenhar_alpha(label, pill.x + 14.0f, pill.y + (h - label.h) * .5f, a);
 }
 
 // Botao secundario: 345x96, raio 64, fundo #222 e texto branco; focado, fundo
@@ -3960,6 +4003,8 @@ static void heroWeb(float a, float desloc) {
         if (action == ACAO_LEMBRAR)
           desenhaLembrete(rc,ci && agenda_lembrete(ci->imdb),selected,a*stagger);
         else desenhaBotao(rc,NULL,action,selected,a*stagger);
+        if (selected && action == ACAO_TRAILER && stagger > .85f)
+          desenhaDicaBotao(rc, i18n("Assistir trailer"), a);
         if (maisAcoes && a > .3f && stagger > .85f)
           ponteiro_alvo(rc.x,rc.y,rc.w,rc.h,ponteiroDetalhe,NULL,-1,j);
       }
@@ -3969,6 +4014,8 @@ static void heroWeb(float a, float desloc) {
       GfxRect rc = { bx, cyBtn - NV_DETW2_CIRC * 0.5f,
                      NV_DETW2_CIRC, NV_DETW2_CIRC };
       desenhaBotao(rc, NULL, acaoEm(nb), nivel == 0 && botao == nb, a);
+      if (nivel == 0 && botao == nb && acaoEm(nb) == ACAO_TRAILER)
+        desenhaDicaBotao(rc, i18n("Assistir trailer"), a);
       if (a > 0.3f) ponteiro_alvo(rc.x, rc.y, rc.w, rc.h, ponteiroDetalhe, NULL, -1, nb);
       bx += NV_DETW2_CIRC + NV_DETW2_BTN_GAP;
     }

@@ -615,6 +615,7 @@
   T("Assistir", "Oglej si"),
   T("Assistir T%dE%d", "Poglej S%dE%d"),
   T("Assistir do começo", "Predvajaj od začetka"),
+  T("Assistir trailer", "Poglej napovednik"),
   T("Assistiu", "Gledal(a)"),
   T("Assistiu recentemente", "Nedavno ogledano"),
   T("Assistiu recentemente: %s", "Nedavno gledano: %s"),

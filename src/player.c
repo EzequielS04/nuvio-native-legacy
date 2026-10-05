@@ -127,7 +127,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 // retoma. 420 ms e maior que o intervalo de repeticao do controle (que na C9
 // fica perto de 100 ms) e menor que o tempo de reacao de quem soltou de
 // proposito.
-#define PLR_SCRUB_FIM_MS  420u
+#define PLR_SCRUB_FIM_MS  SALTO_FIM_MS   // sem Seekr; com ele salto_fim_ms()
 // Duracao de reserva, em segundos, para quando o `meta` do catalogo nao traz
 // tempo de filme (as series trazem "3 temporadas", que nao e duracao de nada).
 // 1h54 e so um numero plausivel para o layout ter o que mostrar — assim que o
@@ -2634,7 +2634,7 @@ void player_atualizar(float dt, Uint32 agora) {
 #ifdef NV_SHOT_HOOKS
   if (shotBusca) { scrubbing = 1; posVisSolto = 1; scrubUltimo = agora; }
 #endif
-  if (scrubbing && agora - scrubUltimo > PLR_SCRUB_FIM_MS) terminarSalto();
+  if (scrubbing && agora - scrubUltimo > salto_fim_ms(ajustes_seekr_ligado())) terminarSalto();
 
   if (comVideo && video_ativo()) {
     double d = video_duracao();

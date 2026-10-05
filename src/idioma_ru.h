@@ -614,6 +614,7 @@
   T("Assistir", "Смотреть"),
   T("Assistir T%dE%d", "Смотреть S%dE%d"),
   T("Assistir do começo", "Смотреть с начала"),
+  T("Assistir trailer", "Смотреть трейлер"),
   T("Assistiu", "Посмотрел"),
   T("Assistiu recentemente", "Недавно просмотренное"),
   T("Assistiu recentemente: %s", "Недавно просмотрено: %s"),
