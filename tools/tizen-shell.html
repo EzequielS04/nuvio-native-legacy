@@ -449,7 +449,16 @@
     // explicar um arranque travado.
     setStatus: function (t) {
       if (!t) return;
-      if (window.__nvDiag) window.__nvDiag(t);
+      // Progresso do preload chega ~150 vezes em 0,1 s: cada uma passava por
+      // mostrar() (anel, log de 200 KB, repintura) no fio principal e comia o
+      // anel de 200 linhas antes de o app falar. So o texto sem contagem e
+      // cada degrau de 10 % vao ao painel; a barra continua a cada chamada.
+      var mp = /\((\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\)/.exec(t);
+      var passo = mp && parseFloat(mp[2]) > 0 ? Math.floor(parseFloat(mp[1]) / parseFloat(mp[2]) * 10) : -1;
+      if (window.__nvDiag && (passo < 0 || passo !== Module.nvPassoPreload)) {
+        Module.nvPassoPreload = passo;
+        window.__nvDiag(t);
+      }
       var barra = document.querySelector("#abertura .barra");
       if (!barra) return;
       var m = /\((\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\)/.exec(t);
