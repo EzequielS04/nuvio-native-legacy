@@ -41,6 +41,8 @@ void descanso_rota(float s, float *px, float *py) {
 #define DESC_ESPERA_S       6.0f   // sem a arte seguinte pronta, quanto esperar no preto
 #define DESC_ROTA_X        140.0f  // o bloco do relogio anda +-140 x +-80 px
 #define DESC_ROTA_Y         80.0f
+#define DESC_CICLO_MS      60000u  // o relogio fica num lugar por um minuto
+#define DESC_TROCA_MS       1500u  // e leva 1,5 s para apagar e 1,5 s para acender
 
 static int   ativoAnt;
 static int   estiloAt = ESM_ESTILO_VITRINE;
@@ -192,11 +194,16 @@ static void desenharRelogio(unsigned agora, float a) {
   int reduz = ajustes_animacoes_reduzidas();
   TxtLinha lh, ld, lp;
   horaAgora(hora, sizeof hora, data, sizeof data, &seg);
-  // O bloco troca de lugar UMA vez por minuto, em pixel inteiro, e fica parado
-  // no resto do tempo. A rota continua (painel OLED), mas andar um pouco a cada
-  // quadro deixava o numeral e a data tremendo: texto em posicao fracionaria
-  // muda de amostragem todo quadro. Pedido do dono, 05/10.
-  { float m = (float)(time(NULL) / 60); descanso_rota(m * 7.0f, &px, &py); }
+  // O bloco troca de lugar A CADA CICLO (painel OLED) e fica PARADO dentro
+  // dele, em pixel inteiro: andar um pouco a cada quadro deixava o numeral e a
+  // data tremendo (texto em posicao fracionaria muda de amostragem todo quadro).
+  // A troca nunca e um salto: nos ultimos DESC_TROCA_MS do ciclo o bloco
+  // apaga devagar, muda de lugar no escuro e acende devagar no novo. Pedido do
+  // dono, 05/10.
+  { unsigned n = agora / DESC_CICLO_MS, f = agora % DESC_CICLO_MS;
+    descanso_rota((float)n * 7.0f, &px, &py);
+    a *= f < DESC_TROCA_MS ? suave((float)f / DESC_TROCA_MS)
+       : f > DESC_CICLO_MS - DESC_TROCA_MS ? suave((float)(DESC_CICLO_MS - f) / DESC_TROCA_MS) : 1.0f; }
   cx = floorf(NV_TELA_W * 0.5f + (px * 2.0f - 1.0f) * DESC_ROTA_X);
   cy = floorf(NV_TELA_H * 0.5f + (py * 2.0f - 1.0f) * DESC_ROTA_Y);
   (void)s; (void)reduz;

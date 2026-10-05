@@ -155,14 +155,17 @@ void esmaecer_desenhar(unsigned agora) {
       }
     }
     if (l.tex) {
-      // Muda de lugar uma vez por minuto, em pixel inteiro (05/10: andar a
-      // cada quadro deixava o texto tremendo).
-      float s = (float)(t / 60) * 60.0f;
+      // Muda de lugar a cada minuto, em pixel inteiro, e parado no resto
+      // (05/10: andar a cada quadro deixava o texto tremendo). A troca apaga e
+      // acende devagar, 1,5 s cada, como a tela de descanso.
+      unsigned n = agora / 60000u, f = agora % 60000u;
+      float s = (float)n * 60.0f, k;
       float px = 0.5f + 0.5f * sinf(s / 41.0f), py = 0.5f + 0.5f * sinf(s / 67.0f + 1.3f);
       float x = floorf(120.0f + px * (NV_TELA_W - 240.0f - (float)l.w));
       float y = floorf(120.0f + py * (NV_TELA_H - 240.0f - (float)l.h));
-      (void)agora;
-      txt_desenhar_alpha(l, x, y, (veu - 0.80f) / 0.12f);
+      k = f < 1500u ? (float)f / 1500.0f : f > 58500u ? (float)(60000u - f) / 1500.0f : 1.0f;
+      k = k * k * (3.0f - 2.0f * k);
+      txt_desenhar_alpha(l, x, y, k * (veu - 0.80f) / 0.12f);
     }
   }
   gfx_opacidade_grupo = g; gfx_osd_mult = m;
