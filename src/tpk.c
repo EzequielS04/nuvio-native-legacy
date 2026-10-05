@@ -338,7 +338,7 @@ void nv_tpk_tecla(const char *nome, int apertou) {
   //    no Play; o app nao tem "so pausar"), inclusive XF86PlayBack, que e o
   //    play/pause do Smart Remote 2021+;
   //  - Stop volta; retroceder/avancar viram as setas (seek do player);
-  //  - CH+ e a azul viram "s" (Salvos), vermelha/verde abrem o painel de log (F9).
+  //  - a azul vira "s" (Salvos), vermelha/verde abrem o painel de log (F9).
   static const struct { const char *n; SDL_Keycode k; } T[] = {
     { "Up", SDLK_UP }, { "Down", SDLK_DOWN }, { "Left", SDLK_LEFT }, { "Right", SDLK_RIGHT },
     { "Return", SDLK_RETURN }, { "KP_Enter", SDLK_RETURN }, { "Select", SDLK_RETURN },
@@ -348,7 +348,10 @@ void nv_tpk_tecla(const char *nome, int apertou) {
     { "XF86AudioRewind", SDLK_LEFT }, { "XF86AudioForward", SDLK_RIGHT },
     { "XF86AudioNext", SDLK_RIGHT }, { "XF86AudioPrev", SDLK_LEFT },
     { "XF86NextChapter", SDLK_RIGHT }, { "XF86PreviousChapter", SDLK_LEFT },
-    { "XF86RaiseChannel", SDLK_s }, { "XF86Blue", SDLK_s },
+    // CH+/CH-: F7/F8, como o Android entrega. main.c os vira em CH+/- de
+    // verdade com canal na tela (zap) e em Salvos / Spotlight fora disso. Era
+    // so o CH+ -> "s", e o CH- nao existia: sem zap na Samsung (dono, 05/10).
+    { "XF86RaiseChannel", SDLK_F7 }, { "XF86LowerChannel", SDLK_F8 }, { "XF86Blue", SDLK_s },
     { "XF86Red", SDLK_F9 }, { "XF86Green", SDLK_F9 },
     { "Minus", SDLK_MINUS },
     // SPOTLIGHT (spotlight.h): o microfone do Smart Remote CHEGA como

@@ -1055,6 +1055,8 @@ namespace NuvioTpk
             "XF86AudioPlay", "XF86AudioPause", "XF86AudioPlayPause", "XF86PlayBack",
             "XF86AudioStop", "XF86AudioRewind", "XF86AudioForward",
             "XF86AudioNext", "XF86AudioPrev", "XF86NextChapter", "XF86PreviousChapter",
+            // CH+/CH-: sem reserva a TV os gasta trocando o canal da antena.
+            "XF86RaiseChannel", "XF86LowerChannel",
         };
 
         void ReservaTeclasMidia()

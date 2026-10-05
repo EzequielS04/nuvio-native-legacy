@@ -367,12 +367,14 @@ static void fotosDoElenco(CatItem *d, const char *imdbSerie, int serie, int mant
   snprintf(url, sizeof url, "%s/find/%s?api_key=%s&external_source=imdb_id",
            TMDB, imdbSerie, chave);
   corpo = rede_baixar(url, 20);
-  if (!corpo) return;
+  // Cada saida muda diz por que: elenco sem foto e sem clique (Samsung, Ted
+  // Lasso, 05/10/2026) chegou ao log sem nenhuma linha que apontasse a causa.
+  if (!corpo) { printf("[desc] elenco %s: /find do TMDB nao respondeu\n", imdbSerie); fflush(stdout); return; }
   { const char *vet = serie ? "tv_results" : "movie_results";
     const char *p = js_array(corpo, NULL, vet);
     if (p) idTmdb = (long)js_num(p, js_fim(p), "id", 0); }
   free(corpo);
-  if (!idTmdb) return;
+  if (!idTmdb) { printf("[desc] elenco %s: o TMDB nao conhece este id (%s)\n", imdbSerie, serie ? "tv" : "movie"); fflush(stdout); return; }
   d->tmdb = idTmdb;
 
   // TITULO E SINOPSE NO IDIOMA DA INTERFACE.
@@ -492,9 +494,16 @@ static void fotosDoElenco(CatItem *d, const char *imdbSerie, int serie, int mant
              TMDB, serie ? "tv" : "movie", idTmdb, chave, desc_tmdb_idioma());
     corpo = rede_baixar(url, 20);
     if (corpo) {
-      desc_tmdb_elenco(corpo, d);
+      int casados = desc_tmdb_elenco(corpo, d), comFoto = 0, k;
+      for (k = 0; k < d->nElenco; k++) comFoto += d->elenco[k].foto[0] != 0;
+      printf("[desc] elenco %s: %d nome(s), %d casaram com o TMDB, %d com foto\n", imdbSerie, d->nElenco, casados, comFoto);
       free(corpo);
-    }
+    } else printf("[desc] elenco %s: /credits do TMDB nao respondeu\n", imdbSerie);
+    fflush(stdout);
+  } else {
+    printf("[desc] elenco %s: sem fotos (%s)\n", imdbSerie,
+           !ajustes_tmdb_elenco() ? "\"Elenco do TMDB\" desligado nos ajustes" : "a ficha veio sem nomes");
+    fflush(stdout);
   }
 
   // Onde assistir. Os campos provLogo/provNome existiam no CatItem e NUNCA

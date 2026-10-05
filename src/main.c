@@ -1153,7 +1153,8 @@ int main(int argc, char **argv) {
       if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE)
         e.key.keysym.sym = SDLK_AC_BACK;
 #endif
-#ifdef NV_ANDROID
+#if defined(NV_ANDROID) || defined(NV_TPK)
+      // (Samsung .tpk: tpk.c entrega XF86RaiseChannel/LowerChannel como F7/F8.)
       // CH+/CH- NO ANDROID. O NuvioActivity entrega CH+ como F7 e CH- como F8.
       // Com canal na tela (guia, canal ao vivo, canal no canto) sao CH+/CH- de
       // verdade, com os scancodes do webOS que guia.c, player.c e app.c ja
