@@ -3740,14 +3740,13 @@ void player_desenhar(Uint32 agora) {
       plrilha_pedir(&pd); }
   }
   // REBUFFER (#182 pediu um indicador): com o video ja rodando, o buffer que
-  // esvazia congelava a imagem sem nenhum sinal. So o anel, num disco da ilha
-  // (para nao sumir em cena clara), e so depois de 600 ms parado — o
+  // esvazia congelava a imagem sem nenhum sinal. So o anel, e so depois de 600 ms parado — o
   // vai-e-volta curto de um seek nao acende.
+  // SEM PLACA (dono, 05/10): era um disco de material opaco por tras do anel.
+  // Agora so os pontos, cada um com a sombra suave propria (plrui_anel_solto).
   else if (comVideo && !erroFonte && !saindo && video_bufferando_ms() >= 600) {
-    GfxRect d = { NV_VTELA_W * 0.5f - 48.0f, NV_VTELA_H * 0.5f - 48.0f, 96.0f, 96.0f };
     ESCALA_INI();
-    plrui_material(d, 48.0f, 0, entrada);
-    plrui_anel(NV_VTELA_W * 0.5f, NV_VTELA_H * 0.5f, 56.0f, 0, agora, entrada);
+    plrui_anel_solto(NV_VTELA_W * 0.5f, NV_VTELA_H * 0.5f, 56.0f, agora, entrada);
     ESCALA_FIM();
   }
   if (erroFonte && ehCanal()) {

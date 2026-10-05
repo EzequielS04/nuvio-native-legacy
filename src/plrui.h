@@ -63,6 +63,7 @@ void plrui_trilho(GfxRect r, float frac, float cr, float cg, float cb, float a);
 
 // Anel de 12 pontos do carregamento, centrado em (cx, cy), diametro `d`.
 // `cinza` = 1 pinta em branco 70% (o Seekr esperando), senao no acento.
+void plrui_anel_solto(float cx, float cy, float d, Uint32 agora, float a);
 void plrui_anel(float cx, float cy, float d, int cinza, Uint32 agora, float a);
 
 // O ponto que respira (atividade): 10 px no acento com o halo de 6 a 22%.
