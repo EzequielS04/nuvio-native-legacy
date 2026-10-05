@@ -23,11 +23,6 @@ static int ajDicasDe(int op, AjDica *d) {
     d[2] = (AjDica){ "Voltar", "Sair" };
     return 3;
   }
-  if (uxCabecalho) {
-    d[0] = (AjDica){ "OK", "Mostrar ou ocultar" }; d[1] = (AjDica){ "↓", "Lista" };
-    d[2] = (AjDica){ "←", "Categorias" };
-    return 3;
-  }
   if (op == AJ_TEMA && ajEditandoLinha(op)) {
     d[0] = (AjDica){ "← →", "Escolher" }; d[1] = (AjDica){ "↑ ↓", "Fileira" };
     d[2] = (AjDica){ "OK", "Confirmar" };
@@ -100,7 +95,7 @@ static float aj2Previa(int op, float x, float y, float w) {
 static void ajDesenharInspetor(void) {
   GfxRect ir = aj2InspR();
   float x = ir.x, w = ir.w, y = ir.y + 4.0f, fim = ir.y + ir.h - 8.0f;
-  int categoria = focoIndice || uxCabecalho;
+  int categoria = focoIndice;
   int op = categoria ? -1 : focoOp;
   if (!aj2TemInsp()) return;
   { int opPv = op >= 0 ? op : -1;
@@ -262,11 +257,9 @@ static void ajDesenharFolha(void) {
   int sec = secAtual, i, nd;
   float topo, base, y, aPag = anim_suave(paginaA) * aj2TextoLista;
   const Item *s = &TELA[secIni[sec]];
-  float wChip = 0;
   AjDica d[4];
   ajIlha(fr, 40.0f, 1, 0);
-  wChip = ajChipAvancados(fr.x + fr.w - 26.0f, fr.y + 22.0f, uxCabecalho && !focoIndice, aPag);
-  aj2CabecalhoA3(fr, s->titulo, wChip + 20.0f, aPag);
+  aj2CabecalhoA3(fr, s->titulo, 20.0f, aPag);
   topo = AJ_TOPO;
   base = AJ_BASE;
   gfx_recorte(fr.x, topo, fr.w, base - topo);
@@ -287,7 +280,7 @@ static void ajDesenharFolha(void) {
     y += h;
   }
   gfx_sem_recorte();
-  nd = ajDicasDe(uxCabecalho || focoIndice ? -1 : focoOp, d);
+  nd = ajDicasDe(focoIndice ? -1 : focoOp, d);
   aj2RodapeA3(fr, d, nd, aPag);
 }
 

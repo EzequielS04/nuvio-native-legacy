@@ -33,7 +33,7 @@ int main(void) {
   for (i = 0; i < AJ_N_TELA; i++) {
     if (TELA[i].tipo != IT_OPC ||
         (TELA[i].op != AJ_VIDRO && TELA[i].op != AJ_VIDRO_CONTORNO)) continue;
-    uxAvancados[secDoItem[i]] = 0;
+    valor[AJ_AVANCADAS] = 1;   // global advanced toggle Desligado
     assert(visivel(i) && focavel(i));
   }
   assert(inativa(AJ_VIDRO_CONTORNO));
@@ -143,7 +143,7 @@ int main(void) {
   // Avançado encontrado pela busca é revelado e alcançável, sem ciclos extras.
   ajustes_abrir_opcao(AJ_TEX_MB); ajustes_iniciar();
   assert(focoOp == AJ_TEX_MB && !focoIndice && visivel(focoItem));
-  assert(uxAvancados[secAtual]);
+  assert(lig(AJ_AVANCADAS));   // the deep link turned the global toggle on
   key(SDLK_ESCAPE); assert(ajustes_pediu_busca() == 2); assert(!ajustes_pediu_busca());
   assert(!uxVeioBusca);
   ajustes_abrir_opcao(AJ_TEX_MB); ajustes_iniciar(); assert(uxVeioBusca);
@@ -163,8 +163,19 @@ int main(void) {
   // Categoria lembra a última opção; esconder avançados nunca deixa foco oculto.
   focarOpcao(AJ_TEX_MB); int sec = secAtual;
   focarSecao(0); focarSecao(sec); assert(focoOp == AJ_TEX_MB);
-  uxCabecalho = 1; key(SDLK_RETURN);
-  assert(!uxAvancados[sec] && uxCabecalho && visivel(focoItem));
+  { int ti = focoItem; (void)sec;
+    // Global toggle chip (top of the index): RIGHT from "Diferentes", OK flips it.
+    focoIndice = 1; uxIndice = 1; key(SDLK_RIGHT); assert(uxChipAv && focoIndice);
+    key(SDLK_RETURN); assert(!lig(AJ_AVANCADAS) && !visivel(ti) && !focavel(ti));
+    { char *f = arquivo(); assert(strstr(f, "avancadasLocal 1")); free(f); }
+    key(SDLK_RETURN); assert(lig(AJ_AVANCADAS) && visivel(ti));
+    key(SDLK_LEFT); assert(!uxChipAv);
+    // Advanced stays hidden in EVERY category while off, visible in every one while on.
+    valor[AJ_AVANCADAS] = 1; assert(!visivel(ti));
+    for (i = 0; i < AJ_N_TELA; i++) if (TELA[i].tipo == IT_OPC && uxAvancada(TELA[i].op)) assert(!visivel(i));
+    valor[AJ_AVANCADAS] = 0;
+    for (i = 0; i < AJ_N_TELA; i++) if (TELA[i].tipo == IT_OPC && uxAvancada(TELA[i].op)) assert(visivel(i) || TELA[i].op == AJ_ICONE_APP);
+    focoIndice = 1; }   // focus on the index: the row rests (no hover)
   valor[AJ_ANIM] = 1; ajustes_atualizar(1.0f, SDL_GetTicks());
   assert(animItem[focoItem] == 0);
 
