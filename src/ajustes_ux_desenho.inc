@@ -525,25 +525,33 @@ static void aj2Regua(GfxRect ln, float y, float a) {
     for (k = 0; k < n; k++) {
       int v = L[k];
       if (f < 2) { aj2Bolinha(v, bx + 28.0f + k * 72.0f, cy, v == alvo, v == sel && v != alvo, a); continue; }
-      { const char *nome = V_TEMA[v], *url = ajFundoArte();
-        TxtLinha t = ajTxt(TXT_V2_SEG, nome);
-        float w = 7 + 42 + 12 + t.w + 12 + 15 + 20, c1[3], c2[3];
+      // Pilula da dinamica: disco com o DESENHO do que ela faz, tingido na cor
+      // que ela tiraria da arte agora, e o nome. Antes eram a mesma miniatura
+      // da arte em todas (nao dizia qual era qual) mais um ponto de cor, e a
+      // fileira passava da borda do bloco com Montserrat ou em outro idioma:
+      // o nome agora encolhe para a largura que sobra (maxT).
+      { static const char *const IC[5] = { "aj_pipette", "aj_blend", "aj_spotlight", "aj_paint-roller", "aj_feather" };
+        const char *nome = V_TEMA[v], *url = ajFundoArte();
+        const char *ic = v == AJ_TEMA_DINAMICA ? IC[0] : v == AJ_TEMA_GRADIENTE ? IC[1] : v == AJ_TEMA_IMERSIVA ? IC[2] :
+                         v == AJ_TEMA_TEXTURA ? IC[3] : IC[4];
+        float maxT = (ln.x + ln.w - 18.0f - bx - (n - 1) * 10.0f) / n - (7 + 42 + 10 + 18);
+        TxtLinha t = ajTxtC(TXT_V2_SEG, nome, maxT);
+        float w = 7 + 42 + 10 + t.w + 18, c1[3], c2[3];
         GfxRect p = { px, cy - 28.0f, w, 56 };
         int foc = v == alvo;
         if (foc) {
           gfx_cor(p, 0.5f, 1, 1, 1, 0.16f * a);
           gfx_anel_fora(p, 28.0f / 56.0f, 2.0f, 3.0f, 0.953f, 0.949f, 0.937f, 0.92f * a);
         } else ajNeutro(p, 28, 0.07f, AJ_CHIP_SOL, a);
-        ajImg(url, (GfxRect){ px + 7, cy - 21, 42, 42 }, 21, a);
-        if (v == sel && !foc) gfx_icone((GfxRect){ px + 16, cy - 12, 24, 24 }, "aj_check", 1, 1, 1, a);
-        txt_desenhar_alpha(t, px + 61, cy - t.h * 0.5f, (foc ? 1.0f : 0.78f) * a);
         aj2CorDin(v, url, c1, c2);
-        { float dx = px + 61 + t.w + 12;
-          if (v == AJ_TEMA_GRADIENTE) {
-            gfx_cor((GfxRect){ dx - 3, cy - 7.5f, 15, 15 }, 0.5f, c2[0], c2[1], c2[2], a);
-            gfx_cor((GfxRect){ dx - 7, cy - 7.5f, 15, 15 }, 0.5f, c1[0], c1[1], c1[2], a);
-          } else gfx_cor((GfxRect){ dx, cy - 7.5f, 15, 15 }, 0.5f, c1[0], c1[1], c1[2], a); }
-        px += w + 12.0f; }
+        gfx_cor((GfxRect){ px + 7, cy - 21, 42, 42 }, 0.5f, 0.055f, 0.059f, 0.071f, 0.85f * a);
+        if (v == sel && !foc) gfx_icone((GfxRect){ px + 16, cy - 12, 24, 24 }, "aj_check", 1, 1, 1, a);
+        else {
+          if (v == AJ_TEMA_GRADIENTE) c1[0] = (c1[0] + c2[0]) * 0.5f, c1[1] = (c1[1] + c2[1]) * 0.5f, c1[2] = (c1[2] + c2[2]) * 0.5f;
+          gfx_icone((GfxRect){ px + 16, cy - 12, 24, 24 }, ic, c1[0], c1[1], c1[2], a);
+        }
+        txt_desenhar_alpha(t, px + 59, cy - t.h * 0.5f, (foc ? 1.0f : 0.78f) * a);
+        px += w + 10.0f; }
     }
   }
 }
