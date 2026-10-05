@@ -169,6 +169,11 @@ int tex_bombear(int max_por_quadro);
 // por quem mede (main.c).
 extern int    tex_upl_n;
 extern long   tex_upl_bytes;
+// Pedidos que foram do indice do cache de disco direto ao decode, sem esperar
+// a fila de rede (discoDireto), e downloads poupados pela memoria de arte
+// inexistente (404 lembrado / host em prazo estourado).
+extern int    tex_disco_direto;
+int tex_negativas_poupadas(void);
 extern int    tex_n_busca;
 // PEDIDOS QUE VOLTARAM SEM TEXTURA (arte ainda a caminho; a que falhou de vez
 // nao conta). So sobe, nunca zera: quem desenha uma vez so (o fundo parado do
