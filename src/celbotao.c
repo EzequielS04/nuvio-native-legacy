@@ -22,6 +22,9 @@
 #define CB_VAO     14.0f   // entre o botao e o cartao
 
 static int     dono, aberto;
+// HOSPEDADO (celbotao.h): o dono desenha o QR dentro da propria superficie
+// (celb_desenhar_em) e o cartao flutuante nao existe.
+static int     embutido;
 static float   animCartao;            // 0..1 (mola), entrando
 static GfxRect ancora[CELB_N];        // ultimo botao desenhado de cada dono
 static float   animBotao[CELB_N];
@@ -79,6 +82,7 @@ int celb_abrir(int d, const char *t) {
   snprintf(titulo, sizeof titulo, "%s", t ? t : "");
   dono = d;
   aberto = 1;
+  embutido = 0;
   animCartao = 0.0f;
   // Sem rede o cartao abre assim mesmo e diz por que nao ha codigo: um OK que
   // nao faz nada pareceria botao quebrado.
@@ -87,9 +91,17 @@ int celb_abrir(int d, const char *t) {
   return 1;
 }
 
+int celb_abrir_embutido(int d, const char *t) {
+  if (!celb_abrir(d, t)) return 0;
+  embutido = 1;
+  return 1;
+}
+int celb_embutido(int d) { return aberto && embutido && dono == d; }
+
 void celb_fechar(void) {
   if (!aberto) return;
   aberto = 0;
+  embutido = 0;
   celular_fechar();
 }
 void celb_fechar_dono(int d) { if (aberto && dono == d) celb_fechar(); }
@@ -110,6 +122,19 @@ static void regerarPonteiro(int a, int b) { (void)a; (void)b; regerar(); }
 int celb_evento(const SDL_Event *e) {
   SDL_Keycode k;
   if (!aberto) return 0;
+  if (embutido) {
+    // HOSPEDADO: o QR e um pedaco da tela do dono, nao uma camada por cima —
+    // so o Voltar e dele (fecha o QR, nao a tela); o resto segue para o dono,
+    // que continua navegavel com o codigo a vista.
+    if (e->type != SDL_KEYDOWN) return 0;
+    k = e->key.keysym.sym;
+    if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE || k == SDLK_DELETE ||
+        e->key.keysym.scancode == NV_SCANCODE_BACK) {
+      celb_fechar();
+      return 1;
+    }
+    return 0;
+  }
   if (e->type == SDL_TEXTINPUT || e->type == SDL_TEXTEDITING) return 1;
   if (e->type == SDL_KEYUP) return 1;
   if (e->type != SDL_KEYDOWN) return 0;
@@ -162,6 +187,22 @@ static void qrTextura(const char *u) {
   snprintf(texQrDe, sizeof texQrDe, "%s", u);
 }
 
+// A moldura branca e o QR, com o canto de cima em (x, y): o MESMO desenho no
+// cartao e hospedado na tela do dono.
+static void qrDesenhar(const char *u, float x, float y, float a) {
+  qrTextura(u);
+  if (!texQr) return;
+  gfx_cor((GfxRect){ x, y, CB_QR + 2 * CB_MOLDURA, CB_QR + 2 * CB_MOLDURA }, 0.06f, 1.0f, 1.0f, 1.0f, a);
+  gfx_tex_aspect_atual = 0.0f;
+  gfx_rect((GfxRect){ x + CB_MOLDURA, y + CB_MOLDURA, CB_QR, CB_QR }, texQr, GFX_SNAP, 0, 0.0f, 0.0f, 0.0f, 0, 0, 0, a);
+}
+static const char *FRASE_QR = "Aponte a câmera do celular. Mesma rede Wi-Fi, vale por 5 minutos.";
+static const char *msgSemQr(int est) {
+  return est == CEL_FALHOU ? "Endereço bloqueado por tentativas erradas. Aperte OK para gerar outro."
+       : est == CEL_EXPIROU ? "O endereço expirou. Aperte OK para gerar outro."
+       : "Sem rede local. Conecte a TV ao Wi-Fi e aperte OK.";
+}
+
 // Altura do miolo, pela mesma conta que o desenho usa.
 #define CB_TITULO_H   40.0f
 #define CB_LINHA_H    26.0f
@@ -183,7 +224,7 @@ static void celb_desenharCorpo_(void) {
   GfxRect r;
   int est, temQr;
   const char *u, *curta;
-  if (!aberto) return;
+  if (!aberto || embutido) return;   // hospedado: quem desenha e o dono
   a = anim_suave(animCartao);
   est = celular_estado();
   u = celular_url();
@@ -225,21 +266,11 @@ static void celb_desenharCorpo_(void) {
   y += CB_PAD + CB_TITULO_H;
 
   if (!temQr) {
-    const char *m = est == CEL_FALHOU ? "Endereço bloqueado por tentativas erradas. Aperte OK para gerar outro."
-                  : est == CEL_EXPIROU ? "O endereço expirou. Aperte OK para gerar outro."
-                  : "Sem rede local. Conecte a TV ao Wi-Fi e aperte OK.";
-    txt_bloco(TXT_BODY, i18n(m), 200, 204, 212, x + CB_PAD, y + 16.0f, w - 2 * CB_PAD, CB_LINHA_H + 6.0f, a, 3);
+    txt_bloco(TXT_BODY, i18n(msgSemQr(est)), 200, 204, 212, x + CB_PAD, y + 16.0f, w - 2 * CB_PAD, CB_LINHA_H + 6.0f, a, 3);
     return;
   }
   y += 18.0f;
-  qrTextura(u);
-  if (texQr) {
-    float qx = x + (w - CB_QR) * 0.5f;
-    gfx_cor((GfxRect){ qx - CB_MOLDURA, y, CB_QR + 2 * CB_MOLDURA, CB_QR + 2 * CB_MOLDURA }, 0.06f,
-            1.0f, 1.0f, 1.0f, a);
-    gfx_tex_aspect_atual = 0.0f;
-    gfx_rect((GfxRect){ qx, y + CB_MOLDURA, CB_QR, CB_QR }, texQr, GFX_SNAP, 0, 0.0f, 0.0f, 0.0f, 0, 0, 0, a);
-  }
+  qrDesenhar(u, x + (w - CB_QR) * 0.5f - CB_MOLDURA, y, a);
   y += CB_QR + 2 * CB_MOLDURA + 18.0f;
   // ENDERECO CURTO, para quem nao tem camera: sem "http://" (o navegador do
   // celular completa sozinho), centrado.
@@ -247,6 +278,68 @@ static void celb_desenharCorpo_(void) {
   { TxtLinha t = txt_linha_corta(TXT_CAPTION, curta, 232, 236, 244, 255, w - 2 * CB_PAD);
     txt_desenhar_alpha(t, x + (w - t.w) * 0.5f, y, a); }
   y += 30.0f + 10.0f;
-  txt_bloco(TXT_CAPTION2, i18n("Aponte a câmera do celular. Mesma rede Wi-Fi, vale por 5 minutos."),
-            170, 174, 184, x + CB_PAD, y, w - 2 * CB_PAD, CB_LINHA_H, a * 0.9f, 3);
+  txt_bloco(TXT_CAPTION2, i18n(FRASE_QR), 170, 174, 184, x + CB_PAD, y, w - 2 * CB_PAD, CB_LINHA_H, a * 0.9f, 3);
+}
+
+// --- hospedado: o mesmo QR, dentro da superficie do dono ----------------------
+// TRES ARRANJOS, do mais largo ao mais apertado. O QR nunca encolhe: 248 px e
+// o tamanho medido para a camera a 3 m, e e o que o cartao usa.
+//   LADO    QR a esquerda, a frase a direita, o endereco embaixo (coluna larga)
+//   PILHA   QR, endereco, frase
+//   CURTO   QR e endereco (quando nem a pilha cabe na altura que o dono tem)
+// O endereco fica sempre numa linha propria, da largura toda: e a saida de
+// quem nao tem camera, e cortado nao serve para nada.
+#define CB_E_QR     (CB_QR + 2 * CB_MOLDURA)
+#define CB_E_VAO    22.0f
+#define CB_E_LADO_MIN 230.0f   // largura minima da frase ao lado do QR
+#define CB_E_URL_H  (14.0f + 30.0f)
+enum { CB_E_MSG = 0, CB_E_LADO, CB_E_PILHA, CB_E_CURTO };
+static int embArranjo(float w, float hMax, float *h) {
+  int est = celular_estado();
+  float frase;
+  if (!(est == CEL_ESPERANDO && celular_url()[0])) {
+    *h = txt_bloco(TXT_BODY, i18n(msgSemQr(est)), 0, 0, 0, 0, 0, w, CB_LINHA_H + 6.0f, 0.0f, 3);
+    return CB_E_MSG;
+  }
+  if (w >= CB_E_QR + CB_E_VAO + CB_E_LADO_MIN) { *h = CB_E_QR + CB_E_URL_H; return CB_E_LADO; }
+  frase = txt_bloco(TXT_CAPTION2, i18n(FRASE_QR), 0, 0, 0, 0, 0, w, CB_LINHA_H, 0.0f, 3);
+  *h = CB_E_QR + CB_E_URL_H + 8.0f + frase;
+  if (*h <= hMax) return CB_E_PILHA;
+  *h = CB_E_QR + CB_E_URL_H;
+  return CB_E_CURTO;
+}
+float celb_embutido_altura(int d, float w, float hMax) {
+  float h = 0.0f;
+  if (!celb_embutido(d)) return 0.0f;
+  embArranjo(w, hMax, &h);
+  return h;
+}
+void celb_desenhar_em(int d, GfxRect r, float alpha) {
+  float a, h, y = r.y;
+  int arr;
+  const char *u, *curta;
+  if (!celb_embutido(d)) return;
+  a = anim_suave(animCartao) * alpha;
+  arr = embArranjo(r.w, r.h, &h);
+  cartao = (GfxRect){ r.x, r.y, r.w, h };
+  if (arr == CB_E_MSG) {
+    // Vencido, bloqueado ou sem rede: o clique na frase gera outro, como o OK.
+    if (ponteiro_ativo()) ponteiro_alvo(r.x, r.y, r.w, h, NULL, regerarPonteiro, 0, 0);
+    txt_bloco(TXT_BODY, i18n(msgSemQr(celular_estado())), 200, 204, 212, r.x, y, r.w, CB_LINHA_H + 6.0f, a, 3);
+    return;
+  }
+  u = celular_url();
+  qrDesenhar(u, r.x, y, a);
+  if (arr == CB_E_LADO) {
+    float tx = r.x + CB_E_QR + CB_E_VAO, tw = r.w - CB_E_QR - CB_E_VAO;
+    float fh = txt_bloco(TXT_CAPTION2, i18n(FRASE_QR), 0, 0, 0, 0, 0, tw, CB_LINHA_H, 0.0f, 5);
+    txt_bloco(TXT_CAPTION2, i18n(FRASE_QR), 170, 174, 184, tx, y + (CB_E_QR - fh) * 0.5f, tw, CB_LINHA_H, a * 0.9f, 5);
+  }
+  y += CB_E_QR + 14.0f;
+  curta = !strncmp(u, "http://", 7) ? u + 7 : u;
+  { TxtLinha t = txt_linha_corta(TXT_CAPTION, curta, 232, 236, 244, 255, r.w);
+    txt_desenhar_alpha(t, r.x, y, a); }
+  y += 30.0f + 8.0f;
+  if (arr == CB_E_PILHA)
+    txt_bloco(TXT_CAPTION2, i18n(FRASE_QR), 170, 174, 184, r.x, y, r.w, CB_LINHA_H, a * 0.9f, 3);
 }

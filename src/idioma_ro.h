@@ -1971,6 +1971,7 @@
   T("Mais rápida", "Cea mai rapidă"),
   T("Mais tarde", "Mai târziu"),
   T("Mais vistos", "Cele mai vizionate"),
+  T("Maiúsculas", "Majuscule"),
   T("Malásia", "Malaysia"),
   T("Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.", "Trimite ultimii 200 KB din jurnalul acestei sesiuni (fără parole sau chei) celui care face aplicația. Folosește când ceva nu merge chiar acum."),
   T("Mandar uma mensagem para %s?", "Trimiți un mesaj lui %s?"),

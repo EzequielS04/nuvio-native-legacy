@@ -1971,6 +1971,7 @@
   T("Mais rápida", "La más rápida"),
   T("Mais tarde", "Más adelante"),
   T("Mais vistos", "Más vistos"),
+  T("Maiúsculas", "Mayúsculas"),
   T("Malásia", "Malasia"),
   T("Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.", "Envía los últimos 200 KB del registro de esta sesión (sin contraseñas ni claves) a quien hace la app. Úsalo cuando algo falle ahora mismo."),
   T("Mandar uma mensagem para %s?", "¿Enviar un mensaje a %s?"),

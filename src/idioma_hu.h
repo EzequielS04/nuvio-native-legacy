@@ -1972,6 +1972,7 @@
   T("Mais rápida", "Leggyorsabb"),
   T("Mais tarde", "Később"),
   T("Mais vistos", "Legnézettebb"),
+  T("Maiúsculas", "Nagybetűk"),
   T("Malásia", "Malajzia"),
   T("Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.", "Elküldi ennek a munkamenetnek az utolsó 200 KB-nyi naplóját (jelszavak és kulcsok nélkül) az app készítőjének. Használd, ha éppen most van valami baj."),
   T("Mandar uma mensagem para %s?", "Üzenetet küldesz neki: %s?"),

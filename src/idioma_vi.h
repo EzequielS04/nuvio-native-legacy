@@ -1972,6 +1972,7 @@
   T("Mais rápida", "Nhanh nhất"),
   T("Mais tarde", "Sắp tới"),
   T("Mais vistos", "Xem nhiều nhất"),
+  T("Maiúsculas", "Chữ hoa"),
   T("Malásia", "Malaysia"),
   T("Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.", "Gửi 200 KB cuối của nhật ký phiên này (không có mật khẩu hay khóa) cho tác giả ứng dụng. Dùng khi đang có sự cố ngay lúc này."),
   T("Mandar uma mensagem para %s?", "Gửi tin nhắn cho %s?"),

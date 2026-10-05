@@ -1971,6 +1971,7 @@
   T("Mais rápida", "Самый быстрый источник"),
   T("Mais tarde", "Позже"),
   T("Mais vistos", "Самые просматриваемые"),
+  T("Maiúsculas", "Заглавные"),
   T("Malásia", "Малайзия"),
   T("Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.", "Отправляет последние 200 КБ журнала этого сеанса (без паролей и ключей) разработчику приложения. Используйте, когда что-то не работает прямо сейчас."),
   T("Mandar uma mensagem para %s?", "Отправить сообщение %s?"),

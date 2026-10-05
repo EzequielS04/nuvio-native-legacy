@@ -1972,6 +1972,7 @@
   T("Mais rápida", "最快"),
   T("Mais tarde", "稍後"),
   T("Mais vistos", "觀看最多"),
+  T("Maiúsculas", "大寫"),
   T("Malásia", "馬來西亞"),
   T("Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.", "把本次工作階段日誌的最近 200 KB（不含密碼和金鑰）傳送給應用程式開發者。現在出了問題時使用。"),
   T("Mandar uma mensagem para %s?", "傳訊息給%s？"),

@@ -1972,6 +1972,7 @@
   T("Mais rápida", "Greičiausias"),
   T("Mais tarde", "Vėliau"),
   T("Mais vistos", "Žiūrėčiausi"),
+  T("Maiúsculas", "Didžiosios"),
   T("Malásia", "Malaizija"),
   T("Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.", "Išsiunčia paskutinius 200 KB šios sesijos žurnalo (be slaptažodžių ar raktų) programos kūrėjui. Naudokite, kai kas nors negerai būtent dabar."),
   T("Mandar uma mensagem para %s?", "Siųsti žinutę %s?"),

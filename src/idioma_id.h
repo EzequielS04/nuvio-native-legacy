@@ -1972,6 +1972,7 @@
   T("Mais rápida", "Tercepat"),
   T("Mais tarde", "Nanti"),
   T("Mais vistos", "Paling banyak ditonton"),
+  T("Maiúsculas", "Huruf besar"),
   T("Malásia", "Malaysia"),
   T("Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.", "Mengirim 200 KB terakhir log sesi ini (tanpa kata sandi atau kunci) ke pembuat aplikasi. Gunakan saat ada masalah sekarang juga."),
   T("Mandar uma mensagem para %s?", "Kirim pesan ke %s?"),

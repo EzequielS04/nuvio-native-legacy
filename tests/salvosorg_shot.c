@@ -150,12 +150,12 @@ static void tecladoAcao(int c) {
   toque(SDLK_RETURN);
 }
 static void tecladoAbriu(void) { tf = 0; tc = 0; }
-// CIMA da primeira fileira leva a barra do campo (o botao do celular): desce
-// de volta e encosta a esquerda.
+// ESQUERDA alem da primeira coluna entra na coluna do campo (o modo do
+// celular): encosta a esquerda e, se entrou, DIREITA volta a tecla de onde saiu.
 static void tecladoVoltarTopo(void) {
   toques(SDLK_UP, 7);
-  if (teclado_foco_campo()) toque(SDLK_DOWN);
   toques(SDLK_LEFT, 6);
+  if (teclado_foco_campo()) toque(SDLK_RIGHT);
   tf = 0; tc = 0;
 }
 

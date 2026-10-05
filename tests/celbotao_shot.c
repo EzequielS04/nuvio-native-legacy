@@ -290,7 +290,7 @@ int main(int argc, char **argv) {
       char n[64];
       teclado_abrir_com(L[i].titulo, L[i].dica, L[i].max, L[i].alfa, NULL);
       assert(celular_estado() == CEL_PARADO);
-      tecla(SDLK_UP);
+      tecla(SDLK_LEFT);   // a coluna do campo fica a esquerda da grade
       assert(teclado_foco_campo() == 3);
       captura(saida, L[i].nome);
       if (i == 0) {
