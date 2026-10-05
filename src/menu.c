@@ -640,7 +640,10 @@ static void desenhaRodape(const MenuGeo *g, float e, float alpha, float foco, fl
   // que o app web mostra quando `avatar_url` e nulo. A inicial e 19 Bold
   // (TXT_V2_KBD18) a 90 % = 17 na tela: o mockup usa 16/700 no avatar de 40
   // e 17/700 no de 44.
-  { GLuint tex = (p && p->avatarUrl[0]) ? tex_obter(p->avatarUrl) : 0;
+  // A foto e pedida pela largura com que desenha (tex_obter_larg): o teto
+  // unico de 640 decodificava ate 1,6 MB de avatar para um circulo de 44.
+  // Ver tests/artemenor.c.
+  { GLuint tex = (p && p->avatarUrl[0]) ? tex_obter_larg(p->avatarUrl, av.w) : 0;
     if (tex) {
       gfx_tex_aspect_atual = 1.0f;
       gfx_rect(av, tex, GFX_CARD, 0, 0, 0, 0.5f, 0, 0, 0, alpha);
@@ -969,7 +972,9 @@ static void tvIcone(int d, float cx, float cy, float foco, float alfa) {
 static void tvCirculoPasta(const ColFolder *pf, float cx, float cy, float alfa) {
   GfxRect c = { cx - TV_LOGO * 0.5f, cy - TV_LOGO * 0.5f, TV_LOGO, TV_LOGO };
   const char *capa = pf ? col_capa(pf) : NULL;
-  GLuint tex = (capa && capa[0]) ? tex_obter(capa) : 0;
+  // Pedida pela largura do circulo (TV_LOGO=48, cap 128 pelo piso), nao pelo
+  // 640 unico — ver tests/artemenor.c.
+  GLuint tex = (capa && capa[0]) ? tex_obter_larg(capa, TV_LOGO) : 0;
   if (tex) {
     float asp = tex_aspecto(capa);
     gfx_tex_aspect_atual = asp > 0.0f ? asp : 1.0f;
@@ -989,7 +994,8 @@ static void tvCirculoPasta(const ColFolder *pf, float cx, float cy, float alfa) 
 
 static void tvAvatar(GfxRect av, float alfa) {
   const ContaPerfil *p = perfis_item_ativo();
-  GLuint tex = (p && p->avatarUrl[0]) ? tex_obter(p->avatarUrl) : 0;
+  // Como o avatar do menu: pela largura com que desenha (tex_obter_larg).
+  GLuint tex = (p && p->avatarUrl[0]) ? tex_obter_larg(p->avatarUrl, av.w) : 0;
   if (tex) {
     gfx_tex_aspect_atual = 1.0f;
     gfx_rect(av, tex, GFX_CARD, 0, 0, 0, 0.5f, 0, 0, 0, alfa);

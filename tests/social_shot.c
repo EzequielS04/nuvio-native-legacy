@@ -287,6 +287,9 @@ int main(int argc, char **argv) {
   { char caminho[700]; FILE *f;
     const char *en = getenv("NUVIO_SHOT_EN");
     const char *temaEnv = getenv("NUVIO_SHOT_THEME");
+    // NUVIO_SHOT_FONTE, como no detail_secoes_shot: 3 = Montserrat, a fonte
+    // da TV do dono. A captura sai na fonte de quem vai julgar o resultado.
+    const char *fonteEnv = getenv("NUVIO_SHOT_FONTE");
     int ingles = (en && *en && *en != '0');
     int tema = temaEnv && *temaEnv ? atoi(temaEnv) : 2;
     if (tema < 0 || tema >= 12) tema = 2;
@@ -294,6 +297,7 @@ int main(int argc, char **argv) {
     f = fopen(caminho, "w");
     assert(f);
     fprintf(f, "idioma %d\nselected_theme %d\n", ingles, tema);
+    if (fonteEnv && *fonteEnv) fprintf(f, "fonteInterface %d\n", atoi(fonteEnv));
     fclose(f);
     ajustes_dir(dados_dir());
     printf("idioma: %s, acento: %d\n", ajustes_idioma_ingles() ? "en" : "pt", tema); }
