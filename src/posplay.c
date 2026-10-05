@@ -407,8 +407,9 @@ static void anelContagem(float cx, float cy, float frac, float a) {
   }
 }
 
-// GLASS UI (mockup de 03/10, "proximo" e "mais-como-este"): o video ja
-// encolheu para 52% no topo (player.c); embaixo dele, UMA ILHA. Na serie, o
+// GLASS UI (mockup de 03/10, "proximo" e "mais-como-este"): UMA ILHA. No filme
+// o video recua para o topo (player.c) e a ilha fica embaixo dele; na serie o
+// video segue em tela cheia e a ilha vai por cima (posplay_sobre_video, #249). Na serie, o
 // cartao do proximo episodio sem o retangulo de acento que fingia contorno:
 // still grande com "T1E4 · 56 min", "A seguir em 8 s" com o anel da
 // contagem, nome, data e duracao, sinopse e "Comecar agora" (o que o OK faz);
