@@ -273,8 +273,14 @@ static const char *ajFundoArte(void) {
   return (cat_n() > 0 && home_item_focado(&hi) && hi.indice >= 0)
            ? ajArte(AJA_FUNDO, hi.indice) : ajArte(AJA_FUNDO, ajArteFundoN);
 }
+// 2.0.2 (dono, na TCL): "o fundo do ajustes tem que ser sempre frost que fica
+// melhor de ler". Os Ajustes desenham SEMPRE o Frost, qualquer que seja a
+// Aparencia › Fundo escolhida (o valor salvo nao muda; a escolha continua
+// valendo no resto do app e aparece nos cartoes da propria opcao). E o mesmo
+// caminho do Frost do app (fundo_desenhar_modo): a luz assada no canal, sem
+// fosco a mais, e as mesmas quedas nos niveis de GPU menores.
 static void ajFundo(void) {
-  fundo_desenhar((GfxRect){ 0, 0, NV_VTELA_W, NV_VTELA_H }, ajFundoArte(), 1.0f);
+  fundo_desenhar_modo(FUNDO_FROST, (GfxRect){ 0, 0, NV_VTELA_W, NV_VTELA_H }, 0.0f, ajFundoArte(), 1.0f);
 }
 
 // --- GEOMETRIA ------------------------------------------------------------------
