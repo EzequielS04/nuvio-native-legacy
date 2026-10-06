@@ -3411,6 +3411,7 @@
   T("Recentes", "Son"),
   T("Recolher", "Daralt"),
   T("Recolhida", "Daraltıldı"),
+  T("Recomendada", "Önerilen"),
   T("Recomendado pelo TMDB", "TMDB öneriyor"),
   T("Recomendados, com Instalar", "Önerilen, Yükle ile"),
   T("Recomendar a um amigo", "Arkadaşa öner"),

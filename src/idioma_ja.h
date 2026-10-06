@@ -3411,6 +3411,7 @@
   T("Recentes", "最近"),
   T("Recolher", "たたむ"),
   T("Recolhida", "折りたたみ"),
+  T("Recomendada", "おすすめ"),
   T("Recomendado pelo TMDB", "TMDBのおすすめ"),
   T("Recomendados, com Instalar", "おすすめ（インストールボタン付き）"),
   T("Recomendar a um amigo", "フレンドにおすすめ"),

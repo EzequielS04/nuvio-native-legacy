@@ -3411,6 +3411,7 @@
   T("Recentes", "Nedavno"),
   T("Recolher", "Strni"),
   T("Recolhida", "Strnjeno"),
+  T("Recomendada", "Priporočeno"),
   T("Recomendado pelo TMDB", "Priporoča TMDB"),
   T("Recomendados, com Instalar", "Priporočeno, z Namesti"),
   T("Recomendar a um amigo", "Priporoči prijatelju"),

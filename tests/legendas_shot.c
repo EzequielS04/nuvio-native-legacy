@@ -224,6 +224,13 @@ int main(int argc, char **argv) {
   faixas_abrir_em(1);
   quadros(60);
   salvar("legendas-seletor-simples");
+  tecla(SDLK_RETURN);                                     // #202: the active pt row has 2 versions -> their list
+  quadros(30);
+  assert(legendasui_versoes());
+  salvar("legendas-seletor-versoes");
+  tecla(SDLK_ESCAPE);                                     // Back to the main list, focus on that language
+  quadros(20);
+  assert(!legendasui_versoes());
   { int i; for (i = 0; i < 12; i++) tecla(SDLK_DOWN); }   // last row: Mais opcoes
   tecla(SDLK_RETURN);
   quadros(40);

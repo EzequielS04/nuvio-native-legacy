@@ -3411,6 +3411,7 @@
   T("Recentes", "Πρόσφατα"),
   T("Recolher", "Σύμπτυξη"),
   T("Recolhida", "Συμπτυγμένο"),
+  T("Recomendada", "Προτεινόμενη"),
   T("Recomendado pelo TMDB", "Προτείνεται από το TMDB"),
   T("Recomendados, com Instalar", "Προτεινόμενο, με Εγκατάσταση"),
   T("Recomendar a um amigo", "Πρότεινε σε φίλο"),

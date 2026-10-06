@@ -3411,6 +3411,7 @@
   T("Recentes", "Nylige"),
   T("Recolher", "Skjul"),
   T("Recolhida", "Skjult"),
+  T("Recomendada", "Anbefalt"),
   T("Recomendado pelo TMDB", "Anbefalt av TMDB"),
   T("Recomendados, com Instalar", "Anbefalte, med Installer"),
   T("Recomendar a um amigo", "Anbefal til en venn"),

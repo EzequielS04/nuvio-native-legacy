@@ -3411,6 +3411,7 @@
   T("Recentes", "Terbaru"),
   T("Recolher", "Ciutkan"),
   T("Recolhida", "Diciutkan"),
+  T("Recomendada", "Disarankan"),
   T("Recomendado pelo TMDB", "Direkomendasikan TMDB"),
   T("Recomendados, com Instalar", "Direkomendasikan, dengan Pasang"),
   T("Recomendar a um amigo", "Rekomendasikan ke teman"),

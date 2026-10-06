@@ -3411,6 +3411,7 @@
   T("Recentes", "Скорошни"),
   T("Recolher", "Свиване"),
   T("Recolhida", "Свито"),
+  T("Recomendada", "Препоръчително"),
   T("Recomendado pelo TMDB", "Препоръчано от TMDB"),
   T("Recomendados, com Instalar", "Препоръчано, с Инсталирай"),
   T("Recomendar a um amigo", "Препоръчай на приятел"),

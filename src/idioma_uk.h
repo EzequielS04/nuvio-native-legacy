@@ -3410,6 +3410,7 @@
   T("Recentes", "Нещодавні"),
   T("Recolher", "Згорнути"),
   T("Recolhida", "Згорнуто"),
+  T("Recomendada", "Рекомендовано"),
   T("Recomendado pelo TMDB", "Рекомендує TMDB"),
   T("Recomendados, com Instalar", "Рекомендовані, з кнопкою «Встановити»"),
   T("Recomendar a um amigo", "Порадити другові"),

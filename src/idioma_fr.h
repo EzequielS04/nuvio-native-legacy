@@ -3410,6 +3410,7 @@
   T("Recentes", "Récents"),
   T("Recolher", "Réduire"),
   T("Recolhida", "Réduite"),
+  T("Recomendada", "Recommandée"),
   T("Recomendado pelo TMDB", "Recommandé par TMDB"),
   T("Recomendados, com Instalar", "Recommandés, avec Installer"),
   T("Recomendar a um amigo", "Recommander à un ami"),

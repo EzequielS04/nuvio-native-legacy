@@ -3410,6 +3410,7 @@
   { "Recentes", "Recent" },
   { "Recolher", "Collapse" },
   { "Recolhida", "Collapsed" },
+  { "Recomendada", "Recommended" },
   { "Recomendado pelo TMDB", "Recommended by TMDB" },
   { "Recomendados, com Instalar", "Recommended, with Install" },
   { "Recomendar a um amigo", "Recommend to a friend" },

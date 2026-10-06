@@ -3410,6 +3410,7 @@
   T("Recentes", "Recente"),
   T("Recolher", "Restrânge"),
   T("Recolhida", "Restrânsă"),
+  T("Recomendada", "Recomandată"),
   T("Recomendado pelo TMDB", "Recomandat de TMDB"),
   T("Recomendados, com Instalar", "Recomandate, cu Instalează"),
   T("Recomendar a um amigo", "Recomandă unui prieten"),

@@ -3411,6 +3411,7 @@
   T("Recentes", "最近"),
   T("Recolher", "收起"),
   T("Recolhida", "收起"),
+  T("Recomendada", "推荐"),
   T("Recomendado pelo TMDB", "TMDB 推荐"),
   T("Recomendados, com Instalar", "推荐，带安装按钮"),
   T("Recomendar a um amigo", "推荐给好友"),
