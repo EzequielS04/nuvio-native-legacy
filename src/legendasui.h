@@ -93,6 +93,9 @@ typedef struct {
   char codec[24];    // Matroska CodecID when probed
   char formato[8];   // "SRT"/"VTT"/"ASS"/"PGS" when actually known, else ""
   int  letreiro;     // forced / signs track
+  int  tipo;         // LING_LEG_* of an embedded track (#287); 0 for addons
+  int  completaPar;  // 1 = plain embedded track whose language also has a forced/signs one:
+                     // shown as "Legenda completa" so the two read apart (#287)
   Legenda leg;       // private copy (URL never shown or logged)
 } LegUiCand;
 // Identity helpers: stable within a media session.
@@ -100,6 +103,9 @@ void legendasui_id_embutida(const VideoFaixa *f, char out[24]);
 void legendasui_id_addon(const Legenda *l, char out[24]);
 int  legendasui_montar(const VideoFaixa *const *emb, int nEmb,
                        const Legenda *add, int nAdd, LegUiCand *out, int max);
+// Short translated kind of an embedded candidate ("Forçada", "Letreiros",
+// "SDH", "Legenda completa"); NULL when there is nothing to say (#287).
+const char *legendasui_tipo_rotulo(const LegUiCand *c);
 // 1 when the candidate can be the SECOND subtitle (external, not ASS).
 int  legendasui_cand_secundaria_ok(const LegUiCand *c);
 

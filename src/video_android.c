@@ -304,11 +304,15 @@ static void escolherAudioPreferido(void) {
 static VideoFaixa novasA[MAX_FAIXAS], novasL[MAX_FAIXAS];
 static int nNovasA, nNovasL;
 
-JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeFaixa(JNIEnv *env, jclass cls, jint tipo, jint idx, jstring lingua) {
+// `flags` (#287): bit 0 = SELECTION_FLAG_FORCED, bit 1 = ROLE_FLAG_DESCRIBES_
+// MUSIC_AND_SOUND (SDH); `nome` = Format.label (o Name da faixa do MKV).
+JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeFaixa(JNIEnv *env, jclass cls, jint tipo, jint idx, jstring lingua,
+                                                                       jint flags, jstring nome) {
   VideoFaixa *f;
-  char l[16];
+  char l[16], nm[48];
   (void)cls;
   deJString(env, lingua, l, sizeof l);
+  deJString(env, nome, nm, sizeof nm);
   if (tipo == 0) { if (nNovasA >= MAX_FAIXAS) return; f = &novasA[nNovasA++]; }
   else           { if (nNovasL >= MAX_FAIXAS) return; f = &novasL[nNovasL++]; }
   memset(f, 0, sizeof *f);
@@ -318,6 +322,16 @@ JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeFaixa(JNIEnv
   if (f->idioma[0]) snprintf(f->rotulo, sizeof f->rotulo, "%s", i18n(ling_nome(f->idioma)));
   else snprintf(f->rotulo, sizeof f->rotulo, "%s %d", i18n(tipo ? "Legenda" : "Áudio"),
                 tipo ? nNovasL : nNovasA);
+  if (tipo) {
+    const char *r;
+    f->tipoLeg = ling_tipo_legenda(nm, flags & 1, (flags & 2) != 0);
+    f->letreiro = f->tipoLeg == LING_LEG_FORCADA || f->tipoLeg == LING_LEG_LETREIROS;
+    r = ling_tipo_legenda_rotulo(f->tipoLeg);
+    if (r) {
+      size_t k = strlen(f->rotulo);
+      snprintf(f->rotulo + k, sizeof f->rotulo - k, "  \xc2\xb7  %s", i18n(r));
+    }
+  }
 }
 
 JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeFaixasFim(JNIEnv *env, jclass cls, jint selAudio, jint selLeg) {

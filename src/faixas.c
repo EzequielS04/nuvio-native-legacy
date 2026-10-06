@@ -713,9 +713,11 @@ static void aplicar(void) {
 #define FX_AUTO_EMB_MS  10000u   // espera pelos idiomas das embutidas (era 30 s: a legenda do addon ja estava na mao)
 #define FX_AUTO_FIM_MS  30000u   // desiste de vez: legenda ligada no minuto 5 assusta
 static void legendaAutomatica(Uint32 agora) {
-  const char *emb[NV_FAIXA_MAX], *add[LEG_MAX];
+  const char *emb[NV_FAIXA_MAX], *add[LEG_MAX], *audio;
+  const VideoFaixa *fa;
   const CatItem *ci;
-  int nEmb, nAdd = 0, embFechado, addFechado = 1, i, r;
+  int tipos[NV_FAIXA_MAX];
+  int nEmb, nAdd = 0, embFechado, addFechado = 1, i, r, soForcada;
   Uint32 passou;
   if (!legAuto || aberta || !player_aberto() || !player_com_video()) return;
   // Canal ao vivo nao tem legenda de addon nem idioma no arquivo que valha.
@@ -730,13 +732,18 @@ static void legendaAutomatica(Uint32 agora) {
   if (!video_n_audio() && !video_n_legenda() && passou < 8000u) return;
   nEmb = video_n_legenda();
   if (nEmb > NV_FAIXA_MAX) nEmb = NV_FAIXA_MAX;
-  // Faixa de LETREIROS nunca liga sozinha: nao traduz o dialogo, e ligada
-  // pela preferencia parece legenda quebrada. Sem idioma, ling_legenda_auto
-  // passa por ela.
+  // Faixa de LETREIROS/FORCADA nunca liga como a legenda inteira: nao traduz
+  // o dialogo, e ligada pela preferencia parece legenda quebrada. #287: ela so
+  // liga quando o AUDIO ja esta no idioma da legenda (ling_legenda_auto_tipo).
   for (i = 0; i < nEmb; i++) {
     const VideoFaixa *f = video_legenda(i);
-    emb[i] = f && !f->letreiro ? f->idioma : "";
+    emb[i] = f ? f->idioma : "";
+    tipos[i] = !f ? LING_LEG_COMUM : f->tipoLeg ? f->tipoLeg : f->letreiro ? LING_LEG_LETREIROS : LING_LEG_COMUM;
   }
+  fa = video_audio(video_audio_atual());
+  audio = fa ? fa->idioma : "";
+  soForcada = ajustes_legenda_forcada_auto() && audio[0] && ling_legenda()[0] &&
+              strcasecmp(ling_legenda(), "none") && ling_casa(audio, ling_legenda());
   embFechado = video_mkv_sondado() != 0 || passou >= FX_AUTO_EMB_MS;
   // So confia na lista dos addons quando ela e DESTE titulo: sem imdb o app
   // nao pede legenda nenhuma (app.c), e o que estiver em memoria e do anterior.
@@ -748,13 +755,23 @@ static void legendaAutomatica(Uint32 agora) {
     addFechado = addons_legendas_prontas();
   }
   if (passou >= FX_AUTO_FIM_MS) embFechado = addFechado = 1;
-  r = ling_legenda_auto(ling_legenda(), emb, nEmb, embFechado, add, nAdd, addFechado);
+  r = ling_legenda_auto_tipo(ling_legenda(), audio, ajustes_legenda_forcada_auto(),
+                             emb, tipos, nEmb, embFechado, add, nAdd, addFechado);
   if (r == LING_AUTO_ESPERA) {
     // Passou do primeiro instante e ainda procura: a ilha diz o que esta fazendo.
-    if (passou >= 1200u && ling_legenda()[0] && strcasecmp(ling_legenda(), "none")) pilBuscando(ling_legenda(), agora);
+    if (!soForcada && passou >= 1200u && ling_legenda()[0] && strcasecmp(ling_legenda(), "none")) pilBuscando(ling_legenda(), agora);
     return;
   }
   legAuto = 0;
+  if (r == LING_AUTO_NADA && soForcada) {
+    // #287: o audio ja esta no idioma da legenda e o arquivo nao tem forcada.
+    // Sem legenda e o pedido, nao uma falha: a ilha fica quieta.
+    pilBusca = 0;
+    printf("[legenda] automatica: audio em '%s' = legenda '%s', sem forcada: nenhuma\n",
+           audio, ling_legenda());
+    fflush(stdout);
+    return;
+  }
   if (r == LING_AUTO_NADA) {
     if (ling_legenda()[0] && strcasecmp(ling_legenda(), "none")) {
       // Antes era silencio: a pessoa nao sabia se o app tentou. Agora a ilha diz.
@@ -782,9 +799,12 @@ static void legendaAutomatica(Uint32 agora) {
     int b = legauto_escolher(v, nv, ling_legenda(), video_url_atual(), NULL, 0, lem);
     if (b >= 0 && b < nAdd) r = nEmb + b;
   }
-  printf("[legenda] automatica: '%s' -> %s %d (%s) aos %u ms\n", ling_legenda(),
+  printf("[legenda] automatica: '%s' -> %s %d (%s%s) aos %u ms\n", ling_legenda(),
          r < nEmb ? "embutida" : "addon", r < nEmb ? r : r - nEmb,
-         r < nEmb ? emb[r] : add[r - nEmb], (unsigned)passou);
+         r < nEmb ? emb[r] : add[r - nEmb],
+         r < nEmb && tipos[r] == LING_LEG_FORCADA ? ", forcada: audio no mesmo idioma" :
+         r < nEmb && tipos[r] == LING_LEG_LETREIROS ? ", letreiros: audio no mesmo idioma" : "",
+         (unsigned)passou);
   fflush(stdout);
   escolherLegenda(r);
 }

@@ -1,5 +1,6 @@
 // Ver tests/faixasmkv.sh (#206).
 #include "../src/faixasmkv.h"
+#include "../src/linguas.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,8 +51,11 @@ int main(int argc, char **argv) {
      "audio 2: idioma + 2.0", a[1].rotulo);
   ok(!l[0].letreiro && !strchr(l[0].rotulo, 0xc2), "legenda 1: so o idioma", l[0].rotulo);
   ok(l[1].letreiro && strstr(l[1].rotulo, "Forced") != NULL, "legenda 2: nome Forced, letreiro", l[1].rotulo);
-  ok(l[2].letreiro && strstr(l[2].rotulo, "Letreiros") != NULL, "legenda 3: so a flag -> Letreiros", l[2].rotulo);
+  ok(l[2].letreiro && l[2].tipoLeg == LING_LEG_FORCADA && strstr(l[2].rotulo, "For\xc3\xa7" "ada") != NULL, "legenda 3: so a flag -> Forcada (#287)", l[2].rotulo);
   ok(!l[3].letreiro && strstr(l[3].rotulo, "English SDH") != NULL, "legenda 4: nome SDH", l[3].rotulo);
+  ok(nf >= 7 && fx[6].sdh == 1 && fx[5].sdh == 0, "FlagHearingImpaired lida (#287)", NULL);
+  ok(l[0].tipoLeg == LING_LEG_COMUM && l[1].tipoLeg == LING_LEG_FORCADA && l[3].tipoLeg == LING_LEG_SDH,
+     "tipos: comum, forcada (nome), SDH (#287)", NULL);
   ok(l[1].numero == 1 && l[1].ordinalMkv == 1 && a[1].numero == 1, "indices do player intactos", NULL);
 
   // De novo, como na releitura do audio (#165): nada duplica.
@@ -80,7 +84,7 @@ int main(int argc, char **argv) {
     snprintf(g[4].codec, sizeof g[4].codec, "S_HDMV/PGS");   // a legenda 2 (Forced)
     player(a, 2, l, 3);
     faixasmkv_aplicar(a, 2, l, 3, g, nf);
-    ok(!strcmp(l[0].rotulo, "Húngaro") && strstr(l[1].rotulo, "Letreiros") && strstr(l[2].rotulo, "English SDH"),
+    ok(!strcmp(l[0].rotulo, "Húngaro") && strstr(l[1].rotulo, "For\xc3\xa7" "ada") && strstr(l[2].rotulo, "English SDH"),
        "legendas 3x4 com uma PGS: casa sem ela", l[2].rotulo);
     // O overlay do .tpk (#269) le a faixa pelo ordinal do ARQUIVO: a PGS
     // escondida pelo player conta, senao o mkvass colheria a legenda vizinha.

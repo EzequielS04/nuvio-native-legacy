@@ -421,6 +421,9 @@ typedef enum {
   // APOIAR O PROJETO (Sobre e ajuda, apoio.h): a previa mostra os QRs do
   // Patreon e do Ko-fi. Acao, sem valor. No fim: valor[]/CHAVE[] posicionais.
   AJ_APOIAR,
+  // #287: com o audio no idioma da legenda, ligar so a legenda FORCADA desse
+  // idioma (ou nenhuma). LOCAL, padrao Ligado. No fim: valor[]/CHAVE[] posicionais.
+  AJ_LEG_FORCADA,
   AJ_N
 } OpcaoId;
 
@@ -1183,6 +1186,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Tamanho máximo",                  V_TAMANHO_GB, 7),       // local: tamanhoMaxLocal
   ESC("Tamanho mínimo",                  V_TAMANHO_GB, 7),       // local: tamanhoMinLocal
   ACAO("Apoiar o projeto"),
+  ESC("Legenda forçada automática quando o áudio for no seu idioma", V_LIGA, 2), // local: legendaForcadaLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1381,6 +1385,7 @@ static const char *CHAVE[] = {
   "relogio12hLocal",
   "tamanhoMaxLocal", "tamanhoMinLocal",
   "-apoiar",
+  "legendaForcadaLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1807,6 +1812,7 @@ int ajustes_legenda_sync_audio(void) { return lig(AJ_LEG_SYNC_AUDIO); }
 #else
 int ajustes_legenda_sync_audio(void) { return 0; }   // escondida fora do Android
 #endif
+int ajustes_legenda_forcada_auto(void) { return lig(AJ_LEG_FORCADA); }   // #287, padrao Ligado
 int ajustes_cache_seek_mb(void) {
   static const int MB[] = { 0, 256, 512, 1024 };
   int v = valor[AJ_CACHE_SEEK];
@@ -3657,6 +3663,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_TAMANHO_AJUSTES:
     case AJ_LOGO_TRAILER:   /* so a protecao de OLED desta TV */
     case AJ_LEG_SYNC_AUDIO: /* PCM e passthrough sao desta TV; o web nao tem */
+    case AJ_LEG_FORCADA:    /* #287: o web nao tem esta escolha */
     case AJ_LEG2_POS: case AJ_LEG2_TAMANHO: case AJ_LEG2_COR: case AJ_LEG2_FUNDO: case AJ_LEG2_BORDA: /* estilo da legenda e desta TV */
     case AJ_CACHE_SEEK:     /* F07: o disco e o player sao desta TV */
     case AJ_TRAILER_ZOOM_TPK: /* #241: o firmware de cada Samsung reage de um jeito */
@@ -4664,6 +4671,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_QUALIDADE: return "Define a preferência de resolução. A disponibilidade depende das fontes do addon.";
     case AJ_DV: case AJ_ATMOS: return "Preferência para fontes compatíveis. O formato disponível também depende do arquivo e da TV.";
     case AJ_LEG_SYNC_AUDIO: return "Compara as falas do áudio com a legenda externa para acertar o atraso. Só onde o player entrega o áudio decodificado e sem passthrough; vale só nesta TV.";
+    case AJ_LEG_FORCADA: return "Quando o áudio já está no idioma da legenda, liga só a legenda forçada desse idioma (falas em outra língua e placas), ou nenhuma se o arquivo não tiver. Desligado, liga a legenda completa como antes.";
     case AJ_LEG_LINGUA2: return "Segunda legenda, mostrada no alto da tela junto com a principal. Só arquivos SRT/VTT dos addons. \"Da conta\" segue o que está no seu perfil.";
     case AJ_LEG2_POS: return "No topo, a segunda legenda fica no alto da tela. Junto da principal, ela fica logo acima da principal, no pé da tela.";
     case AJ_LEG2_TAMANHO: case AJ_LEG2_COR: case AJ_LEG2_FUNDO: case AJ_LEG2_BORDA:
@@ -6428,6 +6436,7 @@ static AjPreview familiaPreviaOpcao(int op) {
   switch (op) {
     case AJ_LEG2_POS: case AJ_LEG2_TAMANHO: case AJ_LEG2_COR: case AJ_LEG2_FUNDO: case AJ_LEG2_BORDA:
     case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: case AJ_LEG_LINGUA: case AJ_LEG_LINGUA2: case AJ_CACHE_SEEK:
+    case AJ_LEG_FORCADA:
     case AJ_AUD_LINGUA: case AJ_PAUSA_OVERLAY: case AJ_FONTE_MANUAL:
     case AJ_FONTE_AUTO: case AJ_FONTE_REPOR: case AJ_FONTE_TEXTO: case AJ_SELOS_CORES:
     case AJ_FONTE_PRIORIDADE: case AJ_FONTE_HDR:

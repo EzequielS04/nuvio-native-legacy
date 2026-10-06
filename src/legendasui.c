@@ -91,6 +91,9 @@ int legendasui_montar(const VideoFaixa *const *emb, int nEmb,
       memset(c, 0, sizeof *c);
       legendasui_id_embutida(f, c->id);
       c->embutida = 1; c->indice = i; c->letreiro = f->letreiro;
+      // #287: the kind from the track; a forced/signs flag without kind (a
+      // platform that only knows the flag) reads as signs, as before.
+      c->tipo = f->tipoLeg ? f->tipoLeg : f->letreiro ? LING_LEG_LETREIROS : LING_LEG_COMUM;
       snprintf(c->idioma, sizeof c->idioma, "%s", f->idioma);
       snprintf(c->rotulo, sizeof c->rotulo, "%s", f->rotulo);
       snprintf(c->codec, sizeof c->codec, "%s", f->codec);
@@ -109,7 +112,24 @@ int legendasui_montar(const VideoFaixa *const *emb, int nEmb,
     formatoDaExtensao(add[i].arquivo, c->formato);
     if (!c->formato[0]) formatoDaExtensao(add[i].url, c->formato);
   }
+  // #287: a plain embedded track next to a forced one of the same language is
+  // the full one. Saying so is what tells "Embutida" from "Embutida" apart.
+  { int a, b;
+    for (a = 0; a < n; a++) {
+      if (!out[a].embutida || out[a].tipo != LING_LEG_COMUM) continue;
+      for (b = 0; b < n; b++)
+        if (out[b].embutida && (out[b].tipo == LING_LEG_FORCADA || out[b].tipo == LING_LEG_LETREIROS) &&
+            out[a].idioma[0] && ling_casa(out[b].idioma, out[a].idioma) && ling_casa(out[a].idioma, out[b].idioma))
+          out[a].completaPar = 1;
+    }
+  }
   return n;
+}
+
+const char *legendasui_tipo_rotulo(const LegUiCand *c) {
+  if (!c || !c->embutida) return NULL;
+  if (c->tipo == LING_LEG_COMUM) return c->completaPar ? i18n("Legenda completa") : NULL;
+  { const char *r = ling_tipo_legenda_rotulo(c->tipo); return r ? i18n(r) : NULL; }
 }
 
 int legendasui_cand_secundaria_ok(const LegUiCand *c) {
@@ -185,7 +205,14 @@ static const char *prefLinha(int slot) {
 // change while the player panel is open, so the key stays stable.
 static const char *nomeIdioma(const char *cod) { return cod && cod[0] ? i18n(ling_nome(cod)) : "?"; }
 static void chaveOrigem(const LegUiCand *c, char *dst, size_t n) {
-  if (c->embutida) snprintf(dst, n, c->letreiro ? "E*" : "E");
+  // One group per KIND (#287): "Embutida · Forçada" and the full track of the
+  // same language are two rows, not "2 versões" (the kind is what the person
+  // picks by). Plain stays "E" and signs "E*", as before.
+  if (c->embutida) {
+    if (c->tipo == LING_LEG_COMUM) snprintf(dst, n, "E");
+    else if (c->tipo == LING_LEG_LETREIROS) snprintf(dst, n, "E*");
+    else snprintf(dst, n, "E:%c", c->tipo == LING_LEG_FORCADA ? 'F' : c->tipo == LING_LEG_SDH ? 'S' : 'C');
+  }
   else snprintf(dst, n, "A:%s", c->origem);
 }
 
@@ -593,7 +620,7 @@ static void textoLinha(const LuiLinha *l, char *nome, size_t tn, char *sub, size
       if (!mais && !ver) {
         snprintf(nome, tn, "%s", nomeIdioma(c->idioma));
         juntar(sub, ts, c->embutida ? i18n("Embutida") : c->origem);
-        if (c->letreiro) juntar(sub, ts, i18n("Letreiros"));
+        juntar(sub, ts, legendasui_tipo_rotulo(c));
         if (l->nVar > 1) { char b[32]; snprintf(b, sizeof b, i18n("%d versões"), l->nVar); juntar(sub, ts, b); }
       } else {
         const char *marca = c->embutida ? faixas_legenda_marca(c->indice) : NULL;
@@ -603,7 +630,8 @@ static void textoLinha(const LuiLinha *l, char *nome, size_t tn, char *sub, size
         if (l->nVar < 0) juntar(nome, tn, i18n("Recomendada"));
         juntar(sub, ts, c->embutida ? i18n("Embutida") : c->origem);
         juntar(sub, ts, c->formato);
-        if (c->letreiro) juntar(sub, ts, i18n("Letreiros"));
+        { const char *t = legendasui_tipo_rotulo(c);
+          if (t && !strstr(nome, t)) juntar(sub, ts, t); }   // the title may already say it
         juntar(sub, ts, c->arquivo);
         if (l->slot == 0 && marca) juntar(sub, ts, marca);
       }

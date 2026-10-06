@@ -1834,6 +1834,7 @@ static void *lerMkv(void *arg) {
           corrigiu = 1;
         }
         f->letreiro = letreiro;
+        f->tipoLeg = ling_tipo_legenda(m->nome, m->forcado, m->sdh);
         if (jaTemIdioma && !corrigiu && !letreiro) continue;
         if (!jaTemIdioma && id[0]) casou++;
         snprintf(f->idioma, sizeof f->idioma, "%s", id);
@@ -1843,7 +1844,7 @@ static void *lerMkv(void *arg) {
         if (letreiro)
           snprintf(f->rotulo, sizeof f->rotulo, "%s%s%s",
                    f->idioma[0] ? i18n(ling_nome(f->idioma)) : "",
-                   f->idioma[0] ? "  \xc2\xb7  " : "", i18n("Letreiros"));
+                   f->idioma[0] ? "  \xc2\xb7  " : "", i18n(ling_tipo_legenda_rotulo(f->tipoLeg)));
         // O NOME da faixa ("SDH", "Full") e o que separa duas legendas do
         // MESMO idioma. Sem ele o dono ve "Portugues" tres vezes e escolhe no
         // escuro — e essa e justamente a lista que ele reclamou. Nome que e so
@@ -2529,6 +2530,7 @@ static void bombearDts(void) {
       } else continue;
       f->stream_index = t->stream_index; f->stream_id = t->stream_id;
       f->canais = t->channels; f->letreiro = t->forced;
+      f->tipoLeg = t->forced ? LING_LEG_FORCADA : LING_LEG_COMUM;
       snprintf(f->codec, sizeof f->codec, "%s", t->codec);
       /* ASS consumers expect the Matroska CodecID, not an FFmpeg name. */
       if (!strcmp(t->codec, "ass") || !strcmp(t->codec, "ssa"))

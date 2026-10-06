@@ -121,11 +121,17 @@ static void estado(int controles) {
   v.largura = 3840; v.altura = 2160; v.pronto = 1; v.pos = 12.0; v.duracao = 3360.0;
   v.nAudio = 1;
   faixa(&v.audio[0], 1, "Ingl\xc3\xaas  \xc2\xb7  E-AC3 \xc2\xb7 5.1", "en", "", 0);
-  v.nLeg = 4; v.legAtual = -1;
+  v.nLeg = 5; v.legAtual = -1;
+  // #287: full + forced + signs of the same language, and an SDH one: the
+  // simple list says which is which next to "Embutida".
   faixa(&v.leg[0], 3, "Portugu\xc3\xaas (Brasil)", "pt", "S_TEXT/UTF8", 0);
-  faixa(&v.leg[1], 4, "Portugu\xc3\xaas \xe2\x80\x94 Letreiros", "pt", "S_TEXT/ASS", 1);
-  faixa(&v.leg[2], 5, "English", "en", "S_TEXT/UTF8", 0);
-  faixa(&v.leg[3], 6, "Espa\xc3\xb1ol", "es", "S_HDMV/PGS", 0);
+  faixa(&v.leg[1], 4, "Portugu\xc3\xaas  \xc2\xb7  For\xc3\xa7" "ada", "pt", "S_TEXT/UTF8", 1);
+  v.leg[1].tipoLeg = LING_LEG_FORCADA;
+  faixa(&v.leg[2], 5, "Portugu\xc3\xaas  \xc2\xb7  Signs & Songs", "pt", "S_TEXT/ASS", 1);
+  v.leg[2].tipoLeg = LING_LEG_LETREIROS;
+  faixa(&v.leg[3], 6, "English  \xc2\xb7  English SDH", "en", "S_TEXT/UTF8", 0);
+  v.leg[3].tipoLeg = LING_LEG_SDH;
+  faixa(&v.leg[4], 7, "Espa\xc3\xb1ol", "es", "S_HDMV/PGS", 0);
   video_simular(&v);
   player_shot_estado(relogio, 12.0f, 3360.0f, 1, 0, 0, 0);
   if (!controles) player_shot_esconder();

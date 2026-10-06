@@ -392,6 +392,7 @@ int   ajustes_leg2_tamanho(void);
 int   ajustes_leg2_cor(void);
 int   ajustes_leg2_fundo(void);
 int   ajustes_leg2_borda(void);
+int   ajustes_legenda_forcada_auto(void);    // #287: 1 = audio in the subtitle language -> only the forced track (local, default on)
 int   ajustes_legenda_sync_audio(void);      // 1 = offer "Por audio" in subtitle AutoSync (F06; local, default off)
 int   ajustes_trailer_zoom_tpk(void);        // #241: 1 = experimental trailer zoom on the native .tpk (local, default off)
 int   ajustes_cache_seek_mb(void);           // F07: seek cache limit in MB for the next video (0 = off / not on this TV)
