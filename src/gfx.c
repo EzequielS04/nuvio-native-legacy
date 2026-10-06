@@ -95,7 +95,35 @@ static int telaW = (int)NV_TELA_W, telaH = (int)NV_TELA_H;
 static float uTelaW = NV_TELA_W, uTelaH = NV_TELA_H;
 static int   miniAtiva, miniPxW, miniPxH;
 static float miniX0, miniY0, miniEsc;
-void gfx_tamanho_alvo(int w, int h) { telaW = w; telaH = h; }
+// O alvo da TELA (o ultimo gfx_tamanho_alvo): a unidade de gfx_fill_gpu. Os
+// alvos pequenos (luz assada, snapshot) mudam telaW por dentro e contam pelo
+// tamanho deles.
+static int telaRealW = (int)NV_TELA_W, telaRealH = (int)NV_TELA_H;
+// A tesoura ligada por gfx_recorte, em pixels do alvo (origem embaixo).
+static int recorteAtivo;
+static GLint recorteBox[4];
+// Pixels que o quad `r` (layout) pinta no alvo atual: cortado pelo alvo e pela
+// tesoura, em telas do alvo da tela. Ignora giro e miniatura (aproximado).
+static double fillGpuArea(GfxRect r, const float sub[4]) {
+  float ex = (float)telaW / NV_TELA_W, ey = (float)telaH / NV_TELA_H;
+  float x0 = (r.x + r.w * sub[0]) * ex, x1 = (r.x + r.w * sub[2]) * ex;
+  float y0 = (NV_TELA_H - (r.y + r.h * sub[3])) * ey, y1 = (NV_TELA_H - (r.y + r.h * sub[1])) * ey;
+  if (x0 < 0.0f) x0 = 0.0f;
+  if (y0 < 0.0f) y0 = 0.0f;
+  if (x1 > (float)telaW) x1 = (float)telaW;
+  if (y1 > (float)telaH) y1 = (float)telaH;
+  if (recorteAtivo) {
+    float sx0 = (float)recorteBox[0], sy0 = (float)recorteBox[1];
+    float sx1 = sx0 + (float)recorteBox[2], sy1 = sy0 + (float)recorteBox[3];
+    if (x0 < sx0) x0 = sx0;
+    if (y0 < sy0) y0 = sy0;
+    if (x1 > sx1) x1 = sx1;
+    if (y1 > sy1) y1 = sy1;
+  }
+  if (x1 <= x0 || y1 <= y0 || telaRealW <= 0 || telaRealH <= 0) return 0.0;
+  return (double)(x1 - x0) * (double)(y1 - y0) / ((double)telaRealW * (double)telaRealH);
+}
+void gfx_tamanho_alvo(int w, int h) { telaW = w; telaH = h; telaRealW = w; telaRealH = h; }
 // Tamanho da interface (gfx.h). escAtiva multiplica o retangulo de layout
 // antes de tudo: o SDF, os raios e as espessuras sao fracoes do proprio rect,
 // e uAlt sai da altura JA ampliada — a rampa de borda segue com 1 px do alvo.
@@ -1462,6 +1490,8 @@ double gfx_ms_rect = 0.0, gfx_ms_outros = 0.0;
 // contador e uma medida por quadro.
 double gfx_fill = 0.0;
 double gfx_fill_vis = 0.0;
+double gfx_fill_gpu = 0.0, gfx_fill_gpu_mist = 0.0;
+double gfx_fill_gpu_ult = 0.0, gfx_fill_gpu_mist_ult = 0.0;
 unsigned long long gfx_modos_desligados = 0;
 int    gfx_n_cheio = 0;   // desenhos que cobrem >= 50% da tela
 // So na medida (tests/fluidez_perf.c, -DNV_FLUIDEZ_PERF): quantos desses foram
@@ -1582,6 +1612,8 @@ void gfx_novo_quadro(void) {
   gfx_n_rect = gfx_n_prog = gfx_n_bind = gfx_n_outros = 0;
   gfx_ms_rect = gfx_ms_outros = 0.0;
   gfx_fill = 0.0; gfx_fill_vis = 0.0; gfx_n_cheio = 0; gfx_n_cheio_mistura = 0;
+  gfx_fill_gpu_ult = gfx_fill_gpu; gfx_fill_gpu_mist_ult = gfx_fill_gpu_mist;
+  gfx_fill_gpu = 0.0; gfx_fill_gpu_mist = 0.0;
   memcpy(gfx_fill_modo_ult, gfx_fill_modo, sizeof gfx_fill_modo);
   memset(gfx_fill_modo, 0, sizeof gfx_fill_modo);
   desfGeradosQuadro = 0;
@@ -1769,6 +1801,11 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
     GFX_OUTRO_FIM();
     ambIntacta = 0;
     return;
+  }
+  if (!miniAtiva) {
+    double ag = fillGpuArea(r, subAtual);
+    gfx_fill_gpu += ag;
+    if (blendLigado && !comAmb && !opaco) gfx_fill_gpu_mist += ag;
   }
   Programa *P = &progs[modo];
   if (progAtual != (int)modo) { glUseProgram(P->prog); progAtual = (int)modo; gfx_n_prog++; }
@@ -2044,7 +2081,7 @@ static int ambCriarAlvos(GLuint *tex, GLuint *fbo, int n) {
 // da camada, mistura) e volta como estava.
 static void ambAssarEm(GLuint fbo, void (*pintar)(void *), void *ctx) {
   GLint fboAnt, vpAnt[4];
-  int twAnt = telaW, thAnt = telaH, pend = ambPendente, intacta = ambIntacta, blendAnt = blendLigado;
+  int twAnt = telaW, thAnt = telaH, pend = ambPendente, intacta = ambIntacta, blendAnt = blendLigado, recAnt;
   float g = gfx_opacidade_grupo, desl = gfx_desliza_atual;
   GLboolean tesoura;
   GFX_OUTRO_INI();
@@ -2052,6 +2089,7 @@ static void ambAssarEm(GLuint fbo, void (*pintar)(void *), void *ctx) {
   glGetIntegerv(GL_VIEWPORT, vpAnt);
   tesoura = glIsEnabled(GL_SCISSOR_TEST);
   if (tesoura) glDisable(GL_SCISSOR_TEST);
+  recAnt = recorteAtivo; recorteAtivo = 0;
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, 0);
   texAtual = 0;
@@ -2077,6 +2115,7 @@ static void ambAssarEm(GLuint fbo, void (*pintar)(void *), void *ctx) {
   glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)fboAnt);
   glViewport(vpAnt[0], vpAnt[1], vpAnt[2], vpAnt[3]);
   if (tesoura) glEnable(GL_SCISSOR_TEST);
+  recorteAtivo = recAnt;
   GFX_OUTRO_FIM();
 }
 // O desenho de um assado de luz: as quatro luzes de regiao (nv_ambiente_viva)
@@ -2569,8 +2608,6 @@ void gfx_luz_canto(GfxRect r, float raio, float cx, float cy, float alcance,
 // de um retangulo e o caminho barato para o mesmo resultado. A tesoura cobre
 // exatamente os pixels que o quad cobriria (centro do pixel dentro do rect:
 // de round(x0) a round(x1)), e o recorte que estava ativo volta depois.
-static int recorteAtivo;
-static GLint recorteBox[4];
 void gfx_furo(GfxRect r) {
   float ex = (float)telaW / NV_TELA_W, ey = (float)telaH / NV_TELA_H;
   int x0, x1, y0, y1, cheia;

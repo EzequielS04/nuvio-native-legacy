@@ -465,6 +465,14 @@ extern double gfx_fill;      // area submetida no quadro, em telas cheias
 // sangra, o destaque rolado) so conta o que aparece. E o mais proximo do
 // preenchimento real que da para tirar sem GPU; nao enxerga a tesoura.
 extern double gfx_fill_vis;
+// O PREENCHIMENTO QUE A GPU PAGA: o quad em pixels do alvo, cortado pelo alvo e
+// pela tesoura, em telas do alvo da tela. Os alvos pequenos (luz assada 320x180,
+// snapshot) contam pelo tamanho deles, e o clear de cor chapada (gfx_rect de
+// tela cheia opaca, gfx_furo) nao conta: e um glClear. `_mist` e a parte
+// desenhada COM mistura (le a tela; a Mali nao descarta o que fica por baixo).
+// `_ult` = o do quadro anterior (o log le estes).
+extern double gfx_fill_gpu, gfx_fill_gpu_mist;
+extern double gfx_fill_gpu_ult, gfx_fill_gpu_mist_ult;
 extern int    gfx_n_cheio;   // desenhos cobrindo >= 50% da tela
 extern int    gfx_n_cheio_mistura;   // desses, com mistura (so -DNV_FLUIDEZ_PERF)
 // O mesmo gfx_fill repartido por modo (programa): diz QUAL shader cobre a
