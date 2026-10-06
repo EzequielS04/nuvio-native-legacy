@@ -43,6 +43,10 @@ const CORS = {
   "access-control-allow-headers": "authorization, content-type, x-nuvio-auth, x-nuvio-perfil, if-none-match",
   "access-control-allow-methods": "GET, POST, OPTIONS",
   "cross-origin-resource-policy": "cross-origin",
+  // O 304 de /v1/rec so manda `etag` (ver rotaReceber): sem isto exposto o
+  // XHR da TV enxerga o 304 mas nunca le o cabecalho para comparar com o que
+  // ja tinha guardado, e cai numa sondagem que nunca acerta o cache.
+  "access-control-expose-headers": "etag",
 };
 function json(dados, status = 200, extra = {}) {
   return new Response(JSON.stringify(dados), {
@@ -572,7 +576,12 @@ export async function rotaReceber(env, quem, url, req) {
   const sig = respostas.reduce((a, x) => a + x.respondido + (x.reacao === null ? 0 : x.reacao + 2) + x.terminou, 0);
   const etag = `"${quem.id.length}-${maiorId}-${naoVistas}-${respostas.length}.${sig}"`;
   if (req.headers.get("if-none-match") === etag) {
-    return new Response(null, { status: 304, headers: { etag } });
+    // SEM CORS AQUI, o XHR da TV via `mode: "cors"` nunca via ESTE 304 —
+    // via um erro de rede generico, porque a resposta sem
+    // access-control-allow-origin e recusada pelo navegador antes de chegar
+    // ao codigo que compara o status. A sondagem de 304 (o caso comum, "nada
+    // novo") era exatamente o caminho sem CORS; so o 200 com corpo tinha.
+    return new Response(null, { status: 304, headers: { etag, ...CORS } });
   }
   return json({ cursor: maiorId, novas: naoVistas, itens, respostas }, 200, { etag });
 }
@@ -629,6 +638,18 @@ export default {
 
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
     if (rota === "/v1/saude") return json({ ok: 1, t: agora() });
+
+    // TV VIDAA: o site (/tv/*) e o proxy dela (/v1/proxy) moram em OUTRO
+    // worker, nuvio-tv (servidor/tv). Estavam aqui, com [assets] no
+    // wrangler.toml deste worker, e todo deploy feito de uma arvore sem o site
+    // montado apagava a pagina da TV (24/09 e de 29/09 a 05/10, issue #135).
+    // Aqui fica so o repasse, para o endereco antigo continuar valendo; sem o
+    // binding (teste, deploy de arvore antiga) responde 404 e o site segue no
+    // ar no endereco proprio dele.
+    if (rota === "/tv" || rota.startsWith("/tv/") || rota === "/v1/proxy") {
+      if (!env.TV) return erro("site da tv em outro endereco", 404);
+      return env.TV.fetch(req);
+    }
 
     // BUILD DE DIAGNOSTICO (#77, 20/09/2026): uma TV que nao chega nem ao
     // login nao tem sessao nem Trakt para assinar o envio, e o dono pediu uma
