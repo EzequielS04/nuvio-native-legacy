@@ -475,8 +475,8 @@ int main(int argc, char **argv) {
 
     // 12g. REGRESSAO "em todos os filmes ela fala que ta ok e ta fora de
     //      sincronia" (dono, 04/10). Um longa de 2 h (1332 falas) com a
-    //      externa +2,5 s e a embutida no MKV. A referencia custa UM Range por
-    //      fala (cada fala mora num Cluster) e a TV le no maximo LS_RITMO = 8
+    //      externa +2,5 s e a embutida no MKV. No 2.0 a referencia custava UM
+    //      Range por fala (cada fala mora num Cluster) e a TV le no maximo LS_RITMO = 8
     //      Ranges/s: o relogio do player aqui anda 125 ms por Range, o melhor
     //      caso da TV (sem latencia de rede). Antes, o teto de 45 s do plano
     //      vencia aos ~360 Ranges, cancelava a leitura, deixava a legenda +2,5 s
@@ -503,7 +503,9 @@ int main(int argc, char **argv) {
       atrasoLeitorUs = 0;
       printf("[12g] filme: %d Ranges, relogio do player %u s, autoFase %d, fase %d, offset em vigor %d ms\n",
              ranges, (agora - t0) / 1000u, v.autoFase, v.fase, legsync_offset_ms(0));
-      assert(ranges > 1200 && agora - t0 > 3u * LS_AUTO_TETO_TESTE);  // ~um Range por fala: > 2 min a 8/s
+      // 2.1: SRT com CueDuration sai do proprio indice (cabeca + Cues), sem
+      // um Range por fala: segundos em vez de > 2 min a 8/s.
+      assert(ranges <= 6 && agora - t0 < LS_AUTO_TETO_TESTE);
       assert(v.autoFase == 2 && v.fase == LEGSYNC_ACEITA && abs(v.offsetAutoMs - 2500) <= 25);
       assert(legsync_offset_ms(0) == v.offsetAutoMs);
       conferirFilme(legsync_offset_ms(0));                      // a fala certa no instante certo
