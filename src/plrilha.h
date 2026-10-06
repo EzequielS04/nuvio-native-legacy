@@ -49,6 +49,9 @@ void plrilha_pedir(const PlrIlhaPedido *p);
 // A pilula da hora acompanhando o OSD: `a` e a opacidade dos controles.
 // `falta` em segundos ate o fim do titulo (< 0 = sem "termina as": canal).
 void plrilha_relogio(float a, double falta);
+// #202: a velocidade da reproducao em centesimos (velocidade.h). Fora de
+// 100 a pilula mostra "1,5x" depois do "termina as". Vale ate a proxima chamada.
+void plrilha_velocidade(int cent);
 // 1 = ancorada a direita (Posicao do relogio), para o OSD por as marcas de
 // formato no outro canto.
 int  plrilha_direita(void);

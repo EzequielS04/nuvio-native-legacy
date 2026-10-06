@@ -18,6 +18,7 @@
 #include "mkv.h"
 #include "mkvass.h"
 #include "faixasmkv.h"
+#include "velocidade.h"
 #include <SDL2/SDL.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -53,6 +54,13 @@ static char cabecalhos[2048];
 static volatile int ativo, pronto, falhou, terminou, tocando, largura, altura;
 static volatile int conflito;   // ver video_tpk_log_host
 static volatile int durMs, bufferando;
+// VELOCIDADE (#202, video.h). O host aplica por escolher(3, centesimos) —
+// Player.SetPlaybackRate — e responde no evento EV_VELOCIDADE (a = centesimos,
+// b = 1 aceitou / 0 recusou). A documentacao do Tizen.Multimedia diz que o
+// SetPlaybackRate lanca InvalidOperationException em "Streaming playback", e
+// toda fonte do app e streaming: a linha aparece, o primeiro pedido e a prova,
+// e a recusa a esconde pelo resto da execucao.
+static volatile int velPedida = 100, velEnviada = 100, velRecusada;
 static volatile Uint32 bufferDesde;
 static unsigned sessao;
 // The host reports numeric errors from another thread. Preserve that evidence
@@ -189,7 +197,7 @@ void nv_tpk_video_legenda(const char *texto, int durMs) {
 }
 
 enum { EV_PRONTO = 1, EV_TOCANDO = 2, EV_PAUSADO = 3, EV_FIM = 4, EV_ERRO = 5,
-       EV_TAMANHO = 6, EV_BUFFER = 7 };
+       EV_TAMANHO = 6, EV_BUFFER = 7, EV_VELOCIDADE = 8 };
 
 __attribute__((visibility("default")))
 void nv_tpk_video_evento(int tipo, int a, int b) {
@@ -207,6 +215,10 @@ void nv_tpk_video_evento(int tipo, int a, int b) {
     case EV_BUFFER:
       if (a < 100 && !bufferando) { bufferando = 1; bufferDesde = SDL_GetTicks(); }
       else if (a >= 100) bufferando = 0;
+      break;
+    case EV_VELOCIDADE:
+      vel_log(a, b ? "plataforma ok" : "plataforma recusou");
+      if (!b) { velRecusada = 1; velPedida = 100; }
       break;
     default: break;
   }
@@ -244,6 +256,7 @@ static int abrirSessao(void) {
   legendaLimpar(1);
   emTrailer = 0;
   sessao++;
+  velEnviada = 100;   // Player novo no host: nasce em 1x
   if (!hAbrir) { falhou = 1; printf("[video] tpk: host sem player\n"); return 0; }
   hAbrir(urlAtual, cabecalhos);
   return 1;
@@ -384,6 +397,11 @@ static void escolhasPendentes(void) {
 
 void video_bombear(void) {
   escolhasPendentes();
+  // O SetPlaybackRate exige Ready/Playing/Paused: so com o prepare feito.
+  if (!velRecusada && pronto && hEscolher && velEnviada != velPedida) {
+    velEnviada = velPedida;
+    hEscolher(3, velEnviada);
+  }
   double pos = video_pos();
   sondaMkv(pos);
   if (pronto && pos > 0.5) reconIniciou = 1;
@@ -652,6 +670,12 @@ void video_escala_definir(int sw, int sh) { (void)sw; (void)sh; }
 int  video_largura(void) { return largura; }
 int  video_altura(void) { return altura; }
 int  video_pode_forcar_sdr(void) { return 0; }
+int  video_velocidade_suportada(void) { return !velRecusada && hEscolher != NULL; }
+void video_velocidade(int c) {
+  if (c <= 0 || c > 400) c = 100;
+  if (!velRecusada) velPedida = c;
+}
+int  video_velocidade_atual(void) { return velRecusada ? 100 : velPedida; }
 void video_forcar_sdr(void) {}
 void video_encerrar(void) { video_parar(); }
 #endif

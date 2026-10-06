@@ -11,6 +11,7 @@
 #include "js.h"
 #include "lsregistro.h"
 #include "rede.h"
+#include "velocidade.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -230,6 +231,12 @@ int  video_pode_forcar_sdr(void) { return 0; }
 int  video_recorte_fonte(void) { return 1; }
 void video_forcar_sdr(void) {}
 void video_encerrar(void) {}
+// Sem pipeline no Mac: a linha da velocidade aparece (para as capturas e para
+// desenvolver a folha) e o pedido so fica guardado.
+static int velMac = VEL_NORMAL;
+int  video_velocidade_suportada(void) { return 1; }
+void video_velocidade(int c) { velMac = c > 0 ? c : VEL_NORMAL; }
+int  video_velocidade_atual(void) { return velMac; }
 // .tpk da Samsung: o player e o do host .NET, em video_tpk.c.
 #elif !defined(NV_TPK) && !defined(NV_ANDROID)   // ramo luna (webOS): Android usa video_android.c
 #include <dlfcn.h>
@@ -431,6 +438,12 @@ static int dvPedido;
 static char      midia[64];
 static double    posSeg, durSeg;
 static int       tocando, pronto, ligado, falhou, terminou;
+// VELOCIDADE (#202, video.h). velPedida e o que a pessoa quer; velEnviada o
+// que este pipeline ja recebeu (nasce 100 a cada load). O setPlayRate do uMS e
+// o mesmo que o app web do Nuvio manda ({mediaId, playRate, audioOutput:true});
+// a resposta diz se a TV aceitou. Recusou uma vez, a linha some do app inteiro
+// (a mesma TV nao passa a aceitar no titulo seguinte).
+static volatile int velPedida = 100, velEnviada = 100, velRecusada;
 // Ver video_erro_texto. Escrito no fio do LS2, lido pelo de desenho: e so
 // texto curto e o pior caso de corrida e ler meia mensagem num quadro.
 static char      erroTexto[96];
@@ -1771,7 +1784,9 @@ int video_tocar(const char *url) {
 
 // Chamado uma vez por quadro. So existe para o prazo acima: sem ele o recuo
 // dependeria de o usuario perceber que nao ha imagem e sair da tela.
+static void velBombear(void);
 void video_bombear(void) {
+  velBombear();
   // O ACB demora cerca de 1,5 s para ligar uma sessao. Se o usuario sair e
   // reabrir nesse intervalo, o loadCompleted novo encontra bindVivo=1. Antes
   // ele simplesmente desistia para sempre; agora o pedido fica pendente.
@@ -1964,6 +1979,7 @@ static int tocarInterno(const char *url, int comDV) {
   // entender no titulo seguinte, e insistir so arrisca a imagem de novo.)
   fonX = -1; dstX = dstY = dstW = dstH = -1;
   posSeg = durSeg = bufferSeg = 0; tocando = pronto = 0; midia[0] = 0;
+  velEnviada = 100;   // pipeline novo nasce em 1x; video_bombear reaplica
   bufferandoDesde = 0;
   nAudio = nLeg = 0; audioAtual = 0; legAtual = -1; vidAtmos = 0;
   legUrlAtual[0] = 0; mkvPendente = 0;
@@ -2620,6 +2636,42 @@ void video_legenda_externa(const char *url) {
   printf("[video] legenda externa: %.80s\n", reconhecivel);
   fflush(stdout);
 }
+
+// Resposta do setPlayRate. O contexto leva a sessao e o valor pedido, para
+// uma resposta atrasada de um pipeline que ja saiu nao desligar a linha.
+static int aoVelocidade(LSHandle *h, LSMessage *m, void *u) {
+  const char *p = lsPayload(m);
+  unsigned ctx = (unsigned)(uintptr_t)u, minhaSessao = ctx >> 10;
+  int cent = (int)(ctx & 0x3ffu), ok = p && strstr(p, "\"returnValue\":true") != NULL;
+  (void)h;
+  if (!ok) printf("[video] setPlayRate: %.200s\n", p ? p : "(nulo)");
+  if (minhaSessao != (sessao & 0x3fffffu)) return 1;
+  vel_log(cent, ok ? "plataforma ok" : "plataforma recusou");
+  if (!ok) { velRecusada = 1; velPedida = 100; }
+  return 1;
+}
+
+// Manda so com o pipeline pronto E tocando: nao ha prova de que o setPlayRate
+// numa midia pausada nao a retome, e a pausa e da pessoa. Pausado, o pedido
+// espera o play.
+static void velBombear(void) {
+  char b[160];
+  int v = velPedida;
+  if (velRecusada || !ligado || !midia[0] || !pronto || !tocando || v == velEnviada) return;
+  velEnviada = v;
+  snprintf(b, sizeof b, "{\"mediaId\":\"%s\",\"playRate\":%d.%02d,\"audioOutput\":true}",
+           midia, v / 100, v % 100);
+  chamarCtx("setPlayRate", b, aoVelocidade,
+            (void *)(uintptr_t)(((sessao & 0x3fffffu) << 10) | ((unsigned)v & 0x3ffu)));
+}
+
+int  video_velocidade_suportada(void) { return !velRecusada; }
+void video_velocidade(int c) {
+  if (c <= 0 || c > 400) c = 100;
+  if (velRecusada) return;
+  velPedida = c;
+}
+int  video_velocidade_atual(void) { return velRecusada ? 100 : velPedida; }
 
 void video_encerrar(void) {
   if (!ligado) return;

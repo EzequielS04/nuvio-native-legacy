@@ -81,6 +81,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "relogiofim.h"
 #include "aovivo.h"
 #include "botoes.h"
+#include "velocidade.h"
 #include "recomenda.h"
 #include "home.h"
 #include "descoberta.h"
@@ -1481,6 +1482,9 @@ static void lembrarFonte(void) {
 
 static void fecharSessao(int manter) {
   int jaRetido = retido;
+  // #202: a velocidade e desta reproducao; o trailer da home e o proximo
+  // titulo comecam em 1x.
+  video_velocidade(VEL_NORMAL);
   legsync_encerrar();   // F05: cancela leitura/analise da sessao; join so no fim do app
   if (!jaRetido) lembrarFonte();
   // PERSONAL-SERVER END OF SESSION (Jellyfin/Emby/Plex): stop check-in (and
@@ -2862,6 +2866,8 @@ void player_atualizar(float dt, Uint32 agora) {
                                concluiuAgora(cr), dt);
       }
     }
+    // #202: a legenda interpola na velocidade pedida (relogio.h).
+    relogio_taxa(&relLeg, video_velocidade_atual() / 100.0);
     relogio_amostra(&relLeg, video_pos(), monoSeg(), tocando && !scrubbing);
     // A cada 10 s: o numero cru do pipeline e o do relogio da legenda, no
     // mesmo instante. A diferenca e o que a interpolacao acrescenta (0..~250).
@@ -4229,7 +4235,10 @@ void player_desenhar(Uint32 agora) {
 
   // O "termina as" da pilula vale tambem sem o OSD (a ilha crescida das
   // faixas, os avisos): o tempo que falta e dado a ilha a cada quadro.
-  plrilha_relogio(0.0f, ehCanal() ? -1.0 : (double)(duracaoSeg - posSeg));
+  // #202: "termina as" em tempo de RELOGIO: a 1,5x o resto do arquivo passa
+  // em 2/3 do tempo. A ilha tambem mostra a velocidade quando nao e 1x.
+  plrilha_relogio(0.0f, ehCanal() ? -1.0 : vel_tempo_real((double)(duracaoSeg - posSeg), video_velocidade_atual()));
+  plrilha_velocidade(ehCanal() ? VEL_NORMAL : video_velocidade_atual());
   float a = anim * entrada;
   // FOLHA ABERTA, OSD APAGADO. A folha de Fontes e a de Legendas sao vidro
   // translucido: o relogio, os selos 4K/HDR e o tempo do player apareciam
@@ -4507,7 +4516,7 @@ static void desenharOsdCorpo(Uint32 agora, float a, float ac, const CatItem *c) 
 
   // A PILULA DA ILHA (plrilha.h): a hora e "termina as" moram nela agora, no
   // canto da Posicao do relogio. O canal nao tem fim.
-  plrilha_relogio(ac, ehCanal() ? -1.0 : (double)(duracaoSeg - posSeg));
+  plrilha_relogio(ac, ehCanal() ? -1.0 : vel_tempo_real((double)(duracaoSeg - posSeg), video_velocidade_atual()));
 
   // Selos de formato no alto, no canto OPOSTO ao da ilha. Vem do FLUXO, nao
   // de constante: selo que mente e pior que selo ausente, porque e nele que o

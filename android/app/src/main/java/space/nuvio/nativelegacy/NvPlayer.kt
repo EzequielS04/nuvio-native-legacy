@@ -249,6 +249,12 @@ object NvPlayer {
     @JvmStatic fun ganho(pct: Int) {
         principal.post { ganhoPct = GanhoMath.pct(pct); aplicarGanho() }
     }
+    // #202: velocidade em centesimos. O C reaplica a cada abertura (o player
+    // novo nasce em 1x), entao aqui nao fica estado.
+    @JvmStatic fun velocidade(centesimos: Int) {
+        val v = centesimos.coerceIn(25, 400) / 100f
+        principal.post { player?.setPlaybackSpeed(v) }
+    }
     @JvmStatic fun janela(x: Int, y: Int, w: Int, h: Int, encaixa: Int) { principal.post { definirJanela(x, y, w, h, encaixa != 0) } }
     @JvmStatic fun escolher(tipo: Int, idx: Int) { principal.post { escolherMain(tipo, idx) } }
 

@@ -1521,6 +1521,13 @@ int  video_recorte_fonte(void) { return 0; }
 int  video_pode_forcar_sdr(void) { return 0; }
 void video_forcar_sdr(void) { }
 
+// VELOCIDADE (#202): sem a linha neste alvo. webapis.avplay.setSpeed recebe
+// um INTEIRO de trick play (-16..16), sem 1,25x/1,5x e sem garantia de audio
+// acompanhando — o app web do Nuvio tambem so oferece 1x no AVPlay.
+int  video_velocidade_suportada(void) { return 0; }
+void video_velocidade(int c) { (void)c; }
+int  video_velocidade_atual(void) { return 100; }
+
 // Guardado e NAO USADO no AVPlay: nao ha como pedir uma camada de Dolby Vision
 // ao player. Fica registrado para nao parecer esquecimento, e para o dia em que
 // a Samsung expuser algo equivalente.

@@ -311,6 +311,20 @@ int  video_altura(void);
 int  video_pode_forcar_sdr(void);
 void video_forcar_sdr(void);
 
+// VELOCIDADE DE REPRODUCAO (#202), em centesimos (150 = 1,5x; velocidade.h).
+// video_velocidade guarda o pedido e o backend o aplica quando o pipeline
+// aceita (pronto; na LG tambem tocando) e de novo a cada pipeline novo da
+// MESMA reproducao (reconexao, troca de fonte): o pipeline novo nasce em 1x.
+// Quem volta a 1x e o player (titulo novo, fechar).
+//   suportada: 0 = esconder a linha. O .wgt (AVPlay setSpeed e trick play
+//              inteiro, sem audio) nunca tem; LG e .tpk passam a 0 quando a
+//              plataforma RECUSA o pedido (resposta do uMS / excecao do host),
+//              e ai a velocidade valendo volta a 100.
+//   atual:     o pedido valendo (100 depois de uma recusa).
+int  video_velocidade_suportada(void);
+void video_velocidade(int centesimos);
+int  video_velocidade_atual(void);
+
 void video_encerrar(void);
 
 // SO NO MAC (capturas tests/*_shot.c): o coto do pipeline passa a responder o

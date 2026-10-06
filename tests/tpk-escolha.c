@@ -54,9 +54,11 @@ static int  hPos(void) { return fakePosMs; }
 
 // The fake host counts what actually reaches it.
 static int nAudios, nLegs, ultAudio, ultLeg;
+static int nVels, ultVel;   // #202: escolher(3, centesimos)
 static void hEscolher(int tipo, int idx) {
   if (tipo == 0) { nAudios++; ultAudio = idx; }
   else if (tipo == 1) { nLegs++; ultLeg = idx;nv_tpk_video_legenda("old synchronous cue",3000); }
+  else if (tipo == 3) { nVels++; ultVel = idx; }
 }
 
 static int falhas;
@@ -142,6 +144,24 @@ int main(void) {
   video_escolher_legenda(0);video_escolher_legenda(-1);nv_tpk_video_evento(2,0,0);video_bombear();
   SDL_Delay(2600);video_bombear();
   ok("off also cancels a deferred choice in new session",nLegs==2&&!video_legenda_nativa(cue,sizeof cue));
+
+  // #202 SPEED: goes to the host as escolher(3, cents) only with the player
+  // prepared, once per value, again on a new host Player (it starts at 1x);
+  // the host's refusal (EV 8, b = 0) hides the row and pins 1x.
+  video_tocar("http://x/rapido.mkv");
+  ok("speed row offered with a host", video_velocidade_suportada());
+  video_velocidade(150); video_bombear();
+  ok("speed waits for the prepare", nVels == 0);
+  nv_tpk_video_evento(1, 100000, 0); video_bombear(); video_bombear();
+  ok("speed sent once after the prepare", nVels == 1 && ultVel == 150);
+  nv_tpk_video_evento(8, 150, 1);
+  ok("accepted speed stays", video_velocidade_atual() == 150 && video_velocidade_suportada());
+  video_tocar("http://x/outra-fonte.mkv"); nv_tpk_video_evento(1, 100000, 0); video_bombear();
+  ok("new host Player gets the speed again", nVels == 2 && ultVel == 150);
+  nv_tpk_video_evento(8, 150, 0);
+  ok("refusal hides the row and pins 1x", !video_velocidade_suportada() && video_velocidade_atual() == 100);
+  video_velocidade(200); video_bombear();
+  ok("nothing more is sent after a refusal", nVels == 2);
 
   printf(falhas ? "tpk-escolha: %d falha(s)\n" : "tpk-escolha: ok\n", falhas);
   return falhas != 0;

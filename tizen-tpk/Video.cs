@@ -79,7 +79,7 @@ namespace NuvioTpk
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int FnPos();
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void FnEscolher(int tipo, int idx);
 
-        const int EV_PRONTO = 1, EV_TOCANDO = 2, EV_PAUSADO = 3, EV_FIM = 4, EV_ERRO = 5, EV_TAMANHO = 6, EV_BUFFER = 7;
+        const int EV_PRONTO = 1, EV_TOCANDO = 2, EV_PAUSADO = 3, EV_FIM = 4, EV_ERRO = 5, EV_TAMANHO = 6, EV_BUFFER = 7, EV_VELOCIDADE = 8;
 
         readonly Func<Display> fazDisplay;
         readonly Action<Action> principal;
@@ -115,10 +115,12 @@ namespace NuvioTpk
             NvVid.RegistrarFaixas(Marshal.GetFunctionPointerForDelegate(fEscolher));
         }
 
-        // 0 = audio, 1 = legenda embutida, 2 = atraso da legenda (ms).
+        // 0 = audio, 1 = legenda embutida, 2 = atraso da legenda (ms),
+        // 3 = velocidade em centesimos (#202).
         void Escolher(int tipo, int idx)
         {
             if (player == null) return;
+            if (tipo == 3) { Velocidade(idx); return; }
             // Diagnostics: the player's REAL state at the moment of the write.
             // Tizen.Multimedia track selection also supports Ready and Paused.
             // The native delay is a measured firmware workaround: an early
@@ -134,6 +136,26 @@ namespace NuvioTpk
                 else player.SetSubtitleOffset(idx);
             }
             catch (Exception e) { if (tipo != 2) Log("escolher " + tipo + "/" + idx + ": " + e.Message); }
+        }
+
+        // VELOCIDADE (#202). A documentacao diz que SetPlaybackRate lanca
+        // InvalidOperationException em streaming e NotAvailableException com
+        // audio offload; a resposta vai ao C (EV_VELOCIDADE, b = 1 aceitou), que
+        // esconde a linha se a TV recusar. Nao provado em TV.
+        void Velocidade(int centesimos)
+        {
+            float v = Math.Max(25, Math.Min(400, centesimos)) / 100f;
+            try
+            {
+                player.SetPlaybackRate(v);
+                Log("velocidade " + v.ToString(System.Globalization.CultureInfo.InvariantCulture) + " ok");
+                NvVid.Evento(EV_VELOCIDADE, centesimos, 1);
+            }
+            catch (Exception e)
+            {
+                Log("velocidade " + v.ToString(System.Globalization.CultureInfo.InvariantCulture) + ": " + e.GetType().Name + " " + e.Message);
+                NvVid.Evento(EV_VELOCIDADE, centesimos, 0);
+            }
         }
 
         // Lista de faixas para o C, logo depois do prepare. Devolve quantas
