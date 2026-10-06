@@ -13,7 +13,7 @@ import { rotaXtream } from "./xtream.js";
 import { codigoRegistro } from "./codigo.js";
 import { rotaTrailerImdb, rotaTrailerYoutube } from "./trailer.js";
 import { rotaNoticia, rotaNoticiaImg } from "./noticia.js";
-import { rotaAmigos, limpezaAmigos, despublicar, garantirPerfil, avatarPublico, limitar } from "./amigos.js";
+import { rotaAmigos, limpezaAmigos, despublicar, garantirPerfil, avatarPublico, limitar, seloDe, mesmaConta } from "./amigos.js";
 import { rotaEuNome, rotaAlcance, rotaEvento, rotaFeed, rotaAmigo, limpezaSocial,
          limparNome, avatarPerfilOk, resolverNome, rotaRecResposta } from "./social.js";
 import { rotaEnquete } from "./enquete.js";
@@ -249,6 +249,9 @@ const saoContatos = (db, a, b) =>
 async function rotaContatosLer(env, quem) {
   const r = await env.DB.prepare(
     "SELECT p.id AS id, p.nome AS nome, p.avatar AS avatar, c.criado AS desde, c.via AS via, " +
+    // O APELIDO que o amigo escolheu (vazio se nunca escolheu): a linha dele
+    // mostra o nome e, embaixo, o @apelido.
+    "COALESCE((SELECT f.apelido FROM perfil f WHERE f.pessoa = p.id), '') AS apelido, " +
     // IDENTIDADES LIGADAS (migracao 008), so as verificadas que a pessoa deixou
     // amigos verem: a TV junta o feed do Trakt dela com o nosso por elas.
     "(SELECT GROUP_CONCAT(i.provedor || ':' || i.sujeito, ' ') FROM identidade i " +
@@ -259,6 +262,9 @@ async function rotaContatosLer(env, quem) {
     contatos: (r.results || []).map((x) => ({
       id: x.id,
       nome: x.nome,
+      apelido: x.apelido || "",
+      // selo de criador, decidido aqui pela conta (amigos.js: seloDe)
+      ...(seloDe(env, x.id) ? { selo: seloDe(env, x.id) } : {}),
       avatar: x.avatar || "",
       origem: x.id.startsWith("trakt:") ? "trakt" : "nuvio",
       // desde quando e contato e por onde (codigo|trakt|sugestao|pedido|"")
@@ -399,6 +405,8 @@ async function sugestoesDe(env, quem, corpo) {
   // marcou "mostrar minha foto" e a URL e de um host sem hash de e-mail.
   const empurra = async (x, origem, viaNome) => {
     if (vistos.has(x.id) || saida.length >= SUG_MAX) return;
+    // Outro perfil da MINHA conta nao e "gente que talvez voce conheca".
+    if (mesmaConta(x.id, quem.id)) return;
     vistos.add(x.id);
     let id = x.id;
     if (!id.startsWith("trakt:")) {
@@ -410,6 +418,7 @@ async function sugestoesDe(env, quem, corpo) {
       nome: x.apelido || x.nome || "",
       avatar: x.comAvatar ? avatarPublico(x.avatar) : "",
       origem, viaNome: viaNome || "",
+      ...(seloDe(env, x.id) ? { selo: seloDe(env, x.id) } : {}),
     });
   };
   const SEL = "p.id AS id, p.nome AS nome, p.avatar AS avatar, f.pub AS pub, f.apelido AS apelido, " +
