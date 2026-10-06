@@ -3672,6 +3672,7 @@
   T("Sem resposta", "Ingen svar"),
   T("Sem segunda legenda", "Ingen andre undertekster"),
   T("Sem tarja, na maior qualidade", "Uten svarte stolper, i høyeste kvalitet"),
+  T("Sem texto", "Uten tekst"),
   T("Senha", "Passord"),
   T("Senha Xtream", "Xtream-passord"),
   T("Senha do Emby", "Emby-passord"),

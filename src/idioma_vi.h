@@ -3672,6 +3672,7 @@
   T("Sem resposta", "Không có phản hồi"),
   T("Sem segunda legenda", "Không có phụ đề thứ hai"),
   T("Sem tarja, na maior qualidade", "Không viền đen, chất lượng cao nhất"),
+  T("Sem texto", "Không có chữ"),
   T("Senha", "Mật khẩu"),
   T("Senha Xtream", "Mật khẩu Xtream"),
   T("Senha do Emby", "Mật khẩu Emby"),

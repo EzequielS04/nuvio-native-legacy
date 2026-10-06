@@ -3672,6 +3672,7 @@
   T("Sem resposta", "応答なし"),
   T("Sem segunda legenda", "2つ目の字幕なし"),
   T("Sem tarja, na maior qualidade", "黒帯なし、最高画質"),
+  T("Sem texto", "文字なし"),
   T("Senha", "パスワード"),
   T("Senha Xtream", "Xtream のパスワード"),
   T("Senha do Emby", "Emby のパスワード"),

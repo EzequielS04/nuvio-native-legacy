@@ -665,10 +665,14 @@ static const char *V_TMDB_LING[] = {
   // primeiros nao muda). "中文" acima e o simplificado; o tradicional vem no fim.
   "Nederlands", "Polski", "Türkçe", "Svenska", "Dansk", "Norsk", "Čeština",
   "Slovenčina", "Slovenščina", "Magyar", "Lietuvių", "Bosanski", "Srpski",
-  "Български", "Ελληνικά", "Bahasa Indonesia", "Tiếng Việt", "繁體中文"
+  "Български", "Ελληνικά", "Bahasa Indonesia", "Tiếng Việt", "繁體中文",
+  // Arabe (relato do .tpk 4/5): sem ele o TMDB nunca era pedido em arabe e a
+  // arte localizada (logo/fundo "ar") nunca chegava. A interface nao tem arabe;
+  // e so o idioma dos metadados.
+  "العربية"
 };
-_Static_assert(sizeof V_TMDB_LING / sizeof *V_TMDB_LING == 32,
-               "V_TMDB_LING casa com ESC(..., 32), W_TMDB_LING e L[] de ajustes_tmdb_idioma");
+_Static_assert(sizeof V_TMDB_LING / sizeof *V_TMDB_LING == 33,
+               "V_TMDB_LING casa com ESC(..., 33), W_TMDB_LING e L[] de ajustes_tmdb_idioma");
 _Static_assert(sizeof V_IDIOMA / sizeof *V_IDIOMA == IDIOMA_N + 1,
                "V_IDIOMA: \"Automático\" e um rotulo por IDIOMA_* de idiomacod.h");
 // Preenchido em rotulosDeIdioma(), no arranque: os nomes saem de linguas.c em
@@ -1008,7 +1012,7 @@ static const Opcao OPCOES[AJ_N] = {
   // nativo sempre enriqueceu por ele — nascer desligado apagaria elenco com
   // foto, ficha e trailers de quem ja usa o app sem nunca ter visto o ajuste.
   ESC("TMDB",                       V_LIGA, 2),   // tmdb_enabled
-  ESC("Idioma dos metadados",       V_TMDB_LING, 32), // tmdb_language
+  ESC("Idioma dos metadados",       V_TMDB_LING, 33), // tmdb_language
   ESC("Arte localizada",            V_LIGA, 2),   // tmdb_use_artwork
   ESC("Título e sinopse",           V_LIGA, 2),   // tmdb_use_basic_info
   ESC("Ficha técnica",              V_LIGA, 2),   // tmdb_use_details
@@ -2145,7 +2149,7 @@ const char *ajustes_tmdb_idioma(void) {
     "ja-JP", "ko-KR", "zh-CN", "ro-RO", "uk-UA", "ru-RU",
     "nl-NL", "pl-PL", "tr-TR", "sv-SE", "da-DK", "nb-NO", "cs-CZ", "sk-SK",
     "sl-SI", "hu-HU", "lt-LT", "bs-BA", "sr-RS", "bg-BG", "el-GR", "id-ID",
-    "vi-VN", "zh-TW"
+    "vi-VN", "zh-TW", "ar-SA"
   };
   int v = valor[AJ_TMDB_IDIOMA];
   if (v < 0 || v >= (int)(sizeof L / sizeof *L)) v = 0;
@@ -2262,7 +2266,7 @@ static const char *W_TMDB_LING[] = {
   "interface", "pt", "en", "es", "fr", "de", "it", "pt-pt", "ja", "ko", "zh",
   "ro", "uk", "ru",
   "nl", "pl", "tr", "sv", "da", "no", "cs", "sk", "sl", "hu", "lt", "bs", "sr",
-  "bg", "el", "id", "vi", "zh-tw", NULL
+  "bg", "el", "id", "vi", "zh-tw", "ar", NULL
 };
 
 // `heroSectionEnabled` -> `hero_section_enabled`. Uma sequencia de maiusculas

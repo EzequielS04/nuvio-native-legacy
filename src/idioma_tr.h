@@ -3672,6 +3672,7 @@
   T("Sem resposta", "Yanıt yok"),
   T("Sem segunda legenda", "İkinci altyazı yok"),
   T("Sem tarja, na maior qualidade", "Siyah bant yok, en yüksek kalite"),
+  T("Sem texto", "Metinsiz"),
   T("Senha", "Şifre"),
   T("Senha Xtream", "Xtream şifresi"),
   T("Senha do Emby", "Emby parolası"),

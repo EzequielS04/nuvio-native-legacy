@@ -3672,6 +3672,7 @@
   T("Sem resposta", "Tidak ada jawaban"),
   T("Sem segunda legenda", "Tanpa subjudul kedua"),
   T("Sem tarja, na maior qualidade", "Tanpa bilah hitam, kualitas terbaik"),
+  T("Sem texto", "Tanpa teks"),
   T("Senha", "Kata sandi"),
   T("Senha Xtream", "Kata sandi Xtream"),
   T("Senha do Emby", "Kata sandi Emby"),

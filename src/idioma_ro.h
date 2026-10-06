@@ -3671,6 +3671,7 @@
   T("Sem resposta", "Fără răspuns"),
   T("Sem segunda legenda", "Fără a doua subtitrare"),
   T("Sem tarja, na maior qualidade", "Fără benzi negre, la cea mai bună calitate"),
+  T("Sem texto", "Fără text"),
   T("Senha", "Parolă"),
   T("Senha Xtream", "Parola Xtream"),
   T("Senha do Emby", "Parola Emby"),

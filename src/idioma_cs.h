@@ -3672,6 +3672,7 @@
   T("Sem resposta", "Bez odpovědi"),
   T("Sem segunda legenda", "Bez druhých titulků"),
   T("Sem tarja, na maior qualidade", "Bez černých pruhů, nejvyšší kvalita"),
+  T("Sem texto", "Bez textu"),
   T("Senha", "Heslo"),
   T("Senha Xtream", "Heslo Xtream"),
   T("Senha do Emby", "Heslo Emby"),

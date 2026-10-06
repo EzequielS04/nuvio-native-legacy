@@ -3672,6 +3672,7 @@
   T("Sem resposta", "Nėra atsakymo"),
   T("Sem segunda legenda", "Be antrųjų subtitrų"),
   T("Sem tarja, na maior qualidade", "Be juodų juostų, aukščiausia kokybė"),
+  T("Sem texto", "Be teksto"),
   T("Senha", "Slaptažodis"),
   T("Senha Xtream", "Xtream slaptažodis"),
   T("Senha do Emby", "Emby slaptažodis"),

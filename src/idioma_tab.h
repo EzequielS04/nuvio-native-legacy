@@ -3671,6 +3671,7 @@
   { "Sem resposta", "No answer" },
   { "Sem segunda legenda", "No second subtitle" },
   { "Sem tarja, na maior qualidade", "No black bars, top quality" },
+  { "Sem texto", "No text" },
   { "Senha", "Password" },
   { "Senha Xtream", "Xtream password" },
   { "Senha do Emby", "Emby password" },

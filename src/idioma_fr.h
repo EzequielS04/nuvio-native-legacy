@@ -3671,6 +3671,7 @@
   T("Sem resposta", "Pas de réponse"),
   T("Sem segunda legenda", "Pas de second sous-titre"),
   T("Sem tarja, na maior qualidade", "Sans bandes noires, en qualité maximale"),
+  T("Sem texto", "Sans texte"),
   T("Senha", "Mot de passe"),
   T("Senha Xtream", "Mot de passe Xtream"),
   T("Senha do Emby", "Mot de passe Emby"),

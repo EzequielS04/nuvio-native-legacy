@@ -3672,6 +3672,7 @@
   T("Sem resposta", "無回應"),
   T("Sem segunda legenda", "無第二字幕"),
   T("Sem tarja, na maior qualidade", "無黑邊，最高畫質"),
+  T("Sem texto", "無文字"),
   T("Senha", "密碼"),
   T("Senha Xtream", "Xtream 密碼"),
   T("Senha do Emby", "Emby 密碼"),

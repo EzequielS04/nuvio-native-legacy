@@ -3672,6 +3672,7 @@
   T("Sem resposta", "Няма отговор"),
   T("Sem segunda legenda", "Без втори субтитри"),
   T("Sem tarja, na maior qualidade", "Без черни ленти, най-високо качество"),
+  T("Sem texto", "Без текст"),
   T("Senha", "Парола"),
   T("Senha Xtream", "Парола за Xtream"),
   T("Senha do Emby", "Парола за Emby"),
