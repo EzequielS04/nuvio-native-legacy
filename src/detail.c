@@ -2428,9 +2428,12 @@ void detail_evento(const SDL_Event *e) {
       // vertudo_colecao guarda o PONTEIRO da pasta, nao uma copia — por isso a
       // struct e estatica e nao local.
       static ColFolder pasta;
+      static ColSource pastaFontes[COL_SOURCE_MAX];   // a pasta so aponta (#255)
       long tmdbId = extras_estudio_tmdb(foco.coluna);
       if (tmdbId > 0) {
         memset(&pasta, 0, sizeof pasta);
+        memset(pastaFontes, 0, sizeof pastaFontes);
+        pasta.sources = pastaFontes;
         snprintf(pasta.title, sizeof pasta.title, "%s",
                  extras_estudio_nome(foco.coluna));
         snprintf(pasta.sources[0].prov, sizeof pasta.sources[0].prov, "tmdb");
