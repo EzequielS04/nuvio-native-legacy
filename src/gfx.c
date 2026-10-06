@@ -1259,15 +1259,30 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  float m = bordaR(vUv, uRaio, uAspect);\n"
   "  if (m <= 0.001) discard;\n"
   "  vec2 u = uJan.xy + vUv * uJan.zw;\n"
-  "  float a = 1.0 - smoothstep(0.0, 0.82, u.x);\n"
-  "  float ab = smoothstep(0.70, 1.0, u.y) * 0.92;\n"
-  "  a = 1.0 - (1.0 - a) * (1.0 - ab);\n"
   // No estado de CARTAO o veu e so o canto de baixo a esquerda, sob o texto
   // (uPar.y = 0); na pagina cheia, a vinheta do GFX_DETALHE (uPar.y = 1).
-  "  float ac = (1.0 - smoothstep(0.18, 0.72, u.x)) * smoothstep(0.18, 0.68, u.y);\n"
-  "  float base = smoothstep(0.56, 1.0, u.y) * 0.60;\n"
-  "  ac = 1.0 - (1.0 - ac) * (1.0 - base);\n"
-  "  a = mix(ac, a, uPar.y);\n"
+  // SO O VEU DO ESTADO EM CENA E CALCULADO: assentado (uPar.y 0 ou 1) o outro
+  // conjunto de rampas era computado e jogado fora, ~18 ops por pixel num
+  // cartao de 0,8 tela. MEDIDO na TCL Smart TV Pro (Mali-G52, GPU timer): o
+  // cartao do titulo custava 15,5 ms, ~90 ops por pixel. Ramo uniforme.
+  "  float a;\n"
+  "  if (uPar.y < 0.001) {\n"
+  "    float ac = (1.0 - smoothstep(0.18, 0.72, u.x)) * smoothstep(0.18, 0.68, u.y);\n"
+  "    float base = smoothstep(0.56, 1.0, u.y) * 0.60;\n"
+  "    a = 1.0 - (1.0 - ac) * (1.0 - base);\n"
+  "  } else if (uPar.y > 0.999) {\n"
+  "    a = 1.0 - smoothstep(0.0, 0.82, u.x);\n"
+  "    float ab = smoothstep(0.70, 1.0, u.y) * 0.92;\n"
+  "    a = 1.0 - (1.0 - a) * (1.0 - ab);\n"
+  "  } else {\n"
+  "    float ap = 1.0 - smoothstep(0.0, 0.82, u.x);\n"
+  "    float ab = smoothstep(0.70, 1.0, u.y) * 0.92;\n"
+  "    ap = 1.0 - (1.0 - ap) * (1.0 - ab);\n"
+  "    float ac = (1.0 - smoothstep(0.18, 0.72, u.x)) * smoothstep(0.18, 0.68, u.y);\n"
+  "    float base = smoothstep(0.56, 1.0, u.y) * 0.60;\n"
+  "    ac = 1.0 - (1.0 - ac) * (1.0 - base);\n"
+  "    a = mix(ac, ap, uPar.y);\n"
+  "  }\n"
   // SO O VEU (uCor.r < 0.5): o trailer toca no cartao, atras do canvas, pelo
   // furo; o veu fica por cima com alpha, para o texto seguir no mesmo escuro.
   "  if (uCor.r < 0.5) { float va = clamp(a, 0.0, 1.0) * uFoco;\n"
@@ -1285,7 +1300,9 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  float vaz = uVaza > 0.5 ? e : 0.0;\n"
   "  c = mix(c, uFundo, v * (1.0 - vaz));\n"
   "  c = mix(c, uFundo, uPar.x * (1.0 - e));\n"
-  "  gl_FragColor = nv_dither(c, uCor.a * m * (1.0 - v * vaz) * (1.0 - uPar.x * e));\n"
+  // Efeitos leves: sem dither onde a arte domina (v < 0.5), como no destaque.
+  "  float aj = uCor.a * m * (1.0 - v * vaz) * (1.0 - uPar.x * e);\n"
+  "  gl_FragColor = (uLeve > 0.5 && v < 0.5) ? vec4(c, aj) : nv_dither(c, aj);\n"
   "}\n",
 
   // GFX_VEU_CSS — degrade de uma borda a outra (ver gfx.h). Sem SDF: o veu e
@@ -1683,6 +1700,29 @@ static GLuint ambPendTex;
 static int ambPendPont;
 // O FUNDO DA DINAMICA ADIADO (gfx_fundo_din_desenhar): cor do topo e queda.
 static int dinPendente;
+// FUNDO DA DINAMICA ADIADO PARA O FIM DO QUADRO, POR BAIXO DO QUE JA FOI
+// DESENHADO (Android). A tela e limpa transparente (alfa 0); todo desenho
+// mistura com SRC_ALPHA/ONE_MINUS_SRC_ALPHA e o alfa do destino vira a
+// COBERTURA do que ja esta pintado (premultiplicado, porque o fundo era preto
+// com alfa 0). No fim, o degrade entra com (ONE_MINUS_DST_ALPHA, ONE): o mesmo
+// pixel da ordem de pintor, so que agora ele e pintado DEPOIS dos cartoes — e
+// cada cartaz opaco deixou uma marca no buffer de profundidade
+// (gfx_mascara_opaca), entao o fragmento do fundo embaixo dele e descartado
+// antes de ser sombreado. MEDIDO na TCL Smart TV Pro (Mali-G52, GPU timer):
+// o degrade de tela cheia custava 6,4 ms por quadro e ~70% dele ficava
+// escondido sob as fileiras. Qualquer leitura da tela ou furo de video chama
+// dinDescarregar antes, que resolve o fundo naquele ponto (correto em
+// qualquer momento). Fora do Android (sem como medir) fica o caminho antigo.
+static int dinAdiado, dinAdiadoOk = -1;
+// Os retangulos OPACOS pintados neste quadro (gfx_mascara_opaca): o fundo
+// adiado so e pintado no COMPLEMENTO deles. Nada de buffer de profundidade:
+// MEDIDO na TCL (06/10), marcar os cartazes na profundidade custava mais
+// fragmentos do que poupava — nesta GPU o custo e por fragmento invocado,
+// nao por byte escrito — e o recorte em CPU nao invoca nenhum.
+#define DIN_NOP 160
+static GfxRect dinOp[DIN_NOP];
+static int dinNOp;
+static void dinResolverAdiado(void);
 static float dinPend[4];
 static void dinDescarregar(void);
 static void dinPintar(float y0);
@@ -1699,7 +1739,7 @@ void gfx_novo_quadro(void) {
   memset(gfx_fill_modo, 0, sizeof gfx_fill_modo);
   desfGeradosQuadro = 0;
   ambPendente = 0; ambIntacta = 0; foscoOk = 0; foscoBloq = 0; foscoFonte = 0;
-  ambFonte = 0; dinPendente = 0;
+  ambFonte = 0; dinPendente = 0; dinAdiado = 0; dinNOp = 0;
   gfx_n_assados = 0;
 }
 // Relogio dos pontos de GL que NAO sao gfx_rect: recorte, FBO do snapshot e as
@@ -1826,12 +1866,12 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
       float rx = r.x, ry = r.y, rw = r.w, rh = r.h;   // r ja em coordenadas de tela
       if (rx <= 0.0f && rx + rw >= NV_TELA_W && ry <= 0.0f && rh > 0.0f) {
         memcpy(din, dinPend, sizeof din);
-        dinPendente = 0;
+        dinPendente = 0; dinAdiado = 0;
         modo = GFX_VITRINE_DIN;
         if (ry + rh < NV_TELA_H) dinResto = (ry + rh) / NV_TELA_H;
       }
     }
-    if (modo != GFX_VITRINE_DIN) dinDescarregar();
+    if (modo != GFX_VITRINE_DIN && !dinAdiado) dinDescarregar();   // adiado: fica para o fim
   }
   // VEU DE TELA CHEIA SOBRE O FUNDO PENDENTE (a luz imersiva, ou o Frost
   // adiado): o "dt-cobre" de 55% da pagina do titulo rolada era uma tela
@@ -2417,6 +2457,24 @@ void gfx_fundo_din_desenhar(const float topo[3], float queda) {
     dinPend[0] = topo[0]; dinPend[1] = topo[1]; dinPend[2] = topo[2]; dinPend[3] = queda;
     dinPendente = 1;
     ambPendente = 0; ambIntacta = 0;
+    // Adiado ate o fim do quadro (ver dinAdiado): so com a tela ainda vazia e
+    // um buffer de profundidade na janela.
+    if (dinAdiadoOk < 0) {
+#ifdef NV_ANDROID
+      dinAdiadoOk = 1;
+#else
+      dinAdiadoOk = 0;
+#endif
+      printf("[fundo-din] adiado para o fim do quadro: %s\n", dinAdiadoOk ? "sim" : "nao");
+    }
+    dinAdiado = dinAdiadoOk && gfx_n_rect == 0 && !gfx_modos_desligados;
+    if (dinAdiado) {
+      GFX_OUTRO_INI();
+      glClearColor(0.0f, 0.0f, 0.0f, 0.0f);   // alfa 0: a cobertura comeca vazia
+      glClear(GL_COLOR_BUFFER_BIT);
+      GFX_OUTRO_FIM();
+      dinNOp = 0;
+    }
     return;
   }
   gfx_tex_aspect_atual = 0.0f;
@@ -2450,7 +2508,103 @@ static void dinPintar(float y0) {
 static void dinDescarregar(void) {
   if (!dinPendente) return;
   dinPendente = 0;
+  if (dinAdiado) { dinAdiado = 0; dinResolverAdiado(); return; }
   dinPintar(0.0f);
+}
+// O fundo adiado, por baixo do que ja foi pintado (ver dinAdiado): mistura
+// (ONE_MINUS_DST_ALPHA, ONE), so no complemento dos retangulos opacos. O
+// complemento sai em faixas horizontais entre as bordas dos retangulos; em
+// cada faixa, os vaos entre os intervalos (ordenados e fundidos) viram um
+// pedaco do MESMO quad de tela cheia (uSub), entao o degrade e o mesmo pixel.
+static int dinCmpF(const void *a, const void *b) {
+  float x = *(const float *)a, y = *(const float *)b;
+  return x < y ? -1 : x > y;
+}
+static void dinQuad(float x0, float y0, float x1, float y1) {
+  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+  if (x1 - x0 < 0.5f || y1 - y0 < 0.5f) return;
+  subAtual[0] = x0 / NV_TELA_W; subAtual[1] = y0 / NV_TELA_H;
+  subAtual[2] = x1 / NV_TELA_W; subAtual[3] = y1 / NV_TELA_H;
+  gfx_rect(tela, 0, GFX_FUNDO_DIN, dinPend[3], 0, 0, 0.0f, dinPend[0], dinPend[1], dinPend[2], 1.0f);
+}
+static void dinResolverAdiado(void) {
+  float aspAnt = gfx_tex_aspect_atual, deslAnt = gfx_desliza_atual, g = gfx_opacidade_grupo, sub[4];
+  float ys[2 * DIN_NOP + 2];
+  int bl = blendLigado, rec = recorteAtivo, ny = 0, i, k;
+  ESC_REAL_INI();
+  if (rec) { glDisable(GL_SCISSOR_TEST); recorteAtivo = 0; }
+  memcpy(sub, subAtual, sizeof sub);
+  gfx_tex_aspect_atual = 0.0f; gfx_desliza_atual = 0.0f; gfx_opacidade_grupo = 1.0f;
+  gfxBlend(1);
+  glBlendFuncSeparate(GL_ONE_MINUS_DST_ALPHA, GL_ONE, GL_ONE_MINUS_DST_ALPHA, GL_ONE);
+  ys[ny++] = 0.0f; ys[ny++] = NV_TELA_H;
+  for (i = 0; i < dinNOp; i++) {
+    float a = dinOp[i].y, b = dinOp[i].y + dinOp[i].h;
+    if (a > 0.0f && a < NV_TELA_H) ys[ny++] = a;
+    if (b > 0.0f && b < NV_TELA_H) ys[ny++] = b;
+  }
+  qsort(ys, (size_t)ny, sizeof ys[0], dinCmpF);
+  for (k = 0; k + 1 < ny; k++) {
+    float y0 = ys[k], y1 = ys[k + 1], x = 0.0f;
+    float xs[DIN_NOP][2]; int nx = 0;
+    if (y1 - y0 < 0.5f) continue;
+    for (i = 0; i < dinNOp; i++)
+      if (dinOp[i].y <= y0 + 0.01f && dinOp[i].y + dinOp[i].h >= y1 - 0.01f) {
+        float a = dinOp[i].x, b = dinOp[i].x + dinOp[i].w;
+        if (a < 0.0f) a = 0.0f;
+        if (b > NV_TELA_W) b = NV_TELA_W;
+        if (b > a) { xs[nx][0] = a; xs[nx][1] = b; nx++; }
+      }
+    // ordena por x0 (insercao: poucos por faixa) e varre os vaos
+    for (i = 1; i < nx; i++) {
+      float t0 = xs[i][0], t1 = xs[i][1]; int j = i - 1;
+      while (j >= 0 && xs[j][0] > t0) { xs[j + 1][0] = xs[j][0]; xs[j + 1][1] = xs[j][1]; j--; }
+      xs[j + 1][0] = t0; xs[j + 1][1] = t1;
+    }
+    for (i = 0; i < nx; i++) {
+      if (xs[i][0] > x) dinQuad(x, y0, xs[i][0], y1);
+      if (xs[i][1] > x) x = xs[i][1];
+    }
+    if (x < NV_TELA_W) dinQuad(x, y0, NV_TELA_W, y1);
+  }
+  glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+  gfxBlend(bl);
+  memcpy(subAtual, sub, sizeof sub);
+  gfx_tex_aspect_atual = aspAnt; gfx_desliza_atual = deslAnt; gfx_opacidade_grupo = g;
+  if (rec) { glEnable(GL_SCISSOR_TEST); recorteAtivo = 1; }
+  dinNOp = 0;
+  ESC_REAL_FIM();
+}
+// UM CARTAZ OPACO sobre o fundo adiado (ver dinAdiado): guarda dois
+// retangulos em cruz, 1 px para dentro e sem os cantos (raio + 1 px), para a
+// rampa de borda do SDF e as quinas arredondadas continuarem vendo o fundo.
+// Com a tesoura ativa guarda so a parte visivel. Nenhuma chamada GL.
+void gfx_mascara_opaca(GfxRect r, float raioPx) {
+  float c = (raioPx > 0.0f ? raioPx : 0.0f) + 1.0f;
+  GfxRect a, b;
+  if (!dinPendente || !dinAdiado || miniAtiva || snapAtivo || giroOn || escAtiva != 1.0f ||
+      gfx_opacidade_grupo < 0.999f) return;
+  if (r.w < 2.0f * c + 4.0f || r.h < 2.0f * c + 4.0f || dinNOp + 2 > DIN_NOP) return;
+  a = (GfxRect){ r.x + c, r.y + 1.0f, r.w - 2.0f * c, r.h - 2.0f };
+  b = (GfxRect){ r.x + 1.0f, r.y + c, r.w - 2.0f, r.h - 2.0f * c };
+  if (recorteAtivo) {
+    // recorteBox e em pixels do buffer, origem embaixo: volta ao layout.
+    float ex = (float)telaW / NV_TELA_W, ey = (float)telaH / NV_TELA_H;
+    GfxRect rc = { (float)recorteBox[0] / ex, NV_TELA_H - (float)(recorteBox[1] + recorteBox[3]) / ey,
+                   (float)recorteBox[2] / ex, (float)recorteBox[3] / ey };
+    GfxRect t[2] = { a, b };
+    int i;
+    for (i = 0; i < 2; i++) {
+      float x0 = t[i].x > rc.x ? t[i].x : rc.x;
+      float y0 = t[i].y > rc.y ? t[i].y : rc.y;
+      float x1 = t[i].x + t[i].w < rc.x + rc.w ? t[i].x + t[i].w : rc.x + rc.w;
+      float y1 = t[i].y + t[i].h < rc.y + rc.h ? t[i].y + t[i].h : rc.y + rc.h;
+      if (x1 > x0 && y1 > y0) dinOp[dinNOp++] = (GfxRect){ x0, y0, x1 - x0, y1 - y0 };
+    }
+    return;
+  }
+  dinOp[dinNOp++] = a;
+  dinOp[dinNOp++] = b;
 }
 
 void gfx_anel(GfxRect r, float raio, float esp,

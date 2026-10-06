@@ -610,6 +610,10 @@ void gfx_ambiente_descarregar(void);
 // opaca (GFX_VITRINE_DIN) e o fundo so e pintado onde o destaque nao chega;
 // senao o fundo e pintado antes dele, como sempre. Mesmo pixel.
 void          gfx_fundo_din_desenhar(const float topo[3], float queda);
+// Um cartaz OPACO desenhado sobre o fundo da Dinamica adiado (Android): marca
+// o retangulo (sem os cantos de `raioPx`) na profundidade para o fundo nao ser
+// sombreado embaixo dele. No-op fora desse regime. Ver dinAdiado em gfx.c.
+void          gfx_mascara_opaca(GfxRect r, float raioPx);
 // Contorno de `esp` PIXELS por dentro de r: a borda de fora do anel e a borda
 // de r, entao anel e miolo no mesmo rect dao uma borda so. `raio` e o de r,
 // normalizado pela altura, como em gfx_cor.

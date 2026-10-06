@@ -4497,6 +4497,9 @@ static void desenhaArteCard(GfxRect card, TipoFileira tipo, const char *caminho,
     gfx_varre_atual = varre;
     gfx_rect(card, t, GFX_CARD, f, 0.0f, 0.0f,
              raio, 0, 0, 0, aArte);
+    // Cartaz assentado e opaco: o fundo adiado nao precisa ser pintado
+    // embaixo dele (gfx_mascara_opaca; no-op fora do regime).
+    if (aArte >= 0.999f) gfx_mascara_opaca(card, raio * card.h);
     gfx_varre_atual = 0.0f;
     gfx_tex_aspect_atual = 0.0f;
     gfx_card_forcar_cover_atual = 0.0f;
