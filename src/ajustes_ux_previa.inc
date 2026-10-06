@@ -809,6 +809,28 @@ static float ajPreviaEmQuadro(int op, float x, float y, float w) {
   return box;
 }
 
+// APOIAR O PROJETO: os QRs de verdade (apoio.h), grandes o bastante para a
+// camera do celular a 3 m, sobre a arte da categoria escurecida. Um so quando
+// o outro endereco esta vazio.
+static float ajPreviaApoio(int op, float x, float y, float w) {
+  float k = w / 806.0f, box = w * 9.0f / 16.0f;
+  float lado = floorf(226.0f * k), gap = 80.0f * k;
+  int n = apoio_n(), i;
+  float total = (float)n * lado + (float)(n - 1) * gap, x0 = x + (w - total) * 0.5f;
+  float y0 = y + (box - (lado + 16.0f * k + 52.0f * k + 30.0f)) * 0.5f;
+  ajCenaArte(ajArte(AJA_FUNDO, ajCenaArteOp(op)), (GfxRect){ x, y, w, box }, 22, 0.70f);
+  for (i = 0; i < n; i++) {
+    int q = apoio_qual(i);
+    float qx = x0 + (float)i * (lado + gap);
+    apoio_qr(q, qx, y0, lado, 1.0f);
+    { float rh = floorf(52.0f * k);
+      TxtLinha u = txt_linha_corta(TXT_V2_18, apoio_url_curta(q), 243, 242, 239, 255, lado + gap * 0.8f);
+      apoio_rotulo(q, qx + lado * 0.5f, y0 + lado + 16.0f * k, rh, 1, 1.0f);
+      txt_desenhar_alpha(u, qx + (lado - (float)u.w) * 0.5f, y0 + lado + 16.0f * k + rh + 6.0f, 0.62f); }
+  }
+  return box;
+}
+
 // A previa da opcao em foco: a do efeito dela quando existe; senao a imagem
 // da categoria (nunca o icone da opcao nem uma cena de outra categoria).
 static float ajPrevia(int op, float x, float y, float w) {
@@ -823,6 +845,7 @@ static float ajPrevia(int op, float x, float y, float w) {
     case AJ_FONTE_UI: h = ajPreviaFonte(op, x, y, w); break;
     case AJ_LOGO_APP: h = ajPreviaLogoApp(x, y, w); break;
     case AJ_ABERTURA: h = ajPreviaAbertura(x, y, w); break;
+    case AJ_APOIAR: h = ajPreviaApoio(op, x, y, w); break;
     default: h = ajPreviaEmQuadro(op, x, y, w); break;
   }
   return h >= 0 ? h : ajVisualCena(uxSecaoDe(op), op, x, y, w);

@@ -152,6 +152,7 @@ static const Item TELA[] = {
   SEC("Sobre e ajuda", "Guia de uso, versão, atualização e registros", "aj_info"),
     OPC(AJ_GUIA),
     OPC(AJ_NOVIDADES20),
+    OPC(AJ_APOIAR),
     ROTS("App", ""), OPC(AJ_VERSAO_I), OPC(AJ_ATUALIZAR), OPC(AJ_AVANCADAS),
     ROTS("Registro", "para quem faz o app"),
       OPC(AJ_VER_REGISTRO), OPC(AJ_ENVIAR_LOG), OPC(AJ_ENVIO_AUTO),
