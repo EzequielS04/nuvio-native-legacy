@@ -19,6 +19,8 @@
 typedef struct { char id[16]; short temp, ep; unsigned char visto; } Marca;
 static Marca *mapa;
 static int n, cap, avisouTeto;
+// Sobe a cada mudanca de estado no mapa (vistoep_revisao).
+static unsigned revisao;
 
 // So o id do titulo. "tt123:2:8" e "tt123" tem de casar: o primeiro e o formato
 // que CatItem.imdb carrega num item de "Continuar assistindo", e quem chama
@@ -46,7 +48,11 @@ static int definir(const char *imdb, int temporada, int episodio, int visto) {
   if (!id[0] || temporada < 0 || temporada > SHRT_MAX ||
       episodio < 1 || episodio > SHRT_MAX) return 0;
   i = achar(id, temporada, episodio);
-  if (i >= 0) { mapa[i].visto = visto ? 1 : 0; return 1; }
+  if (i >= 0) {
+    if (mapa[i].visto != (visto ? 1 : 0)) revisao++;
+    mapa[i].visto = visto ? 1 : 0;
+    return 1;
+  }
   if (n >= VE_MAX) {
     if (!avisouTeto) {
       avisouTeto = 1;
@@ -69,6 +75,7 @@ static int definir(const char *imdb, int temporada, int episodio, int visto) {
   mapa[n].ep = (short)episodio;
   mapa[n].visto = visto ? 1 : 0;
   n++;
+  revisao++;
   return 1;
 }
 
@@ -193,9 +200,11 @@ int vistoep_lote(const char *imdb, int ateAqui, int temporada, int episodio,
 }
 
 int vistoep_n(void) { return n; }
+unsigned vistoep_revisao(void) { return revisao; }
 
 void vistoep_esquecer(void) {
   free(mapa); mapa = NULL; n = 0; cap = 0; avisouTeto = 0;
+  revisao++;
 }
 
 // ------------------------------------------------------------------- Trakt

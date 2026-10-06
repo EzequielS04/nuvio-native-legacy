@@ -79,6 +79,9 @@ int  vistoep_temporada(const char *imdb, int temporada, VistoPar *saida, int max
 int  vistoep_lote(const char *imdb, int ateAqui, int temporada, int episodio,
                   const VistoPar *cat, int nCat, int agT, int agE,
                   VistoPar *saida, int max);
+// Sobe a cada episodio que muda de estado (ou entra no mapa) e no logout: quem
+// resume o mapa (o grafico de temporadas) so recalcula quando ela muda.
+unsigned vistoep_revisao(void);
 int  vistoep_n(void);          // total de episodios no mapa, para log e teste
 void vistoep_esquecer(void);   // logout
 
