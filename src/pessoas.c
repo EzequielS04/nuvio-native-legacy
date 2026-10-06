@@ -86,6 +86,7 @@ typedef struct {
   RecPessoa p;             // T_PESSOA (e o disco de T_NAV com temPessoa)
   int  temPessoa;
   char pub[16];            // alvo de A_DESBLOQ
+  char dica[8];            // T_PESSOA: "#abcd" quando outra linha tem o mesmo nome
 } Linha;
 
 static int   aberto, foco, coluna = 1;   // coluna 1 = a pilula de acao da linha
@@ -266,6 +267,7 @@ static const char *tituloLista(int origem) {
   return origem == 3 ? "Comunidade Nuvio Native" : origem == 2 ? "Gosto parecido" : "Resultados da busca";
 }
 
+static void marcarHomonimos(void);
 static void montar(void) {
   int i, np = recomenda_n_pedidos();
   char b[160];
@@ -379,6 +381,31 @@ static void montar(void) {
     for (i = 0; i < REC_GENEROS_N; i++) {
       Linha *l = navL(A_GEN, NULL, rec_genero_rotulo(i), NULL);
       if (l) { l->n = i; l->sw = (rasc.generos & (1u << i)) ? 1 : 0; }
+    }
+  }
+  marcarHomonimos();
+}
+
+// HOMONIMOS (#202). O servidor ja junta as copias da MESMA pessoa; o que sobra
+// com o mesmo nome na lista sao pessoas diferentes (dois perfis da casa que
+// escolheram o mesmo apelido, ou alguem no Trakt e outra na conta Nuvio). Sem
+// pista as duas linhas eram identicas. A pista e o comeco do handle publico:
+// ele ja e o que estranhos recebem, nao diz conta, nome nem e-mail, e e
+// sorteado de novo quando a pessoa despublica. So aparece quando ha colisao.
+static void marcarHomonimos(void) {
+  int i, j;
+  char a[80], b[80];
+  for (i = 0; i < nL; i++) linhas[i].dica[0] = 0;
+  for (i = 0; i < nL; i++) {
+    if (linhas[i].tipo != T_PESSOA || !linhas[i].p.pub[0]) continue;
+    rec_identidade(linhas[i].p.nome, linhas[i].p.apelido, a, sizeof a, NULL, 0);
+    for (j = 0; j < nL; j++) {
+      if (j == i || linhas[j].tipo != T_PESSOA || !strcmp(linhas[i].p.pub, linhas[j].p.pub)) continue;
+      rec_identidade(linhas[j].p.nome, linhas[j].p.apelido, b, sizeof b, NULL, 0);
+      if (!SDL_strcasecmp(a, b)) {
+        snprintf(linhas[i].dica, sizeof linhas[i].dica, "#%.4s", linhas[i].p.pub);
+        break;
+      }
     }
   }
 }
@@ -915,6 +942,10 @@ static void desenhaPessoa(float x, float y, int i, Uint32 agora, float a) {
   char l1[80], l2[64], ctx[160], baixo[240];
   if (f > 0.01f) plrui_linha_foco(retLinha(x, y, h), 24.0f, f * a);
   rec_identidade(p->nome, p->apelido, l1, sizeof l1, l2, sizeof l2);
+  if (l->dica[0]) {
+    size_t k = strlen(l2);
+    snprintf(l2 + k, sizeof l2 - k, "%s%s", k ? " " : "", l->dica);
+  }
   rec_avatar_estilo((GfxRect){ x, yc - PE_AV * 0.5f, PE_AV, PE_AV }, p->avatar, l1, p->pub, a, TXT_ILHA_INICIAL);
   tx = x + PE_AV + 20.0f;
   xd = x + PE_INTERNO;

@@ -1447,6 +1447,23 @@ static int registrar(const char **cab) {
     fflush(stdout);
     return 0;
   }
+  // OUTRA PESSOA DESDE O ULTIMO ARRANQUE (#202). O ciclo so percebe a troca de
+  // identidade NO MEIO da sessao; ligar a TV ja em outro perfil da casa, ou com
+  // o Trakt no lugar da conta Nuvio, chegava aqui com o "Meu perfil" da pessoa
+  // anterior no disco — e conciliarPerfil o republicava na identidade nova: o
+  // mesmo apelido duas vezes na busca dos outros. O id gravado em REC_ARQ_EU e
+  // de quem era; se o servidor diz outro, tudo o que esta aqui e dela. Mesma
+  // regra da troca no meio da sessao: esquecer, e o proximo ciclo registra limpo.
+  { int outra;
+    SDL_LockMutex(mtx);
+    outra = meuId[0] && strcmp(meuId, id);
+    SDL_UnlockMutex(mtx);
+    if (outra) {
+      printf("[recomenda] identidade mudou desde o ultimo arranque: dados sociais locais esquecidos\n");
+      fflush(stdout);
+      recomenda_esquecer();
+      return 0;
+    } }
   SDL_LockMutex(mtx);
   snprintf(meuId, sizeof meuId, "%s", id);
   if (codigo[0]) snprintf(meuCodigo, sizeof meuCodigo, "%s", codigo);

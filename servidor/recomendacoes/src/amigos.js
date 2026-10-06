@@ -66,6 +66,38 @@ const mesmaConta = (a, b) => contaDe(a) === contaDe(b);
 const foraDaConta = (col, p = "?") =>
   `AND ${col} <> ${p} AND substr(${col}, 1, length(${p}) + 1) <> ${p} || ':' `;
 
+// A MESMA PESSOA PUBLICADA DUAS VEZES (#202, "nomes repetidos" na busca). Ate
+// a 2.0.1 a TV guardava "Meu perfil" num arquivo do APARELHO e, ao ligar com
+// outra identidade (outro perfil da casa, ou Trakt no lugar da conta Nuvio),
+// republicava o mesmo apelido/bio/generos nela. No banco de 06/10/2026: 6 dos
+// 22 apelidos publicados apareciam duas vezes, 5 deles com bio e generos
+// identicos. O cliente parou de fazer isso; este corte esconde as copias que
+// ja estao no banco, sem apagar nada.
+//
+// DUAS LINHAS SAO A MESMA PESSOA quando tem o mesmo apelido E:
+//  - sao da MESMA CONTA Nuvio e publicaram exatamente o mesmo conteudo (bio e
+//    generos). Perfis da casa com apelidos ou textos diferentes continuam
+//    pessoas diferentes ("perfil = pessoa"); ou
+//  - uma e `trakt:<slug>` com identidade Trakt VERIFICADA ligada a outra
+//    (migracao 008). Identidade so declarada nunca funde.
+// Fica a copia com quem eu ja sou amigo; empate, o menor id (o perfil
+// principal `nuvio:<sub>` antes de `nuvio:<sub>:<n>`, e nuvio antes de trakt).
+// Bloqueio numa das copias esconde as duas: e a mesma pessoa.
+// `f` e o alias de `perfil` na consulta, `eu` o parametro com quem.id.
+const contaSql = (c) =>
+  `(CASE WHEN ${c} GLOB 'nuvio:*:*' THEN substr(${c}, 1, 5 + instr(substr(${c}, 7), ':')) ELSE ${c} END)`;
+const traktLigado = (c) =>
+  `(SELECT i.pessoa FROM identidade i WHERE i.provedor = 'trakt' AND i.verificado = 1 AND ${c} = 'trakt:' || i.sujeito)`;
+function semCopia(f, eu) {
+  const amigo = (c) => `EXISTS (SELECT 1 FROM contato k WHERE k.a = ${eu} AND k.b = ${c})`;
+  const fp = `${f}.pessoa`;
+  return "AND NOT EXISTS (SELECT 1 FROM perfil g JOIN pessoa gp ON gp.id = g.pessoa AND gp.descobrivel = 1 " +
+    `WHERE g.apelido_norm = ${f}.apelido_norm AND g.apelido <> '' AND g.pessoa <> ${fp} ` +
+    `AND ((${contaSql("g.pessoa")} = ${contaSql(fp)} AND g.bio = ${f}.bio AND g.generos = ${f}.generos) ` +
+    `OR ${traktLigado(fp)} = g.pessoa OR ${traktLigado("g.pessoa")} = ${fp}) ` +
+    `AND (${amigo("g.pessoa")} > ${amigo(fp)} OR (${amigo("g.pessoa")} = ${amigo(fp)} AND g.pessoa < ${fp}))) `;
+}
+
 // SELO DE CRIADOR: quem decide e o SERVIDOR, pela conta (lista em `CRIADORES`,
 // wrangler.toml, ids canonicos separados por virgula), nunca o cliente por
 // apelido ou nome — qualquer um pode escolher o apelido "iqui". Todos os perfis
@@ -305,9 +337,10 @@ async function rotaBuscar(env, quem, corpo, h) {
   // vez de LIKE para usar o indice.
   const hi = q.slice(0, -1) + String.fromCharCode(q.charCodeAt(q.length - 1) + 1);
   const r = await env.DB.prepare(
-    SEL + "WHERE f.apelido_norm >= ? AND f.apelido_norm < ? AND p.descobrivel = 1 AND f.apelido <> '' " +
-    "ORDER BY f.apelido_norm LIMIT ?"
-  ).bind(q, hi, BUSCA_MAX + 2).all();
+    SEL + "WHERE f.apelido_norm >= ?1 AND f.apelido_norm < ?2 AND p.descobrivel = 1 AND f.apelido <> '' " +
+    semCopia("f", "?3") +
+    "ORDER BY f.apelido_norm LIMIT ?4"
+  ).bind(q, hi, quem.id, BUSCA_MAX + 2).all();
   for (const x of r.results || []) {
     if (achados.length >= BUSCA_MAX) break;
     await empurra(x);
@@ -356,10 +389,12 @@ async function rotaSugeridos(env, quem, corpo, h) {
     "JOIN pessoa p ON p.id = a.pessoa AND p.descobrivel = 1 " +
     `WHERE a.imdb IN (${marcas}) AND a.acao = 0 AND a.pessoa <> ? ` +
     foraDaConta("a.pessoa") +
+    semCopia("f", "?") +
     "AND NOT EXISTS (SELECT 1 FROM contato c WHERE c.a = ? AND c.b = a.pessoa) " +
     "AND NOT EXISTS (SELECT 1 FROM bloqueio b WHERE (b.quem = ? AND b.alvo = a.pessoa) OR (b.quem = a.pessoa AND b.alvo = ?)) " +
     "GROUP BY a.pessoa HAVING COUNT(*) >= ? ORDER BY emComum DESC LIMIT 10"
   ).bind(...imdbs, quem.id, contaDe(quem.id), contaDe(quem.id), contaDe(quem.id),
+         quem.id, quem.id, quem.id, quem.id,   // semCopia: os 4 `?` de "sou amigo"
          quem.id, quem.id, quem.id, SUG_TASTE_MIN).all();
   return h.json({
     sugeridos: (r.results || []).map((x) => ({
@@ -410,6 +445,7 @@ async function rotaComunidade(env, quem, corpo, h) {
     "FROM perfil f JOIN pessoa p ON p.id = f.pessoa " +
     "WHERE p.descobrivel = 1 AND f.apelido <> '' AND f.pessoa <> ?1 " +
     foraDaConta("f.pessoa", "?4") +
+    semCopia("f", "?1") +
     "AND NOT EXISTS (SELECT 1 FROM bloqueio b WHERE (b.quem = ?1 AND b.alvo = f.pessoa) OR (b.quem = f.pessoa AND b.alvo = ?1)) " +
     "ORDER BY ativo DESC, f.pub LIMIT ?2 OFFSET ?3"
   ).bind(quem.id, COMUNIDADE_PAG + 1, pag * COMUNIDADE_PAG, contaDe(quem.id)).all();

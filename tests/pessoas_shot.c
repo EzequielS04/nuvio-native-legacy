@@ -267,6 +267,24 @@ int main(int argc, char **argv) {
   foco = 12;
   shot("comunidade-mais");
 
+  /* 13b. HOMONIMOS (#202): duas pessoas diferentes chamadas "marina" ganham
+     a pista do handle; quem tem nome unico continua sem pista. */
+  pessoa(&achados[0], "k7q2abcdef", "", "marina", "mae", 0, "", 0, "");
+  pessoa(&achados[1], "p9x4ghijkm", "", "Marina", "filha", 0, "", 0, "");
+  pessoa(&achados[2], "r5t6npqrst", "", "marina luz", "", 0, "", 0, "");
+  nAchados = 3; achadosOrigem = 1;
+  irPara(PG_LISTA); listaOrigem = 1; listaErro = 0; listaCarregando = 0;
+  snprintf(ultimaBusca, sizeof ultimaBusca, "marina");
+  montar();
+  { int n = 0, i;
+    for (i = 0; i < nL; i++) if (linhas[i].tipo == T_PESSOA) {
+      if (!strcmp(linhas[i].p.pub, "k7q2abcdef")) { assert(!strcmp(linhas[i].dica, "#k7q2")); n++; }
+      if (!strcmp(linhas[i].p.pub, "p9x4ghijkm")) { assert(!strcmp(linhas[i].dica, "#p9x4")); n++; }
+      if (!strcmp(linhas[i].p.pub, "r5t6npqrst")) { assert(!linhas[i].dica[0]); n++; }
+    }
+    assert(n == 3); }
+  shot("homonimos");
+
   /* 14. PEDIDOS */
   irPara(PG_PEDIDOS);
   shot("pedidos");
