@@ -309,6 +309,9 @@ int  video_altura(void);
 // No Tizen o HDR e decidido pelo AVPlay do firmware e nao ha equivalente; a
 // interface usa isto para nao oferecer um botao que nao faz nada.
 int  video_pode_forcar_sdr(void);
+#ifdef NV_SHOT_HOOKS
+void video_shot_pode_forcar_sdr(int sim);   // so o coto do Mac (capturas)
+#endif
 void video_forcar_sdr(void);
 
 // VELOCIDADE DE REPRODUCAO (#202), em centesimos (150 = 1,5x; velocidade.h).
