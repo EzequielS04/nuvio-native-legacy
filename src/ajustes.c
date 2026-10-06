@@ -1149,7 +1149,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Idioma da legenda secundária",    V_LINGUA, 2),
   ESC("Sincronia por áudio",             V_LIGA, 2),
   ESC("Cache de seek em disco",          V_CACHE_SEEK, 4),
-  ESC("Zoom do trailer (experimental)",  V_LIGA, 2),   // local: trailerZoomTpkLocal (.tpk)
+  ESC("Zoom no trailer e no player (experimental)", V_LIGA, 2),   // local: trailerZoomTpkLocal (.tpk)
   ACAO("Plugins"),
   ESC("Servidores pessoais (experimental)", V_LIGA, 2),   // local: jellyfinLocal
   ACAO("Endereço do Jellyfin"),
@@ -4877,7 +4877,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_RELOGIO_POS: return "Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.";
     case AJ_AVANCADAS: return "Mostra, em todas as categorias, as opções técnicas marcadas como Avançado. Vale só para esta TV.";
     case AJ_LOGO_TRAILER: return "Para TVs OLED: não deixa a logo parada na tela enquanto o trailer toca.";
-    case AJ_TRAILER_ZOOM_TPK: return "Tira as barras pretas do trailer ampliando a imagem; em algumas TVs Samsung pode deixar a tela preta ou mostrar a tela inicial da TV.";
+    case AJ_TRAILER_ZOOM_TPK: return "Amplia a imagem do trailer e libera os modos de recorte e zoom da proporção no player; em algumas TVs Samsung pode deixar a tela preta ou mostrar a tela inicial da TV.";
     case AJ_CACHE_SEEK: return "Guarda no disco o trecho já baixado do vídeo, para voltar sem baixar de novo. Apagado ao fechar o player.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
     case AJ_RESOLUCAO: return "4K desenha a interface em 4K nas TVs que permitem; muitas ignoram o pedido e continuam em 1080p. 720p desenha em 1280x720 e amplia para a tela: mais leve em TV fraca, com texto um pouco mais suave. Reinicie o app depois de mudar. O vídeo não muda: segue a qualidade da fonte.";
@@ -4988,7 +4988,7 @@ static const char *efeitoOpcao(int op) {
     case AJ_IDIOMA:
       return "Ao mudar, as fileiras são remontadas para os títulos saírem no idioma novo.";
     case AJ_TRAILER_ZOOM_TPK:
-      return "Vale a partir do próximo trailer. Se a tela ficar preta ou aparecer a tela inicial da TV, desligue.";
+      return "Vale a partir do próximo vídeo. Se a tela ficar preta ou aparecer a tela inicial da TV, desligue.";
     case AJ_CACHE_SEEK:
       return "Vale a partir do próximo vídeo. Sem espaço livre, o cache fica menor ou desligado.";
     case AJ_LEG_LINGUA: case AJ_LEG_LINGUA2:
