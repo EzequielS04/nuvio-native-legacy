@@ -70,11 +70,14 @@ static int   aberto, decidido, pagina, foco = P0_CONTINUAR, pedido;
 static float entrada, pag, relogio;
 static char  dirArte[512] = "deploy/app/art";
 static char  arte[CENAS][600];
-// Linhas da frase de cada item: 2. No idioma em que a lista nao cabe acima
-// dos botoes, os itens que quebram linha passam a 1 (com reticencias), de
-// baixo para cima, so ate caber (vaoItens).
-#define N_ITENS_MAX 12
-static int linhasItem[N_ITENS_MAX], cortados, coube = 1;
+// Folga entre o fim da lista e o topo do rodape no ultimo quadro desenhado,
+// e quantas frases precisaram de reticencias (testes).
+static float folgaLista = 999.0f;
+// Rotulos longos (russo, hungaro): os tres botoes nao cabem na coluna de
+// texto e invadiriam a previa. Ai "Abrir a Central" sai (a Central continua
+// no CH+) e o rodape fica com dois.
+static int   semCentral;
+static int   frasesCortadas;
 
 // A arte de fundo de cada cena (do pacote, sem rede). A da Central e uma
 // home; a dos Ajustes nao tem arte (o Frost e cor); a do player e uma cena.
@@ -105,8 +108,8 @@ int novidades201_pagina(void) { return pagina; }
 int novidades201_foco(void) { return foco; }
 void novidades201_teste_relogio(float s) { relogio = s; }
 void novidades201_teste_esquecer(void) { decidido = 0; aberto = 0; }
-int novidades201_teste_cortados(void) { return coube ? cortados : -1; }
-int novidades201_teste_cortado(int i) { return i >= 0 && i < N_ITENS_MAX && linhasItem[i] == 1; }
+float novidades201_teste_folga(void) { return folgaLista; }
+int novidades201_teste_cortadas(void) { return frasesCortadas; }
 
 int novidades201_pedido(void) {
   int p = pedido;
@@ -171,8 +174,16 @@ void novidades201_evento(const SDL_Event *e) {
   if (!aberto || e->type != SDL_KEYDOWN) return;
   k = e->key.keysym.sym;
   n = pagina ? P1_N : P0_N;
-  if (k == SDLK_LEFT)  { if (foco > 0) foco--; return; }
-  if (k == SDLK_RIGHT) { if (foco < n - 1) foco++; return; }
+  if (k == SDLK_LEFT)  {
+    if (foco > 0) foco--;
+    if (!pagina && semCentral && foco == P0_CENTRAL) foco--;
+    return;
+  }
+  if (k == SDLK_RIGHT) {
+    if (foco < n - 1) foco++;
+    if (!pagina && semCentral && foco == P0_CENTRAL) foco++;
+    return;
+  }
   if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) { ok(); return; }
   if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE ||
       k == SDLK_DELETE || e->key.keysym.scancode == NV_SCANCODE_BACK) {
@@ -571,107 +582,103 @@ static void desenhaPrevia(float x, float y, float a) {
 
 // ------------------------------------------------------------- as mudancas
 typedef struct { const char *grupo, *icone, *nome, *linha; } Item;
+// UMA linha por frase, escrita para caber na Montserrat da TV (mais larga que
+// a Inter do Mac). A altura de cada item e FIXA: a TCL do dono mostrou que
+// medir o texto no primeiro quadro (antes de ele existir) deixava a lista
+// descer por baixo dos botoes. Nada aqui depende de medida.
 static const Item ITENS[] = {
   { "Navegar", "aj_layout-dashboard", "Central de controle",
-    "Segure CH+: abre da ilha do relógio, com atalhos que você escolhe." },
+    "Segure CH+ para abrir, com atalhos que você escolhe." },
   { NULL, "aj_settings-2", "Ajustes",
-    "Categorias em cartões grandes e uma busca que sugere o mais perto." },
+    "Categorias em cartões e uma busca que sugere." },
   { "Assistir", "aj_gauge", "Velocidade",
-    "De 0,75x a 2x na folha de Áudio. Não vale com áudio pelo receptor." },
+    "De 0,75x a 2x, na folha de Áudio." },
   { NULL, "aj_captions", "Legendas",
-    "Versão exata por idioma. Add-ons recebem nome, tamanho e hash." },
+    "Versão exata por idioma. Add-ons acham mais legendas." },
   { NULL, "aj_puzzle", "Fontes e addons",
-    "Faixa de tamanho para tocar sozinho. Links longos de addon funcionam." },
+    "Tamanho mínimo e máximo ao tocar sozinho." },
   { "Correções", "aj_shield-check", "Estabilidade",
-    "LG e Android não fecham mais sozinhos. Android TV mais leve." },
-  { NULL, "aj_sparkles", "E mais",
-    "Coleções além de 256 pastas, árabe, Encontrar pessoas e ícone novo." },
+    "LG e Android não fecham sozinhos. Android TV mais leve." },
 };
 #define N_ITENS ((int)(sizeof ITENS / sizeof *ITENS))
-typedef char nItensCabe[N_ITENS <= N_ITENS_MAX ? 1 : -1];
 
-// Um item: disco com o icone, nome e a linha apagada (ate duas linhas).
-// Devolve a altura. `mede` = 1 nao desenha (gfx_opacidade_grupo zerado).
+#define ITEM_H     64.0f   // nome (34) + frase (30)
+#define FRASE_DY   34.0f
+#define GRUPO_H    34.0f
+#define NOTA_H     30.0f
+#define VAO_MIN    12.0f
+#define VAO_MAX    24.0f
+#define FOLGA_MIN  28.0f   // entre o fim da lista e o rodape
+
 static float ox;   // deslocamento horizontal da pagina (a troca de pagina desliza)
-static float item(int i, float y, float a) {
-  float tx = TX + ox + ICONE + 22.0f, tw = TX + TW - (TX + ICONE + 22.0f), h;
+static void item(int i, float y, float a) {
+  float tx = TX + ox + ICONE + 22.0f, tw = TW - (ICONE + 22.0f);
   GfxRect d = { TX + ox, y - 2.0f, ICONE, ICONE };
-  TxtLinha n;
+  const char *frase = i18n(ITENS[i].linha);
+  TxtLinha n, f;
   gfx_cor(d, 0.5f, 1, 1, 1, 0.075f * a);
   gfx_icone((GfxRect){ d.x + 11.0f, d.y + 11.0f, 22.0f, 22.0f }, ITENS[i].icone, 0.93f, 0.93f, 0.95f, a);
   n = txt_linha_corta(TXT_ILHA_NOME, i18n(ITENS[i].nome), 246, 247, 250, 255, tw);
   txt_desenhar_alpha(n, tx, y, a);
-  h = (float)n.h + 4.0f;
-  h += txt_bloco_corta(TXT_CAPTION, i18n(ITENS[i].linha), 186, 192, 204, tx, y + h, tw, 28.0f, 0.92f * a, linhasItem[i] ? linhasItem[i] : 2);
-  return h < ICONE ? ICONE : h;
+  f = txt_linha_corta(TXT_CAPTION, frase, 186, 192, 204, 255, tw);
+  txt_desenhar_alpha(f, tx, y + FRASE_DY, 0.92f * a);
+  if (txt_largura(TXT_CAPTION, frase) > (int)tw) frasesCortadas++;
 }
 
 static float grupo(const char *g, float y, float a) {
   float kw = ajustes_ui_kicker(i18n(g), TX + ox, y, a);
   gfx_cor((GfxRect){ TX + ox + kw + 16.0f, y + 8.0f, TW - kw - 16.0f, 1.0f }, 0, 1, 1, 1, 0.08f * a);
-  return 34.0f;
-}
-
-// Mede a lista uma vez por idioma (o texto e o que muda a altura) e escolhe
-// o vao entre itens para ela caber entre o titulo e o rodape.
-#define VAO_MIN 6.0f
-static float vaoItens(float disponivel) {
-  static int idiomaMedido = -999;
-  static float vao = 22.0f;
-  int idi = ajustes_idioma(), i;
-  if (idi != idiomaMedido) {
-    float g = gfx_opacidade_grupo, alt[N_ITENS_MAX], total = 0.0f;
-    int ng = 0, k;
-    gfx_opacidade_grupo = 0.0f;
-    for (i = 0; i < N_ITENS; i++) {
-      linhasItem[i] = 2;
-      alt[i] = item(i, 0.0f, 1.0f);
-      if (ITENS[i].grupo) { total += 34.0f; ng++; }
-      total += alt[i];
-    }
-    cortados = 0;
-    for (k = N_ITENS - 1; ; k--) {
-      // Vao entre itens e um pouco a mais antes de cada grupo novo.
-      vao = (disponivel - total) / ((float)(N_ITENS - 1) + 0.8f * (float)(ng - 1));
-      if (vao >= VAO_MIN || k < 0) break;
-      linhasItem[k] = 1;
-      { float h1 = item(k, 0.0f, 1.0f);
-        if (h1 < alt[k]) { total -= alt[k] - h1; alt[k] = h1; cortados++; }
-        else linhasItem[k] = 2; }
-    }
-    gfx_opacidade_grupo = g;
-    coube = vao >= VAO_MIN;
-    if (vao > 26.0f) vao = 26.0f;
-    if (vao < VAO_MIN) vao = VAO_MIN;
-    idiomaMedido = idi;
-  }
-  return vao;
+  return GRUPO_H;
 }
 
 static void paginaNovidades(float y0, float a, float dx) {
-  float y = y0 + N_PAD - 6.0f, base = y0 + N_H - N_PAD - BOTAO_H_PRIMARIO - 40.0f, vao;
+  float y = y0 + N_PAD - 6.0f, vao, total, limite;
   char t[64];
-  int i, g = 0;
+  int i, g = 0, ng = 0, nota;
   if (a <= 0.004f) return;
+  // O rodape (tracos e botoes) e reservado: a lista nunca desenha abaixo
+  // de `limite`.
+  limite = y0 + N_H - N_PAD - BOTAO_H_PRIMARIO - FOLGA_MIN;
   snprintf(t, sizeof t, i18n("Novidades da %s"), N201_VERSAO);
   { TxtLinha l = txt_linha_corta(TXT_NOV_TITULO, t, 248, 249, 252, 255, TW);
     txt_desenhar_alpha(l, TX + dx, y, a);
-    y += (float)l.h + 34.0f; }
-  vao = vaoItens(base - y);
+    y += 60.0f + 34.0f; }
+  for (i = 0; i < N_ITENS; i++) if (ITENS[i].grupo) ng++;
+  total = (float)N_ITENS * ITEM_H + (float)ng * GRUPO_H;
+  nota = limite - y - total - NOTA_H - VAO_MIN >= ((float)(N_ITENS - 1) + 0.8f * (float)(ng - 1)) * VAO_MIN;
+  if (nota) total += NOTA_H + VAO_MIN;
+  vao = (limite - y - total) / ((float)(N_ITENS - 1) + 0.8f * (float)(ng - 1));
+  if (vao > VAO_MAX) vao = VAO_MAX;
+  if (vao < VAO_MIN) vao = VAO_MIN;
   ox = dx;
+  frasesCortadas = 0;
   for (i = 0; i < N_ITENS; i++) {
     // Cascata de entrada: cada linha sobe 12 px, 45 ms depois da anterior.
     float local = ajustes_animacoes_reduzidas() ? 1.0f
                 : anim_clamp((anim_suave(entrada) - 0.04f * (float)i) * 2.6f, 0.0f, 1.0f);
-    float al = a * local, yy = y + (1.0f - local) * 12.0f;
+    float al = a * local, sobe = (1.0f - local) * 12.0f;
     if (ITENS[i].grupo) {
       if (g++) y += vao * 0.8f;
-      yy = y + (1.0f - local) * 12.0f;
-      y += grupo(ITENS[i].grupo, yy, al);
-      yy = y + (1.0f - local) * 12.0f;
+      if (y + GRUPO_H + ITEM_H > limite) break;
+      y += grupo(ITENS[i].grupo, y + sobe, al);
     }
-    y += item(i, yy, al) + vao;
+    if (y + ITEM_H > limite) break;
+    item(i, y + sobe, al);
+    y += ITEM_H;
+    if (i < N_ITENS - 1) y += vao;
   }
+  if (nota && i == N_ITENS && y + VAO_MIN + NOTA_H <= limite) {
+    float local = ajustes_animacoes_reduzidas() ? 1.0f
+                : anim_clamp((anim_suave(entrada) - 0.04f * (float)N_ITENS) * 2.6f, 0.0f, 1.0f);
+    // Nota final, apagada e sem icone, so quando couber com folga.
+    const char *nt = i18n("Também: coleções grandes, links longos de addon e árabe.");
+    TxtLinha l = txt_linha_corta(TXT_CAPTION, nt, 160, 166, 178, 255, TW);
+    y += VAO_MIN;
+    txt_desenhar_alpha(l, TX + dx, y + (1.0f - local) * 12.0f, 0.85f * a * local);
+    if (txt_largura(TXT_CAPTION, nt) > (int)TW) frasesCortadas++;
+    y += NOTA_H;
+  }
+  folgaLista = limite + FOLGA_MIN - y;
   ox = 0.0f;
 }
 
@@ -717,10 +724,16 @@ static void rodape(float y0, float a) {
   int n = pagina ? P1_N : P0_N, i;
   if (!pagina) { rot[0] = i18n("Agora não"); rot[1] = i18n("Abrir a Central"); rot[2] = i18n("Continuar"); }
   else { rot[0] = i18n("Voltar"); rot[1] = i18n("Concluir"); }
+  for (i = 0; i < n; i++) w[i] = botao_largura(rot[i], NULL, i == n - 1);
+  if (!pagina) {
+    // Os tres tem de caber na coluna de texto (os tracos somem antes).
+    semCentral = w[0] + w[1] + w[2] + 2.0f * BOTAO_GAP > TW;
+    if (semCentral && foco == P0_CENTRAL) foco = P0_CONTINUAR;
+  }
   for (i = n - 1; i >= 0; i--) {
     int prim = i == n - 1;
     GfxRect r;
-    w[i] = botao_largura(rot[i], NULL, prim);
+    if (!pagina && semCentral && i == P0_CENTRAL) continue;
     r.w = w[i];
     r.h = prim ? BOTAO_H_PRIMARIO : BOTAO_H_SECUNDARIO;
     r.x = xd - r.w;

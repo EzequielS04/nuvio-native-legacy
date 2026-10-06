@@ -36,6 +36,6 @@ int  novidades201_previa_pronta(void); // a arte do fundo da previa carregou
 // Pula o relogio da previa para `seg` segundos (cena e momento dela).
 void novidades201_teste_relogio(float seg);
 void novidades201_teste_esquecer(void);
-int  novidades201_teste_cortados(void); // itens cortados em 1 linha; -1 = nao cabe
-int  novidades201_teste_cortado(int i);   // testes: a decisao volta a valer
+float novidades201_teste_folga(void);   // rodape - fim da lista, ultimo quadro
+int  novidades201_teste_cortadas(void);  // frases com reticencias, ultimo quadro   // testes: a decisao volta a valer
 #endif

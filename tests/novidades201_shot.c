@@ -26,6 +26,9 @@ static void ajustesDeTeste(int ingles, int reduzidas, int tema) {
   f = fopen(caminho, "w");
   assert(f);
   fprintf(f, "idioma %d\nselected_theme %d\nanimacoes %d\n", ingles, tema, reduzidas);
+  // NUVIO_SHOT_FONTE=3 (TXT_FAMILIA_*): a fonte da interface da TV
+  // (Montserrat na TCL do dono), mais larga que a Inter do Mac.
+  if (getenv("NUVIO_SHOT_FONTE")) fprintf(f, "fonteInterface %d\n", atoi(getenv("NUVIO_SHOT_FONTE")));
   fclose(f);
   ajustes_dir(dados_dir());
 }
@@ -164,28 +167,25 @@ static void captura(const char *saida, const char *nome, float seg, int pagina) 
   grava(cam);
 }
 
-// A lista tem de caber acima dos botoes em TODOS os idiomas: com duas linhas
-// por item, ou com alguns em uma (reticencias) onde duas nao cabem.
+// Em TODOS os idiomas a lista termina acima do rodape com folga, e com a
+// fonte da TV (NUVIO_SHOT_FONTE=3) nenhuma frase precisa de reticencias.
 static void cabeEmTodos(void) {
   int idi, i, comCorte = 0;
   for (idi = 0; idi < IDIOMA_N; idi++) {
-    int l;
+    int c;
+    float folga;
     ajustesDeTeste(idi, 0, 2);
     novidades201_abrir();
-    for (i = 0; i < 30; i++) quadro(1.0f / 60.0f);
-    l = novidades201_teste_cortados();
-    if (l) {
-      int k;
-      printf("idioma %d (%s): %d item(ns) em uma linha:", idi, idioma_iso(idi), l);
-      for (k = 0; k < 12; k++) if (novidades201_teste_cortado(k)) printf(" %d", k);
-      putchar('\n');
-    }
-    assert(l >= 0);
-    if (l) comCorte++;
+    for (i = 0; i < 40; i++) quadro(1.0f / 60.0f);
+    folga = novidades201_teste_folga();
+    c = novidades201_teste_cortadas();
+    if (c) { printf("idioma %d (%s): %d frase(s) com reticencias\n", idi, idioma_iso(idi), c); comCorte++; }
+    assert(folga >= 28.0f);
+    if (getenv("NUVIO_SHOT_FONTE")) assert(c == 0);
     tecla(SDLK_ESCAPE);
     for (i = 0; i < 20; i++) quadro(1.0f / 60.0f);
   }
-  printf("PASS: a lista cabe nos %d idiomas (%d com algum item cortado)\n", IDIOMA_N, comCorte);
+  printf("PASS: a lista acaba acima do rodape nos %d idiomas (%d com reticencias)\n", IDIOMA_N, comCorte);
 }
 
 int main(int argc, char **argv) {
@@ -242,6 +242,10 @@ int main(int argc, char **argv) {
   captura(saida, "de-central", 3.70f, 0);
   ajustesDeTeste(IDIOMA_JA, 0, 2);
   captura(saida, "ja-central", 3.70f, 0);
+  ajustesDeTeste(IDIOMA_HU, 0, 2);
+  captura(saida, "hu-central", 3.70f, 0);
+  ajustesDeTeste(IDIOMA_RU, 0, 2);
+  captura(saida, "ru-central", 3.70f, 0);
 
   ajustesDeTeste(0, 1, 2);
   captura(saida, "reduzido", 0.5f, 0);
