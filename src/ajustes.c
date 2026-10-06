@@ -421,6 +421,10 @@ typedef enum {
   // APOIAR O PROJETO (Sobre e ajuda, apoio.h): a previa mostra os QRs do
   // Patreon e do Ko-fi. Acao, sem valor. No fim: valor[]/CHAVE[] posicionais.
   AJ_APOIAR,
+  // Espaco entre fileiras e entre titulos da Home (home.c, fileiraGap/gapDe), em
+  // por cento do valor medido (100 = o de sempre). LOCAIS: o web nao tem. No fim:
+  // valor[]/CHAVE[] posicionais.
+  AJ_ESPACO_FILEIRAS, AJ_ESPACO_TITULOS,
   AJ_N
 } OpcaoId;
 
@@ -1183,6 +1187,8 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Tamanho máximo",                  V_TAMANHO_GB, 7),       // local: tamanhoMaxLocal
   ESC("Tamanho mínimo",                  V_TAMANHO_GB, 7),       // local: tamanhoMinLocal
   ACAO("Apoiar o projeto"),
+  NUM("Espaço entre fileiras",           50, 150, 10, "%"),     // local: espacoFileirasLocal
+  NUM("Espaço entre títulos",            50, 150, 10, "%"),     // local: espacoTitulosLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1381,6 +1387,7 @@ static const char *CHAVE[] = {
   "relogio12hLocal",
   "tamanhoMaxLocal", "tamanhoMinLocal",
   "-apoiar",
+  "espacoFileirasLocal", "espacoTitulosLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -2073,6 +2080,13 @@ int ajustes_cw_desfocar_proximo(void) { return lig(AJ_CW_BLUR_PROX); }
 int ajustes_cw_do_episodio_mais_alto(void) { return lig(AJ_CW_FURTHEST); }
 int ajustes_cw_mostrar_nao_exibidos(void)  { return lig(AJ_CW_NAO_EXIBIDOS); }
 int ajustes_cw_ordem(void)            { return valor[AJ_CW_ORDEM]; }
+// Espaco da Home em fracao do valor medido. Fora da faixa do NUM (arquivo torto)
+// volta para dentro dela; 0 (arquivo sem a chave) nao chega aqui: o padrao e 100.
+float ajustes_espaco_fator(int pct) {
+  return (pct < 50 ? 50 : pct > 150 ? 150 : pct) / 100.0f;
+}
+float ajustes_espaco_fileiras(void) { return ajustes_espaco_fator(valor[AJ_ESPACO_FILEIRAS]); }
+float ajustes_espaco_titulos(void)  { return ajustes_espaco_fator(valor[AJ_ESPACO_TITULOS]); }
 int ajustes_cw_concluido(void) {
   int v = valor[AJ_CW_CONCLUIDO];
   return v < 70 ? 70 : v > 98 ? 98 : v;   // a faixa do NUM, se o arquivo vier torto
@@ -3651,6 +3665,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER: /* o web nao tem a ilha */
     case AJ_RELOGIO_12H:    /* formato da hora: desta TV */
     case AJ_TAM_MAX: case AJ_TAM_MIN: /* o web nao tem a faixa de tamanho */
+    case AJ_ESPACO_FILEIRAS: case AJ_ESPACO_TITULOS: /* o web nao tem espacamento */
     case AJ_FONTE_PRAZO:    /* o web nao tem: a rede e os addons sao desta casa */
     case AJ_MEDIDOR:        /* o medidor e da GPU desta TV; o web nao tem */
     case AJ_TAMANHO_UI:     /* o tamanho e desta tela, e o web nao tem */
@@ -4872,6 +4887,8 @@ static const char *ajudaOpcao(int op) {
     case AJ_RELOGIO: return "Desligado, a pílula do relógio não fica na tela em repouso. Os avisos continuam saindo dela: ela aparece só para o aviso e some depois.";
     case AJ_SAIDA_PLAYER: return "Ao sair de um filme ou episódio no meio. Home: o vídeo encolhe até a pílula do relógio, que fica com o título para você retomar (CH+ ou AZUL). Página do título: volta para onde você estava. Só vale com o relógio na tela; terminar o título segue para o próximo episódio como sempre.";
     case AJ_TAM_MAX: return "Na escolha automática, fontes maiores que este tamanho ficam para o fim da fila. Serve para quem tem franquia de internet limitada. Só vale para arquivos com tamanho conhecido; se só houver fontes fora da faixa, a melhor delas ainda toca.";
+    case AJ_ESPACO_FILEIRAS: return "O espaço vertical entre uma fileira da Home e a seguinte. Com menos cabem mais fileiras na tela, com mais a Home fica mais arejada.";
+    case AJ_ESPACO_TITULOS: return "O espaço horizontal entre os cartazes de uma fileira da Home.";
     case AJ_TAM_MIN: return "Na escolha automática, fontes menores que este tamanho ficam para o fim da fila. Se for maior que o tamanho máximo, o mínimo é ignorado. Só vale para arquivos com tamanho conhecido; se só houver fontes fora da faixa, a melhor delas ainda toca.";
     case AJ_RELOGIO_12H: return "Como a hora aparece no relógio, na tela de descanso, no fim do filme e no guia de TV: 18:30 ou 6:30 PM.";
     case AJ_RELOGIO_POS: return "Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.";
@@ -6438,6 +6455,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_HOME_LAYOUT:
     case AJ_LANDSCAPE: case AJ_HERO_CHEIO: case AJ_HERO_FUNDO:
     case AJ_HERO_ARTE_DIF: case AJ_HERO_TRAILER: case AJ_FIL_LIMITE:
+    case AJ_ESPACO_FILEIRAS: case AJ_ESPACO_TITULOS:
     case AJ_HERO_TRAILER_SOM: case AJ_HERO_TRAILER_ESPERA: case AJ_HERO_TRANSICAO: case AJ_LOGO_TRAILER:
     case AJ_ADDON_FUNDO: case AJ_ADDON_LOGO:
     case AJ_FIL_ORDEM: case AJ_RAIL: case AJ_RAIL_MODERNA:

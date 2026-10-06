@@ -10,6 +10,8 @@ static const char *ajVisualIcone(int op) {
     case AJ_FIL_ORDEM: return "aj_rows-3";
     case AJ_FIL_LIMITE: return "aj_rows-3";
     case AJ_ITENS_FILEIRA: return "aj_rows-3";
+    case AJ_ESPACO_FILEIRAS: return "aj_rows-3";
+    case AJ_ESPACO_TITULOS: return "aj_rows-3";
     case AJ_OCULTAR_NLANC: return "aj_rows-3";
     case AJ_NOTAS_HOME: return "aj_rows-3";
     case AJ_ROTULOS: return "aj_rows-3";

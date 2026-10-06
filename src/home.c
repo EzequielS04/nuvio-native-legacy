@@ -1115,13 +1115,21 @@ static int temRotulo(TipoFileira t) {
 // O gap comum é 24px. Cards editoriais grandes precisam de 40px porque crescem
 // 6% quando focados e, com o gap menor, quase encostam no vizinho.
 static float gapDe(TipoFileira t) {
-  return (t == FILEIRA_DESTAQUE || t == FILEIRA_DESTAQUE_QUADRADO)
-       ? NV_CARD_GAP_GRANDE : NV_CARD_GAP + xOffTipo(t);
+  // Espaco entre titulos (Ajustes): so o vao medido escala, nunca o xOffTipo. Os
+  // cards grandes crescem 6% no foco, entao o vao deles nao desce de 24.
+  float f = ajustes_espaco_titulos();
+  if (t == FILEIRA_DESTAQUE || t == FILEIRA_DESTAQUE_QUADRADO) {
+    float g = NV_CARD_GAP_GRANDE * f;
+    return g < NV_CARD_GAP ? NV_CARD_GAP : g;
+  }
+  return NV_CARD_GAP * f + xOffTipo(t);
 }
 // Passo vertical entre fileiras. `.home-modern-landscape-posters` aperta o
 // `--home-row-gap` de 32 para 24 (components.css:6473) — a fileira deitada e
 // mais baixa e o respiro do poster em pe sobraria nela.
-static float fileiraGap(void) {
+static float fileiraGapBase(void);
+static float fileiraGap(void) { return fileiraGapBase() * ajustes_espaco_fileiras(); }
+static float fileiraGapBase(void) {
   // Padrao: o respiro largo entre secoes da home original do Nuvio (~100 px da
   // base dos cartoes ao titulo seguinte na captura do dono); o fundo e liso, e
   // e o vazio que separa uma fileira da outra.
