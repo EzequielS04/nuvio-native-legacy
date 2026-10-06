@@ -46,6 +46,9 @@ int  central_tecla_ocupada(void);
 float central_previa_altura(void);
 void  central_previa_desenhar(float x, float y, float a, int foco, int inverte);
 
+// Largura util do nome num botao (tests/central_rotulos.sh).
+float central_rotulo_w(void);
+
 #ifdef CENTRAL_TESTE
 // Capturas: foco num botao (-1 = "Editar atalhos") e modo edicao.
 void central_teste_foco(int foco, int editar);
