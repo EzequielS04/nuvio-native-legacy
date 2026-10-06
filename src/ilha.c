@@ -412,20 +412,21 @@ int ilha_rect(float *x, float *y, float *w, float *h) {
 }
 
 // --- o modal ---------------------------------------------------------------------
-// ESTREIA: Assistir · Depois (mockup aprovado em 02/10, "Episodio novo:
-// Assistir / Depois"). Antes eram Assistir · Detalhes · Marcar como visto; o
-// dono escolheu o par curto: "Depois" recolhe SEM marcar e o cartao fica na
-// pilula (abrir a pagina do titulo continua contando como visto, ilhacart.c).
+// ESTREIA: Assistir · Depois · Dispensar. O par aprovado em 02/10 era
+// Assistir / Depois, com "Depois" recolhendo SEM marcar e o cartao ficando na
+// pilula — e ficava ate a pessoa abrir a serie (dono, 06/10: "o lembrete de
+// serie so sai se eu entrar na serie"). Agora "Depois" tira o cartao ate o app
+// fechar e "Dispensar" tira de vez aquele episodio (ver ILHA_PEDIU_* em ilha.h).
 // AMIGO: Ver tambem · Detalhes · Fechar, o A5 de oportunidades.md.
 static int nBotoes(void) {
   if (modalAtividade) return 1;
   if (modalAviso) return modalM.nBotoes < 1 ? 1 : modalM.nBotoes > ILHA_MODAL_BOTOES ? ILHA_MODAL_BOTOES : modalM.nBotoes;
-  return modalQual == ILHA_ESTREIA ? 2 : 3;
+  return 3;
 }
 static const char *rotuloBotao(int i) {
   if (modalAtividade) return i18n("Fechar");
   if (modalAviso) return modalM.botao[i];
-  if (modalQual == ILHA_ESTREIA) return i == 0 ? i18n("Assistir") : i18n("Depois");
+  if (modalQual == ILHA_ESTREIA) return i == 0 ? i18n("Assistir") : i == 1 ? i18n("Depois") : i18n("Dispensar");
   if (i == 0) return modalQual == ILHA_AMIGO ? i18n("Ver também") : i18n("Retomar");
   if (i == 1) return i18n("Detalhes");
   return i18n("Dispensar");   // a mesma palavra do menu do cartao "Retomar agora"
@@ -433,7 +434,7 @@ static const char *rotuloBotao(int i) {
 static const char *iconeBotao(int i) {
   if (modalAviso) return modalM.botaoIcone[i][0] ? modalM.botaoIcone[i] : NULL;
   if (i == 0) return "play";
-  if (modalQual == ILHA_ESTREIA) return "aj_clock";
+  if (modalQual == ILHA_ESTREIA) return i == 1 ? "aj_clock" : "aj_x";
   if (i == 1) return "aj_info";
   return NULL;
 }
@@ -522,7 +523,12 @@ static void acionar(int i) {
     return;
   }
   if (i == 0) { pedir(ILHA_PEDIU_TOCAR); ilha_modal_fechar(0); }
-  else if (modalQual == ILHA_ESTREIA) ilha_modal_fechar(0);   // "Depois": o cartao fica
+  else if (modalQual == ILHA_ESTREIA && i == 1) {
+    // "Depois": o cartao sai da pilula ate a proxima sessao (ilhacart_adiar).
+    pedir(ILHA_PEDIU_DEPOIS);
+    temCartao[modalQual] = 0;
+    ilha_modal_fechar(0);
+  }
   else if (i == 1) { pedir(ILHA_PEDIU_DETALHES); ilha_modal_fechar(0); }
   else {
     // "Fechar" tira o cartao: o modal recolhe para uma pilula que ja nao o tem.

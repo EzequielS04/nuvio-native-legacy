@@ -2750,7 +2750,7 @@ void app_atualizar(float dt, Uint32 agora) {
     } else if (o == ILHA_PEDIU_DISPENSAR) {
       if (qual == ILHA_VIVO) player_descartar_retido();
       ilhacart_dispensar(qual);
-    }
+    } else if (o == ILHA_PEDIU_DEPOIS) ilhacart_adiar(qual);
   }
   // Da pagina do titulo, um titulo escolhido no painel de Salvos/avisos TROCA a
   // pagina (a de baixo fecha seca). So esse pedido: os demais seguem de fora.
