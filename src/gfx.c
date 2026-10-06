@@ -336,6 +336,17 @@ static const char *FS_CABECA =
   "#else\n"
   "float nv_ruido(){ return nv_ruido_bayer(); }\n"
   "#endif\n"
+  // 2x2 BAYER (levels 0, .5, .75, .25 — the classic matrix), ~7 ALU ops. The
+  // 4x4 above costs ~23 ops (two mod/floor/dot/fract rounds plus the tail), and
+  // on the GPUs that run with light effects every op per pixel is what the
+  // frame is made of: MEASURED on the TCL Smart TV Pro (Mali-G52, GPU timer
+  // query, 06/10/2026) ~0.25 ms per shader op per full screen, so a dithered
+  // full-screen veil paid ~4 ms for the dither alone. With a 1/255 amplitude
+  // four levels already break the band into steps the eye does not resolve.
+  "float nv_ruido_leve(){\n"
+  "  vec2 p = fract(gl_FragCoord.xy * 0.5);\n"
+  "  return p.x + 1.5 * p.y - 4.0 * p.x * p.y + 0.125;\n"
+  "}\n"
   // uLeve > 0.5 = EFEITOS LEVES (gpunivel.h, nivel 1): o ruido passa a ser o
   // BAYER 4x4 (mediump, exato em fp16, poucas ALU) em vez do highp. Antes a
   // cor saia SEM ruido nenhum, e as faixas de 8 bits voltavam justamente nas
@@ -345,7 +356,7 @@ static const char *FS_CABECA =
   // inteiro, entao todo fragmento toma o mesmo lado.
   "uniform float uLeve;\n"
   "vec4 nv_dither(vec3 c, float a){\n"
-  "  float n = ((uLeve > 0.5 ? nv_ruido_bayer() : nv_ruido()) - 0.5) * (1.0 / 255.0);\n"
+  "  float n = ((uLeve > 0.5 ? nv_ruido_leve() : nv_ruido()) - 0.5) * (1.0 / 255.0);\n"
   "  return vec4(clamp(c + n / max(a, 0.004), 0.0, 1.0), a);\n"
   "}\n"
   // uAlt = altura do rect em PIXELS DO ALVO. O SDF mede em fracao da altura,
@@ -391,7 +402,13 @@ static const char *FS_SDF =
   "  vec2 q = qh;\n"
   "  return min(max(q.x,q.y),0.0) + length(max(q,0.0)) - r;\n"
   "}\n"
-  "float borda(float d){ return clamp(0.5 - d * uAlt, 0.0, 1.0); }\n";
+  "float borda(float d){ return clamp(0.5 - d * uAlt, 0.0, 1.0); }\n"
+  // Rect with square corners (uRaio 0, the full-screen passes): the SDF would
+  // give 1 in every pixel of the quad (uAlt is 8192 there, the ramp is a step
+  // at the rect edge, and the quad IS the rect). ~15 ops per pixel saved on
+  // every full-screen veil, destaque and background; a uniform branch costs
+  // nothing on Mali. The rounded case is untouched.
+  "float bordaR(NV_HP vec2 uv, float r, float asp){ return r > 0.0 ? borda(sdf(uv, r, asp)) : 1.0; }\n";
 
 // "cover": recorta o excedente em vez de deformar a arte.
 static const char *FS_COVER =
@@ -483,7 +500,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
 
   // GFX_COR — retangulo/pilula de cor solida
   "void main(){\n"
-  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  float m = bordaR(vUv, uRaio, uAspect);\n"
   "  if (m <= 0.001) discard;\n"
   "  gl_FragColor = vec4(uCor.rgb, uCor.a*m);\n"
   "}\n",
@@ -534,7 +551,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
 
   // GFX_VEU — escurece a base E a esquerda, onde fica o texto sobreposto
   "void main(){\n"
-  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  float m = bordaR(vUv, uRaio, uAspect);\n"
   "  if (m <= 0.001) discard;\n"
   "  float gb = smoothstep(0.34, 1.0, vUv.y);\n"
   "  float ge = smoothstep(0.62, 0.0, vUv.x) * 0.78;\n"
@@ -895,7 +912,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // garante laco com limite variavel, e tres mix compilam para o mesmo punhado
   // de instrucoes que o laco geraria.
   "void main(){\n"
-  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  float m = bordaR(vUv, uRaio, uAspect);\n"
   "  if (m <= 0.001) discard;\n"
   "#ifdef GL_FRAGMENT_PRECISION_HIGH\n"
   "  highp float t = clamp(vUv.y, 0.0, 1.0);\n"
@@ -933,7 +950,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
 
   // GFX_ARTE — a textura intacta, recortada pelos cantos. Ver a nota em gfx.h.
   "void main(){\n"
-  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  float m = bordaR(vUv, uRaio, uAspect);\n"
   "  if (m <= 0.001) discard;\n"
   "  vec4 t = texture2D(uTex, vUv);\n"
   // uFoco > 0 = ARTE DE TELA CHEIA COM O VEU DOS AJUSTES NA MESMA PASSADA (so
@@ -958,7 +975,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "#define GFX_LUZ_PREC mediump\n"
   "#endif\n"
   "void main(){\n"
-  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  float m = bordaR(vUv, uRaio, uAspect);\n"
   "  if (m <= 0.001) discard;\n"
   "  GFX_LUZ_PREC vec2 p = (vUv - uPar) * vec2(uAspect, 1.0);\n"
   // O falloff linear ao quadrado ainda mostrava um limite circular em TVs com
@@ -996,7 +1013,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // sequencia, como uma so luz passando, e a conta e a mesma do GFX_COR mais
   // um exp — nenhum desenho a mais.
   "void main(){\n"
-  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  float m = bordaR(vUv, uRaio, uAspect);\n"
   "  if (m <= 0.001) discard;\n"
   "  float x = uPar.y + vUv.x * uFoco + (1.0 - vUv.y) * 0.05 - uPar.x;\n"
   "  float b = exp(-x*x*70.0);\n"
@@ -1059,7 +1076,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  return t < 0.5 ? mix(uGrad0, uGrad1, t * 2.0) : mix(uGrad1, uGrad2, t * 2.0 - 1.0);\n"
   "}\n"
   "void main(){\n"
-  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  float m = bordaR(vUv, uRaio, uAspect);\n"
   "  if (m <= 0.001) discard;\n"
   "  float t = vUv.x * 0.78 + vUv.y * 0.22 + 0.10 * sin(uTempo * 0.7);\n"
   "  vec3 c = grad3(t) + (1.0 - vUv.y) * 0.06;\n"
@@ -1124,7 +1141,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // as do GFX_VEU (base e esquerda), com a esquerda mais larga: no Dinamica o
   // texto ocupa 40% da largura e no banner do Padrao, 45%.
   "void main(){\n"
-  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  float m = bordaR(vUv, uRaio, uAspect);\n"
   "  if (m <= 0.001) discard;\n"
   "  vec2 uv = vec2(vUv.x - uDesliza, vUv.y);\n"
   "  float dentro = step(0.0, uv.x) * step(uv.x, 1.0);\n"
@@ -1138,7 +1155,8 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  float gb = smoothstep(uCor.r > 0.0 ? uCor.r : 0.38, 1.0, vUv.y) * 0.72 * uFoco;\n"
   "  c *= 1.0 - clamp(ge + gb - ge * gb, 0.0, 1.0);\n"
   "  float d = smoothstep(0.66, 1.0, vUv.y);\n"
-  "  gl_FragColor = nv_dither(c, uCor.a * m * dentro * (1.0 - uPar.y * d * d));\n"
+  "  float a = uCor.a * m * dentro * (1.0 - uPar.y * d * d);\n"
+  "  gl_FragColor = (uLeve > 0.5 && a > 0.5) ? vec4(c, a) : nv_dither(c, a);\n"   // see GFX_VITRINE_DIN
   "}\n",
 
   // GFX_FUNDO_DIN — ver gfx.h. SO COR: um degrade vertical de uma cor so. O
@@ -1222,7 +1240,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // GFX_JANELA — o cartao do carrossel. Ver a nota em gfx.h.
   // uFoco = forca do veu, uPar.x = apagar da pagina rolada, uPar.y = qual veu.
   "void main(){\n"
-  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  float m = bordaR(vUv, uRaio, uAspect);\n"
   "  if (m <= 0.001) discard;\n"
   "  vec2 u = uJan.xy + vUv * uJan.zw;\n"
   "  float a = 1.0 - smoothstep(0.0, 0.82, u.x);\n"
@@ -1268,7 +1286,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // GFX_MINI — o alvo de uma miniatura (gfx_mini_*): a textura e um FBO
   // (origem embaixo), recortada pelos cantos.
   "void main(){\n"
-  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  float m = bordaR(vUv, uRaio, uAspect);\n"
   "  if (m <= 0.001) discard;\n"
   "  vec4 t = texture2D(uTex, vec2(vUv.x, 1.0 - vUv.y));\n"
   "  gl_FragColor = vec4(t.rgb / max(t.a, 0.004), t.a * uCor.a * m);\n"
@@ -1283,7 +1301,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // uPar.y = 1 veu branco (tinta escura), 0 preto. Cantos pelo SDF, grao pelo
   // nv_dither.
   "void main(){\n"
-  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  float m = bordaR(vUv, uRaio, uAspect);\n"
   "  if (m <= 0.001) discard;\n"
   "  vec4 t = texture2D(uTex, uJan.xy + vUv * uJan.zw);\n"
   "  vec3 c = mix(uCor.rgb, t.rgb, t.a * uFoco);\n"
@@ -1294,7 +1312,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
 
   // GFX_FOSCO — o assado lido em coordenada de tela, so dentro dos cantos.
   "void main(){\n"
-  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  float m = bordaR(vUv, uRaio, uAspect);\n"
   "  if (m <= 0.001) discard;\n"
   "  gl_FragColor = nv_dither(texture2D(uTex, vAmb).rgb, uCor.a * m);\n"
   "}\n",
@@ -1306,7 +1324,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // mix(fundo, arte, alfa) e o que a mistura do GFX_VITRINE fazia sobre o
   // fundo ja pintado.
   "void main(){\n"
-  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  float m = bordaR(vUv, uRaio, uAspect);\n"
   "  vec2 uv = vec2(vUv.x - uDesliza, vUv.y);\n"
   "  float dentro = step(0.0, uv.x) * step(uv.x, 1.0);\n"
   "  float ra = uAspect / max(uTexAsp, 0.01);\n"
@@ -1321,7 +1339,12 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  float d = smoothstep(0.66, 1.0, vUv.y);\n"
   "  float a = clamp(uCor.a * m * dentro * (1.0 - uPar.y * d * d), 0.0, 1.0);\n"
   "  vec3 bg = uDin.rgb * mix(1.0, uDin.a, smoothstep(0.0, 1.0, 1.0 - vAmb.y));\n"
-  "  gl_FragColor = nv_dither(mix(bg, c, a), 1.0);\n"
+  // Light effects: no dither where the art dominates (a > 0.5). Photo content
+  // has its own noise; the band the dither fights lives in the background
+  // gradient and the dissolve, which keep it. The regions are large and
+  // contiguous, so the branch only diverges along one line.
+  "  vec3 o = mix(bg, c, a);\n"
+  "  gl_FragColor = (uLeve > 0.5 && a > 0.5) ? vec4(o, 1.0) : nv_dither(o, 1.0);\n"
   "}\n",
 };
 
