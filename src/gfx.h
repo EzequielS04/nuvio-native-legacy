@@ -295,6 +295,12 @@ extern float gfx_desliza_atual;
 // 1 = o GFX_CARD deve sempre preencher a moldura com cover. Usado pela forma
 // editorial 4:3, que nao pode cair no contain quando recebe arte 16:9.
 extern float gfx_card_forcar_cover_atual;
+// 1 = o GFX_CARD escurece a arte pelos dois veus de borda da tela de perfis
+// (os mesmos GFX_VEU_TOPO 330 px / 0,92 e GFX_VEU_BAIXO 300 px / 0,95, em
+// coordenada de tela). Sobre fundo preto e o mesmo pixel que os dois veus
+// desenhados por cima, sem as duas passadas de largura inteira. So a parede
+// de capas (psestilos.c) liga; quem liga desliga.
+extern float gfx_card_veu_tela_atual;
 // 1 = o cartaz em foco ganha o rebordo claro no GFX_CARD; 0 = nao ganha. E um
 // ajuste da pessoa (Ajustes > Foco no cartaz), lido uma vez por quadro pela
 // tela que desenha; o brilho e o especular do foco nao dependem dele.

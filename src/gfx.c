@@ -27,7 +27,7 @@ static void gfxBlend(int on) {
 // shader que usasse a mesma variavel.
 typedef struct {
   GLuint prog;
-  GLint rect, tela, tex, foco, par, raio, cor, asp, texAsp, forcarCover, borda, varre, veu, desl, fundo,
+  GLint rect, tela, tex, foco, par, raio, cor, asp, texAsp, forcarCover, veuTela, borda, varre, veu, desl, fundo,
         grad0, grad1, grad2, tempo, reg0, reg1, reg2, reg3, vaza;
   GLint amb, ambOn;         // uAmb/uAmbOn: so os tres modos de arte com rampa
   GLint texB, texAspB, alfaB;   // camadas do destaque (gfx_hero_camadas)
@@ -63,6 +63,7 @@ void gfx_textura_definir(GLuint tex, const float janela[4], float aspecto,
 }
 int gfx_textura_ativa(void) { return txTex != 0; }
 float gfx_card_forcar_cover_atual = 0.0f;
+float gfx_card_veu_tela_atual = 0.0f;
 // O pedaco do rect que o proximo gfx_rect desenha (uSub). So gfx_sombra_vazada
 // mexe, e devolve a (0,0,1,1) antes de sair.
 static float subAtual[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
@@ -254,6 +255,7 @@ static const char *FS_CABECA =
   "uniform float uAspect;\n"
   "uniform float uTexAsp;   // w/h da TEXTURA; 0 = nao ajustar\n"
   "uniform float uForceCover;\n"
+  "uniform float uVeuTela;   // GFX_CARD: os veus de borda da tela de perfis, no fragmento (gfx.h)\n"
   "uniform vec4  uJan;\n"
   // A COR DO FUNDO DA PAGINA, para as rampas que dissolvem a arte nela
   // (destaque, destaque cheio, detalhe). Era vec3(0.051) cravado em cada uma;
@@ -464,6 +466,20 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // especular, entao desligar a borda nao deixa o foco invisivel.
   "    cor += smoothstep(0.010,0.0,abs(d)) * uFoco * 0.35 * uBorda;\n"
   "  } else cor *= 0.80;\n"
+  // THE EDGE VEILS OF THE PROFILE PICKER, IN THE CARD (gfx_card_veu_tela_atual).
+  // Over a black background a black veil of alpha v is cor *= (1 - v), so the
+  // poster wall can carry the two veils itself: the same ramps as GFX_VEU_TOPO
+  // (0..330 px, 0.92) and GFX_VEU_BAIXO (780..1080 px, 0.95), measured on the
+  // screen (vAmb.y counts from the bottom). Same pixel, two full-width passes
+  // less per frame (0.59 screens). MEASURED on the TCL Smart TV Pro
+  // (Mali-G52): the picker frame is fill-bound at ~7-8 ms per screen.
+  "  if (uVeuTela > 0.5) {\n"
+  "    float sy = 1.0 - vAmb.y;\n"
+  "    float vt = smoothstep(1.0, 0.15, sy / 0.3055556) * 0.92;\n"
+  "    float tb = clamp((sy - 0.7222222) / 0.2777778, 0.0, 1.0);\n"
+  "    float gb = tb * tb * (3.0 - 2.0 * tb); gb = gb * gb * 0.95;\n"
+  "    cor *= (1.0 - vt) * (1.0 - gb);\n"
+  "  }\n"
   // O VEU DA BASE NO MESMO FRAGMENTO DA ARTE (gfx_veu_card_atual). Desenhado
   // como passada separada, ele e a arte dividiam a MESMA cobertura de borda:
   // no pixel da borda a arte entra com m e o veu escurece so m dela, entao
@@ -1424,6 +1440,7 @@ int gfx_iniciar(void) {
     progs[m].asp  = glGetUniformLocation(p, "uAspect");
     progs[m].texAsp = glGetUniformLocation(p, "uTexAsp");
     progs[m].forcarCover = glGetUniformLocation(p, "uForceCover");
+    progs[m].veuTela = glGetUniformLocation(p, "uVeuTela");
     progs[m].borda  = glGetUniformLocation(p, "uBorda");
     progs[m].varre  = glGetUniformLocation(p, "uVarre");
     progs[m].veu    = glGetUniformLocation(p, "uVeu");
@@ -1944,6 +1961,7 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
     glUniform4f(P->jan, j[0], j[1], j[2], j[3]);
   }
   if (P->forcarCover >= 0) glUniform1f(P->forcarCover, gfx_card_forcar_cover_atual);
+  if (P->veuTela >= 0)     glUniform1f(P->veuTela, gfx_card_veu_tela_atual);
   if (P->borda >= 0)  glUniform1f(P->borda, gfx_borda_foco_atual);
   if (P->varre >= 0)  glUniform1f(P->varre, gfx_varre_atual);
   // Depois da arte (gfx_veu_na_arte) a lista so serve para gfx_veu_base pular
