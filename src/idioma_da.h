@@ -3420,6 +3420,7 @@
   T("Recentes", "Seneste"),
   T("Recolher", "Skjul"),
   T("Recolhida", "Sammenklappet"),
+  T("Recomendada", "Anbefalet"),
   T("Recomendado pelo TMDB", "Anbefalet af TMDB"),
   T("Recomendados, com Instalar", "Anbefalede, med Installer"),
   T("Recomendar a um amigo", "Anbefal til en ven"),

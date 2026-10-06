@@ -3420,6 +3420,7 @@
   T("Recentes", "Gần đây"),
   T("Recolher", "Thu gọn"),
   T("Recolhida", "Thu gọn"),
+  T("Recomendada", "Đề xuất"),
   T("Recomendado pelo TMDB", "TMDB đề xuất"),
   T("Recomendados, com Instalar", "Được đề xuất, kèm Cài đặt"),
   T("Recomendar a um amigo", "Đề xuất cho bạn bè"),

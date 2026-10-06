@@ -3420,6 +3420,7 @@
   T("Recentes", "Ostatnie"),
   T("Recolher", "Zwiń"),
   T("Recolhida", "Zwinięte"),
+  T("Recomendada", "Zalecana"),
   T("Recomendado pelo TMDB", "Polecane przez TMDB"),
   T("Recomendados, com Instalar", "Polecane, z Zainstaluj"),
   T("Recomendar a um amigo", "Poleć znajomemu"),

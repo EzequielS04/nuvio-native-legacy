@@ -3420,6 +3420,7 @@
   T("Recentes", "Recent"),
   T("Recolher", "Inklappen"),
   T("Recolhida", "Ingeklapt"),
+  T("Recomendada", "Aanbevolen"),
   T("Recomendado pelo TMDB", "Aanbevolen door TMDB"),
   T("Recomendados, com Instalar", "Aanbevolen, met Installeren"),
   T("Recomendar a um amigo", "Aanbevelen bij een vriend"),

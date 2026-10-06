@@ -3420,6 +3420,7 @@
   T("Recentes", "Naujausi"),
   T("Recolher", "Suskleisti"),
   T("Recolhida", "Suskleista"),
+  T("Recomendada", "Rekomenduojama"),
   T("Recomendado pelo TMDB", "Rekomenduoja TMDB"),
   T("Recomendados, com Instalar", "Rekomenduojama, su Įdiegti"),
   T("Recomendar a um amigo", "Rekomenduoti draugui"),

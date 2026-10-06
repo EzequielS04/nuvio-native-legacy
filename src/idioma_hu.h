@@ -3420,6 +3420,7 @@
   T("Recentes", "Legutóbbiak"),
   T("Recolher", "Összecsukás"),
   T("Recolhida", "Összecsukva"),
+  T("Recomendada", "Ajánlott"),
   T("Recomendado pelo TMDB", "A TMDB ajánlja"),
   T("Recomendados, com Instalar", "Ajánlott, Telepítéssel"),
   T("Recomendar a um amigo", "Ajánlás ismerősnek"),

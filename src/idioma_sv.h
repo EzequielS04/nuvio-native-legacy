@@ -3420,6 +3420,7 @@
   T("Recentes", "Senaste"),
   T("Recolher", "Fäll ihop"),
   T("Recolhida", "Hopfälld"),
+  T("Recomendada", "Rekommenderad"),
   T("Recomendado pelo TMDB", "Rekommenderad av TMDB"),
   T("Recomendados, com Instalar", "Rekommenderade, med Installera"),
   T("Recomendar a um amigo", "Rekommendera till en vän"),

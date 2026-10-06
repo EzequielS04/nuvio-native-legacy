@@ -13,6 +13,8 @@
 #include "rede.h"
 #include "escala.h"
 #include "catalogo.h"
+#include "legauto.h"
+#include "video.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -163,6 +165,11 @@ static LuiLinha linhas[LUI_MAX_LINHAS];
 static int nLinhasV;
 
 static int mais, alvo, aberto;
+// #202: a language row with several versions opens the list of THAT group's
+// versions (ver = 1). verGrupo is the simple-view row key it came from; Back
+// returns focus to it.
+static int ver;
+static char verGrupo[96];
 static char focoChave[96];
 static int foco, rolagem, syncAcao;
 static char aviso[128];
@@ -239,6 +246,31 @@ static const char *estadoSync(int slot) {
   return s && s[0] ? s : NULL;
 }
 
+// Does this candidate belong to the simple-view group `grupo` (same key as
+// gruposDoSlot builds)? The second slot never lists what it cannot draw.
+static int candNoGrupo(const char *grupo, const LegUiCand *c) {
+  char org[80], chave[96];
+  int slot = grupo[0] == 's';
+  if (slot && !legendasui_cand_secundaria_ok(c)) return 0;
+  chaveOrigem(c, org, sizeof org);
+  snprintf(chave, sizeof chave, "%c|%s|%s", slot ? 's' : 'p', nomeIdioma(c->idioma), org);
+  return !strcmp(chave, grupo);
+}
+
+// The version the app would pick on its own: the file whose name shares the
+// most words with what is playing; ties (and embedded tracks) keep the first.
+static int versaoRecomendada(const char *grupo) {
+  const char *midia = video_url_atual();
+  int i, melhor = -1, ms = -1;
+  for (i = 0; i < nCand; i++) {
+    int s;
+    if (!candNoGrupo(grupo, &cand[i])) continue;
+    s = cand[i].embutida ? 0 : legauto_afinidade_release(cand[i].arquivo, midia ? midia : "");
+    if (s > ms) { ms = s; melhor = i; }
+  }
+  return melhor;
+}
+
 static void montarLinhas(void) {
   char prim[24];
   const char *sec = legenda2_identidade();
@@ -246,7 +278,16 @@ static void montarLinhas(void) {
   capturar();
   idPrimario(prim);
   nLinhasV = 0;
-  if (!mais) {
+  if (ver) {
+    int rec = versaoRecomendada(verGrupo);
+    for (i = 0; i < nCand && nLinhasV < LUI_MAX_LINHAS; i++) {
+      char k[96];
+      if (!candNoGrupo(verGrupo, &cand[i])) continue;
+      snprintf(k, sizeof k, "v|%s", cand[i].id);
+      linhaFixa(LR_CAND, verGrupo[0] == 's', k);
+      linhas[nLinhasV - 1].cand = i; linhas[nLinhasV - 1].nVar = i == rec ? -1 : 1;   // -1: recommended
+    }
+  } else if (!mais) {
     gruposDoSlot(0, prim);
     linhaFixa(LR_NENHUMA, 0, "p|-");
     gruposDoSlot(1, sec);
@@ -290,7 +331,7 @@ static void avisar(const char *s) {
 void legendasui_abrir(void) {
   char prim[24];
   int i;
-  aberto = 1; mais = 0; alvo = 0; rolagem = 0; aviso[0] = 0;
+  aberto = 1; mais = 0; ver = 0; alvo = 0; rolagem = 0; aviso[0] = 0;
   focoChave[0] = 0; foco = 0;
   montarLinhas();
   // Open on the row of the active primary, else on the first row.
@@ -304,10 +345,11 @@ void legendasui_abrir(void) {
 }
 
 int legendasui_mais(void) { return aberto && mais; }
+int legendasui_versoes(void) { return aberto && ver; }
 
 void legendasui_reiniciar(void) {
   legenda2_reiniciar();
-  mais = 0; alvo = 0; focoChave[0] = 0; foco = 0; rolagem = 0; aviso[0] = 0;
+  mais = 0; ver = 0; alvo = 0; focoChave[0] = 0; foco = 0; rolagem = 0; aviso[0] = 0;
 }
 
 // --- choosing ----------------------------------------------------------------------
@@ -389,6 +431,7 @@ int legendasui_evento(const SDL_Event *e) {
   k = e->key.keysym.sym;
   l = nLinhasV ? &linhas[foco] : NULL;
   if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE) {
+    if (ver) { ver = 0; rolagem = 0; snprintf(focoChave, sizeof focoChave, "%s", verGrupo); montarLinhas(); return LEGUI_TRATADO; }
     if (mais) { mais = 0; snprintf(focoChave, sizeof focoChave, "mais"); rolagem = 0; montarLinhas(); return LEGUI_TRATADO; }
     aberto = 0;
     return LEGUI_FECHAR;
@@ -415,7 +458,20 @@ int legendasui_evento(const SDL_Event *e) {
         montarLinhas(); focar(2 < nLinhasV ? 3 < nLinhasV ? 3 : 2 : 0);
         break;
       case LR_NENHUMA: escolher(l->slot, NULL); break;
-      case LR_CAND: escolher(l->slot, l->cand >= 0 ? &cand[l->cand] : NULL); break;
+      case LR_CAND:
+        if (!mais && !ver && l->nVar > 1) {
+          snprintf(verGrupo, sizeof verGrupo, "%s", l->chave);
+          ver = 1; rolagem = 0; focoChave[0] = 0; foco = 0;
+          montarLinhas();
+          { int i, a = -1;   // open on the version in use, else the recommended one
+            for (i = 0; i < nLinhasV; i++) {
+              if (linhas[i].cand >= 0 && ativoNoSlot(linhas[i].slot, &cand[linhas[i].cand])) { a = i; break; }
+              if (a < 0 && linhas[i].nVar < 0) a = i;
+            }
+            focar(a >= 0 ? a : 0); }
+          break;
+        }
+        escolher(l->slot, l->cand >= 0 ? &cand[l->cand] : NULL); break;
       case LR_ALVO: alvo = !alvo; break;
       case LR_ATRASO: break;
       case LR_SYNC: {
@@ -534,7 +590,7 @@ static void textoLinha(const LuiLinha *l, char *nome, size_t tn, char *sub, size
       if (!c) break;
       *idioma = c->idioma;
       *ativo = ativoNoSlot(l->slot, c) && (l->slot == 0 || legenda2_estado() == LEG2_ATIVA);
-      if (!mais) {
+      if (!mais && !ver) {
         snprintf(nome, tn, "%s", nomeIdioma(c->idioma));
         juntar(sub, ts, c->embutida ? i18n("Embutida") : c->origem);
         if (c->letreiro) juntar(sub, ts, i18n("Letreiros"));
@@ -542,6 +598,9 @@ static void textoLinha(const LuiLinha *l, char *nome, size_t tn, char *sub, size
       } else {
         const char *marca = c->embutida ? faixas_legenda_marca(c->indice) : NULL;
         snprintf(nome, tn, "%s", c->embutida ? c->rotulo : nomeIdioma(c->idioma));
+        // The version the app would pick by itself: marked on the title line,
+        // which has the full width (the details line is busy with the file name).
+        if (l->nVar < 0) juntar(nome, tn, i18n("Recomendada"));
         juntar(sub, ts, c->embutida ? i18n("Embutida") : c->origem);
         juntar(sub, ts, c->formato);
         if (c->letreiro) juntar(sub, ts, i18n("Letreiros"));
@@ -584,12 +643,17 @@ static void desenharLinha(const LuiLinha *l, int sel, float x, float y, float w,
     float sw = plrui_seg(rot, cont, 2, alvo, sel, -1.0f, 0, a);
     plrui_seg(rot, cont, 2, alvo, sel, dir - sw, y + (LU_LN_H - 54.0f) * 0.5f, a);
     dir -= sw + 12.0f;
-  } else if (!mais && (l->tipo == LR_CAND || l->tipo == LR_NENHUMA)) {
+  } else if (!mais && !ver && (l->tipo == LR_CAND || l->tipo == LR_NENHUMA)) {
     // (No pill on the AutoSync row: only the primary syncs, and the title
     // needs the width next to the < action > discs.)
     // In "Mais opções" the slot is the "Usar como" row at the top: no pill per
     // row, so the details (release name) get the width.
     dir -= pilulaSlot(l->slot, dir, y + LU_LN_H * 0.5f, sel, aL) + 12.0f;
+    // Several versions: OK opens them, and the chevron says so.
+    if (l->tipo == LR_CAND && l->nVar > 1) {
+      gfx_icone((GfxRect){ dir - 24.0f, y + (LU_LN_H - 24.0f) * 0.5f, 24.0f, 24.0f }, "pl_chevron-right", 1, 1, 1, (sel ? 0.9f : 0.5f) * aL);
+      dir -= 24.0f + 10.0f;
+    }
   }
   if (l->tipo == LR_SYNC && sel) {
     // The chosen action between < > discs; a disc dims with nothing beyond it.
@@ -653,7 +717,7 @@ void legendasui_corpo(GfxRect c, float a) {
   int vis = luVis(), fim, i;
   montarLinhas();
   plrui_kicker(tituloSessao(), x0 + 10.0f, y, 115, 115, 113, a);
-  { TxtLinha t = txt_linha(TXT_ILHA_PERGUNTA, mais ? "Mais opções" : "Legendas", 243, 242, 239, 255);
+  { TxtLinha t = txt_linha(TXT_ILHA_PERGUNTA, mais ? "Mais opções" : ver && nLinhasV && linhas[0].cand >= 0 ? nomeIdioma(cand[linhas[0].cand].idioma) : "Legendas", 243, 242, 239, 255);
     float ty = y + 22.0f;
     const char *rot[2] = { "Faixas", "Estilo" };
     int cont[2] = { nCand, -1 };
@@ -674,7 +738,7 @@ void legendasui_corpo(GfxRect c, float a) {
     } else {
       char q[32];
       const char *k[3] = { "OK", "\xe2\x86\x92", "Voltar" };
-      const char *rt[3] = { "Usar", "Estilo", mais ? "Voltar" : "Fechar" };
+      const char *rt[3] = { "Usar", "Estilo", mais || ver ? "Voltar" : "Fechar" };
       int naSync = nLinhasV && linhas[foco].tipo == LR_SYNC, nf = 0, pf = 0;
       // The AutoSync row is not a choice: it is left out of "N de M", which
       // disappears on it, and the hints say what OK does there.

@@ -3419,6 +3419,7 @@
   T("Recentes", "Zuletzt"),
   T("Recolher", "Einklappen"),
   T("Recolhida", "Eingeklappt"),
+  T("Recomendada", "Empfohlen"),
   T("Recomendado pelo TMDB", "Von TMDB empfohlen"),
   T("Recomendados, com Instalar", "Empfohlen, mit Installieren"),
   T("Recomendar a um amigo", "Einem Freund empfehlen"),
