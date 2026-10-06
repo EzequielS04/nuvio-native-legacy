@@ -3037,31 +3037,80 @@ typedef struct {
   float logo, logoHeight, action, caption, friends, meta, secondary, synopsis;
 } HeroCopyLayout;
 
-// One bottom boundary, measured text and the same order for every layout.
-// Reserve the action slot while it fades; neither decode nor focus can make
-// the button overlap the information underneath it.
+// One bottom boundary, measured text and the same order for every layout:
+// LOGO, then the information (caption, friends, meta, secondary, synopsis),
+// then the ACTION at the bottom (owner 06/10, Apple TV reference: logo at the
+// top-left, "type • genre • year", three lines of synopsis, a compact button).
+// `slot` 1 = the button is (or may be) on screen and the text sits above it;
+// `slot` 0 = no button (Moderna with focus on the rows): the button slot
+// collapses and the whole block settles on `base`. The button rides right under
+// the synopsis, so a fading button never overlaps the text. The logo size is
+// computed with the full slot, so it never rescales while the slot moves.
 static HeroCopyLayout heroCopyLayout(float base, float hSin, int hasMeta,
                                      int hasSec, float captionH, float logoH,
                                      float btnH, float btnGap, float minTop,
                                      float slot, float friendsH) {
   HeroCopyLayout p;
-  p.synopsis = base - hSin;
+  float s = slot < 0.0f ? 0.0f : slot > 1.0f ? 1.0f : slot;
+  float slotH = btnH + btnGap;
+  p.synopsis = base - slotH * s - hSin;
+  p.action = p.synopsis + hSin + btnGap;
   p.secondary = p.synopsis - (hasSec ? (hSin > 0 ? NV_HERO_COPY_LINHA : 0) + NV_LD_HERO_SEC : 0);
   p.meta = p.secondary - (hasMeta ? ((hasSec || hSin > 0) ? NV_HERO_COPY_LINHA : 0) + NV_LD_HERO_META : 0);
   // A linha de AMIGOS (quem gostou / assistiu) fica logo acima da meta.
   p.friends = p.meta - (friendsH > 0 ? NV_HERO_COPY_LINHA + friendsH : 0);
   p.caption = p.friends - (captionH > 0 ? NV_HERO_COPY_LINHA + captionH : 0);
-  p.action = p.caption - NV_HERO_COPY_LINHA - btnH;
-  p.logoHeight = fminf(logoH, fmaxf(48.0f, p.action - btnGap - minTop));
-  // `slot` 1 = the action button is (or may be) on screen: the logo sits above
-  // it. `slot` 0 = no button (Moderna with focus on the rows): the empty button
-  // slot collapses and the logo sits on the text, one line gap above it.
-  // The size above always uses the full slot so the logo never rescales.
-  float bottom = p.action - btnGap;
-  float colado = p.caption - NV_HERO_COPY_LINHA;
-  if (slot < 1.0f) bottom = colado + (bottom - colado) * fmaxf(slot, 0.0f);
+  // Logo bottom one gap above the first information line.
+  float bottom = p.caption - btnGap;
+  float bottomCheio = bottom - slotH * (1.0f - s);   // where it is with the slot open
+  p.logoHeight = fminf(logoH, fmaxf(48.0f, bottomCheio - minTop));
   p.logo = bottom - p.logoHeight;
   return p;
+}
+
+// PONTOS DE PAGINA DO DESTAQUE (dono, 06/10): um ponto por titulo, o atual
+// vira uma pilula mais larga, e as setas < > dos lados. `xDir` e a borda
+// direita do conjunto, `yc` o centro vertical. A posicao do realce anda com
+// mola (animacoes reduzidas: salta); uma volta do ultimo para o primeiro
+// salta tambem, para nao varrer a fileira inteira. Mais de 12 titulos: uma
+// janela de 12 em volta do atual. Cada ponto e um gfx_cor (pilula de canto
+// 0,5): ~16 retangulos pequenos, nada de tela cheia.
+#define HERO_PONTOS_MAX 12
+static float heroPontosPos = -1.0f;
+static Uint32 heroPontosT;
+static void desenhaPontosHero(float xDir, float yc, int n, int atual, float a) {
+  const float d = 8.0f, gap = 10.0f, larga = 26.0f, seta = 22.0f, folga = 14.0f;
+  Uint32 agora = SDL_GetTicks();
+  float dt = heroPontosT ? (float)(agora - heroPontosT) / 1000.0f : 0.0f;
+  int m, ini, i;
+  float w, x;
+  heroPontosT = agora;
+  if (n <= 1 || a <= 0.004f) return;
+  if (dt > 0.1f) dt = 0.1f;
+  if (heroPontosPos < 0.0f || ajustes_animacoes_reduzidas() ||
+      fabsf(heroPontosPos - (float)atual) > 1.5f)
+    heroPontosPos = (float)atual;
+  else
+    heroPontosPos += ((float)atual - heroPontosPos) * (1.0f - expf(-dt * 14.0f));
+  m = n < HERO_PONTOS_MAX ? n : HERO_PONTOS_MAX;
+  ini = atual - m / 2;
+  if (ini > n - m) ini = n - m;
+  if (ini < 0) ini = 0;
+  w = (float)(m - 1) * (d + gap) + larga;
+  x = xDir - seta - folga - w;
+  gfx_icone((GfxRect){ x - folga - seta, yc - seta * 0.5f, seta, seta }, "pl_chevron-left",
+            1.0f, 1.0f, 1.0f, 0.55f * a);
+  gfx_icone((GfxRect){ xDir - seta, yc - seta * 0.5f, seta, seta }, "pl_chevron-right",
+            1.0f, 1.0f, 1.0f, 0.55f * a);
+  for (i = 0; i < m; i++) {
+    float k = 1.0f - fabsf((float)(ini + i) - heroPontosPos);
+    float pw;
+    if (k < 0.0f) k = 0.0f;
+    pw = d + (larga - d) * k;
+    gfx_cor((GfxRect){ x, yc - d * 0.5f, pw, d }, 0.5f, 1.0f, 1.0f, 1.0f,
+            (0.34f + 0.61f * k) * a);
+    x += pw + gap;
+  }
 }
 
 // O BLOCO DE TEXTO DE UM TITULO do destaque (logo, meta, selos, sinopse),
@@ -3098,8 +3147,21 @@ static float desenhaCopiaHero(const CatItem *ci, int principal, float x,
   if (ci && ci->meta[0]) {
     size_t n = strlen(metaLinha);
     snprintf(metaLinha + n, sizeof metaLinha - n, "%s%s",
-             n ? "   \xe2\x80\xa2   " : "", ci->meta);
+             n ? "  \xe2\x80\xa2  " : "", ci->meta);
   }
+  // TIPO • GENERO • ANO (dono, 06/10, referencia da Apple TV): o genero chega
+  // como "Filme · Terror"; no destaque o separador e o mesmo ponto cheio da
+  // linha toda, com o mesmo respiro.
+  { char t[sizeof metaLinha]; size_t i = 0, o = 0;
+    const char *de = "  \xc2\xb7  ", *para = "  \xe2\x80\xa2  ";
+    size_t nd = strlen(de), np = strlen(para);
+    while (metaLinha[i] && o + np < sizeof t) {
+      if (!strncmp(metaLinha + i, de, nd)) { memcpy(t + o, para, np); o += np; i += nd; }
+      else if (!strncmp(metaLinha + i, " \xc2\xb7 ", 4)) { memcpy(t + o, para, np); o += np; i += 4; }
+      else t[o++] = metaLinha[i++];
+    }
+    t[o] = 0;
+    memcpy(metaLinha, t, o + 1); }
 
   // Linha secundaria: destaque de progresso, selos e a nota do IMDb. O web so
   // mostra o IMDb aqui quando ja existe destaque ou selo (showImdbSecondary);
@@ -3329,7 +3391,7 @@ static void desenhaHero(Uint32 agora, float saida) {
   // de sempre, e os dois novos, do layout.h.
   float dinY = 0.0f, aVis = 1.0f;
   float logoH = NV_LOGO_HERO_H, sinW = NV_HERO_SIN_W;
-  float btnH = NV_HERO_BOTAO_H, btnGap = NV_HOME_HERO_BOTAO_GAP;
+  float btnH = NV_HERO_BOTAO_COMPACTO_H, btnGap = NV_HOME_HERO_BOTAO_GAP;
   int sinLinhas = 3;
   if (lay == HOME_LAYOUT_PADRAO) {
     // TELA CHEIA NA LARGURA (dono, 30/09): sem cartao, sem canto. A arte vai de
@@ -3338,8 +3400,8 @@ static void desenhaHero(Uint32 agora, float saida) {
     cheio = 0; modoHero = GFX_VITRINE; r = padBannerRect();
     vitVeu = 0.92f; vitAncora = 0.30f; vitDissolve = 1.0f; vitRaio = 0.0f;
     vitVeuIni = 0.0f;
-    logoH = NV_PAD_LOGO_H; sinW = NV_PAD_SIN_W; sinLinhas = 2;
-    btnH = 60.0f; btnGap = 22.0f;
+    logoH = NV_PAD_LOGO_H; sinW = NV_PAD_SIN_W; sinLinhas = 3;
+    btnH = NV_HERO_BOTAO_COMPACTO_H; btnGap = 22.0f;
   } else if (lay == HOME_LAYOUT_DINAMICA) {
     cheio = 0; modoHero = GFX_VITRINE;
     dinY = dinHeroY();
@@ -3360,7 +3422,7 @@ static void desenhaHero(Uint32 agora, float saida) {
     // (0,38 x 780): o texto le igual, e a arte segue escurecendo ate a base.
     vitVeuIni = 0.38f * NV_DIN_HERO_H / NV_DIN_ARTE_H;
     logoH = NV_DIN_LOGO_H; sinW = 760.0f;
-    btnH = 60.0f; btnGap = 22.0f;
+    btnH = NV_HERO_BOTAO_COMPACTO_H; btnGap = 22.0f;
   }
 
   if(lay==HOME_LAYOUT_MODERNA && foco.fileira>=0 && foco.fileira<nFileiras && fileiras[foco.fileira].tipo==FILEIRA_SOCIAL) {
@@ -3825,7 +3887,6 @@ static void desenhaHero(Uint32 agora, float saida) {
   // gesto descasariam, e o olho le descasamento como defeito.
   { int n = heroNLista();
     if (aBotao > 0.004f && n > 0) {
-      float ar, ag, ab; ajustes_acento(&ar, &ag, &ab);
       // OK ABRE A PAGINA DO TITULO — e o rotulo diz isso. "Reproduzir" seria a
       // promessa de comecar o filme, e quem aperta acaba numa pagina: o rotulo
       // tem de descrever o que a tecla FAZ, nao o que seria bonito escrever.
@@ -3837,22 +3898,18 @@ static void desenhaHero(Uint32 agora, float saida) {
         // Nos layouts novos o botao existe SEMPRE; so aceso (na cor de realce)
         // com o foco no destaque. Na Moderna ele so aparece com o foco la.
         int btnFoco = (lay == HOME_LAYOUT_MODERNA) || focoHero;
-        int tb = btnFoco ? ajustes_tinta_foco() : 245;
-        TxtLinha lb = txt_linha(TXT_CALLOUT, rot, tb, tb, tb, 255);
+        // PILULA COMPACTA (dono, 06/10, referencia da Apple TV): com o foco,
+        // branca com o texto escuro; sem ele, a pilula translucida de sempre
+        // com o texto claro. ~46 px e o corpo de 24/600 em vez do callout.
+        int tb = btnFoco ? 18 : 245;
+        TxtLinha lb = txt_linha(TXT_ILHA_NOME, rot, tb, tb, tb, 255);
         float bh = btnH;
-        float bw = lb.w + 96.0f;
+        float bw = lb.w + 56.0f;
         float by = actionY;
         GfxRect bt = { x, by, bw, bh };
-        // Brilho difuso por tras do botao (0,9x a altura de folga, alpha 0,35):
-        // a luz da pilula em foco do menu lateral (21/09/2026). Uma mancha de
-        // ~450x160 px sobre a arte do hero — 0,035 tela, o unico acrescimo de
-        // preenchimento da home nesta cara nova.
-        if (btnFoco) {
-          GfxRect luz = { bt.x - bh * 0.9f, bt.y - bh * 0.9f, bw + bh * 1.8f, bh * 2.8f };
-          gfx_rect(luz, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.35f * aBtn); }
         // Raio = metade da ALTURA: o raio do gfx_cor e fracao da altura do
         // retangulo, entao 0,5 e a pilula exata em qualquer largura.
-        if (btnFoco) gfx_cor(bt, 0.5f, ar, ag, ab, aBtn);
+        if (btnFoco) gfx_cor(bt, 0.5f, 1.0f, 1.0f, 1.0f, 0.96f * aBtn);
         else if (ajustes_vidro()) gfx_vidro_painel(bt, 0.5f, 0.55f, aBtn);
         else gfx_cor(bt, 0.5f, 1.0f, 1.0f, 1.0f, 0.18f * aBtn);
         // O TRIANGULO DE REPRODUZIR NAO ENTRA AQUI. Ele e a marca universal de
@@ -3861,12 +3918,14 @@ static void desenhaHero(Uint32 agora, float saida) {
         txt_desenhar_alpha(lb, x + (bw - lb.w) * 0.5f, by + (bh - lb.h) * 0.5f,
                            aBtn);
 
-        if (btnFoco) { char pos[24];
+        // PONTOS DE PAGINA no lugar do "1 / 10" (dono, 06/10): no canto
+        // direito, na altura do botao. Esquerda/direita do controle continuam
+        // trocando o destaque; as setas aqui sao so a dica.
+        if (btnFoco) {
           int p = heroPosDe(heroIntencao());
-          snprintf(pos, sizeof pos, "%d / %d", (p < 0 ? 0 : p) + 1, n);
-          TxtLinha lp = txt_linha(TXT_HERO_META, pos, 196, 199, 208, 255);
-          txt_desenhar_alpha(lp, x + bw + 28.0f, by + (bh - lp.h) * 0.5f,
-                             aBtn * 0.92f); }
+          desenhaPontosHero(NV_TELA_W - ajustes_conteudo_x(), by + bh * 0.5f,
+                            n, p < 0 ? 0 : p, aBtn);
+        }
       }
 
       // CONTINUIDADE DA ABERTURA: a pagina de titulo cresce a partir do
