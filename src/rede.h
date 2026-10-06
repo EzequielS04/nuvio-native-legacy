@@ -52,6 +52,12 @@ typedef struct {
   size_t max_bytes, max_cabecalhos;
   int seguir;          /* 0 = devolver 3xx; 1 = ate 5 redirects */
   const char *ca_arquivo;
+  /* #290: 1 = servidor PESSOAL configurado pela pessoa (Jellyfin/Emby/Plex),
+   * que costuma ter certificado autoassinado ou de rede local. O certificado
+   * deixa de ser verificado SO enquanto o pedido estiver na MESMA origem
+   * (esquema+host+porta) de `url`; um redirect para outra origem volta a
+   * verificar. Todo o resto do app continua verificando. */
+  int tls_pessoal;
   RedeJob *job;
   void (*intervalo)(const RedeIntervalo *, void *);
   void *intervalo_usuario;

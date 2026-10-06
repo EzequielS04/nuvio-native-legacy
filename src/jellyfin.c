@@ -173,6 +173,16 @@ static int pedir(const JfConta *c, const char *base, RedeJob *job, const char *m
   p.max_bytes = JF_CORPO_MAX;
   p.seguir = 1;
   p.job = job;
+  // #290: the configured personal server may use a self-signed or LAN
+  // certificate. Only this server's own origin skips verification (rede.h).
+  p.tls_pessoal = 1;
+  if (!strncmp(url, "https://", 8)) {
+    static int avisado;
+    if (!avisado) {
+      avisado = 1;
+      printf("[%s] TLS: certificado nao verificado (servidor pessoal)\n", emby ? "emby" : "jellyfin");
+    }
+  }
   rede_pedir(&p, r);
   apagarSegredo(auth, sizeof auth);
   apagarSegredo(tokh, sizeof tokh);
