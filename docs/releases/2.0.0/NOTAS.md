@@ -2,7 +2,7 @@
 
 The first time you open it, a short guide walks through what changed. It stays in Settings › About and help › What's new in 2.0.
 
-**Samsung (.tpk): no in-app update to 2.0.** Install the new .tpk by hand this time. Updates from inside the app come back with the next version.
+**Samsung (.tpk): 2.0 is not offered as an in-app update.** It is a big change to the app's .NET part, which the in-app update does not replace, so install the new .tpk by hand once. In-app updates keep working after 2.0.
 
 ## Added
 
@@ -41,7 +41,7 @@ The first time you open it, a short guide walks through what changed. It stays i
 
 ![Nuvio Legacy 2.0](https://raw.githubusercontent.com/iqui27/nuvio-native-legacy/master/docs/releases/2.0.0/banner.jpg)
 
-**Samsung .tpk: install this version by hand.** 2.0 changes the app's images and fonts, and the in-app update only replaces the program, so it is not offered for 2.0. It is back from the next version on.
+**Samsung .tpk: install this version by hand.** The in-app update only swaps the app's core library; 2.0 also changes the .NET host and the bundled images and fonts, so it has to be a full install. Later versions update from inside the app again.
 
 | Platform | File |
 | --- | --- |
