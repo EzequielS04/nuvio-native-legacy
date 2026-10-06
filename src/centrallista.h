@@ -16,7 +16,9 @@
 
 #define CENTRAL_MAX 8
 
-typedef struct { const char *chave, *icone; } CentralItem;
+// `curto`: o nome no botao (o rotulo inteiro de Ajustes nao cabe num botao de
+// ~120 px; o inteiro continua na lista de edicao). Chave em portugues, i18n.
+typedef struct { const char *chave, *icone, *curto; } CentralItem;
 typedef struct { int n; int item[CENTRAL_MAX]; } CentralLista;   // indices do catalogo
 
 int  central_catalogo_n(void);
