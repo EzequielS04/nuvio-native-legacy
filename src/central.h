@@ -38,6 +38,14 @@ void central_tecla_quadro(Uint32 agora, void (*entregar)(SDL_Event *e));
 // 1 enquanto um gesto de CH+ esta em curso (tecla embaixo ou esperando).
 int  central_tecla_ocupada(void);
 
+// A previa do cartao de novidades: o painel aberto com os atalhos de fabrica,
+// em (x, y), largura CENTRAL_PREVIA_W. `foco` = botao em foco (-1 nenhum);
+// `inverte` = botao cujo interruptor aparece trocado (o OK da animacao), -1
+// nenhum. A hora, a direita da faixa de cima, e de quem chama.
+#define CENTRAL_PREVIA_W 492.0f
+float central_previa_altura(void);
+void  central_previa_desenhar(float x, float y, float a, int foco, int inverte);
+
 #ifdef CENTRAL_TESTE
 // Capturas: foco num botao (-1 = "Editar atalhos") e modo edicao.
 void central_teste_foco(int foco, int editar);

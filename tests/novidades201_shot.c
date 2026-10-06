@@ -10,6 +10,8 @@
 #include "text.h"
 #include "tex_cache.h"
 #include "idiomacod.h"
+#include "centrallista.h"
+#include "idioma.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -184,6 +186,34 @@ static void cabeEmTodos(void) {
     if (getenv("NUVIO_SHOT_FONTE")) assert(c == 0);
     tecla(SDLK_ESCAPE);
     for (i = 0; i < 20; i++) quadro(1.0f / 60.0f);
+  }
+  { // Os nomes curtos dos atalhos de fabrica (os que a previa mostra, com o
+    // desenho da central): botao de (492 - 40 - 20) / 3 - 24 = 120 px, no
+    // degrau menor; nome de varias palavras quebra em duas linhas, entao so
+    // conta a palavra mais larga.
+    int k, ruins = 0;
+    CentralLista fab;
+    centrallista_padrao(&fab);
+    for (idi = 0; idi < IDIOMA_N; idi++) {
+      ajustesDeTeste(idi, 0, 2);
+      for (k = 0; k < fab.n; k++) {
+        const char *c = i18n(central_catalogo(fab.item[k])->curto);
+        char pal[96];
+        const char *q = c;
+        int cabe = txt_largura(TXT_ILHA_HORA, c) <= 120;
+        if (!cabe && strchr(c, ' ')) {   // duas linhas em 16/600: cada palavra cabe?
+          cabe = 1;
+          while (*q) {
+            size_t n = strcspn(q, " ");
+            snprintf(pal, sizeof pal, "%.*s", (int)n, q);
+            if (txt_largura(TXT_G16B, pal) > 120) cabe = 0;
+            q += n; while (*q == ' ') q++;
+          }
+        }
+        if (!cabe) { printf("curto longo (%s): %s\n", idioma_iso(idi), c); ruins++; }
+      }
+    }
+    if (getenv("NUVIO_SHOT_FONTE")) assert(ruins == 0);
   }
   printf("PASS: a lista acaba acima do rodape nos %d idiomas (%d com reticencias)\n", IDIOMA_N, comCorte);
 }

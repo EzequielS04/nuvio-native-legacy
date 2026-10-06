@@ -22,6 +22,7 @@
 #include "ajustes.h"
 #include "anim.h"
 #include "botoes.h"
+#include "central.h"
 #include "centrallista.h"
 #include "dados.h"
 #include "gfx.h"
@@ -216,10 +217,6 @@ static void vidro(GfxRect r, float raioPx, float a) {
   gfx_anel(r, raioPx / r.h, 1.0f, 1, 1, 1, 0.09f * a);
 }
 
-static void superficie(GfxRect r, float raioPx, float f, float a) {
-  gfx_cor(r, raioPx / r.h, 1, 1, 1, (0.06f + 0.09f * f) * a);
-}
-
 static void arteFundo(int cena, GfxRect p, float a) {
   GLuint t;
   if (a <= 0.004f || !arte[cena][0]) return;
@@ -236,15 +233,14 @@ static void arteFundo(int cena, GfxRect p, float a) {
 }
 
 // ------------------------------------------- cena 1: a Central de controle
-#define CC_W       560.0f
-#define CC_H       434.0f
+// O painel e o da central de verdade (central_previa_desenhar): a mesma
+// faixa de informacao, os mesmos botoes com os nomes curtos, os atalhos de
+// fabrica. Aqui so a pilula do relogio que estica ate ele e o foco andando.
 #define CC_PIL_W   118.0f
-#define CC_PIL_H    50.0f
-#define CC_BTN_H   104.0f
-#define CC_GAP      10.0f
+#define CC_PIL_H   NV_ILHA_H
 
-// Os atalhos de fabrica, como a central os mostra a quem nunca editou.
-static int ccOps(int *op, const char **ic, int max) {
+// Os atalhos de fabrica, na ordem em que a central os mostra.
+static int ccOps(int *op, int max) {
   CentralLista l;
   int i, n = 0;
   centrallista_padrao(&l);
@@ -252,44 +248,9 @@ static int ccOps(int *op, const char **ic, int max) {
     const CentralItem *c = central_catalogo(l.item[i]);
     int o = c ? ajustes_rapido_op(c->chave) : -1;
     if (o < 0) continue;
-    op[n] = o; ic[n] = c->icone; n++;
+    op[n++] = o;
   }
   return n;
-}
-
-static float infoLinha(const char *k, const char *v, float x, float y, float w, float a) {
-  TxtLinha lk = txt_linha(TXT_ILHA_META, i18n(k), 243, 242, 239, 255);
-  TxtLinha lv = txt_linha_corta(TXT_ILHA_META, v, 243, 242, 239, 255, w - (float)lk.w - 24.0f);
-  gfx_cor((GfxRect){ x, y, w, 1 }, 0, 1, 1, 1, 0.07f * a);
-  txt_desenhar_alpha(lk, x, y + 10.0f, 0.5f * a);
-  txt_desenhar_alpha(lv, x + w - (float)lv.w, y + 10.0f, 0.9f * a);
-  return 10.0f + (float)lk.h + 10.0f;
-}
-
-static void ccBotao(GfxRect r, const char *icone, const char *rot, const char *val,
-                    int aceso, float f, float a) {
-  float ar, ag, ab;
-  int tinta = aceso ? ajustes_tinta_foco() : 243;
-  float ti = (float)tinta / 255.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  if (aceso) gfx_cor(r, 20.0f / r.h, ar, ag, ab, a);
-  else superficie(r, 20.0f, f, a);
-  if (f > 0.01f) gfx_anel_fora(r, 20.0f / r.h, 4.0f, 3.0f, 1, 1, 1, 0.95f * f * a);
-  gfx_icone((GfxRect){ r.x + 14.0f, r.y + 13.0f, 24.0f, 24.0f }, icone, ti, ti, ti, (aceso ? 1.0f : 0.85f) * a);
-  { TxtLinha v = txt_linha_corta(TXT_ILHA_ITEM, val, tinta, tinta, tinta, 255, r.w - 28.0f);
-    TxtLinha l = txt_linha_corta(TXT_ILHA_GENERO, rot, tinta, tinta, tinta, 255, r.w - 28.0f);
-    txt_desenhar_alpha(v, r.x + 14.0f, r.y + r.h - 12.0f - (float)v.h, a);
-    txt_desenhar_alpha(l, r.x + 14.0f, r.y + r.h - 12.0f - (float)v.h - 1.0f - (float)l.h,
-                       (aceso ? 0.8f : 0.6f) * a); }
-}
-
-static const char *nomePlataforma(void) {
-  switch (ptv_plataforma()) {
-    case PTV_LG: return "LG webOS";
-    case PTV_TIZEN: case PTV_TPK: return "Samsung Tizen";
-    case PTV_ANDROID: return "Android TV";
-    default: return "";
-  }
 }
 
 static void cenaCentral(GfxRect p, float t, float a) {
@@ -297,6 +258,7 @@ static void cenaCentral(GfxRect p, float t, float a) {
   float dir = p.x + p.w - 36.0f, topo = p.y + 36.0f;
   float m = red ? 1.0f : sai3(janela(t, 0.95f, 0.62f));
   float c = red ? 1.0f : sai3(janela(t, 1.35f, 0.45f));
+  float ccH = central_previa_altura();
   GfxRect r;
   char hora[16];
   { time_t ag = time(NULL);
@@ -313,8 +275,8 @@ static void cenaCentral(GfxRect p, float t, float a) {
     float seg = red ? 0.0f : janela(t, 0.10f, 0.25f) * (1.0f - janela(t, 0.95f, 0.25f));
     float pilW = lerp(CC_PIL_W, (float)hl.w + 44.0f + (float)sl.w + 24.0f, sai3(seg));
     float pr = janela(t, 0.25f, 0.70f);
-    r.w = lerp(pilW, CC_W, m);
-    r.h = lerp(CC_PIL_H, CC_H, m);
+    r.w = lerp(pilW, CENTRAL_PREVIA_W, m);
+    r.h = lerp(CC_PIL_H, ccH, m);
     r.x = dir - r.w;
     r.y = topo;
     // A sombra do painel, que so existe quando ele ja e painel.
@@ -339,49 +301,16 @@ static void cenaCentral(GfxRect p, float t, float a) {
     txt_desenhar_alpha(hl, dir - 22.0f - (float)hl.w, topo + (CC_PIL_H - (float)hl.h) * 0.5f - 1.0f, a); }
   if (c <= 0.01f) return;
 
-  { float x = r.x + 24.0f, w = r.w - 48.0f, y = topo + 64.0f + (1.0f - c) * 10.0f, ca = c * a;
-    int op[8], n, i, alvo = 1, sel;
-    const char *ic[8];
-    char ver[64];
-    ajustes_ui_kicker(i18n("Central de controle"), x, topo + CC_PIL_H * 0.5f - 8.0f, ca);
-    y += infoLinha("Internet", i18n("Conectado"), x, y, w, ca);
-    snprintf(ver, sizeof ver, "%s%s%s", N201_VERSAO, nomePlataforma()[0] ? " · " : "", nomePlataforma());
-    y += infoLinha("Versão", ver, x, y, w, ca);
-    gfx_cor((GfxRect){ x, y, w, 1 }, 0, 1, 1, 1, 0.07f * ca);
-    y += 20.0f;
-    ajustes_ui_kicker(i18n("Atalhos"), x, y, ca);
-    y += 30.0f;
-    n = ccOps(op, ic, 5);
-    // O foco anda do primeiro para o primeiro interruptor depois dele, e o OK
-    // o vira: o que a central faz de verdade, sem gravar nada aqui.
-    // De preferencia um desligado: o OK o acende.
+  // O foco entra no primeiro botao, anda ate um interruptor (de preferencia
+  // desligado) e o OK o vira: o que a central faz, sem gravar nada aqui.
+  { int op[CENTRAL_MAX], n = ccOps(op, CENTRAL_MAX), i, alvo = 1, f = -1, inv = -1;
     for (i = 1; i < n; i++) if (ajustes_rapido_ligado(op[i]) == 0) { alvo = i; break; }
     if (i == n) for (i = 1; i < n; i++) if (ajustes_rapido_ligado(op[i]) >= 0) { alvo = i; break; }
-    sel = !red && t >= 3.25f;
-    { float bw = (w - 2.0f * CC_GAP) / 3.0f;
-      float fIn = red ? 1.0f : janela(t, 2.05f, 0.25f), mv = red ? 1.0f : sai3(janela(t, 2.75f, 0.28f));
-      for (i = 0; i <= n && i < 6; i++) {
-        GfxRect b = { x + (float)(i % 3) * (bw + CC_GAP), y + (float)(i / 3) * (CC_BTN_H + CC_GAP), bw, CC_BTN_H };
-        float f = 0.0f;
-        if (i == 0) f = fIn * (1.0f - mv);
-        if (i == alvo) f = fIn * mv;
-        if (i < n) {
-          int lig = ajustes_rapido_ligado(op[i]);
-          const char *val = ajustes_rapido_valor(op[i]);
-          if (i == alvo && sel && lig >= 0) {
-            lig = !lig;
-            val = lig ? "Ligado" : "Desligado";
-          }
-          if (i == alvo && !red) {   // o toque: a peca afunda um pouco e volta
-            float pu = janela(t, 3.15f, 0.22f), s = 1.0f - 0.05f * sinf(pu * 3.14159f);
-            b = (GfxRect){ b.x + b.w * (1.0f - s) * 0.5f, b.y + b.h * (1.0f - s) * 0.5f, b.w * s, b.h * s };
-          }
-          ccBotao(b, ic[i], i18n(ajustes_rapido_rotulo(op[i])), i18n(val), lig == 1, f, ca);
-        } else {
-          ccBotao(b, "aj_sliders-horizontal", i18n("Atalhos"), i18n("Editar"), 0, f, ca);
-        }
-      }
-    } }
+    if (red) f = alvo;
+    else if (t >= 2.75f) f = alvo;
+    else if (t >= 2.05f) f = 0;
+    if (!red && t >= 3.25f) inv = alvo;
+    central_previa_desenhar(dir - CENTRAL_PREVIA_W, topo + (1.0f - c) * 10.0f, c * a, f, inv); }
 }
 
 // ----------------------------------------------------- cena 2: os Ajustes
@@ -569,7 +498,8 @@ static void desenhaPrevia(float x, float y, float a) {
   // Os tres tracos do ciclo, no pe a direita: o da cena enche no tempo dela.
   { int i;
     for (i = 0; i < CENAS; i++) {
-      GfxRect tr = { p.x + p.w - 44.0f - (float)(CENAS - i) * 40.0f + 8.0f, p.y + p.h - 68.0f, 32.0f, 4.0f };
+      // Na altura do kicker (curto): a frase de baixo tem a largura toda.
+      GfxRect tr = { p.x + p.w - 44.0f - (float)(CENAS - i) * 40.0f + 8.0f, p.y + p.h - 106.0f, 32.0f, 4.0f };
       gfx_cor(tr, 0.5f, 1, 1, 1, 0.22f * a);
       if (i == agora) {
         float pr = ajustes_animacoes_reduzidas() ? 1.0f : dentro / CICLO_S;

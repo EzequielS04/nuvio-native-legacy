@@ -55,6 +55,9 @@ static int focoEd;              // item do catalogo em foco na edicao
 static float rolaEd;            // rolagem da lista de edicao (px)
 static CentralLista lista;
 static int perfilLido = -1;
+// A previa do cartao de novidades (central_previa_*): sem video tocando,
+// sem aviso, e o botao `previaInverte` mostrado com o interruptor trocado.
+static int previa, previaInverte = -1;
 static char aviso[96];
 static Uint32 avisoAte;
 
@@ -285,7 +288,7 @@ static int tocando(char *tit, size_t nt, char *meta, size_t nm) {
 #ifdef CENTRAL_TESTE
   if (testeTit[0]) { snprintf(tit, nt, "%s", testeTit); snprintf(meta, nm, "%s", testeMeta); return 1; }
 #endif
-  if (!player_aberto() || !player_com_video()) return 0;
+  if (previa || !player_aberto() || !player_com_video()) return 0;
   c = cat_item(player_indice());
   if (c && c->titulo[0]) snprintf(tit, nt, "%s", c->titulo);
   ep = player_linha_episodio();
@@ -388,7 +391,7 @@ static void cartaoTocando(GfxRect r, const char *tit, const char *meta, float a)
 // UM BOTAO: icone em cima, nome curto e, quando nao e interruptor, o valor.
 // Interruptor ligado = botao cheio no acento; foco = superficie clara e anel.
 static void botao(GfxRect r, const char *icone, const char *rot, const char *val, int ligado, int f, float a) {
-  float ar, ag, ab, w = r.w - 28.0f, y;
+  float ar, ag, ab, w = r.w - 24.0f, y;   // 14 a esquerda, 10 a direita
   int aceso = ligado == 1;
   int tinta = aceso ? ajustes_tinta_foco() : 243;
   float ti = (float)tinta / 255.0f;
@@ -398,10 +401,22 @@ static void botao(GfxRect r, const char *icone, const char *rot, const char *val
   else superficie(r, CC_BOTAO_R, f ? 1.0f : 0.0f, a);
   if (f) gfx_anel_fora(r, CC_BOTAO_R / r.h, 3.0f, 2.5f, 1, 1, 1, 0.95f * a);
   gfx_icone((GfxRect){ r.x + 14.0f, r.y + 14.0f, CC_ICONE, CC_ICONE }, icone, ti, ti, ti, (aceso ? 1.0f : 0.88f) * a);
-  // Nome em 16/600; se nao couber (alemao, russo), um degrau menor; o corte
-  // e o ultimo recurso.
+  // Nome em 16/600; se nao couber (alemao, russo), um degrau menor; sem
+  // valor embaixo (interruptor) e com mais de uma palavra, duas linhas em
+  // 16/600 ("Choisir la / source"); o corte e o ultimo recurso.
   l = txt_linha(TXT_G16B, rot, tinta, tinta, tinta, 255);
-  if ((float)l.w > w) l = txt_linha_corta(TXT_ILHA_HORA, rot, tinta, tinta, tinta, 255, w);
+  if ((float)l.w > w) {
+    TxtLinha m = txt_linha(TXT_ILHA_HORA, rot, tinta, tinta, tinta, 255);
+    if ((float)m.w <= w) l = m;
+    else if (ligado >= 0 && strchr(i18n(rot), ' ')) {
+      float g = gfx_opacidade_grupo, h;
+      gfx_opacidade_grupo = 0.0f;
+      h = txt_bloco_corta(TXT_G16B, rot, tinta, tinta, tinta, 0, 0, w, 19.0f, 1.0f, 2);
+      gfx_opacidade_grupo = g;
+      txt_bloco_corta(TXT_G16B, rot, tinta, tinta, tinta, r.x + 14.0f, r.y + r.h - 14.0f - h, w, 19.0f, a, 2);
+      return;
+    } else l = txt_linha_corta(TXT_ILHA_HORA, rot, tinta, tinta, tinta, 255, w);
+  }
   y = r.y + r.h - 14.0f;
   if (ligado < 0 && val && val[0]) {
     v = txt_linha_corta(TXT_ILHA_HORA, val, tinta, tinta, tinta, 255, w);
@@ -421,7 +436,9 @@ static void desenhaBotoes(float x, float y, float w, float a) {
                   bw, CC_BOTAO_H };
     if (i < n) {
       const CentralItem *c = central_catalogo(item[i]);
-      botao(r, c->icone, c->curto, ajustes_rapido_valor(op[i]), ajustes_rapido_ligado(op[i]), i == foco, a);
+      int lig = ajustes_rapido_ligado(op[i]);
+      if (previa && i == previaInverte && lig >= 0) lig = !lig;
+      botao(r, c->icone, c->curto, ajustes_rapido_valor(op[i]), lig, i == foco, a);
     } else botao(r, "aj_sliders-horizontal", "Editar", "", 0, i == foco, a);
     if (aberta && a > 0.5f && ponteiro_ativo()) ponteiro_alvo(r.x, r.y, r.w, r.h, ptFoco, ptOk, i, 0);
   }
@@ -515,10 +532,43 @@ static void corpo(GfxRect r, float a, void *u) {
     } }
   desenhaBotoes(cx, y, cw, a);
   // Falha ao gravar: some sozinha; mora na faixa de cima, no lugar da linha.
-  if (aviso[0] && (Sint32)(avisoAte - agora) > 0) {
+  if (!previa && aviso[0] && (Sint32)(avisoAte - agora) > 0) {
     TxtLinha l = txt_linha_corta(TXT_ILHA_HORA, aviso, 240, 184, 107, 255, cw);
     txt_desenhar_alpha(l, cx, r.y + r.h - CC_PAD * 0.5f - (float)l.h, a);
   }
+}
+
+// A PREVIA (novidades201.c): o mesmo desenho da central aberta, com os
+// atalhos de fabrica, sem ler nem gravar a lista da pessoa, sem alvo de
+// ponteiro e sem mexer no foco dela.
+static void previaEntrar(CentralLista *salva, int *est) {
+  *salva = lista;
+  est[0] = foco; est[1] = aberta; est[2] = editando;
+  centrallista_padrao(&lista);
+  aberta = 0; editando = 0; previa = 1;
+}
+static void previaSair(const CentralLista *salva, const int *est) {
+  lista = *salva;
+  foco = est[0]; aberta = est[1]; editando = est[2];
+  previa = 0; previaInverte = -1;
+}
+float central_previa_altura(void) {
+  CentralLista s;
+  int e[3];
+  float h;
+  previaEntrar(&s, e);
+  h = altura(1);
+  previaSair(&s, e);
+  return h;
+}
+void central_previa_desenhar(float x, float y, float a, int f, int inverte) {
+  CentralLista s;
+  int e[3];
+  previaEntrar(&s, e);
+  foco = f;
+  previaInverte = inverte;
+  corpo((GfxRect){ x, y, CC_W, altura(1) }, a, NULL);
+  previaSair(&s, e);
 }
 
 #ifdef CENTRAL_TESTE
