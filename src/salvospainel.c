@@ -3337,6 +3337,14 @@ static void desenhaAmigoLinha(int i, int idx, float dx, float y, float a, Uint32
     }
   }
   andaresIlha(tx, y, alt, larg, v, a, c->nome, NULL, linha2, linha3);
+  // O SELO DE CRIADOR depois do nome, na mesma conta de andaresIlha (o nome
+  // ocupa ate 60 % da largura; o bloco e centrado na altura da linha).
+  if (rec_selo_pessoa_largura(c->selo) > 0.0f) {
+    float bloco = 29.0f + (linha2[0] ? 27.0f : 0.0f) + (linha3[0] ? 22.0f : 0.0f);
+    float nw = (float)txtIlha(TXT_ILHA_NOME, c->nome, larg * 0.6f).w;
+    if (tx + nw + 12.0f + rec_selo_pessoa_largura(c->selo) <= tx + larg)
+      rec_selo_pessoa(tx + nw + 12.0f, y + (alt - bloco) * 0.5f + (29.0f - BADGE_H) * 0.5f + 1.0f, c->selo, a);
+  }
 }
 
 // A ATIVIDADE VAZIA: diz o que vai aparecer e de onde, sem prometer dado que
