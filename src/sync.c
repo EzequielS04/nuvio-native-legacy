@@ -29,6 +29,7 @@ void servidores_esquecer_todos(void);   // servidores.c: wipe every profile's to
 #include "perfilcont.h"
 #include "psparede.h"
 #include "syncprog.h"
+#include "contapend.h"
 #include "ajustes.h"
 #include "catordem.h"
 #include "catordemcache.h"
@@ -1200,8 +1201,13 @@ static void soLeituraDaCopia(int st) {
 
 // ---------------------------------------------------------------- ciclo
 
+// Inicio do ciclo no relogio de parede: o que o jornal da conta confirmou
+// ANTES disto ja esta refletido no pull deste ciclo (contapend_podar).
+static long long cicloInicioMs;
+
 static void *rodar(void *u) {
   (void)u;
+  cicloInicioMs = contapend_agora_ms();
   foraCiclo = 0;
   copiaCiclo = 0;
   addonsCiclo = 0;
@@ -1311,12 +1317,19 @@ static void *rodar(void *u) {
   // Sempre, nao so quando `sujoProgresso`: linhas migradas do formato antigo
   // nascem pendentes sem ninguem ter marcado nada.
   if (syncprog_empurrar() >= 0) sujoProgresso = 0;
+  // O JORNAL DA CONTA (vistos e Salvos marcados nesta TV): DEPOIS do pull,
+  // como o resto. E a repeticao de quem falhou offline — cada ciclo tenta de
+  // novo o que ainda nao teve 2xx.
+  contapend_enviar();
 
+  { int pend = contapend_pendentes();
+    char sufixo[48] = "";
+    if (pend > 0) snprintf(sufixo, sizeof sufixo, " · %d pendentes", pend);
   snprintf(resumo, sizeof resumo,
-           "%d addons · %d progressos · %d vistos · %d na lista · %d coleções%s",
+           "%d addons · %d progressos · %d vistos · %d na lista · %d coleções%s%s",
            nAddonsRem, syncprog_puxadas(), cVistos < 0 ? 0 : cVistos,
            cBiblio < 0 ? 0 : cBiblio, cColecoes < 0 ? 0 : cColecoes,
-           temTraktRem ? " · Trakt" : "");
+           temTraktRem ? " · Trakt" : "", sufixo); }
   estado = SYNC_PRONTO;
   fioPronto = 1;
   return NULL;
@@ -1582,14 +1595,10 @@ void sync_passo(unsigned agoraMs) {
   // remontagem aqui custaria o ciclo de rede inteiro por nada, a cada cinco
   // minutos — foi o erro que a ordem de catalogos ja cometeu neste arquivo.
   //
-  // O QUE ISTO AINDA NAO FAZ, escrito para nao virar surpresa: tirar um titulo
-  // pelo "+" do detalhe fala com o TRAKT (app.c), nao com a conta. A linha
-  // continua em `sync_pull_library` e volta no ciclo seguinte. Fechar isso
-  // exige `sync_push_library`, que este app nao tem — e nao pode ganhar de
-  // qualquer jeito: um push da lista LOCAL antes de o primeiro pull chegar
-  // mandaria lista curta e apagaria itens nos outros aparelhos da pessoa
-  // (secao 1.6, regra 2). O caminho certo e um push de DELECAO por chave, como
-  // o `sync_delete_watched_items` faz com os vistos.
+  // O "+" E O TIRAR CHEGAM NA CONTA pelo jornal (contapend.c): ler a lista
+  // inteira, aplicar so o gesto e subir com sync_push_library — nunca a lista
+  // LOCAL (secao 1.6, regra 2). O que a pessoa tirou e ainda nao saiu da conta
+  // fica fora daqui pelo filtro de contalib_aplicar_catalogo.
   if (temBibBlob && bibBlob) {
     if (contalib_ler_biblioteca(bibBlob) > 0) contalib_aplicar_catalogo();
     free(bibBlob); bibBlob = NULL; temBibBlob = 0;
@@ -1618,6 +1627,12 @@ void sync_passo(unsigned agoraMs) {
     if (rev != contalib_vistos_revisao() && !trakt_ativo() && !simkl_ativo())
       desc_refazer_continuar();
   }
+  // O JORNAL DA CONTA POR CIMA do que veio: o que a pessoa marcou/desmarcou
+  // aqui e ainda nao esta (ou acabou de entrar) na conta continua valendo na
+  // tela, inclusive depois de reabrir o app sem rede. E o que ja foi
+  // confirmado antes deste ciclo sai do jornal: o pull acima ja o reflete.
+  contapend_podar(cicloInicioMs);
+  contapend_aplicar_local();
   spMarcar(SP_VISTOS);
   // Rede so quando muda o que buscar. Quando as duas coisas mudam no mesmo
   // ciclo, o ciclo de rede ja remonta as fileiras no fim — nao ha o que somar.
@@ -1916,6 +1931,9 @@ void sync_esquecer_usuario(void) {
   desc_loc_apagar();
   // O mapa de episodios vistos e da conta que saiu, como todo o resto.
   vistoep_esquecer();
+  // O jornal da conta sai da MEMORIA; o arquivo (por usuario, so ids) fica
+  // para quando ESTA pessoa voltar — e o que ainda nao subiu nao se perde.
+  contapend_esquecer();
   free(catHomeBlob);
   catHomeBlob = NULL;
   temCatHomeBlob = 0;

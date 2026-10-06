@@ -187,9 +187,15 @@ void salvos_iniciar(void) {
   fflush(stdout);
 }
 
+static void (*aoDefinir)(const CatItem *ci, int salvo);
+void salvos_ao_definir(void (*f)(const CatItem *ci, int salvo)) { aoDefinir = f; }
+
 int salvos_definir(const CatItem *ci, int salvo) {
   int k;
   if (!ci || !ci->imdb[0]) return 0;
+  // O GESTO VAI PARA A CONTA mesmo quando a lista LOCAL nao muda: tirar um
+  // titulo que so a conta tinha nao mexe em salvos.txt e tem de chegar la.
+  if (aoDefinir) aoDefinir(ci, salvo);
   // Carregar sob demanda: se alguem salvar antes de salvos_iniciar (nao deveria,
   // mas o roteador tem muitos caminhos), gravar por cima de uma lista nao lida
   // APAGARIA o arquivo inteiro. Ler primeiro custa uma vez.

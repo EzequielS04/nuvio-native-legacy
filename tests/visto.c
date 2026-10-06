@@ -38,6 +38,8 @@ void nuvem_url_escapar(const char *v, char *dst, unsigned tam) { snprintf(dst, t
 const char *i18n(const char *s) { return s; }
 const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 int sessao_logada(void) { return logada; }
+const char *sessao_usuario(void) { return "usuario-teste"; }
+char *contacache_ler(const char *s, int p, const char *u, long *q) { (void)s; (void)p; (void)u; (void)q; return NULL; }
 int perfis_ativo(void) { return 2; }
 const char *dados_cliente_id(void) { return "cliente-teste"; }
 char *dados_ler(const char *n) { (void)n; return NULL; }
