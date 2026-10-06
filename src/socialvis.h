@@ -110,6 +110,9 @@ typedef struct {
 
 typedef struct {
   char id[96], nome[64], avatar[512];
+  // Do CONTATO (servidor com /v1/contatos novo; vazio no antigo): o apelido que
+  // a pessoa escolheu e o selo que o servidor deu ("criador").
+  char apelido[32], selo[12];
   int  fonte;
   int  agora;           // assistindo agora (ponto verde)
   int  novo;            // ha evento que a pessoa ainda nao viu (anel laranja)

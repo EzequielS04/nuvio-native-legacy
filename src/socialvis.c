@@ -513,6 +513,8 @@ static void agrupar(void) {
       a = &amigos[achaAmigo(ctts[i].id)];
       if (ctts[i].nome[0]) snprintf(a->nome, sizeof a->nome, "%s", ctts[i].nome);
       if (ctts[i].avatar[0]) snprintf(a->avatar, sizeof a->avatar, "%s", ctts[i].avatar);
+      snprintf(a->apelido, sizeof a->apelido, "%s", ctts[i].apelido);
+      snprintf(a->selo, sizeof a->selo, "%s", ctts[i].selo);
       continue;
     }
     a = &amigos[nAmigos++];
@@ -520,6 +522,8 @@ static void agrupar(void) {
     snprintf(a->id, sizeof a->id, "%s", ctts[i].id);
     snprintf(a->nome, sizeof a->nome, "%s", ctts[i].nome);
     snprintf(a->avatar, sizeof a->avatar, "%s", ctts[i].avatar);
+    snprintf(a->apelido, sizeof a->apelido, "%s", ctts[i].apelido);
+    snprintf(a->selo, sizeof a->selo, "%s", ctts[i].selo);
     a->fonte = !strcmp(ctts[i].origem, "trakt") ? SV_FONTE_TRAKT : SV_FONTE_NUVIO;
   }
   for (i = 0; i < nAmigos; i++) {

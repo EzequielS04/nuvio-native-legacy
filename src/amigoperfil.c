@@ -9,6 +9,8 @@
 #include "tex_cache.h"
 #include "layout.h"
 #include "idioma.h"
+#include "recomenda.h"
+#include "badges.h"
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -209,8 +211,13 @@ void amigoperfil_desenhar(Uint32 agora) {
     float y;
     svd_rosto(av, &perf.a, 0.0f, a, agora);
     y = av.y + av.h + 40.0f;
-    { TxtLinha t = txt_linha_corta(TXT_TITULO2, perf.a.nome, 246, 246, 250, 255, lw);
-      txt_desenhar_alpha(t, lx, y, a); y += (float)t.h + 6.0f; }
+    // O NOME E O SELO DE CRIADOR (o servidor decide; ver rec_selo_pessoa): o
+    // nome e cortado para o selo caber ao lado.
+    { float sw = rec_selo_pessoa_largura(perf.a.selo);
+      TxtLinha t = txt_linha_corta(TXT_TITULO2, perf.a.nome, 246, 246, 250, 255, sw > 0.0f ? lw - sw - 12.0f : lw);
+      txt_desenhar_alpha(t, lx, y, a);
+      if (sw > 0.0f) rec_selo_pessoa(lx + (float)t.w + 12.0f, y + ((float)t.h - BADGE_H) * 0.5f, perf.a.selo, a);
+      y += (float)t.h + 6.0f; }
     // "Amigos ha 2 meses · pelo codigo" — a FONTE pequena, so aqui.
     { char q[80] = "", por[80];
       if (perf.desde > 0) {
@@ -222,6 +229,12 @@ void amigoperfil_desenhar(Uint32 agora) {
       else snprintf(por, sizeof por, i18n("pelo %s"), socialvis_fonte_nome(perf.porOnde));
       if (q[0]) snprintf(buf, sizeof buf, "%s \xc2\xb7 %s", q, por);
       else snprintf(buf, sizeof buf, "%s", por);
+      // O @APELIDO na frente, quando a linha de cima e o nome e nao ele mesmo.
+      if (perf.a.apelido[0] && SDL_strcasecmp(perf.a.apelido, perf.a.nome)) {
+        char t2[sizeof buf];
+        snprintf(t2, sizeof t2, "@%s \xc2\xb7 %s", perf.a.apelido, buf);
+        snprintf(buf, sizeof buf, "%s", t2);
+      }
       { TxtLinha t = txt_linha_corta(TXT_CAPTION, buf, 168, 166, 178, 255, lw);
         txt_desenhar_alpha(t, lx, y, a); y += (float)t.h + 28.0f; } }
     if (perf.a.agora && perf.a.nTit > 0) {

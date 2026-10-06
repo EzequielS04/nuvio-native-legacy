@@ -222,6 +222,12 @@ int main(int argc, char **argv) {
     // Os amigos tambem sao CONTATOS (a aba Amigos lista contatos).
     nContatos = 0;
     if (cen >= 1) contato(nContatos++, "nuvio:pedro", "Pedro", "deploy/app/art/elenco/00_0.jpg", "nuvio");
+    // NUVIO_SHOT_CRIADOR=1: Pedro com apelido e o selo de criador que o
+    // servidor manda (/v1/contatos), para ver o selo na linha e no perfil.
+    if (cen >= 1 && getenv("NUVIO_SHOT_CRIADOR")) {
+      snprintf(contatos[nContatos - 1].apelido, sizeof contatos[0].apelido, "pedro cine");
+      snprintf(contatos[nContatos - 1].selo, sizeof contatos[0].selo, "criador");
+    }
     if (cen >= 3) {
       contato(nContatos++, "nuvio:marina", "Marina", "", "nuvio");
       contato(nContatos++, "trakt:vlern", "vlern", "", "trakt");
