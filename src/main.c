@@ -1050,6 +1050,18 @@ int main(int argc, char **argv) {
   if (discordRoots) fclose(discordRoots);
   else discordCa[0] = 0; // Desktop development can use system trust.
 #endif
+#ifdef NV_TPK
+  // #290: the .tpk in-app update replaces only libnuvio.so; res/art is the
+  // one from the installed package, and discord-ca.pem only ships since
+  // 1.7.4. A CAINFO pointing at a missing file makes curl fail every verified
+  // https request at once (CURLE_SSL_CACERT_BADFILE). Without the bundle,
+  // fall back to the TV's own trust store.
+  if (access(discordCa, R_OK) != 0) {
+    printf("[rede] %s missing from the package: using the TV's CA store\n", discordCa);
+    fflush(stdout);
+    discordCa[0] = 0;
+  }
+#endif
   rede_discord_ca(discordCa);
   rede_preparar();
   // NIVEL DE GPU (gpunivel.h): le GL_*, marca a GPU fraca no perfil e decide
