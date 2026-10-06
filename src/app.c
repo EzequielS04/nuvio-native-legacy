@@ -561,8 +561,13 @@ static void idDoAlvo(const CatItem *ci, char *dst, size_t n) {
 static int diagDaHome;
 static int ltdDoGuia;
 
+// O perfil do amigo aberto pelo DUELO do Perfil e Stats: Voltar nele volta ao
+// Perfil, nao a home. Qualquer outra troca de tela esquece.
+static int socialDoPerfil;
+
 static void trocarTela(Tela nova) {
   if (nova == tela) return;
+  if (nova != TELA_SOCIAL) socialDoPerfil = 0;
   if (tela == TELA_AJUSTES) ajustes_encerrar();
   if (tela == TELA_LIVETV_DIAG) livetvdiag_encerrar();
   tela = nova;
@@ -2763,6 +2768,10 @@ void app_atualizar(float dt, Uint32 agora) {
         spainel_pediu_perfil(pid, sizeof pid)) {
       if (spainel_aberto()) spainel_fechar();
       amigoperfil_abrir(pid); trocarTela(TELA_SOCIAL);
+    }
+    if (tela == TELA_PERFIL && perfil_pediu_amigo(pid, sizeof pid)) {
+      amigoperfil_abrir(pid); trocarTela(TELA_SOCIAL);
+      socialDoPerfil = 1;
     } }
   if (tela==TELA_HOME && home_pediu_social()) {
     trocarTela(TELA_AJUSTES);menu_definir_destino(MENU_AJUSTES);
@@ -2883,6 +2892,10 @@ void app_atualizar(float dt, Uint32 agora) {
       // só para alcançar a navegação principal.
       if (saiuPorEsquerda && sidebar_permitida()) {
         menu_abrir();
+      } else if (tela == TELA_SOCIAL && socialDoPerfil) {
+        trocarTela(TELA_PERFIL);
+        menu_definir_destino(MENU_PERFIL);
+        perfil_voltar_ao_duelo();
       } else {
         trocarTela(TELA_HOME);
         menu_definir_destino(MENU_INICIO);
