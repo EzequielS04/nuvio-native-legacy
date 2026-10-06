@@ -68,6 +68,14 @@ extern void NV_CAT_TEST_ANTES_TRAVA(void);
 #else
 #define CAT_TESTE_ANTES_TRAVA() ((void)0)
 #endif
+#ifdef NV_CAT_TEST_CACHE_MEIO
+// Teste (tests/catcachecorrida.c): outro fio mexe no catalogo no meio da
+// codificacao do cache.
+extern void NV_CAT_TEST_CACHE_MEIO(void);
+#define CAT_TESTE_CACHE_MEIO() NV_CAT_TEST_CACHE_MEIO()
+#else
+#define CAT_TESTE_CACHE_MEIO() ((void)0)
+#endif
 
 // --- QUANDO O BLOCO VELHO PODE MORRER ----------------------------------------
 // O bloco trocado fora morria na troca SEGUINTE. Isso protegia o leitor de UMA
@@ -885,6 +893,9 @@ int cat_gravar_cache_se_identidade(const char *dirArte, const char *donoEsperado
   char caminho[600], tmp[620];
   CacheCab c;
   FILE *f;
+  CatItem *copia;
+  CatFileira *copiaFils;
+  int qtd, qf;
   if (n < 1 && nFils < 1) return 0;
   caminhoCache(dirArte, caminho, sizeof caminho);
   // Grava num temporario e renomeia: quem le na proxima abertura nunca pega
@@ -899,33 +910,57 @@ int cat_gravar_cache_se_identidade(const char *dirArte, const char *donoEsperado
   c.ingles = ajustes_idioma();
   c.tamItem = (unsigned)sizeof(CatItem);
   c.tamFileira = (unsigned)sizeof(CatFileira);
-  c.nItens = n; c.nFileiras = nFils;
   identidadeAtual(c.usuario, sizeof c.usuario, &c.perfil);
   if (!donoEsperado || strcmp(c.usuario, donoEsperado) || c.perfil != perfilEsperado)
     return 0;
+  // RETRATO DO BLOCO SOB pubTrava, e so dele se codifica (queda "double free
+  // or corruption (!prev)" / "malloc(): invalid next size" da 2.0.0, LG webOS).
+  // As duas passadas do RLE liam `itens` e `n` da tela sem trava, no fio da
+  // descoberta, logo depois de "fileiras remontadas sem rede" — o instante em
+  // que o fio principal aplica a biblioteca da conta (cat_definir_na_lista no
+  // bloco, cat_acrescentar_lote trocando o bloco). Um naLista que vira 1 entre
+  // a passada que MEDE e a que ESCREVE quebra uma corrida de zeros, a segunda
+  // sai maior que o malloc da primeira e escreve alem do fim. Ler o bloco fora
+  // da trava tambem nao garante que ele viva: cat_quadro libera os trocados.
+  // A copia custa um memcpy do catalogo (o mesmo de cada troca de bloco) e
+  // tira a codificacao de dentro da trava. tests/catcachecorrida.sh.
+  catTravar();
+  qtd = n; qf = nFils;
+  copia = malloc(sizeof(CatItem) * (size_t)(qtd > 0 ? qtd : 1));
+  copiaFils = malloc(sizeof(CatFileira) * (size_t)(qf > 0 ? qf : 1));
+  if (!copia || !copiaFils) {
+    pthread_mutex_unlock(&pubTrava); free(copia); free(copiaFils); return 0;
+  }
+  if (qtd > 0) memcpy(copia, itens, sizeof(CatItem) * (size_t)qtd);
+  if (qf > 0) memcpy(copiaFils, fils, sizeof(CatFileira) * (size_t)qf);
+  pthread_mutex_unlock(&pubTrava);
+  c.nItens = qtd; c.nFileiras = qf;
   { /* CODIFICA FORA DA TRAVA DO SISTEMA DE ARQUIVOS: so o fwrite fica dentro. */
     double t0 = cat_relogio_ms(), t1, t2;
-    size_t rawN = sizeof(CatItem) * (size_t)n, encN;
+    size_t rawN = sizeof(CatItem) * (size_t)qtd, encN;
     unsigned char *enc;
     unsigned long long encN64;
-    encN = rleCodificar((const unsigned char *)itens, rawN, NULL);
+    encN = rleCodificar((const unsigned char *)copia, rawN, NULL);
     enc = malloc(encN ? encN : 1);
-    if (!enc) return 0;
-    rleCodificar((const unsigned char *)itens, rawN, enc);
+    if (!enc) { free(copia); free(copiaFils); return 0; }
+    CAT_TESTE_CACHE_MEIO();
+    rleCodificar((const unsigned char *)copia, rawN, enc);
+    free(copia);
     c.magia = CACHE_MAGIA_RLE;
     encN64 = encN;
     t1 = cat_relogio_ms();
     CACHE_FS_TRAVAR();
     f = fopen(tmp, "wb");
-    if (!f) { CACHE_FS_LIBERAR(); free(enc); return 0; }
+    if (!f) { CACHE_FS_LIBERAR(); free(enc); free(copiaFils); return 0; }
     if (fwrite(&c, sizeof c, 1, f) != 1 ||
         fwrite(&encN64, sizeof encN64, 1, f) != 1 ||
         fwrite(enc, 1, encN, f) != encN ||
-        (nFils > 0 &&
-         fwrite(fils, sizeof(CatFileira), (size_t)nFils, f) != (size_t)nFils)) {
-      fclose(f); remove(tmp); CACHE_FS_LIBERAR(); free(enc); return 0;
+        (qf > 0 &&
+         fwrite(copiaFils, sizeof(CatFileira), (size_t)qf, f) != (size_t)qf)) {
+      fclose(f); remove(tmp); CACHE_FS_LIBERAR(); free(enc); free(copiaFils); return 0;
     }
     free(enc);
+    free(copiaFils);
     t2 = cat_relogio_ms();
     printf("[perf] cat cache: %zu KB -> %zu KB, codifica %.1f ms (fora da trava), escreve %.1f ms (dentro da trava do FS)\n",
            rawN / 1024, encN / 1024, t1 - t0, t2 - t1);
@@ -944,7 +979,7 @@ int cat_gravar_cache_se_identidade(const char *dirArte, const char *donoEsperado
   CACHE_FS_LIBERAR();
   CACHE_MARCAR_SUJO();
   printf("[cat] cache gravado em %s: %d titulos, %d fileiras\n",
-         caminho, n, nFils);
+         caminho, qtd, qf);
   fflush(stdout);
   return 1;
 }
