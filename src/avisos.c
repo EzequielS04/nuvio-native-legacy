@@ -72,7 +72,7 @@
 // olhando um card do outro lado da tela leva um tempo para notar o canto.
 #define AV_TOAST_MS   20000.0f
 
-enum { AV_REC, AV_AGENDA, AV_UPDATE, AV_CANAL, AV_CRASH };
+enum { AV_REC, AV_AGENDA, AV_UPDATE, AV_CANAL, AV_CRASH, AV_PEDIDO };
 typedef struct {
   char id[72];
   int  tipo;
@@ -871,6 +871,23 @@ static void colherLocais(void) {
         }
       }
     } else tirar("rec"); }
+  // PEDIDOS DE AMIZADE: uma linha so, com a contagem, que leva a aba Amigos.
+  // A chave e o pedido mais novo: um pedido novo acende o ponto de "novo" de
+  // novo; o mesmo pedido relido nao. A ilha ja disse o assunto
+  // (ilhasinais.c), entao a linha nao vai para a ilha (anunciar = 0).
+  { int k = recomenda_ativo() ? recomenda_n_pedidos() : 0, i;
+    char id[40] = "";
+    RecPessoa p;
+    if (k > 0 && recomenda_pedido(0, &p) && p.pub[0]) snprintf(id, sizeof id, "pedidos:%s", p.pub);
+    for (i = n - 1; i >= 0; i--)
+      if (!strncmp(itens[i].id, "pedidos:", 8) && strcmp(itens[i].id, id)) tirar(itens[i].id);
+    if (id[0]) {
+      char txt[200];
+      snprintf(txt, sizeof txt, k == 1 ? i18n("%d pessoa quer ser sua amiga.")
+                                       : i18n("%d pessoas querem ser suas amigas."), k);
+      (void)por(id, AV_PEDIDO, i18n("Pedidos de amizade"), txt, NULL);
+      for (i = 0; i < n; i++) if (!strcmp(itens[i].id, id)) itens[i].anunciar = 0;
+    } }
   // Atualizacao
   { const char *v = atualizacao_nova();
     if (v && v[0]) {
@@ -1002,6 +1019,7 @@ static const char *icone(int tipo) {
     case AV_AGENDA: return "lembrete";
     case AV_UPDATE: return "avancar";
     case AV_CRASH:  return "fluxo";
+    case AV_PEDIDO: return "aj_users";
     default:        return "menu_settings";
   }
 }
@@ -1244,7 +1262,8 @@ static int ehCanalExpansivel(int i) { return i >= 0 && i < n && itens[i].tipo ==
 // primeiro, a da aba Avisos do painel Social.
 static float larguraTextoAviso = 610.0f;
 static int temAcaoAviso(const Aviso *av) {
-  return av->tipo == AV_REC || av->tipo == AV_AGENDA || av->tipo == AV_UPDATE || av->tipo == AV_CRASH;
+  return av->tipo == AV_REC || av->tipo == AV_AGENDA || av->tipo == AV_UPDATE || av->tipo == AV_CRASH ||
+         av->tipo == AV_PEDIDO;
 }
 // A LINHA EM FOCO SEMPRE TEM A LINHA DE ACAO (06/10): e onde mora "Segure OK
 // para dispensar". Fora do foco so quem tem acao a desenha.
@@ -1338,6 +1357,7 @@ void avisos_lista_desenhar(float x, float y0, float w, float a, int focoLinha) {
     else txt_bloco(TXT_ILHA_SUB, av->texto, 243, 242, 239, tx, y + 51.0f, tw, 25.0f, a * 0.62f, 2);
     switch (av->tipo) {
       case AV_REC:    acao = i18n("OK abre Salvos"); break;
+      case AV_PEDIDO: acao = i18n("OK abre Amigos para aceitar"); break;
       case AV_AGENDA: acao = i18n("OK abre o título"); break;
       case AV_UPDATE: acao = i18n("OK abre a atualização"); break;
       case AV_CRASH:  acao = envioEstado == 1 ? i18n("Enviando…") : envioEstado == 2 ? i18n("Registro enviado. Obrigado.")
@@ -1391,6 +1411,8 @@ int avisos_lista_ok(int linha) {
   }
   switch (a.tipo) {
     case AV_REC:    pediuCodigo = AVISOS_ABRIR_SALVOS; return 1;
+    // 2 = o painel fica aberto (so troca de aba); a central fecha como sempre.
+    case AV_PEDIDO: pediuCodigo = AVISOS_ABRIR_AMIGOS; return 2;
     case AV_UPDATE: pediuCodigo = AVISOS_ABRIR_ATUALIZACAO; return 1;
     case AV_AGENDA: snprintf(pediuAbrir, sizeof pediuAbrir, "%s", a.alvo); return 1;
     case AV_CRASH:

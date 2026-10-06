@@ -286,7 +286,13 @@ enum { SPS_CONSENT_NAO = 0, SPS_CONSENT_SIM, SPS_REC, SPS_SUG,
        SPS_IDENT,
        // F08: Simkl (so com login nesta TV ou ja ligado) e Letterboxd (usuario
        // DECLARADO, o servidor nao confere). Mesma gramatica da linha do Trakt.
-       SPS_SIMKL, SPS_LETTERBOXD };
+       SPS_SIMKL, SPS_LETTERBOXD,
+       // PEDIDOS DE AMIZADE RECEBIDOS (06/10, relato do dono: "o pessoal ta
+       // adicionando e nao ta aparecendo para aceitar"). Ate aqui o unico
+       // lugar para aceitar era o modal da pilula, que vive 10 s, e uma pagina
+       // dentro de Encontrar pessoas; esta aba so mostrava "(N)" no fim da
+       // lista. Agora os pedidos abrem a aba, cada um com Aceitar e Recusar.
+       SPS_PEDIDO };
 // A API do alcance e do nome so existe no socialsrv (branch agente/socialsrv).
 // Ate o merge as linhas ficam desligadas; NV_SOCIAL_V2_UI liga so a tela (o
 // teste de captura o usa com a API de mentira).
@@ -296,13 +302,26 @@ enum { SPS_CONSENT_NAO = 0, SPS_CONSENT_SIM, SPS_REC, SPS_SUG,
 #define SP_V2 0
 #endif
 typedef struct { unsigned char tipo; short idx; } SPSocial;
-#define SP_SOCIAL_MAX (REC_MAX + REC_SUGESTOES_MAX + REC_CONTATOS_MAX + 8)
+#define SP_SOCIAL_MAX (REC_MAX + REC_SUGESTOES_MAX + REC_CONTATOS_MAX + REC_PEDIDOS_MAX + 8)
 static SPSocial social[SP_SOCIAL_MAX];
 static int nSocial;
 static RecSugestao sugs[REC_SUGESTOES_MAX];
 static int nSugs;
 static RecContato ctts[REC_CONTATOS_MAX];
 static int nCtts;
+// Pedidos recebidos (copia, como as outras listas). `pedCol` = a pilula em
+// foco na linha do pedido: 0 Aceitar, 1 Recusar (→ e ← trocam). `pedFeito` =
+// os handles ja respondidos nesta sessao: a linha some NA HORA do OK, sem
+// esperar a volta do servidor (recomenda.c tira da caixa quando ela chega).
+static RecPessoa peds[REC_PEDIDOS_MAX];
+static int nPeds, pedCol;
+static char pedFeito[REC_PEDIDOS_MAX][16];
+static int nPedFeito;
+static int pedJaFeito(const char *pub) {
+  int i;
+  for (i = 0; i < nPedFeito; i++) if (!strcmp(pedFeito[i], pub)) return 1;
+  return 0;
+}
 // Retrato do estado do consentimento na ultima reconstrucao. O fio de rede pode
 // adotar um "sim" respondido em OUTRA TV no meio de um ciclo (ver a
 // reconciliacao em recomenda.c), e sem esta marca a pergunta continuaria na
@@ -929,6 +948,7 @@ static float socialAlt(int i) {
   switch (social[i].tipo) {
     case SPS_REC:       return SPI_H;
     case SPS_SUG:       return SPS_H_SUG;
+    case SPS_PEDIDO:    return SPS_H_SUG;
     case SPS_AMIGO:     return SPS_H_AMIGO +
                           ((social[i].idx >= 0 && social[i].idx < REC_CONTATOS_MAX &&
                             cttCadeia[social[i].idx]) ? SPS_CADEIA_H : 0.0f);
@@ -969,7 +989,7 @@ static float socialAntes(int i) {
   }
   if (social[i].tipo == SPS_APARECER) return SPS_SEP_APARECER;
   if (social[i].tipo == SPS_NOME) return SPS_SEP_APARECER;
-  if (social[i].tipo != SPS_SUG && social[i].tipo != SPS_AMIGO) return 0.0f;
+  if (social[i].tipo != SPS_SUG && social[i].tipo != SPS_AMIGO && social[i].tipo != SPS_PEDIDO) return 0.0f;
   return (i == 0 || social[i - 1].tipo != social[i].tipo) ? sh : 0.0f;
 }
 
@@ -978,18 +998,34 @@ static float socialTopo(void) {
   if (aba != SP_ABA_SOCIAL) return 0.0f;
   if (consentindo()) return SPS_CONSENT_TOPO;
   if (perguntandoAlcance()) return SPS_ALC_TOPO;
-  return nRecs == 0 ? SPS_VAZIO_TOPO : 0.0f;
+  // Com pedido esperando, o texto de "nenhuma recomendacao" sai: os pedidos
+  // sao a primeira coisa da aba, e o codigo continua em "Adicionar um amigo".
+  return nRecs == 0 && nPeds == 0 ? SPS_VAZIO_TOPO : 0.0f;
 }
 
 // Copia a lista de recomendacoes para dentro do painel. COPIA, e nao ponteiro:
 // a lista de recomenda.c vive atras de um mutex que o fio de rede reescreve, e
 // e exatamente o erro que derrubou este arquivo antes (ver a nota longa em
 // SPLinha).
+// A caixa de pedidos mudou desde a ultima montagem (o fio de rede releu, ou
+// um aceite pela ilha tirou alguem): conta e handles, na ordem.
+static int pedidosMudaram(void) {
+  int i, n = recomenda_n_pedidos(), k = 0;
+  RecPessoa p;
+  for (i = 0; i < n; i++) {
+    if (!recomenda_pedido(i, &p) || !p.pub[0] || pedJaFeito(p.pub)) continue;
+    if (k >= nPeds || strcmp(peds[k].pub, p.pub)) return 1;
+    k++;
+  }
+  return k != nPeds;
+}
+
 static void reconstruirSocial(void) {
   int i;
   nRecs = 0;
   nSugs = 0;
   nCtts = 0;
+  nPeds = 0;
   nSocial = 0;
   consentEstado = -1;
   if (!temAbas()) return;
@@ -1062,6 +1098,14 @@ static void reconstruirSocial(void) {
     if (recomenda_sugestao(i, &sugs[nSugs])) nSugs++;
     else break;
 
+  // OS PEDIDOS ABREM A LISTA: sao a unica coisa da aba que espera uma
+  // resposta de quem esta olhando.
+  { int np = recomenda_n_pedidos();
+    for (i = 0; i < np && nPeds < REC_PEDIDOS_MAX; i++)
+      if (recomenda_pedido(i, &peds[nPeds]) && peds[nPeds].pub[0] && !pedJaFeito(peds[nPeds].pub)) nPeds++;
+    for (i = 0; i < nPeds && nSocial < SP_SOCIAL_MAX; i++) {
+      social[nSocial].tipo = SPS_PEDIDO; social[nSocial].idx = (short)i; nSocial++;
+    } }
   for (i = 0; i < nRecs && nSocial < SP_SOCIAL_MAX; i++) {
     social[nSocial].tipo = SPS_REC; social[nSocial].idx = (short)i; nSocial++;
   }
@@ -1741,7 +1785,7 @@ static void abrirMenu(void) {
 static void okSocial(void);
 static void abrirLinha(void) {
   if (aba == SP_ABA_ATIVIDADE || aba == SP_ABA_SOCIAL) { okSocial(); return; }
-  if (aba == SP_ABA_AVISOS) { if (avisos_lista_ok(foco)) spainel_fechar(); return; }
+  if (aba == SP_ABA_AVISOS) { if (avisos_lista_ok(foco) == 1) spainel_fechar(); return; }
   if (foco >= 0 && foco < nLinhas) {
     snprintf(pedido, sizeof pedido, "%s", linhas[foco].id);
     temPedido = 1;
@@ -1784,6 +1828,26 @@ static void okSocial(void) {
           recomenda_adicionar_sugerido(sugs[social[foco].idx].id);
         reconstruirSocial();
         if (foco >= nSocial) foco = nSocial > 0 ? nSocial - 1 : 0;
+        return;
+      case SPS_PEDIDO:
+        // UM OK RESPONDE. O pedido sai da lista na hora; se o fio social
+        // estiver ocupado (outra operacao em voo), nada e marcado e o OK
+        // pode ser repetido.
+        if (social[foco].idx >= 0 && social[foco].idx < nPeds) {
+          const RecPessoa *p = &peds[social[foco].idx];
+          int ok = pedCol ? recomenda_recusar(p->pub) : recomenda_aceitar(p->pub);
+          if (ok) {
+            if (nPedFeito == REC_PEDIDOS_MAX) {
+              memmove(pedFeito[0], pedFeito[1], sizeof pedFeito[0] * (REC_PEDIDOS_MAX - 1));
+              nPedFeito--;
+            }
+            snprintf(pedFeito[nPedFeito++], sizeof pedFeito[0], "%s", p->pub);
+            printf("[amigos] pedido %s na aba Amigos\n", pedCol ? "recusado" : "aceito");
+            pedCol = 0;
+            reconstruirSocial();
+            if (foco >= nSocial) foco = nSocial > 0 ? nSocial - 1 : 0;
+          }
+        }
         return;
       case SPS_ADICIONAR:
         // A TELA DE AMIGOS. O painel FICA ABERTO atras: a modal e uma camada
@@ -1957,6 +2021,12 @@ void spainel_evento(const SDL_Event *e) {
   // ESQUERDA NA LINHA DE ABAS NAO FECHA SE HA PARA ONDE IR. Fora dela, e fora
   // da primeira aba, ela continua sendo "sair pela borda" — o gesto que
   // perfil.c ja tinha nesta posicao.
+  // Na linha do pedido, ← e → escolhem entre Aceitar e Recusar.
+  if ((k == SDLK_LEFT || k == SDLK_RIGHT) && aba == SP_ABA_SOCIAL && foco >= 0 &&
+      foco < nSocial && social[foco].tipo == SPS_PEDIDO) {
+    if (k == SDLK_RIGHT) { pedCol = 1; return; }
+    if (pedCol) { pedCol = 0; return; }
+  }
   if (k == SDLK_LEFT) {
     if (temAbas() && foco == SP_FOCO_ABAS && aba != SP_ABA_SALVOS) {
       trocarAba(proximaAba(aba, -1)); return;
@@ -1977,6 +2047,7 @@ void spainel_evento(const SDL_Event *e) {
              linhas[foco + 1].fila == linhas[foco].fila) foco++;
     return;
   }
+  if (k == SDLK_DOWN || k == SDLK_UP) pedCol = 0;
   if (k == SDLK_DOWN) {
     if (foco == SP_FOCO_ABAS) {
       if (temBarra()) { foco = SP_FOCO_BARRA; if (barraFoco >= nChips()) barraFoco = 0; }
@@ -2024,7 +2095,7 @@ void spainel_evento(const SDL_Event *e) {
         if (!e->key.repeat && !okDesde) { okDesde = SDL_GetTicks(); if (!okDesde) okDesde = 1; }
         return;
       }
-      if (!e->key.repeat && avisos_lista_ok(foco)) spainel_fechar();
+      if (!e->key.repeat && avisos_lista_ok(foco) == 1) spainel_fechar();
       focoAvisosValido();
       return;
     }
@@ -2126,7 +2197,7 @@ void spainel_atualizar(float dt, Uint32 agora) {
                          social[foco].tipo + 1 == identConfirma)) identConfirma = 0;
 #endif
   if (aberto && aba == SP_ABA_SOCIAL &&
-      (nRecs != recomenda_n() || nSugs != recomenda_n_sugestoes() ||
+      (nRecs != recomenda_n() || nSugs != recomenda_n_sugestoes() || pedidosMudaram() ||
        consentEstado != recomenda_aparecer() || svRevSocial != socialvis_revisao()
 #if SP_V2
        || (consentEstado != REC_APARECER_NAO_PERGUNTADO && alcEstado != recomenda_alcance())
@@ -3349,6 +3420,40 @@ static void desenhaSugLinha(int i, int idx, float dx, float y, float a, Uint32 a
     txt_desenhar_alpha(acF, p.x + 20.0f, p.y + (p.h - acF.h) * 0.5f, a * v); }
 }
 
+// Linha de um PEDIDO DE AMIZADE: o rosto, o apelido, a bio (ou o aviso de
+// que recusar nao avisa) e as duas pilulas. A pilula em foco e a de `pedCol`;
+// fora do foco as duas ficam em repouso.
+static void desenhaPedidoLinha(int i, int idx, float dx, float y, float a, Uint32 agora) {
+  const RecPessoa *p = &peds[idx];
+  float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f, v = focoVisual(f);
+  float px = SP_X + dx + SP_PAD, tx = px + SPI_AV + SPI_AV_GAP;
+  float fimLinha = SP_X + dx + SP_LINHA_X + SP_LINHA_W - SP_LINHA_PADX;
+  const char *nome = p->apelido[0] ? p->apelido : (p->nome[0] ? p->nome : "?");
+  const char *rot[2] = { i18n("Aceitar"), i18n("Recusar") };
+  int tf = ajustes_tinta_foco(), k;
+  float xp = fimLinha;
+  GfxRect pr[2];
+  TxtLinha rr[2], rf[2];
+  { GfxRect r = linhaIlhaRet(dx, y, SPS_H_SUG);
+    superficieItem(r, SP_LINHA_RAIO / r.h, f, a); }
+  rostoIlha((GfxRect){ px, y + (SPS_H_SUG - SPI_AV) * 0.5f, SPI_AV, SPI_AV },
+            p->avatar, nome, p->pub, 0, a, agora);
+  for (k = 1; k >= 0; k--) {
+    rr[k] = txtIlha(TXT_ILHA_SEG, rot[k], 300.0f);
+    rf[k] = txt_linha(TXT_ILHA_SEG, rot[k], tf, tf, tf, 255);
+    pr[k] = (GfxRect){ xp - ((float)rr[k].w + 40.0f), y + (SPS_H_SUG - 44.0f) * 0.5f, (float)rr[k].w + 40.0f, 44.0f };
+    xp = pr[k].x - 10.0f;
+  }
+  andaresIlha(tx, y, SPS_H_SUG, pr[0].x - 18.0f - tx, v, a, nome, NULL,
+              p->bio[0] ? p->bio : i18n("Quer ser seu amigo"), NULL);
+  for (k = 0; k < 2; k++) {
+    float fk = (k == pedCol) ? f : 0.0f, vk = focoVisual(fk);
+    botaoSup(pr[k], 0.5f, fk, a);
+    txt_desenhar_alpha(rr[k], pr[k].x + 20.0f, pr[k].y + (pr[k].h - rr[k].h) * 0.5f, a * 0.85f * (1.0f - vk));
+    txt_desenhar_alpha(rf[k], pr[k].x + 20.0f, pr[k].y + (pr[k].h - rf[k].h) * 0.5f, a * vk);
+  }
+}
+
 // Linha de um AMIGO JA ADICIONADO, na gramatica do feed: o rosto (anel
 // vermelho e ponto se esta vendo agora), o nome, o que ele esta fazendo e, a
 // direita, a capa do titulo dele. Sem acao alem de abrir o perfil.
@@ -3778,17 +3883,20 @@ static void desenharPainel(Uint32 agora) {
     // baixo dele leria como duas telas empilhadas.
     if (consentindo())    desenhaConsentimento(x, y, a);
     else if (perguntandoAlcance()) desenhaAlcancePergunta(x, y, a);
-    else if (nRecs == 0)  desenhaSocialVazio(x, y, a);
+    else if (nRecs == 0 && nPeds == 0) desenhaSocialVazio(x, y, a);
     y += socialTopo();
     for (i = 0; i < nSocial; i++) {
       float alt = socialAlt(i);
       float cab = socialAntes(i);
       if (cab > 0.0f) {
         // So a secao das sugestoes tem rotulo; o vao do interruptor e mudo.
-        if ((social[i].tipo == SPS_SUG || social[i].tipo == SPS_AMIGO) &&
+        if ((social[i].tipo == SPS_SUG || social[i].tipo == SPS_AMIGO || social[i].tipo == SPS_PEDIDO) &&
             y + cab >= listaTopo() && y <= SP_LISTA_BASE) {
+          char rotPed[96];
+          snprintf(rotPed, sizeof rotPed, i18n("Pedidos de amizade (%d)"), nPeds);
           desenhaSecao(SP_X + x, y,
-                       social[i].tipo == SPS_SUG ? "Pessoas que você talvez conheça"
+                       social[i].tipo == SPS_PEDIDO ? rotPed
+                       : social[i].tipo == SPS_SUG ? "Pessoas que você talvez conheça"
                                                  : "Seus amigos", a, cab < SP_SECAO_H - 0.5f);
         }
         // Por pessoa: o nome de quem mandou abre o grupo dele.
@@ -3804,6 +3912,7 @@ static void desenharPainel(Uint32 agora) {
         switch (social[i].tipo) {
           case SPS_REC: desenhaRecLinha(i, social[i].idx, x, y, a, agora); break;
           case SPS_SUG: desenhaSugLinha(i, social[i].idx, x, y, a, agora); break;
+          case SPS_PEDIDO: desenhaPedidoLinha(i, social[i].idx, x, y, a, agora); break;
           case SPS_AMIGO: desenhaAmigoLinha(i, social[i].idx, x, y, a, agora); break;
           case SPS_ENCONTRAR: {
             char rot[96];

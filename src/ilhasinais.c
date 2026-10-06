@@ -2,6 +2,8 @@
 #include "ilhasinais.h"
 #include "ilha.h"
 #include "ilhasalvar.h"
+#include "ilhacart.h"
+#include "avisodisp.h"
 #include "enquete.h"
 #include "ilhaacao.h"
 #include "addons.h"
@@ -23,8 +25,10 @@
 #define SYNC_ATIVIDADE_MS 3000u
 
 static int pediuTrakt;
-static char pedidoPub[REC_PEDIDOS_MAX][16];
-static int nPedidoVisto;
+static int pedOpPend;
+static char pedPubPend[16];
+static int pediuAmigos;
+static void responderPedido(void);
 
 void ilhasinais_iniciar(void) { rede_avisar_saude(rede_saude_nota); rede_avisar_host(rede_hosts_nota); }
 
@@ -40,57 +44,97 @@ static void acoes(void) {
   if (!strncmp(chave, "salvar:", 7)) { ilhasalvar_acao(chave, b); return; }
   if (!strncmp(chave, "enquete:", 8)) { enquete_acao(chave, b); return; }
   if (!strncmp(chave, "pedido:", 7)) {
-    const char *pub = chave + 7;
-    if (b == 1) recomenda_aceitar(pub);
-    else if (b == 2) recomenda_recusar(pub);
+    // O fio social pode estar ocupado (uma releitura em voo): a resposta fica
+    // guardada e sai na proxima volta, em vez de se perder em silencio.
+    if (b == 1 || b == 2) {
+      pedOpPend = b;
+      snprintf(pedPubPend, sizeof pedPubPend, "%s", chave + 7);
+      responderPedido();
+    }
     return;
   }
+  if (!strcmp(chave, "pedidos")) { pediuAmigos = 1; return; }
+  if (!strncmp(chave, "vendo:", 6)) { ilhacart_vendo_acao(chave); return; }
   if (!strcmp(chave, "trakt") && b == 1) pediuTrakt = 1;
 }
 
 // --- social: pedido de amizade e amizade nova ----------------------------------
-static int pedidoJaVisto(const char *pub) {
-  int i;
-  for (i = 0; i < nPedidoVisto; i++) if (!strcmp(pedidoPub[i], pub)) return 1;
-  return 0;
+// PEDIDO DE AMIZADE NA ILHA (06/10, relato do dono): o aviso e PASSAGEIRO e
+// nao e o lugar de responder. Ele diz o assunto uma vez — um pedido novo com
+// o modal Aceitar/Recusar, varios juntos num "3 pedidos de amizade" que leva a
+// aba Amigos — e some sozinho. Antes ele voltava a cada arranque (a lista de
+// ja vistos era so da sessao) e, perdidos os 10 s, nao havia onde aceitar
+// alem de uma pagina dentro de Encontrar pessoas. Agora o ja dito vai para o
+// disco (avisodisp, chave "pedido:<pub>") e os pedidos ficam na aba Amigos
+// (salvospainel.c) e na lista de Avisos ate a resposta.
+#define PEDIDO_ILHA_MS 6000u
+// pedOpPend: 1 aceitar, 2 recusar ainda nao entregue (fio social ocupado).
+
+int ilhasinais_pediu_amigos(void) { int p = pediuAmigos; pediuAmigos = 0; return p; }
+
+static void responderPedido(void) {
+  int ok;
+  if (!pedOpPend) return;
+  ok = pedOpPend == 1 ? recomenda_aceitar(pedPubPend) : recomenda_recusar(pedPubPend);
+  if (!ok) return;               // ocupado: tenta de novo na proxima volta
+  printf("[amigos] pedido %s pela ilha\n", pedOpPend == 1 ? "aceito" : "recusado");
+  if (pedOpPend == 2) ilha_avisar("pedido-resp", ILHA_INFO, "aj_x", i18n("Pedido recusado"), 3000u, 0);
+  pedOpPend = 0;
 }
 
 static void pedidosDeAmizade(void) {
-  int i, n = recomenda_n_pedidos();
+  int i, n = recomenda_n_pedidos(), novos = 0;
+  RecPessoa p, primeiro;
+  char chave[40];
   for (i = 0; i < n; i++) {
-    RecPessoa p;
-    char chave[40], txt[200], f[120];
+    if (!recomenda_pedido(i, &p) || !p.pub[0]) continue;
+    snprintf(chave, sizeof chave, "pedido:%s", p.pub);
+    if (avisodisp_tem(chave)) continue;
+    avisodisp_por(chave);        // dito: nao volta nem depois de reiniciar
+    if (!novos) primeiro = p;
+    novos++;
+  }
+  if (!novos) return;
+  if (novos == 1) {
     static IlhaModal m;
     IlhaAvisoEx e;
+    char txt[200], f[120];
     int g, k = 0;
-    if (!recomenda_pedido(i, &p) || !p.pub[0] || pedidoJaVisto(p.pub)) continue;
-    // UMA VEZ POR PEDIDO NESTA SESSAO: a lista e relida a cada 10 min e o
-    // mesmo pedido pendente nao volta a abrir a pilula.
-    if (nPedidoVisto == REC_PEDIDOS_MAX) { memmove(pedidoPub[0], pedidoPub[1], sizeof pedidoPub[0] * (REC_PEDIDOS_MAX - 1)); nPedidoVisto--; }
-    snprintf(pedidoPub[nPedidoVisto++], sizeof pedidoPub[0], "%s", p.pub);
+    const char *nome = primeiro.apelido[0] ? primeiro.apelido : "?";
     memset(&m, 0, sizeof m);
     memset(&e, 0, sizeof e);
-    snprintf(chave, sizeof chave, "pedido:%s", p.pub);
-    snprintf(txt, sizeof txt, i18n("%s quer ser seu amigo"), ilha_forte(f, sizeof f, p.apelido[0] ? p.apelido : "?"));
+    snprintf(chave, sizeof chave, "pedido:%s", primeiro.pub);
+    snprintf(txt, sizeof txt, i18n("%s quer ser seu amigo"), ilha_forte(f, sizeof f, nome));
     snprintf(m.kicker, sizeof m.kicker, "%s", i18n("Pedido de amizade"));
-    snprintf(m.titulo, sizeof m.titulo, "%s", p.apelido);
-    snprintf(m.texto, sizeof m.texto, "%s", p.bio);
+    snprintf(m.titulo, sizeof m.titulo, "%s", primeiro.apelido);
+    snprintf(m.texto, sizeof m.texto, "%s", primeiro.bio);
     for (g = 0; g < REC_GENEROS_N && k < 3; g++)
-      if (p.generos & (1u << g)) snprintf(m.chips[k++], sizeof m.chips[0], "%s", i18n(rec_genero_rotulo(g)));
-    snprintf(m.rosto, sizeof m.rosto, "%s", p.avatar);
-    snprintf(m.rostoNome, sizeof m.rostoNome, "%s", p.apelido[0] ? p.apelido : "?");
-    snprintf(m.rodape, sizeof m.rodape, "%s", i18n("Recusar não avisa a pessoa."));
+      if (primeiro.generos & (1u << g)) snprintf(m.chips[k++], sizeof m.chips[0], "%s", i18n(rec_genero_rotulo(g)));
+    snprintf(m.rosto, sizeof m.rosto, "%s", primeiro.avatar);
+    snprintf(m.rostoNome, sizeof m.rostoNome, "%s", nome);
+    snprintf(m.rodape, sizeof m.rodape, "%s", i18n("Recusar não avisa a pessoa. O pedido também fica em Amigos."));
     m.nBotoes = 2;
     snprintf(m.botao[0], sizeof m.botao[0], "%s", i18n("Aceitar"));
     snprintf(m.botaoIcone[0], sizeof m.botaoIcone[0], "check");
     snprintf(m.botao[1], sizeof m.botao[1], "%s", i18n("Recusar"));
     snprintf(m.botaoIcone[1], sizeof m.botaoIcone[1], "aj_x");
-    e.chave = chave; e.tipo = ILHA_ACENTO; e.texto = txt; e.ms = 10000u;
-    e.rosto = p.avatar; e.rostoNome = p.apelido[0] ? p.apelido : "?";
+    e.chave = chave; e.tipo = ILHA_ACENTO; e.texto = txt; e.ms = PEDIDO_ILHA_MS;
+    e.rosto = primeiro.avatar; e.rostoNome = nome;
     e.modal = &m;
     ilha_avisar_ex(&e);
-    printf("[ilha] pedido de amizade: %s\n", p.pub);
+  } else {
+    // VARIOS DE UMA VEZ: um aviso so, com o rosto do mais novo; OK leva a
+    // aba Amigos, onde cada um tem Aceitar e Recusar.
+    IlhaAvisoEx e;
+    char txt[120];
+    memset(&e, 0, sizeof e);
+    snprintf(txt, sizeof txt, i18n("%d pedidos de amizade"), novos);
+    e.chave = "pedidos"; e.tipo = ILHA_ACENTO; e.texto = txt; e.ms = PEDIDO_ILHA_MS;
+    e.rosto = primeiro.avatar; e.rostoNome = primeiro.apelido[0] ? primeiro.apelido : "?";
+    e.acao = 1;
+    ilha_avisar_ex(&e);
   }
+  printf("[ilha] pedidos de amizade novos: %d\n", novos);
 }
 
 // AMIZADE NOVA: a lista de contatos ganhou alguem entre duas leituras. A
@@ -243,6 +287,7 @@ static void addonFora(void) {
 void ilhasinais_passo(Uint32 agora) {
   static Uint32 ultSonda;
   acoes();
+  responderPedido();
   ilhasalvar_passo(agora);
   enquete_passo(agora);
   rede();

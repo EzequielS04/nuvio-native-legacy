@@ -2809,6 +2809,7 @@ void app_atualizar(float dt, Uint32 agora) {
   // cartao de atualizacao. O titulo (agenda) segue pelo contrato de baixo.
   { int c = avisos_pediu();
     if (c == AVISOS_ABRIR_SALVOS && !spainel_aberto()) spainel_abrir();
+    else if (c == AVISOS_ABRIR_AMIGOS) spainel_ir_aba(2);   // 2 = aba Amigos
     else if (c == AVISOS_ABRIR_ATUALIZACAO) atualizacao_abrir(); }
   // A ILHA: cartoes (ilhacart.c) e o que o modal pediu.
   { const CatItem *ab = detail_aberto() ? cat_item(detail_indice()) : NULL;
@@ -2822,6 +2823,13 @@ void app_atualizar(float dt, Uint32 agora) {
       ajustes_abrir_no_trakt();
       trocarTela(TELA_AJUSTES); menu_definir_destino(MENU_AJUSTES);
     }
+    // Pedidos de amizade (varios) e amigos vendo agora: a aba do painel.
+    if (ilhasinais_pediu_amigos()) spainel_ir_aba(2);   // 2 = aba Amigos
+    { char im[32];
+      if (ilhacart_pediu_atividade(im, sizeof im)) {
+        if (im[0]) spainel_abrir_titulo(im);
+        else spainel_ir_aba(1);                       // 1 = aba Atividade
+      } }
     o = ilha_pediu(&ic, &qual);
     if (o && qual == ILHA_VIVO && !ilhacart_vivo_vale(&ic)) o = ILHA_PEDIU_NADA;
     if (o == ILHA_PEDIU_SALVOS) {

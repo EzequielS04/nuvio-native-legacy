@@ -124,6 +124,11 @@ checa "F aceita H" 1 "$(tem "$(api f POST /v1/pedidos/aceitar "{\"pub\":\"$pub_h
 checa "amizade simetrica (F ve H)" 1 "$(tem "$(api f GET /v1/contatos)" 'nuvio:hhh')"
 checa "amizade simetrica (H ve F)" 1 "$(tem "$(api h GET /v1/contatos)" 'nuvio:fff')"
 checa "aceitar sem pedido e 404" 404 "$(cod f /v1/pedidos/aceitar "{\"pub\":\"$pub_g\"}")"
+# pedido pendurado de quem JA e amigo (vinculo por outro caminho) nao aparece
+# na caixa: aceitar seria um botao sem efeito (06/10: 2 de 21 em producao)
+sql "INSERT OR IGNORE INTO pedido (de, para, criado, estado) VALUES ('nuvio:hhh', 'nuvio:fff', strftime('%s','now'), 0)"
+checa "pedido de quem ja e amigo nao aparece" 1 "$(tem "$(api f GET /v1/pedidos)" '"recebidos":\[\]')"
+sql "DELETE FROM pedido WHERE de = 'nuvio:hhh' AND para = 'nuvio:fff'"
 
 # dois pedidos cruzados = amigos sem passo extra
 api g POST /v1/pedidos/enviar "{\"pub\":\"$pub_h\"}" > /dev/null

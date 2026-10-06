@@ -74,7 +74,9 @@ int  avisos_cartao_aberto(void);
 // ACOES PEDIDAS PELO PAINEL, entregues a app.c uma vez cada (o mesmo contrato
 // de spainel_pediu_abrir): o IMDb de um titulo a abrir, ou um dos codigos.
 const char *avisos_pediu_abrir(void);
-enum { AVISOS_NADA = 0, AVISOS_ABRIR_SALVOS, AVISOS_ABRIR_ATUALIZACAO };
+// AVISOS_ABRIR_AMIGOS: a linha dos pedidos de amizade (o painel vai para a
+// aba Amigos, onde cada pedido tem Aceitar e Recusar).
+enum { AVISOS_NADA = 0, AVISOS_ABRIR_SALVOS, AVISOS_ABRIR_ATUALIZACAO, AVISOS_ABRIR_AMIGOS };
 int  avisos_pediu(void);
 
 // ENVIO MANUAL DO REGISTRO DESTA SESSAO, pela linha "Enviar registro" dos
@@ -130,6 +132,8 @@ float avisos_lista_altura(void);
 float avisos_lista_altura_linha(int linha, int focoLinha);
 float avisos_lista_y(int linha, int focoLinha);
 void  avisos_lista_desenhar(float x, float y, float w, float a, int focoLinha);
+// 1 = fez algo e o hospedeiro fecha; 2 = so trocou de lugar (pedidos de
+// amizade: o painel vai para a aba Amigos e fica aberto).
 int   avisos_lista_ok(int linha);
 void  avisos_marcar_lidos(void);
 

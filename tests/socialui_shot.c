@@ -22,6 +22,7 @@
 #include "home.h"
 #include "layout.h"
 #include "salvospainel.h"
+#include "avisos.h"
 #include "ctxmenu.h"
 #include "reacao.h"
 #include "recresp.h"
@@ -366,6 +367,54 @@ int main(int argc, char **argv) {
     quadros(1, bmp);
     e.key.keysym.sym = SDLK_ESCAPE; ctx_evento(&e);
     quadros(20, NULL); }
+  // --- PEDIDOS DE AMIZADE NA ABA AMIGOS (06/10) ---------------------------
+  // Tres pedidos na caixa: a secao abre a aba, com Aceitar/Recusar por linha.
+  // O OK responde e a linha sai NA HORA (sem esperar o servidor).
+  { static const char *ap[3] = { "cine-ana", "rafa-series", "lu" };
+    static const char *bio[3] = { "Terror e ficção, sempre", "", "Maratono k-drama" };
+    SDL_Event e;
+    int k, antes;
+    SDL_LockMutex(mtx);
+    for (k = 0; k < 3; k++) {
+      memset(&pedidosRec[k], 0, sizeof pedidosRec[k]);
+      snprintf(pedidosRec[k].pub, sizeof pedidosRec[k].pub, "pub000000%d", k);
+      snprintf(pedidosRec[k].apelido, sizeof pedidosRec[k].apelido, "%s", ap[k]);
+      snprintf(pedidosRec[k].bio, sizeof pedidosRec[k].bio, "%s", bio[k]);
+      snprintf(pedidosRec[k].relacao, sizeof pedidosRec[k].relacao, "recebido");
+    }
+    snprintf(pedidosRec[0].avatar, sizeof pedidosRec[0].avatar, "deploy/app/art/elenco/01_0.jpg");
+    nPedidos = 3;
+    SDL_UnlockMutex(mtx);
+    spainel_ir_aba(2);
+    quadros(60, NULL);
+    memset(&e, 0, sizeof e);
+    e.type = SDL_KEYDOWN;
+    e.key.keysym.sym = SDLK_UP;
+    for (k = 0; k < 20; k++) spainel_evento(&e);
+    e.key.keysym.sym = SDLK_DOWN; spainel_evento(&e);   // primeiro pedido
+    quadros(60, NULL);
+    snprintf(bmp, sizeof bmp, "%s-painel-pedidos.bmp", saida);
+    quadros(1, bmp);
+    e.key.keysym.sym = SDLK_RIGHT; spainel_evento(&e);  // Recusar
+    quadros(30, NULL);
+    snprintf(bmp, sizeof bmp, "%s-painel-pedidos-recusar.bmp", saida);
+    quadros(1, bmp);
+    e.key.keysym.sym = SDLK_LEFT; spainel_evento(&e);   // de volta a Aceitar
+    antes = spainel_n_reconstrucoes();
+    e.key.keysym.sym = SDLK_RETURN; spainel_evento(&e);
+    e.type = SDL_KEYUP; spainel_evento(&e); e.type = SDL_KEYDOWN;
+    quadros(40, NULL);
+    printf("pedidos: reconstrucoes %d -> %d\n", antes, spainel_n_reconstrucoes());
+    snprintf(bmp, sizeof bmp, "%s-painel-pedidos-aceito.bmp", saida);
+    quadros(1, bmp);
+    // A linha dos Avisos que leva para a aba.
+    SDL_LockMutex(mtx); socEstado = REC_SOC_NADA; SDL_UnlockMutex(mtx);
+    avisos_atualizar(1.0f / 60.0f, SDL_GetTicks() + 3000u);   // colhe a linha dos pedidos
+    assert(avisos_lista_n() >= 1);
+    spainel_ir_aba(3);
+    quadros(200, NULL);
+    snprintf(bmp, sizeof bmp, "%s-painel-avisos-pedidos.bmp", saida);
+    quadros(1, bmp); }
   spainel_fechar();
   quadros(30, NULL);
 

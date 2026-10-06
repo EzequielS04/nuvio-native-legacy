@@ -512,6 +512,10 @@ async function rotaPedidosLer(env, quem, h) {
     "p.nome AS nome, p.avatar AS avatar, p.descobrivel AS descobrivel, pe.criado AS criado " +
     "FROM pedido pe JOIN perfil f ON f.pessoa = pe.de JOIN pessoa p ON p.id = pe.de " +
     "WHERE pe.para = ? AND pe.estado = 0 " +
+    // Ja amigos (o vinculo veio por outro caminho: codigo, Trakt, fusao de
+    // identidades) nao sao pedido: aceitar seria um botao sem efeito. Em
+    // 06/10 eram 2 dos 21 pendentes. A linha nao e apagada aqui (GET).
+    "AND NOT EXISTS (SELECT 1 FROM contato c WHERE c.a = pe.para AND c.b = pe.de) " +
     "AND NOT EXISTS (SELECT 1 FROM bloqueio b WHERE (b.quem = pe.para AND b.alvo = pe.de) OR (b.quem = pe.de AND b.alvo = pe.para)) " +
     "ORDER BY pe.criado DESC LIMIT 30"
   ).bind(quem.id).all();
