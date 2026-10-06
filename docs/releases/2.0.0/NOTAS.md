@@ -2,6 +2,8 @@
 
 The first time you open it, a short guide walks through what changed. It stays in Settings › About and help › What's new in 2.0.
 
+**Samsung (.tpk): no in-app update to 2.0.** Install the new .tpk by hand this time. Updates from inside the app come back with the next version.
+
 ## Added
 
 - **Glass UI.** Every panel is now an island, like the clock. Glass or solid, 18 accent colors, and art, blurred art or Frost as the background.
@@ -39,7 +41,7 @@ The first time you open it, a short guide walks through what changed. It stays i
 
 ![Nuvio Legacy 2.0](https://raw.githubusercontent.com/iqui27/nuvio-native-legacy/master/docs/releases/2.0.0/banner.jpg)
 
-**Samsung .tpk: install this version by hand.** 2.0 changes the app's images and fonts, and the automatic update only replaces the program, so it is not offered this time.
+**Samsung .tpk: install this version by hand.** 2.0 changes the app's images and fonts, and the in-app update only replaces the program, so it is not offered for 2.0. It is back from the next version on.
 
 | Platform | File |
 | --- | --- |
