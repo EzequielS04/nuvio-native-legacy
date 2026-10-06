@@ -3655,6 +3655,7 @@
   T("Sem resposta", "Geen antwoord"),
   T("Sem segunda legenda", "Geen tweede ondertitel"),
   T("Sem tarja, na maior qualidade", "Geen zwarte balken, topkwaliteit"),
+  T("Sem texto", "Zonder tekst"),
   T("Senha", "Wachtwoord"),
   T("Senha Xtream", "Xtream-wachtwoord"),
   T("Senha do Emby", "Emby-wachtwoord"),

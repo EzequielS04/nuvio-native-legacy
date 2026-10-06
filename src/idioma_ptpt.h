@@ -3655,6 +3655,7 @@
   T("Sem resposta", "Sem resposta"),
   T("Sem segunda legenda", "Sem segunda legenda"),
   T("Sem tarja, na maior qualidade", "Sem barras pretas, na máxima qualidade"),
+  T("Sem texto", "Sem texto"),
   T("Senha", "Palavra-passe"),
   T("Senha Xtream", "Palavra-passe Xtream"),
   T("Senha do Emby", "Palavra-passe do Emby"),

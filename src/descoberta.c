@@ -24,6 +24,7 @@
 #include "proximo.h"
 #include "perfis.h"
 #include "artereserva.h"
+#include "artefontes.h"
 #include "idbase.h"
 #include "cwfrente.h"
 #include "servidores.h"
@@ -445,35 +446,41 @@ static void fotosDoElenco(CatItem *d, const char *imdbSerie, int serie, int mant
         // d->logo vira "resposta nao e imagem" no tex e o titulo fica sem a
         // arte para sempre (o FALHOU e lembrado). Visto no log da TV em
         // 21/09 com /f91b8uWsSaeGRYCj8k73uIFj9pu.svg.
+        // ORDEM (af_tmdb_logo): o do idioma, o ingles, o sem idioma, e
+        // nenhuma outra lingua. O do idioma e o PRIMEIRO da lista (o mais
+        // votado); era o ultimo, que mudava conforme a ordem da resposta.
         const char *im = strstr(corpo, "\"images\"");
         const char *imObj = im ? strchr(im, '{') : NULL;
         const char *imFim = imObj ? js_fim(imObj) : NULL;
-        const char *p = (imObj && imFim) ? js_array(imObj, imFim, "logos")
-                                         : NULL;
-        char base[3] = "", local[160] = "", neutro[160] = "", en[160] = "";
+        char base[3] = "", esc[160] = "", escIso[8] = "";
         snprintf(base, sizeof base, "%.2s", desc_tmdb_idioma());
-        while (p) {
-          const char *f = js_fim(p);
-          char iso[8] = "", fp[160] = "";
-          js_texto(p, f, "iso_639_1", iso, sizeof iso);
-          js_texto(p, f, "file_path", fp, sizeof fp);
-          if (fp[0] == '/' && !ehSvg(fp)) {
-            if      (!strcmp(iso, base)) snprintf(local,  sizeof local,  "%s", fp);
-            else if (!iso[0] && !neutro[0]) snprintf(neutro, sizeof neutro, "%s", fp);
-            else if (!strcmp(iso, "en") && !en[0]) snprintf(en, sizeof en, "%s", fp);
+        if (imObj && imFim) {
+          size_t tam = (size_t)(imFim - imObj) + 1;
+          char *imCopia = (char *)malloc(tam + 1);
+          if (imCopia) {
+            memcpy(imCopia, imObj, tam); imCopia[tam] = 0;
+            af_tmdb_logo(imCopia, base, esc, sizeof esc, escIso, sizeof escIso);
+            // O FUNDO do TMDB tambem: o backdrop_path da raiz pode ter letreiro
+            // em qualquer lingua (af_tmdb_fundo_padrao).
+            if (d->backdropTmdb[0]) {
+              const char *fp = strstr(d->backdropTmdb, "/t/p/w1280");
+              char ok[160];
+              if (fp && af_tmdb_fundo_padrao(imCopia, base, fp + 10, ok, sizeof ok))
+                snprintf(d->backdropTmdb, sizeof d->backdropTmdb,
+                         "https://image.tmdb.org/t/p/w1280%s", ok);
+              else if (fp) d->backdropTmdb[0] = 0;
+            }
+            free(imCopia);
           }
-          p = js_prox(f);
         }
         // "LOGO DO ADDON" (Ajustes, desligado de fabrica): o logo que o addon
         // mandou no catalogo fica; o do TMDB so entra em quem nao tinha.
         int manterAddon = ajustes_logo_addon() && d->origem[0] && logoAntes[0] &&
                           !ehSvg(logoAntes) && strcmp(logoAntes, d->poster);
-        { const char *esc = local[0] ? local : neutro[0] ? neutro : en;
-          if (esc[0] && !manterAddon) {
+        { if (esc[0] && !manterAddon) {
             snprintf(d->logo, sizeof d->logo,
                      "https://image.tmdb.org/t/p/w500%s", esc);
-            snprintf(d->logoIdioma, sizeof d->logoIdioma, "%s",
-                     local[0] ? base : neutro[0] ? "und" : "en");
+            snprintf(d->logoIdioma, sizeof d->logoIdioma, "%s", escIso);
             snprintf(d->logoIdiomaUrl, sizeof d->logoIdiomaUrl, "%s", d->logo);
           } }
         // LIMPA O QUE JA ESTAVA ENVENENADO: item do cache do catalogo pode ter

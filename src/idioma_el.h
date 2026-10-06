@@ -3655,6 +3655,7 @@
   T("Sem resposta", "Καμία απάντηση"),
   T("Sem segunda legenda", "Χωρίς δεύτερο υπότιτλο"),
   T("Sem tarja, na maior qualidade", "Χωρίς μαύρες μπάρες, κορυφαία ποιότητα"),
+  T("Sem texto", "Χωρίς κείμενο"),
   T("Senha", "Κωδικός"),
   T("Senha Xtream", "Κωδικός Xtream"),
   T("Senha do Emby", "Κωδικός Emby"),

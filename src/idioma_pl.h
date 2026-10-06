@@ -3655,6 +3655,7 @@
   T("Sem resposta", "Brak odpowiedzi"),
   T("Sem segunda legenda", "Bez drugich napisów"),
   T("Sem tarja, na maior qualidade", "Bez czarnych pasów, najwyższa jakość"),
+  T("Sem texto", "Bez tekstu"),
   T("Senha", "Hasło"),
   T("Senha Xtream", "Hasło Xtream"),
   T("Senha do Emby", "Hasło Emby"),

@@ -775,7 +775,10 @@ static int consultarTmdb(ArfPedido *p, int alt, char *valor, size_t n) {
   char *resp;
   char tipo = p->tipoTmdb;
   long id = p->tmdbId;
+  char base[3] = "";
   if (!chave[0]) return -2;
+  // So o idioma que nao e o ingles entra na lista (o ingles ja esta nela).
+  if (strncmp(desc_tmdb_idioma(), "en", 2)) snprintf(base, sizeof base, "%.2s", desc_tmdb_idioma());
   snprintf(chaveMem, sizeof chaveMem, "tmdbid/%s", p->id);
   if (id <= 0 && arfLer(chaveMem, tid, sizeof tid) > 0 && (tid[0] == 'm' || tid[0] == 't')) {
     tipo = tid[0]; id = atol(tid + 1);
@@ -815,20 +818,30 @@ static int consultarTmdb(ArfPedido *p, int alt, char *valor, size_t n) {
       return -1;
     }
     snprintf(api, sizeof api,
-             "https://api.themoviedb.org/3/%s/%ld/images?include_image_language=null,en&api_key=%s",
-             tipo == 't' ? "tv" : "movie", id, chave);
+             "https://api.themoviedb.org/3/%s/%ld/images?include_image_language=%s%snull,en&api_key=%s",
+             tipo == 't' ? "tv" : "movie", id, base, base[0] ? "," : "", chave);
   } else {
     snprintf(api, sizeof api,
-             "https://api.themoviedb.org/3/%s/%ld?append_to_response=images&include_image_language=null,en&api_key=%s",
-             tipo == 't' ? "tv" : "movie", id, chave);
+             "https://api.themoviedb.org/3/%s/%ld?append_to_response=images&include_image_language=%s%snull,en&api_key=%s",
+             tipo == 't' ? "tv" : "movie", id, base, base[0] ? "," : "", chave);
   }
   resp = rede_baixar(api, 8);
   if (!resp) return -2;
   // O outro exclui o padrao que o /find deu, mesmo quando so veio o /images
   // (sem backdrop_path na raiz).
-  { char padraoResp[160];
+  { char padraoResp[160], valido[160];
     af_tmdb_fundos(resp, padrao, padraoResp, sizeof padraoResp, outro, sizeof outro);
-    if (padraoResp[0] == '/') snprintf(padrao, sizeof padrao, "%s", padraoResp); }
+    if (padraoResp[0] == '/') snprintf(padrao, sizeof padrao, "%s", padraoResp);
+    // O PADRAO NO IDIOMA (af_tmdb_fundo_padrao): o backdrop_path que o TMDB
+    // elege pode ter letreiro em qualquer lingua. Trocado, o "outro" e
+    // recalculado para nao repetir a mesma foto.
+    if (af_tmdb_fundo_padrao(resp, base, padrao, valido, sizeof valido)) {
+      if (strcmp(valido, padrao)) {
+        char raiz[160];
+        snprintf(padrao, sizeof padrao, "%s", valido);
+        af_tmdb_fundos(resp, padrao, raiz, sizeof raiz, outro, sizeof outro);
+      }
+    } else padrao[0] = 0; }
   free(resp);
   if (padrao[0] == '/') {
     snprintf(chaveMem, sizeof chaveMem, "tmdb/%s", p->id);

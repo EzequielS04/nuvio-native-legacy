@@ -3655,6 +3655,7 @@
   T("Sem resposta", "Nema odgovora"),
   T("Sem segunda legenda", "Bez drugog titla"),
   T("Sem tarja, na maior qualidade", "Bez crnih traka, vrhunski kvalitet"),
+  T("Sem texto", "Bez teksta"),
   T("Senha", "Lozinka"),
   T("Senha Xtream", "Xtream lozinka"),
   T("Senha do Emby", "Emby lozinka"),

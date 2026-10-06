@@ -3654,6 +3654,7 @@
   T("Sem resposta", "Нет ответа"),
   T("Sem segunda legenda", "Без второго субтитра"),
   T("Sem tarja, na maior qualidade", "Без чёрных полос, в наилучшем качестве"),
+  T("Sem texto", "Без текста"),
   T("Senha", "Пароль"),
   T("Senha Xtream", "Пароль Xtream"),
   T("Senha do Emby", "Пароль Emby"),

@@ -3655,6 +3655,7 @@
   T("Sem resposta", "Ni odziva"),
   T("Sem segunda legenda", "Brez drugih podnapisov"),
   T("Sem tarja, na maior qualidade", "Brez črnih trakov, najvišja kakovost"),
+  T("Sem texto", "Brez besedila"),
   T("Senha", "Geslo"),
   T("Senha Xtream", "Geslo Xtream"),
   T("Senha do Emby", "Geslo Emby"),

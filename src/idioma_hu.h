@@ -3655,6 +3655,7 @@
   T("Sem resposta", "Nincs válasz"),
   T("Sem segunda legenda", "Nincs második felirat"),
   T("Sem tarja, na maior qualidade", "Fekete sávok nélkül, csúcsminőség"),
+  T("Sem texto", "Szöveg nélkül"),
   T("Senha", "Jelszó"),
   T("Senha Xtream", "Xtream-jelszó"),
   T("Senha do Emby", "Emby-jelszó"),

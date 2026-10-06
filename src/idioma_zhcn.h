@@ -3655,6 +3655,7 @@
   T("Sem resposta", "无响应"),
   T("Sem segunda legenda", "无第二字幕"),
   T("Sem tarja, na maior qualidade", "无黑边，最高画质"),
+  T("Sem texto", "无文字"),
   T("Senha", "密码"),
   T("Senha Xtream", "Xtream 密码"),
   T("Senha do Emby", "Emby 密码"),
