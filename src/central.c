@@ -571,6 +571,10 @@ void central_previa_desenhar(float x, float y, float a, int f, int inverte) {
   previaSair(&s, e);
 }
 
+float central_rotulo_w(void) {
+  return (CC_W - 2.0f * CC_PAD - CC_GAP * (CC_COLS - 1)) / CC_COLS - 24.0f;   // o `w` de botao()
+}
+
 #ifdef CENTRAL_TESTE
 void central_teste_tocando(const char *tit, const char *meta) {
   snprintf(testeTit, sizeof testeTit, "%s", tit ? tit : "");

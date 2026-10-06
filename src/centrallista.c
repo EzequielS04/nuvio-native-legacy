@@ -3,11 +3,15 @@
 #include <stdio.h>
 #include <string.h>
 
+// O TERCEIRO CAMPO e o nome no botao, numa chave de i18n SO DA CENTRAL (nunca
+// o mesmo portugues de outra tela: a traducao curta de la nao serviria aqui e
+// vice-versa). Cabe em 15 px Montserrat no botao em todos os idiomas:
+// tests/central_rotulos.sh. Dolby Vision/Atmos sao nome proprio, sem chave.
 // Ordem = ordem da lista "Editar atalhos": reproducao, trailers, tela,
 // interface. So escolhas curtas, que o OK percorre sem lista: idioma, cor de
 // destaque e limite de fileiras pedem a tela de Ajustes.
 static const CentralItem CATALOGO[] = {
-  { "qualidade", "aj_monitor-play", "Qualidade" },
+  { "qualidade", "aj_monitor-play", "Qualidade máx." },
   { "dolbyVision", "aj_sparkles", "Dolby Vision" },
   { "dolbyAtmos", "aj_audio-lines", "Dolby Atmos" },
   { "escolherFonteManual", "aj_list-video", "Escolher fonte" },
@@ -15,20 +19,20 @@ static const CentralItem CATALOGO[] = {
   { "fonteHdrLocal", "aj_sparkle", "HDR e DV" },
   { "pauseOverlayEnabled", "aj_pause", "Pausa" },
   { "legenda2PosLocal", "aj_captions", "2ª legenda" },
-  { "reacaoCreditosLocal", "aj_thumbs-up", "O que achou?" },
-  { "trailerAuto", "aj_clapperboard", "Trailer" },
+  { "reacaoCreditosLocal", "aj_thumbs-up", "Avaliar no fim" },
+  { "trailerAuto", "aj_clapperboard", "Trailer auto" },
   { "trailerHero", "aj_film", "Trailer no topo" },
   { "esmaecerLocal", "aj_moon", "Descanso" },
   { "brilhoPlayerLocal", "aj_sun-dim", "Brilho" },
-  { "vidroLocal", "aj_layers", "Vidro" },
-  { "fundoLocal", "aj_image", "Fundo" },
-  { "animacoes", "aj_wand", "Animações" },
-  { "tamanhoUiLocal", "aj_maximize-2", "Tamanho" },
-  { "relogioTelaLocal", "aj_clock", "Relógio" },
-  { "relogio12hLocal", "aj_alarm-clock", "Formato" },
+  { "vidroLocal", "aj_layers", "Efeito vidro" },
+  { "fundoLocal", "aj_image", "Plano de fundo" },
+  { "animacoes", "aj_wand", "Movimento" },
+  { "tamanhoUiLocal", "aj_maximize-2", "Escala" },
+  { "relogioTelaLocal", "aj_clock", "Mostrar hora" },
+  { "relogio12hLocal", "aj_alarm-clock", "12 ou 24 h" },
   { "medidorFormaLocal", "aj_activity", "Medidor" },
   { "seloVistoLocal", "aj_eye", "Selo de visto" },
-  { "selosColoridosLocal", "aj_badge-check", "Selos coloridos" },
+  { "selosColoridosLocal", "aj_badge-check", "Selos em cor" },
 };
 #define N_CAT ((int)(sizeof CATALOGO / sizeof *CATALOGO))
 
