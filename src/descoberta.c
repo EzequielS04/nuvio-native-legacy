@@ -6508,6 +6508,16 @@ static void *buscarEps(void *u) {
         if (strncmp(it->imdb, "kitsu:", 6)) metaImdbDaFicha(corpo, tt, sizeof tt);
         if (tt[0]) {
           printf("[desc] elenco %s: fotos pelo IMDb da ficha (%s)\n", it->imdb, tt); fflush(stdout);
+          // ARTE PELO MESMO IMDb: o item de busca com id de fora traz so o
+          // POSTER, e a pagina abria com ele esticado no fundo (sem fundo largo
+          // nenhum para trocar). O metahub monta as URLs pelo "tt", como o
+          // hero ja faz (artehero.c).
+          if (!edit.backdrop[0] || !strcmp(edit.backdrop, edit.poster)) {
+            snprintf(edit.backdrop, sizeof edit.backdrop, "https://images.metahub.space/background/medium/%s/img", tt);
+            printf("[desc] %s: fundo pelo IMDb da ficha\n", it->imdb); fflush(stdout);
+          }
+          if (!edit.logo[0])
+            snprintf(edit.logo, sizeof edit.logo, "https://images.metahub.space/logo/medium/%s/img", tt);
           fotosDoElenco(&edit, tt, !strcmp(it->tipo, "series"), manter);
         } else { printf("[desc] elenco %s: id fora do IMDb, sem fotos (meta pedido como %s)\n", it->imdb, serie); fflush(stdout); }
       } }

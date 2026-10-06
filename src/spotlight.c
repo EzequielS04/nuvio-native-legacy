@@ -66,6 +66,7 @@
 #define NV_TELA_H (1080.0f / escala_min(SP_ESCALA_MIN))
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <string.h>
 
 // --- Geometria (1920x1080) ----------------------------------------------------
@@ -408,6 +409,35 @@ static void montarTitulos(const char *alvo) {
       if (k == w) c[w++] = c[i];
     }
     nc = w; }
+  // O MESMO TITULO COM DOIS IDS: um addon de busca devolve "tvdb:383203" (ou
+  // "tmdb:...") e o catalogo do Nuvio devolve "tt10986410" (Ted Lasso, TCL
+  // 05/10/2026). O de id de fora so tem POSTER: o melhor resultado saia em
+  // retrato, a pagina abria com o poster esticado e o elenco sem foto. Fica o
+  // do IMDb, com o placar maior dos dois. Mesmo nome, mesmo tipo e mesmo ano
+  // (ou ano desconhecido de um lado) — remake com o mesmo nome tem outro ano.
+  { int w = 0, k;
+    unsigned char sai[64] = { 0 };
+    for (i = 0; i < nc; i++) {
+      const CatItem *a = cat_item(c[i].idx);
+      int junta = -1;
+      if (a && a->imdb[0] && strncmp(a->imdb, "tt", 2) && strncmp(a->imdb, "kitsu:", 6)) {
+        char na[160], nb[160];
+        busca_normalizar(a->titulo, na, sizeof na);
+        for (k = 0; k < nc && junta < 0; k++) {
+          const CatItem *b = k == i ? NULL : cat_item(c[k].idx);
+          if (!b || strncmp(b->imdb, "tt", 2) || strcmp(a->tipo, b->tipo)) continue;
+          busca_normalizar(b->titulo, nb, sizeof nb);
+          if (strcmp(na, nb)) continue;
+          if (isdigit((unsigned char)a->meta[0]) && isdigit((unsigned char)b->meta[0]) &&
+              strncmp(a->meta, b->meta, 4)) continue;
+          junta = k;
+        }
+      }
+      if (junta >= 0) { sai[i] = 1; if (c[i].pont > c[junta].pont) c[junta].pont = c[i].pont; }
+    }
+    for (i = 0; i < nc; i++) if (!sai[i]) c[w++] = c[i];
+    nc = w;
+    qsort(c, (size_t)nc, sizeof *c, candCmp); }
   if (nc > 0) {
     cabecalho(i18n("Melhor resultado"));
     linhaTitulo(L_TOPO, c[0].idx);
