@@ -197,9 +197,11 @@ static int autoParcialPronto(void) {
   }
   // Escolher a mao: a folha abre com o que ja chegou e continua enchendo.
   if (ajustes_fonte_manual() && lembrada < 0) return !prefPendente;
+  // 0 = Instantaneo, -1 = todos os addons (#202).
   prazo = ajustes_fonte_prazo_ms();
   return stream_auto_pode_decidir(lembrada, prefPendente,
-                                  prazo > 0 && addons_busca_ms() >= (unsigned)prazo);
+                                  prazo > 0 && addons_busca_ms() >= (unsigned)prazo,
+                                  prazo == 0);
 }
 // Episodio que o card de "Continuar assistindo" ANUNCIAVA quando o OK pediu
 // para tocar (issue #93). Armado no ramo home_pediu_tocar e consumido pelo
@@ -374,7 +376,7 @@ static void *escolherFonteCanal(void *u) {
   // -1 so acontece quando TODAS responderam dizendo que nao tem segmento.
   // Ai nao ha o que tentar, mas a primeira da lista com o watchdog ainda e
   // melhor que uma tela de erro sem nenhuma tentativa.
-  if (e < 0) e = stream_automatico();
+  if (e < 0) e = stream_automatico_canal();
   job->resultado = e;
   atomic_store_explicit(&job->estado, FJOB_DONE, memory_order_release);
   return NULL;
@@ -3370,7 +3372,7 @@ void app_atualizar(float dt, Uint32 agora) {
         canalFontePrazo = CANAL_FONTE_PRAZO_MS;
       } else {
         int r = pedirFonteJob(FJOB_CANAL, geracao, NULL, 0);
-        if (r < 0) fonteEscolhida = stream_automatico();
+        if (r < 0) fonteEscolhida = stream_automatico_canal();
         canalFontePrazo = CANAL_FONTE_PRAZO_MS;
       }
       canalFonteDesde = SDL_GetTicks();
@@ -3486,6 +3488,15 @@ void app_atualizar(float dt, Uint32 agora) {
                fonteVODTentativas + 1, VOD_FONTE_MAX_TENTATIVAS);
         player_definir_tentativa(fonteVODTentativas + 1, VOD_FONTE_MAX_TENTATIVAS);
         (void)pedirProximaFonteVOD();
+      }
+      // AS REGRAS DE AUTO-PLAY NAO DEIXARAM NENHUMA (#202: so add-ons
+      // permitidos sem "usar os outros", ou regex exigida que nada casa): a
+      // lista existe, so o automatico nao pode escolher. Como o oficial, abre
+      // a folha de fontes para a pessoa escolher, em vez do erro.
+      else if (!player_id_canal()[0] && stream_regra_bloqueou() && stream_n() > 0) {
+        limparFonteVOD();
+        folhaParaTocar = 1;
+        nomeParaFolha(); stream_folha_abrir();
       }
       else { limparFonteVOD(); erroSemFonte(); }
     }

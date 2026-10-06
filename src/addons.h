@@ -113,6 +113,9 @@ int  addons_faltam_tipo(char *nomes, unsigned tam, int *plugins);
 int  addons_pendente_antes(int idx);
 // O addon com este nome (Stream.provedor) ainda falta?
 int  addons_pendente_nome(const char *nome);
+// O menor grupo de auto-play (fonteregra.h, #202) que um pendente pode trazer;
+// `f` recebe o nome e se e plugin e devolve o grupo (-1 = nunca). 99 = nenhum.
+int  addons_pendente_grupo_min(int (*f)(const char *nome, int plugin, void *u), void *u);
 
 // A mesma consulta, SINCRONA E REENTRANTE, e addons_consultar — declarada em
 // fontecache.h, e nao aqui, porque a assinatura precisa de Stream (streams.h,

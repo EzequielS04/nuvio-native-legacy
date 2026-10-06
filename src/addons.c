@@ -643,6 +643,21 @@ int addons_pendente_nome(const char *nome) {
   return r;
 }
 
+// O MELHOR GRUPO (fonteregra.h, #202) que algum addon/plugin que ainda nao
+// respondeu pode trazer: o menor `f(nome, plugin)` >= 0 entre os pendentes;
+// 99 quando nenhum pendente pode mudar a escolha.
+int addons_pendente_grupo_min(int (*f)(const char *nome, int plugin, void *u), void *u) {
+  int i, m = 99;
+  if (!f || !addons_busca_parcial()) return m;
+  pthread_mutex_lock(&progTrava);
+  for (i = 0; i < nAddon && i < ADD_MAX; i++)
+    if (progEstado[i] == 1) { int g = f(addon[i].nome, 0, u); if (g >= 0 && g < m) m = g; }
+  for (i = 0; i < ADD_EXTRA_MAX; i++)
+    if (progEstadoEx[i] == 1) { int g = f(progNomeEx[i], 1, u); if (g >= 0 && g < m) m = g; }
+  pthread_mutex_unlock(&progTrava);
+  return m;
+}
+
 int addons_ocupado(void) {
   return fioVivo || adotado || atomic_load(&estado) == ADD_BUSCANDO;
 }

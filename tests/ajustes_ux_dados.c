@@ -20,13 +20,13 @@ static void prazoDosAddonsIntegrado(void) {
   int idiomaAntes = valor[AJ_IDIOMA], vezes = 0, n, indice;
   const char *categoria = "", *grupo = "";
   char texto[80];
-  assert(valor[AJ_FONTE_PRAZO] == 1 && valorPadrao[AJ_FONTE_PRAZO] == 1);
+  assert(valor[AJ_FONTE_PRAZO] == 2 && valorPadrao[AJ_FONTE_PRAZO] == 2);
   assert(ajustes_fonte_prazo_ms() == 5000);
   assert(!dePerfil(AJ_FONTE_PRAZO));
   assert(!strcmp(uxEscopo(AJ_FONTE_PRAZO), "Só nesta TV"));
   assert(uxTemPadrao(AJ_FONTE_PRAZO) && !uxDiferente(AJ_FONTE_PRAZO));
-  assert(OPCOES[AJ_FONTE_PRAZO].n == 4);
-  assert(!strcmp(OPCOES[AJ_FONTE_PRAZO].valores[1], "5 s"));
+  assert(OPCOES[AJ_FONTE_PRAZO].n == 7);   /* #202: Instantaneo, 3, 5, 8, 15, 30 s, Todos */
+  assert(!strcmp(OPCOES[AJ_FONTE_PRAZO].valores[2], "5 s"));
   assert(familiaPreviaOpcao(AJ_FONTE_PRAZO) == AJPV_REPRO);
   for (int i = 0; i < AJ_N_TELA; i++) {
     if (TELA[i].tipo == IT_SEC) { categoria = TELA[i].titulo; grupo = ""; }
@@ -48,8 +48,8 @@ static void prazoDosAddonsIntegrado(void) {
   vezes = 0;
   for (int i = 0; i < n; i++) if (resultados[i].op == AJ_FONTE_PRAZO) vezes++;
   assert(vezes == 1);
-  static const int esperado[] = {3000, 5000, 8000, 0};
-  for (int i = 0; i < 4; i++) {
+  static const int esperado[] = {0, 3000, 5000, 8000, 15000, 30000, -1};
+  for (int i = 0; i < 7; i++) {
     valor[AJ_FONTE_PRAZO] = i;
     assert(ajustes_fonte_prazo_ms() == esperado[i]);
     uxValorTexto(AJ_FONTE_PRAZO, i, texto, sizeof texto);
@@ -437,27 +437,81 @@ static void reorganizacao202(void) {
   valor[AJ_IDIOMA] = idiomaAntes;
 }
 
+/* #202: o "Auto-play streams" do oficial e a migracao da espera. */
+static void autoplay202(const char *dir) {
+  // #202: o auto-play do oficial depois do Apoiar. Escopo e regex por PERFIL
+  // (o escopo com a chave do oficial na conta); listas e padrao sao acoes.
+  assert(AJ_FONTE_ESCOPO == AJ_APOIAR + 1 && AJ_FONTE_REGEX_MODELO == AJ_N - 1);
+  assert(!strcmp(CHAVE[AJ_FONTE_ESCOPO], "streamAutoPlaySource") && OPCOES[AJ_FONTE_ESCOPO].n == 3 && valorPadrao[AJ_FONTE_ESCOPO] == 0);
+  { char sn[64]; camelParaSnake(CHAVE[AJ_FONTE_ESCOPO], sn, sizeof sn); assert(!strcmp(sn, "stream_auto_play_source")); }
+  assert(dePerfil(AJ_FONTE_ESCOPO) && dePerfil(AJ_FONTE_OUTROS) && dePerfil(AJ_FONTE_REGEX));
+  assert(!dePerfil(AJ_FONTE_REGEX_MODELO) && !dePerfil(AJ_FONTE_ADDONS_PERM));
+  assert(valorPadrao[AJ_FONTE_OUTROS] == 0 && ajustes_fonte_usar_outros());     /* Ligado de fabrica */
+  assert(valorPadrao[AJ_FONTE_REGEX] == 0 && ajustes_fonte_regex_modo() == FR_REGEX_DESLIGADA);
+  assert(OPCOES[AJ_FONTE_REGEX_MODELO].n == fonteregra_modelos());
+  for (int u = AJ_FONTE_ESCOPO; u <= AJ_FONTE_REGEX_MODELO; u++) {
+    const char *cat = "", *grp = ""; int vz = 0, k;
+    for (k = 0; k < AJ_N_TELA; k++) {
+      if (TELA[k].tipo == IT_SEC) cat = TELA[k].titulo;
+      if (TELA[k].tipo == IT_ROT) grp = TELA[k].titulo;
+      if (TELA[k].tipo == IT_OPC && TELA[k].op == u) { vz++; assert(!strcmp(cat, "Fontes e addons") && !strcmp(grp, "Escolha da fonte")); }
+    }
+    assert(vz == 1 && familiaPreviaOpcao(u) == AJPV_REPRO && ajudaOpcao(u)[0]);
+  }
+  assert(indiceResultado(AJ_FONTE_ADDONS_PERM, ajustes_buscar("permitidos", resultados, AJ_N)) >= 0);
+  assert(indiceResultado(AJ_FONTE_REGEX, ajustes_buscar("regex", resultados, AJ_N)) >= 0);
+  // A conta: o escopo pelo enum do oficial (sem caixa), ida e volta.
+  { int e0 = valor[AJ_FONTE_ESCOPO]; char *out = NULL;
+    const char *blob = "{\"version\":1,\"features\":{\"player_settings\":{\"stream_auto_play_source\":{\"type\":\"string\",\"value\":\"INSTALLED_ADDONS_ONLY\"}}}}";
+    ajustes_aplicar_blob(blob);
+    assert(ajustes_fonte_escopo() == FR_ESCOPO_ADDONS);
+    valor[AJ_FONTE_ESCOPO] = FR_ESCOPO_PLUGINS;
+    assert(ajustes_mesclar_blob(blob, &out) >= 1 && out && strstr(out, "\"value\":\"ENABLED_PLUGINS_ONLY\""));
+    free(out);
+    valor[AJ_FONTE_ESCOPO] = e0; }
+  // Modelo de regex: espelho do padrao; escolher um troca o padrao.
+  fonteregra_definir_regex(fonteregra_modelo(4));
+  assert(fonteregra_modelo_atual() == 4);
+  fonteregra_definir_regex("");
+  // "Espera pelos add-ons": o indice antigo (fontePrazoLocal) migra para a
+  // lista nova; com a chave nova no arquivo, ela vale.
+  { static const struct { const char *arq; int esperado; } C[] = {
+      { "fontePrazoLocal 0\n", 1 }, { "fontePrazoLocal 1\n", 2 }, { "fontePrazoLocal 2\n", 3 },
+      { "fontePrazoLocal 3\n", 6 }, { "fontePrazoLocal 3\nfonteEsperaLocal 0\n", 0 },
+    };
+    char cam[600]; FILE *f; int k, p0 = valor[AJ_FONTE_PRAZO];
+    for (k = 0; k < (int)(sizeof C / sizeof *C); k++) {
+      snprintf(cam, sizeof cam, "%s/ajustes.txt", dir);
+      f = fopen(cam, "w"); assert(f); fputs(C[k].arq, f); fclose(f);
+      valor[AJ_FONTE_PRAZO] = valorPadrao[AJ_FONTE_PRAZO];
+      ajustes_dir(dir);
+      assert(valor[AJ_FONTE_PRAZO] == C[k].esperado);
+    }
+    assert(ajustes_fonte_prazo_ms() == 0);           /* o ultimo: Instantaneo */
+    valor[AJ_FONTE_PRAZO] = p0; remove(cam); }
+}
+
 int main(void) {
   char dir[] = "/tmp/nuvio-aj-ux-dados-XXXXXX";
-  assert(AJ_DISCORD == AJ_ICONE_APP + 1 && AJ_TAMANHO_AJUSTES == AJ_DISCORD + 1 && AJ_LOGO_TRAILER == AJ_TAMANHO_AJUSTES + 1 && AJ_LEG_LINGUA2 == AJ_LOGO_TRAILER + 1 && AJ_LEG_SYNC_AUDIO == AJ_LEG_LINGUA2 + 1 && AJ_CACHE_SEEK == AJ_LEG_SYNC_AUDIO + 1 && AJ_TRAILER_ZOOM_TPK == AJ_CACHE_SEEK + 1 && AJ_PLUGINS == AJ_TRAILER_ZOOM_TPK + 1 && AJ_JF_LIGADO == AJ_PLUGINS + 1 && AJ_JF_SAIR == AJ_PLUGINS + 4 && AJ_AVANCADAS == AJ_JF_SAIR + 1 && AJ_LEG2_POS == AJ_AVANCADAS + 1 && AJ_EM_SERVIDOR == AJ_LEG2_BORDA + 1 && AJ_PX_SAIR == AJ_EM_SERVIDOR + 5 && AJ_FONTE_PRIORIDADE == AJ_PX_SAIR + 1 && AJ_FONTE_HDR == AJ_ABERTURA - 2 && AJ_LOGO_APP == AJ_FONTE_HDR + 1 && AJ_ENQUETES == AJ_ABERTURA + 1 && AJ_ENQUETES == AJ_N - 12);
+  assert(AJ_DISCORD == AJ_ICONE_APP + 1 && AJ_TAMANHO_AJUSTES == AJ_DISCORD + 1 && AJ_LOGO_TRAILER == AJ_TAMANHO_AJUSTES + 1 && AJ_LEG_LINGUA2 == AJ_LOGO_TRAILER + 1 && AJ_LEG_SYNC_AUDIO == AJ_LEG_LINGUA2 + 1 && AJ_CACHE_SEEK == AJ_LEG_SYNC_AUDIO + 1 && AJ_TRAILER_ZOOM_TPK == AJ_CACHE_SEEK + 1 && AJ_PLUGINS == AJ_TRAILER_ZOOM_TPK + 1 && AJ_JF_LIGADO == AJ_PLUGINS + 1 && AJ_JF_SAIR == AJ_PLUGINS + 4 && AJ_AVANCADAS == AJ_JF_SAIR + 1 && AJ_LEG2_POS == AJ_AVANCADAS + 1 && AJ_EM_SERVIDOR == AJ_LEG2_BORDA + 1 && AJ_PX_SAIR == AJ_EM_SERVIDOR + 5 && AJ_FONTE_PRIORIDADE == AJ_PX_SAIR + 1 && AJ_FONTE_HDR == AJ_ABERTURA - 2 && AJ_LOGO_APP == AJ_FONTE_HDR + 1 && AJ_ENQUETES == AJ_ABERTURA + 1 && AJ_ENQUETES == AJ_FONTE_ESCOPO - 12);
   assert(!strcmp(CHAVE[AJ_LOGO_APP], "logoAppLocal") && !strcmp(CHAVE[AJ_ABERTURA], "aberturaAppLocal") && OPCOES[AJ_LOGO_APP].n == 2 && OPCOES[AJ_ABERTURA].n == 3 && valorPadrao[AJ_LOGO_APP] == 0 && valorPadrao[AJ_ABERTURA] == 0 && somenteDesteAparelho(AJ_LOGO_APP) && somenteDesteAparelho(AJ_ABERTURA));
   { int u; for (u = AJ_LOGO_APP; u <= AJ_ABERTURA; u++) { int vz = 0, k; for (k = 0; k < AJ_N_TELA; k++) if (TELA[k].tipo == IT_OPC && TELA[k].op == u) vz++; assert(vz == 1); } }
   assert(!strcmp(CHAVE[AJ_FONTE_PRIORIDADE], "fontePrioridadeLocal") && !strcmp(CHAVE[AJ_FONTE_HDR], "fonteHdrLocal") && OPCOES[AJ_FONTE_PRIORIDADE].n == 3 && OPCOES[AJ_FONTE_HDR].n == 3 && valorPadrao[AJ_FONTE_PRIORIDADE] == 0 && valorPadrao[AJ_FONTE_HDR] == 0 && somenteDesteAparelho(AJ_FONTE_HDR));
   // N3: "Receber enquetes" is the LAST option: local, On by default, in "Notificações".
-  assert(AJ_ENQUETES == AJ_ABERTURA + 1 && AJ_ENQUETES == AJ_N - 12);
+  assert(AJ_ENQUETES == AJ_ABERTURA + 1 && AJ_ENQUETES == AJ_FONTE_ESCOPO - 12);
   assert(!strcmp(CHAVE[AJ_ENQUETES], "enquetesLocal") && OPCOES[AJ_ENQUETES].n == 2 && valorPadrao[AJ_ENQUETES] == 0);
   assert(somenteDesteAparelho(AJ_ENQUETES) && !dePerfil(AJ_ENQUETES));
   { int vezesE = 0, k; for (k = 0; k < AJ_N_TELA; k++) if (TELA[k].tipo == IT_OPC && TELA[k].op == AJ_ENQUETES) vezesE++; assert(vezesE == 1); }
   assert(indiceResultado(AJ_ENQUETES, ajustes_buscar("enquete", resultados, AJ_N)) >= 0);
   /* #231: Cinemeta fora da busca. Ultima opcao, local, Ligado de fabrica (comportamento de antes). */
-  assert(AJ_BUSCA_CINEMETA == AJ_ENQUETES + 1 && AJ_BUSCA_CINEMETA == AJ_N - 11);
+  assert(AJ_BUSCA_CINEMETA == AJ_ENQUETES + 1 && AJ_BUSCA_CINEMETA == AJ_FONTE_ESCOPO - 11);
   assert(!strcmp(CHAVE[AJ_BUSCA_CINEMETA], "buscaCinemetaLocal") && OPCOES[AJ_BUSCA_CINEMETA].n == 2);
   assert(valorPadrao[AJ_BUSCA_CINEMETA] == 0 && ajustes_busca_cinemeta());
   assert(somenteDesteAparelho(AJ_BUSCA_CINEMETA) && !dePerfil(AJ_BUSCA_CINEMETA));
   { int vz = 0, k; for (k = 0; k < AJ_N_TELA; k++) if (TELA[k].tipo == IT_OPC && TELA[k].op == AJ_BUSCA_CINEMETA) vz++; assert(vz == 1); }
   assert(indiceResultado(AJ_BUSCA_CINEMETA, ajustes_buscar("cinemeta", resultados, AJ_N)) >= 0);
   /* OLED: esmaecer quando parado (padrao 5 min) e brilho da interface do player (padrao 80%). Ultimas, locais. */
-  assert(AJ_ESMAECER == AJ_BUSCA_CINEMETA + 1 && AJ_BRILHO_PLAYER == AJ_N - 9 && AJ_BRILHO_PLAYER == AJ_ESMAECER + 1);
+  assert(AJ_ESMAECER == AJ_BUSCA_CINEMETA + 1 && AJ_BRILHO_PLAYER == AJ_FONTE_ESCOPO - 9 && AJ_BRILHO_PLAYER == AJ_ESMAECER + 1);
   assert(!strcmp(CHAVE[AJ_ESMAECER], "esmaecerLocal") && !strcmp(CHAVE[AJ_BRILHO_PLAYER], "brilhoPlayerLocal"));
   assert(OPCOES[AJ_ESMAECER].n == 6 && OPCOES[AJ_BRILHO_PLAYER].n == 4);   /* 2.0: Desligado, 30 s, 1, 2, 5, 10 min */
   assert(valorPadrao[AJ_ESMAECER] == 3 && valorPadrao[AJ_BRILHO_PLAYER] == 1);
@@ -466,24 +520,24 @@ int main(void) {
   { int vE = 0, vB = 0, k; for (k = 0; k < AJ_N_TELA; k++) if (TELA[k].tipo == IT_OPC) { vE += TELA[k].op == AJ_ESMAECER; vB += TELA[k].op == AJ_BRILHO_PLAYER; } assert(vE == 1 && vB == 1); }
   assert(indiceResultado(AJ_ESMAECER, ajustes_buscar("oled", resultados, AJ_N)) >= 0);
   /* 2.0: "Novidades 2.0" e a ULTIMA opcao: acao em Sobre e ajuda, sem chave gravada. */
-  assert(AJ_NOVIDADES20 == AJ_BRILHO_PLAYER + 1 && AJ_NOVIDADES20 == AJ_N - 8);
+  assert(AJ_NOVIDADES20 == AJ_BRILHO_PLAYER + 1 && AJ_NOVIDADES20 == AJ_FONTE_ESCOPO - 8);
   assert(!strcmp(CHAVE[AJ_NOVIDADES20], "-novidades20") && valorPadrao[AJ_NOVIDADES20] == 0);
   { int vz = 0, k; for (k = 0; k < AJ_N_TELA; k++) if (TELA[k].tipo == IT_OPC && TELA[k].op == AJ_NOVIDADES20) vz++; assert(vz == 1); }
   assert(indiceResultado(AJ_NOVIDADES20, ajustes_buscar("novidades", resultados, AJ_N)) >= 0);
   /* Retomada (05/10): "Manter o video pronto ao sair" e a ULTIMA opcao. Avancada, local,
      DESLIGADA de fabrica (instalacao antiga sem a chave = nao retem), nunca no perfil seguro,
      e so com a saida para a home valendo. */
-  assert(AJ_MANTER_VIDEO == AJ_NOVIDADES20 + 1 && AJ_MANTER_VIDEO == AJ_N - 7);
+  assert(AJ_MANTER_VIDEO == AJ_NOVIDADES20 + 1 && AJ_MANTER_VIDEO == AJ_FONTE_ESCOPO - 7);
   /* 2.0: tela de descanso (estilo e fonte da vitrine), LOCAIS, no fim. */
   assert(AJ_DESCANSO_ESTILO == AJ_MANTER_VIDEO + 1 && AJ_DESCANSO_FONTE == AJ_RELOGIO_12H - 1);
   // Formato do relogio (2.0): local, no fim, padrao 24 h.
-  assert(AJ_RELOGIO_12H == AJ_N - 4 && !strcmp(CHAVE[AJ_RELOGIO_12H], "relogio12hLocal") && valorPadrao[AJ_RELOGIO_12H] == 0);
+  assert(AJ_RELOGIO_12H == AJ_FONTE_ESCOPO - 4 && !strcmp(CHAVE[AJ_RELOGIO_12H], "relogio12hLocal") && valorPadrao[AJ_RELOGIO_12H] == 0);
   // Faixa de tamanho da escolha automatica: as DUAS ultimas, locais, padrao "Sem limite" (0 GB).
-  assert(AJ_TAM_MAX == AJ_RELOGIO_12H + 1 && AJ_TAM_MIN == AJ_N - 2 && AJ_TAM_MIN == AJ_TAM_MAX + 1);
+  assert(AJ_TAM_MAX == AJ_RELOGIO_12H + 1 && AJ_TAM_MIN == AJ_FONTE_ESCOPO - 2 && AJ_TAM_MIN == AJ_TAM_MAX + 1);
   assert(!strcmp(CHAVE[AJ_TAM_MAX], "tamanhoMaxLocal") && !strcmp(CHAVE[AJ_TAM_MIN], "tamanhoMinLocal"));
   assert(valorPadrao[AJ_TAM_MAX] == 0 && valorPadrao[AJ_TAM_MIN] == 0 && OPCOES[AJ_TAM_MAX].n == 7 && OPCOES[AJ_TAM_MIN].n == 7);
   // Apoiar o projeto (apoio.h): acao no fim, sem valor, uma vez na tela.
-  assert(AJ_APOIAR == AJ_N - 1 && AJ_APOIAR == AJ_TAM_MIN + 1 && !strcmp(CHAVE[AJ_APOIAR], "-apoiar") && valorPadrao[AJ_APOIAR] == 0);
+  assert(AJ_APOIAR == AJ_FONTE_ESCOPO - 1 && AJ_APOIAR == AJ_TAM_MIN + 1 && !strcmp(CHAVE[AJ_APOIAR], "-apoiar") && valorPadrao[AJ_APOIAR] == 0);
   { int vz = 0, k; for (k = 0; k < AJ_N_TELA; k++) if (TELA[k].tipo == IT_OPC && TELA[k].op == AJ_APOIAR) vz++; assert(vz == 1); }
   assert(somenteDesteAparelho(AJ_TAM_MAX) && somenteDesteAparelho(AJ_TAM_MIN));
   assert(ajustes_tamanho_max_gb() == 0 && ajustes_tamanho_min_gb() == 0);
@@ -532,6 +586,7 @@ int main(void) {
   assert(mkdtemp(dir));
   assert(setenv("NUVIO_DADOS", dir, 1) == 0);
   dados_iniciar(dir);
+  autoplay202(dir);
   buscaECaminhos();
   bloqueadosESegredos();
   puts("ajustes_ux_dados: busca, padroes, escopo, dependencias e segredos ok");
