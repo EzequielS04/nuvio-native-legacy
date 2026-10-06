@@ -955,6 +955,7 @@
   T("Chave de API do Real-Debrid (real-debrid.com/apitoken). Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "Real-Debrid 的 API 金鑰 (real-debrid.com/apitoken)。只有在您的 Nuvio 帳號不包含它時才需要。只儲存在這台電視上，並以遮蔽方式顯示。"),
   T("Chave de API do TorBox. Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "TorBox 的 API 金鑰。只有在您的 Nuvio 帳號不包含它時才需要。只儲存在這台電視上，並以遮蔽方式顯示。"),
   T("Chave do AllDebrid", "AllDebrid 金鑰"),
+  T("Chave do MDBList", "MDBList 金鑰"),
   T("Chave do Premiumize", "Premiumize 金鑰"),
   T("Chave do RPDB", "RPDB 金鑰"),
   T("Chave do Real-Debrid", "Real-Debrid 金鑰"),

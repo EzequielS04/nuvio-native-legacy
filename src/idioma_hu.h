@@ -955,6 +955,7 @@
   T("Chave de API do Real-Debrid (real-debrid.com/apitoken). Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "A Real-Debrid API-kulcsa (real-debrid.com/apitoken). Csak akkor kell, ha a Nuvio-fiókod nem tartalmazza. Csak ezen a tévén marad, és elrejtve jelenik meg."),
   T("Chave de API do TorBox. Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "A TorBox API-kulcsa. Csak akkor kell, ha a Nuvio-fiókod nem tartalmazza. Csak ezen a tévén marad, és elrejtve jelenik meg."),
   T("Chave do AllDebrid", "AllDebrid-kulcs"),
+  T("Chave do MDBList", "MDBList-kulcs"),
   T("Chave do Premiumize", "Premiumize-kulcs"),
   T("Chave do RPDB", "RPDB-kulcs"),
   T("Chave do Real-Debrid", "Real-Debrid-kulcs"),

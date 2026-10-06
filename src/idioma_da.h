@@ -955,6 +955,7 @@
   T("Chave de API do Real-Debrid (real-debrid.com/apitoken). Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "API-nøgle til Real-Debrid (real-debrid.com/apitoken). Behøves kun, hvis din Nuvio-konto ikke har den. Bliver kun på dette TV og vises maskeret."),
   T("Chave de API do TorBox. Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "API-nøgle til TorBox. Behøves kun, hvis din Nuvio-konto ikke har den. Bliver kun på dette TV og vises maskeret."),
   T("Chave do AllDebrid", "AllDebrid-nøgle"),
+  T("Chave do MDBList", "MDBList-nøgle"),
   T("Chave do Premiumize", "Premiumize-nøgle"),
   T("Chave do RPDB", "RPDB-nøgle"),
   T("Chave do Real-Debrid", "Real-Debrid-nøgle"),

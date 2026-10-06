@@ -955,6 +955,7 @@
   T("Chave de API do Real-Debrid (real-debrid.com/apitoken). Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "Κλειδί API του Real-Debrid (real-debrid.com/apitoken). Χρειάζεται μόνο αν ο λογαριασμός σας στο Nuvio δεν το περιέχει. Μένει μόνο σε αυτή την τηλεόραση και εμφανίζεται συγκαλυμμένο."),
   T("Chave de API do TorBox. Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "Κλειδί API του TorBox. Χρειάζεται μόνο αν ο λογαριασμός σας στο Nuvio δεν το περιέχει. Μένει μόνο σε αυτή την τηλεόραση και εμφανίζεται συγκαλυμμένο."),
   T("Chave do AllDebrid", "Κλειδί AllDebrid"),
+  T("Chave do MDBList", "Κλειδί MDBList"),
   T("Chave do Premiumize", "Κλειδί Premiumize"),
   T("Chave do RPDB", "Κλειδί RPDB"),
   T("Chave do Real-Debrid", "Κλειδί Real-Debrid"),

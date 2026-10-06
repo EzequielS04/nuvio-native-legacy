@@ -955,6 +955,7 @@
   T("Chave de API do Real-Debrid (real-debrid.com/apitoken). Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "Real-Debrid の API キー (real-debrid.com/apitoken)。Nuvio アカウントに含まれていない場合のみ必要です。このテレビにのみ保存され、伏せ字で表示されます。"),
   T("Chave de API do TorBox. Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "TorBox の API キー。Nuvio アカウントに含まれていない場合のみ必要です。このテレビにのみ保存され、伏せ字で表示されます。"),
   T("Chave do AllDebrid", "AllDebrid キー"),
+  T("Chave do MDBList", "MDBList キー"),
   T("Chave do Premiumize", "Premiumize キー"),
   T("Chave do RPDB", "RPDB キー"),
   T("Chave do Real-Debrid", "Real-Debrid キー"),

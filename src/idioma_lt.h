@@ -955,6 +955,7 @@
   T("Chave de API do Real-Debrid (real-debrid.com/apitoken). Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "Real-Debrid API raktas (real-debrid.com/apitoken). Reikalingas tik jei jūsų Nuvio paskyra jo neturi. Lieka tik šiame televizoriuje ir rodomas užmaskuotas."),
   T("Chave de API do TorBox. Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "TorBox API raktas. Reikalingas tik jei jūsų Nuvio paskyra jo neturi. Lieka tik šiame televizoriuje ir rodomas užmaskuotas."),
   T("Chave do AllDebrid", "AllDebrid raktas"),
+  T("Chave do MDBList", "MDBList raktas"),
   T("Chave do Premiumize", "Premiumize raktas"),
   T("Chave do RPDB", "RPDB raktas"),
   T("Chave do Real-Debrid", "Real-Debrid raktas"),

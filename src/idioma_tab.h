@@ -954,6 +954,7 @@
   { "Chave de API do Real-Debrid (real-debrid.com/apitoken). Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "Real-Debrid API key (real-debrid.com/apitoken). Only needed if your Nuvio account does not carry it. It stays on this TV only and is shown masked." },
   { "Chave de API do TorBox. Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "TorBox API key. Only needed if your Nuvio account does not carry it. It stays on this TV only and is shown masked." },
   { "Chave do AllDebrid", "AllDebrid key" },
+  { "Chave do MDBList", "MDBList key" },
   { "Chave do Premiumize", "Premiumize key" },
   { "Chave do RPDB", "RPDB key" },
   { "Chave do Real-Debrid", "Real-Debrid key" },

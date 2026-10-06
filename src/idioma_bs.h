@@ -955,6 +955,7 @@
   T("Chave de API do Real-Debrid (real-debrid.com/apitoken). Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "API ključ za Real-Debrid (real-debrid.com/apitoken). Treba samo ako ga vaš Nuvio račun ne sadrži. Ostaje samo na ovom TV-u i prikazuje se maskiran."),
   T("Chave de API do TorBox. Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "API ključ za TorBox. Treba samo ako ga vaš Nuvio račun ne sadrži. Ostaje samo na ovom TV-u i prikazuje se maskiran."),
   T("Chave do AllDebrid", "AllDebrid ključ"),
+  T("Chave do MDBList", "MDBList ključ"),
   T("Chave do Premiumize", "Premiumize ključ"),
   T("Chave do RPDB", "RPDB ključ"),
   T("Chave do Real-Debrid", "Real-Debrid ključ"),

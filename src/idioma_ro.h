@@ -954,6 +954,7 @@
   T("Chave de API do Real-Debrid (real-debrid.com/apitoken). Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "Cheia API Real-Debrid (real-debrid.com/apitoken). Necesară doar dacă contul tău Nuvio nu o conține. Rămâne doar pe acest televizor și apare mascată."),
   T("Chave de API do TorBox. Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "Cheia API TorBox. Necesară doar dacă contul tău Nuvio nu o conține. Rămâne doar pe acest televizor și apare mascată."),
   T("Chave do AllDebrid", "Cheie AllDebrid"),
+  T("Chave do MDBList", "Cheie MDBList"),
   T("Chave do Premiumize", "Cheie Premiumize"),
   T("Chave do RPDB", "Cheia RPDB"),
   T("Chave do Real-Debrid", "Cheie Real-Debrid"),

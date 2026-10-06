@@ -1018,7 +1018,7 @@ static const Opcao OPCOES[AJ_N] = {
   // Integracoes — MDBList. O master liga/desliga a consulta; os demais
   // escolhem quais fontes de nota viram cartao na pagina de titulo.
   ESC("MDBList",                    V_LIGA, 2),   // mdblist_enabled
-  LER("Chave da API"),                            // mdblist_api_key (status)
+  LER("Chave do MDBList"),                        // mdblist_api_key (status)
   ESC("Notas do Trakt",             V_LIGA, 2),   // mdblist_show_trakt
   ESC("Notas do IMDb",              V_LIGA, 2),   // mdblist_show_imdb
   ESC("Notas do TMDB",              V_LIGA, 2),   // mdblist_show_tmdb

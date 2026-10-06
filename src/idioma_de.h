@@ -954,6 +954,7 @@
   T("Chave de API do Real-Debrid (real-debrid.com/apitoken). Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "Real-Debrid-API-Schlüssel (real-debrid.com/apitoken). Nur nötig, wenn Ihr Nuvio-Konto ihn nicht liefert. Er bleibt nur auf diesem Fernseher und wird maskiert angezeigt."),
   T("Chave de API do TorBox. Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.", "TorBox-API-Schlüssel. Nur nötig, wenn Ihr Nuvio-Konto ihn nicht liefert. Er bleibt nur auf diesem Fernseher und wird maskiert angezeigt."),
   T("Chave do AllDebrid", "AllDebrid-Schlüssel"),
+  T("Chave do MDBList", "MDBList-Schlüssel"),
   T("Chave do Premiumize", "Premiumize-Schlüssel"),
   T("Chave do RPDB", "RPDB-Schlüssel"),
   T("Chave do Real-Debrid", "Real-Debrid-Schlüssel"),
