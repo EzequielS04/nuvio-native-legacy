@@ -565,6 +565,18 @@ int ajustes_mesclar_blob(const char *base, char **saida);
 // TMDB, de onde vem (ajuste desta TV) e o tmdb_language cru da conta.
 void ajustes_tmdb_idioma_relatar(const char *blob);
 
+// CENTRAL DE CONTROLE (central.h): uma opcao de escolha curta pela chave do
+// ajustes.txt ("dolbyVision"). _op: -1 se a chave nao existe, nao e escolha de
+// 2 a 6 valores ou nao esta na tela deste build. _rotulo/_valor: texto cru em
+// portugues (text.c traduz ao desenhar). _ligado: 1/0 num interruptor, -1 nos
+// outros. _passo: proximo (dir 1) ou anterior (-1) valor, gravado e com os
+// mesmos efeitos do OK na tela de Ajustes; 0 se nao gravou.
+int         ajustes_rapido_op(const char *chave);
+const char *ajustes_rapido_rotulo(int op);
+const char *ajustes_rapido_valor(int op);
+int         ajustes_rapido_ligado(int op);
+int         ajustes_rapido_passo(int op, int dir);
+
 #ifdef NV_SHOT_HOOKS
 int ajustes_shot_valor(const char *chave, int v);   // capturas: opcao pela chave
 #endif

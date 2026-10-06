@@ -6836,3 +6836,29 @@ int ajustes_shot_valor(const char *chave, int v) {
   return 0;
 }
 #endif
+
+// --- CENTRAL DE CONTROLE (central.h) -----------------------------------------
+// A porta da central para trocar uma opcao sem abrir esta tela. A opcao e
+// achada pela CHAVE do ajustes.txt (estavel entre versoes; o enum nao e). So
+// escolhas curtas (2 a 6 valores) que existem na tela DESTE build; as que
+// pedem a folha de risco (fileiras) ficam fora. A troca passa por
+// definirValorDireto: a mesma gravacao e os mesmos efeitos do OK da tela.
+int ajustes_rapido_op(const char *chave) {
+  int i, op = -1, n;
+  if (!chave || !chave[0]) return -1;
+  for (i = 0; i < AJ_N; i++)
+    if (CHAVE[i] && CHAVE[i][0] != '-' && !strcmp(CHAVE[i], chave)) { op = i; break; }
+  if (op < 0 || OPCOES[op].tipo != OP_ESCOLHA) return -1;
+  if (op == AJ_FIL_LIMITE || op == AJ_ITENS_FILEIRA) return -1;
+  n = nValores(op);
+  if (n < 2 || n > 6) return -1;
+  for (i = 0; i < AJ_N_TELA; i++) if (TELA[i].tipo == IT_OPC && TELA[i].op == op) return op;
+  return -1;
+}
+const char *ajustes_rapido_rotulo(int op) { return op >= 0 && op < AJ_N ? rotuloOpcao(op) : ""; }
+const char *ajustes_rapido_valor(int op) { return op >= 0 && op < AJ_N ? textoValor(op) : ""; }
+int ajustes_rapido_ligado(int op) { return op >= 0 && op < AJ_N && ehInterruptor(op) ? lig(op) : -1; }
+int ajustes_rapido_passo(int op, int dir) {
+  if (op < 0 || op >= AJ_N) return 0;
+  return definirValorDireto(op, passoAdiante(op, dir < 0 ? -1 : 1));
+}

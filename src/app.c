@@ -12,6 +12,8 @@
 //   3. menu    — camada sobre a tela corrente
 //   4. a tela corrente (home, busca, biblioteca ou ajustes)
 #include "celbotao.h"
+#include "central.h"
+#include "teclado.h"
 #include "ponteiro.h"
 #include "app.h"
 #include "descanso.h"
@@ -1794,6 +1796,9 @@ void app_evento(const SDL_Event *e) {
   // O painel de envio do registro (Ajustes > Enviar registro, ou o "Enviar
   // agora" do painel): modal, come o teclado enquanto aberto.
   if (registro_envio_evento(e)) return;
+  // A CENTRAL DE CONTROLE (central.h, CH+ segurado) e uma camada: aberta, come
+  // o teclado todo, por cima do player, das folhas e das ilhas.
+  if (central_aberta()) { central_evento(e); return; }
   // O MODAL DA ILHA (ilha.h) e uma camada: aberto, come o teclado todo.
   if (ilha_evento(e)) return;
   // A CENTRAL DE AVISOS vem logo depois do painel de log: com o toast na tela
@@ -2220,6 +2225,7 @@ void app_atualizar(float dt, Uint32 agora) {
   // Animacoes reduzidas valem para TODA mola e rampa do app (anim.h), nao so
   // para as telas que lembravam de perguntar. Uma leitura por quadro.
   anim_politica_reduzida = ajustes_animacoes_reduzidas();
+  central_atualizar(dt, agora);
   // OK na vitrine da tela de descanso (descanso.h): abre o titulo, so com a
   // Home na frente. Em outra tela o OK so acordou.
   { int k = descanso_pedido_abrir();
@@ -4368,6 +4374,8 @@ void app_desenhar(Uint32 agora) {
   if (!registro_aberto()) diagnostico_intro_desenhar(agora);
   // O MEDIDOR DE DESEMPENHO (Ajustes > Desempenho desta TV) nao e mais camada
   // propria: e conteudo da ilha do relogio (ilha.c, plrilha.c; desempenho.h).
+  // A Central de controle fica acima de tudo, menos do painel de registro.
+  if (!registro_aberto()) central_desenhar(agora);
   CAMADA_SE(registro_aberto());
   registro_desenhar();
   // A ilha do relogio fica acima do painel de registro, no canto de sempre.
@@ -4382,6 +4390,12 @@ int app_quer_sair(void) { return sair; }
 int app_zap_ativo(void) {
   if (tela == TELA_GUIA) return 1;
   return (tela == TELA_PLAYER || player_mini_ativo()) && player_id_canal()[0];
+}
+int app_central_pode(void) {
+  if (central_aberta()) return 1;   // o CH+ que fecha passa pelo mesmo caminho
+  return tela != TELA_LOGIN && tela != TELA_ESCOLHA_PERFIL && login_concluido() &&
+         perfilsel_concluido() && !registro_aberto() && !spot_aberto() &&
+         !teclado_aberto() && !diagnostico_intro_aberto() && !novidades20_aberto();
 }
 
 void app_encerrar(void) {
