@@ -756,6 +756,14 @@ void agenda_marcar_avisado(const char *imdb) {
   pthread_mutex_unlock(&trava);
 }
 
+int agenda_lembretes_pendentes(void) {
+  int i, q = 0;
+  pthread_mutex_lock(&trava);
+  for (i = 0; i < nLembretes; i++) if (!lembretes[i].avisado) q++;
+  pthread_mutex_unlock(&trava);
+  return q;
+}
+
 int agenda_devidos(const AgItem **saida, int max) {
   int i, n = 0;
   for (i = 0; i < nLista && n < max; i++) {
