@@ -48,6 +48,6 @@ A big follow-up to 2.0: fixes, a faster Android TV, and a few things people aske
 | Samsung web app, Tizen 5.5+ | `NuvioTV-2.0.1-tizen.wgt` |
 | Android TV / Google TV, Android 7+ | `Nuvio-2.0.1-android.apk` |
 
-**Samsung .tpk:** coming from 2.0, it updates from inside the app. The in-app update only replaces the app's code, not its bundled images, so the new icon and the new support QR images only show after you install the new .tpk by hand. Everything else works with the in-app update.
+**Samsung .tpk:** coming from 2.0, it updates from inside the app. The in-app update only replaces the app's code, not its bundled images, so the new icon and the Ko-fi badge only show after you install the new .tpk by hand, and the trailer volume fix (#281) is complete only with a manual install. Everything else works with the in-app update.
 
 Tested on an LG C9 and a TCL Android TV; the Samsung builds were not run on a Samsung TV, and the DTS conversion was not tested on a webOS 5+ TV. If something breaks, send the log code from Settings › About and help.
