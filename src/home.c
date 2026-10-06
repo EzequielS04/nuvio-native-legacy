@@ -3692,9 +3692,8 @@ static void desenhaHero(Uint32 agora, float saida) {
     }
   }
   // TRAILER TOCANDO ATRAS DO CANVAS no lugar da arte: furo no retangulo do
-  // hero e a arte se apaga por cima dele (heroTrailerFade). As rampas vao
-  // embora junto com a arte: sem veu sobre o trailer (decisao do dono,
-  // 20/09/2026, mantida no #290; ver o fim do bloco). So no hero de titulo (colecao e social nao chegam aqui com
+  // hero e a arte se apaga por cima dele (heroTrailerFade); as rampas do hero
+  // voltam por cima do video (#290, ver o fim do bloco). So no hero de titulo (colecao e social nao chegam aqui com
   // trailer: ver home_trailer_passo).
   float aTrailer = (heroTrailerFade > 0.005f && heroTrailerItem == heroAtual) ? heroTrailerFade : 0.0f;
   if (aTrailer > 0.0f) {
@@ -3767,9 +3766,18 @@ static void desenhaHero(Uint32 agora, float saida) {
                            arteA != NULL && arteA[0] != 0);
   }
   }
-  // SEM VEU SOBRE O TRAILER (dono, 20/09/2026: "quando tocar o trailer do
-  // hero tirar o overlay, so voltar quando tiver so a arte"): as rampas vao
-  // embora junto com a arte e voltam com ela.
+  // RAMPAS SOBRE O TRAILER (#290, dono 06/10: "vamos colocar o gradiente
+  // mesmo, vamos fazer ficar bonito"). Sem elas o video era um retangulo de
+  // borda dura ao lado do painel do texto. Aqui so as RAMPAS do proprio hero
+  // (uPar.x > 0.5: a esquerda, 45% da largura, e o pe, 18% da altura), as
+  // mesmas que dissolvem a arte parada — trailer e arte ficam com o mesmo
+  // enquadramento, e o miolo do video fica limpo (o veu de 20/09 que o dono
+  // tirou escurecia o trailer; este nao toca no miolo). Um quad, sem textura.
+  // Alfa = heroTrailerFade: entra enquanto a arte sai, entao a soma das duas
+  // rampas fica constante no crossfade. Desenhado DEPOIS do furo, com alfa:
+  // no .tpk/LG/Android o plano de video aparece com 1 - alfa sob a rampa.
+  if (aTrailer > 0.0f && (modoHero == GFX_HERO || modoHero == GFX_HERO_CHEIO))
+    gfx_rect(r, 0, modoHero, 0, 1.0f, 0, 0.0f, 0, 0, 0, aTrailer);
   gfx_tex_aspect_atual = 0.0f;
   heroArteRect = r;
 

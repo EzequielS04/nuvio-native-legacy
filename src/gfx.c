@@ -557,7 +557,8 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // uPar.x > 0.5 = SO AS RAMPAS, como veu com alpha: por cima do trailer que
   // toca atras do canvas no lugar da arte (trailer.h). Mesma regra do
   // GFX_DETALHE.
-  "  if (uPar.x > 0.5) { gl_FragColor = nv_dither(bg, clamp(ah + av - ah*av, 0.0, 1.0) * uCor.a); return; }\n"
+  "  if (uPar.x > 0.5) { vec3 vb = (uAmbOn > 0.5) ? texture2D(uAmb, vAmb).rgb : bg;\n"
+  "    gl_FragColor = nv_dither(vb, clamp(ah + av - ah*av, 0.0, 1.0) * uCor.a); return; }\n"
   "  if (uAmbOn > 0.5) { vec3 amb = texture2D(uAmb, vAmb).rgb;\n"
   "    gl_FragColor = nv_dither(mix(c, amb, clamp(ah + av - ah*av, 0.0, 1.0)), 1.0); return; }\n"
   "  if (uVaza > 0.5) { gl_FragColor = nv_dither(c, uCor.a * dentro * (1.0 - clamp(ah + av - ah*av, 0.0, 1.0))); return; }\n"
@@ -721,7 +722,8 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "                 - clamp((t-0.46)/0.30,0.0,1.0)*0.38\n"
   "                 - clamp((t-0.76)/0.24,0.0,1.0)*0.42;\n"
   "  ah *= step(vUv.x, 0.65);\n"
-  "  if (uPar.x > 0.5) { gl_FragColor = nv_dither(bg, clamp(ah + av - ah*av, 0.0, 1.0) * uCor.a); return; }\n"
+  "  if (uPar.x > 0.5) { vec3 vb = (uAmbOn > 0.5) ? texture2D(uAmb, vAmb).rgb : bg;\n"
+  "    gl_FragColor = nv_dither(vb, clamp(ah + av - ah*av, 0.0, 1.0) * uCor.a); return; }\n"
   "  if (uAmbOn > 0.5) { vec3 amb = texture2D(uAmb, vAmb).rgb;\n"
   "    gl_FragColor = nv_dither(mix(c, amb, clamp(ah + av - ah*av, 0.0, 1.0)), 1.0); return; }\n"
   "  if (uVaza > 0.5) { gl_FragColor = nv_dither(c, uCor.a * dentro * (1.0 - clamp(ah + av - ah*av, 0.0, 1.0))); return; }\n"
@@ -1794,7 +1796,7 @@ static void ambPintarVeu(float cr, float cg, float cb, float va);
 void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
               float parx, float pary, float raio,
               float cr, float cg, float cb, float ca) {
-  int comAmb = 0, opaco = 0, cheia, clearCor, duplo = 0;
+  int comAmb = 0, veuAmb = 0, opaco = 0, cheia, clearCor, duplo = 0;
   float din[4] = { 0.0f, 0.0f, 0.0f, 0.0f }, dinResto = -1.0f;
   if ((int)modo < 0 || (int)modo >= GFX_NMODOS) return;
   // Grupo a 0 = "desenhar sem aparecer" (quem mede uma previa ou pede as
@@ -1897,6 +1899,14 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
       parx <= 0.5f && ca * gfx_opacidade_grupo >= 0.999f && gfx_desliza_atual == 0.0f &&
       progs[modo].ambOn >= 0)
     comAmb = 1;
+  // SO A RAMPA (uPar.x) SOBRE O TRAILER DO HERO (#290): o veu tem de fundir
+  // no MESMO fundo em que a arte parada funde. Com a luz ambiente esse fundo e
+  // a luz (o caminho comAmb acima mistura nela), entao o veu le a luz como
+  // cor; a mistura continua ligada (o veu e alfa sobre o furo do video).
+  else if ((modo == GFX_HERO || modo == GFX_HERO_CHEIO) && parx > 0.5f && ambFonte &&
+           nv_ambiente_forca > 0.001f && !efeitosMinimos && !snapAtivo &&
+           progs[modo].ambOn >= 0)
+    veuAmb = 1;
   // SEM luz ambiente, a mesma arte com alfa 1 ja saia com alfa 1 em todo
   // pixel (c misturada no fundo pelo proprio shader): a mistura era um no-op
   // que ainda lia a tela. Desliga-la nao muda um pixel.
@@ -2037,8 +2047,8 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
     glActiveTexture(GL_TEXTURE0);
   }
   if (P->ambOn >= 0) {
-    glUniform1f(P->ambOn, comAmb ? 1.0f : 0.0f);
-    if (comAmb) {
+    glUniform1f(P->ambOn, comAmb || veuAmb ? 1.0f : 0.0f);
+    if (comAmb || veuAmb) {
       glActiveTexture(GL_TEXTURE1);
       glBindTexture(GL_TEXTURE_2D, ambFonte);
       glActiveTexture(GL_TEXTURE0);
@@ -2094,7 +2104,7 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
     if (semMistura) glDisable(GL_BLEND);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     if (semMistura) glEnable(GL_BLEND); }
-  if (comAmb) {
+  if (comAmb || veuAmb) {
     // Solta a luz da unidade 1: ela volta a ser ALVO em gfx_ambiente_preparar,
     // e alvo ligado a uma unidade e o laco que o GLES deixa indefinido.
     glActiveTexture(GL_TEXTURE1);
