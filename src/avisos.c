@@ -1,4 +1,5 @@
 #include "avisos.h"
+#include "queda.h"
 #include "ilha.h"
 #include "ilhasalvar.h"
 #define AV_ILHA_CHAVE "avisos"   // o "N avisos novos" da central na ilha (ilha.c junta)
@@ -629,6 +630,12 @@ static void *fioCanalFn(void *u) {
 // --- ciclo ---------------------------------------------------------------------------
 void avisos_iniciar(void) {
   char *m;
+#ifdef NV_WEBOS
+  // Antes de tudo: o relato da queda anterior entra no log desta sessao (e
+  // o que o envio automatico leva) e o registrador volta a ficar armado.
+  { char qd[700];
+    if (dados_caminho(qd, sizeof qd, "queda.txt")) { queda_relatar(qd); queda_armar(qd); } }
+#endif
   vistosLer();
   m = dados_ler(AV_MARCA_ARQ);
   // MARCA PRESENTE NAO E CRASH quando a sessao anterior se despediu por fora
