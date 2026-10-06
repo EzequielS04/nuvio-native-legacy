@@ -104,7 +104,7 @@ namespace NuvioTpk
             fParar = () => Principal(Parar);
             fPausar = p => Principal(() => Pausar(p != 0));
             fBuscar = ms => Principal(() => Buscar(ms));
-            fVolume = v => Principal(() => { if (player != null) player.Volume = Math.Max(0, Math.Min(100, v)) / 100f; });
+            fVolume = v => Principal(() => PedirVolume(v));
             fJanela = (x, y, w, h) => Principal(() => Janela(x, y, w, h));
             fPos = () => posMs;
             NvVid.Registrar(Marshal.GetFunctionPointerForDelegate(fAbrir), Marshal.GetFunctionPointerForDelegate(fParar),
@@ -204,6 +204,40 @@ namespace NuvioTpk
         // App foi para segundo plano: o player pausa (e o C fica sabendo).
         public void PausarPeloSistema() { SoltaPrimer(); Pausar(true); }
 
+        // VOLUME DO TRAILER (#281: S90C, Tizen 9, trailer sem som com o ajuste
+        // de som ligado). So o trailer pede volume (trailer.c); o filme nunca
+        // pede e segue intocado. O pedido chega logo depois do Abrir, com o
+        // Player ainda em Idle/preparando, e era o UNICO momento em que o
+        // Volume era escrito. NAO PROVADO que o Tizen 9 descarta o volume
+        // escrito antes do prepare, mas nada mais difere do filme (que toca
+        // com som). Entao o alvo fica guardado por sessao e e reaplicado depois
+        // do prepare, depois do Start e 1,5 s depois, com Muted=false explicito
+        // e o valor LIDO DE VOLTA no registro.
+        float volAlvo = 1f;
+        bool volPedido;
+
+        void PedirVolume(int v)
+        {
+            volAlvo = Math.Max(0, Math.Min(100, v)) / 100f;
+            volPedido = true;
+            if (player != null) AplicaVolume(player, "pedido");
+        }
+
+        void AplicaVolume(Player p, string quando)
+        {
+            if (!volPedido || p == null) return;
+            string estado = "?", lido = "?", erro = "";
+            try { estado = p.State.ToString(); } catch { }
+            // Cada escrita no seu try: uma recusa do Muted nao pode pular o Volume.
+            try { p.Muted = volAlvo <= 0f; } catch (Exception e) { erro += " muted:" + e.GetType().Name; }
+            try { p.Volume = volAlvo; } catch (Exception e) { erro += " volume:" + e.GetType().Name + " " + e.Message; }
+            try { lido = p.Volume.ToString("0.00", CultureInfo.InvariantCulture) + " muted=" + p.Muted; }
+            catch (Exception e) { lido = "? (" + e.GetType().Name + ")"; }
+            if (erro.Length > 0) lido += " falhou" + erro;
+            Log("[audio] volume alvo=" + volAlvo.ToString("0.00", CultureInfo.InvariantCulture) +
+                " lido=" + lido + " estado=" + estado + " (" + quando + ")");
+        }
+
         // Relogio do host, no fio principal.
         public void Tique()
         {
@@ -226,6 +260,9 @@ namespace NuvioTpk
             Parar();
             int minha = ++sessao;
             posMs = 0;
+            // Player novo nasce no volume cheio; so um pedido DESTA sessao
+            // (trailer.c, logo depois do video_tocar) o muda.
+            volAlvo = 1f; volPedido = false;
             try
             {
                 var p = new Player();
@@ -253,10 +290,17 @@ namespace NuvioTpk
                 try { dur = p.StreamInfo.GetDuration(); } catch { }
                 try { var v = p.StreamInfo.GetVideoProperties(); NvVid.Evento(EV_TAMANHO, v.Size.Width, v.Size.Height); } catch { }
                 int nAudio = Faixas(p);
+                AplicaVolume(p, "preparado");
                 NvVid.Evento(EV_PRONTO, dur, 0);
                 p.Start();
                 windowMetrics.Invalidate();
+                AplicaVolume(p, "start");
                 NvVid.Evento(EV_TOCANDO, 0, 0);
+                if (volPedido)
+                {
+                    await System.Threading.Tasks.Task.Delay(1500);
+                    if (minha == sessao && player == p) AplicaVolume(p, "tocando 1,5 s");
+                }
                 // Alguns contêineres/HLS so publicam as faixas de audio depois
                 // que a reproducao comeca: le de novo, uma vez.
                 if (nAudio == 0)

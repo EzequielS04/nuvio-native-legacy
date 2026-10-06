@@ -1619,6 +1619,16 @@ int app_iniciar(const char *dirArte) {
       tela = TELA_ESCOLHA_PERFIL;
       perfilAntes = perfis_ativo();
       perfilsel_iniciar();
+    } else {
+      // NO CHOOSER = THE CHOICE IS ALREADY MADE (#228). A restored session
+      // with one profile never passed through perfilsel, so its `concluido`
+      // stayed 0 for the whole session, and home_trailer_passo (which requires
+      // perfilsel_concluido) logged "autoplay gate=top-overlay" forever: the
+      // hero and focused-poster trailers never started, while the title page
+      // (no such guard) played. Registros 23154 (Q80A) and 41271 (S90C): one
+      // profile, gate stuck on top-overlay. If the sync later finds a second
+      // profile, the chooser opens via perfilsel_iniciar, which resets this.
+      perfilsel_continuar_ativo();
     }
   } else {
     tela = TELA_LOGIN;
@@ -2254,6 +2264,36 @@ static void legendasDaFonte(void) {
   snprintf(ultimo, sizeof ultimo, "%s", chave);
   addons_legendas_fonte(alvo, c->tipo, s->arquivo, (unsigned long long)s->tamanhoBytes,
                         s->videoHash, s->url, s->cabecalhos[0] != 0);
+}
+
+// TRAILER NO DESTAQUE: so com a home na frente de tudo. A lista e a mesma
+// ordem de app_evento — o que come tecla antes da home tambem esta na frente
+// dela na tela. Devolve NULL com a home no topo, ou o NOME do primeiro
+// bloqueio: o registro dizia so "top-overlay" e escondeu por semanas que era a
+// escolha de perfil que nunca concluia (#228).
+static const char *homeTrailerBloqueio(void) {
+  if (tela != TELA_HOME) return "screen";
+  if (!homePronta) return "home-not-ready";
+  if (!login_concluido()) return "login";
+  if (!perfilsel_concluido()) return "profile-choice";
+  if (player_aberto() || player_retido() || player_mini_ativo()) return "player";
+  if (detail_aberto()) return "detail";
+  if (spainel_aberto()) return "saved-panel";
+  if (menu_aberto() || ctx_aberto()) return "menu";
+  if (vertudo_aberta()) return "see-all";
+  if (avisos_aberto() || avisos_cartao_aberto()) return "notices";
+  if (sintro_aberto() || pipintro_aberto() || recintro_aberto() || telemetria_aberto()) return "intro";
+  if (novidades_aberto() || novidades11_aberto() || novidades12_aberto() ||
+      novidades13_aberto() || novidades131_aberto() || novidades132_aberto() ||
+      novidades133_aberto() || novidades134_aberto() || novidades139_aberto() || novidades1312_aberto() ||
+      novidades142_aberto() || novidades148_aberto() || novidades170_aberto() || novidades180_aberto() ||
+      novidades20_aberto()) return "whats-new";
+  if (atualizacao_aberta() || agendaviso_aberto()) return "update-notice";
+  if (recomenda_aberta() || recenviar_aberto() || pessoas_aberto()) return "recommend";
+  if (faixas_aberta() || episodios_aberto() || stream_folha_aberta()) return "sheet";
+  if (guia_overlay_aberta()) return "guide";
+  if (registro_aberto()) return "log";
+  return NULL;
 }
 
 void app_atualizar(float dt, Uint32 agora) {
@@ -3944,18 +3984,9 @@ void app_atualizar(float dt, Uint32 agora) {
   // TRAILER NO DESTAQUE: so com a home na frente de tudo. A lista e a mesma
   // ordem de app_evento — o que come tecla antes da home tambem esta na
   // frente dela na tela.
-  home_trailer_passo(tela == TELA_HOME && homePronta && login_concluido() && perfilsel_concluido() &&
-                     !player_aberto() && !player_retido() && !player_mini_ativo() && !detail_aberto() && !spainel_aberto() &&
-                     !menu_aberto() && !ctx_aberto() && !vertudo_aberta() && !avisos_aberto() &&
-                     !avisos_cartao_aberto() && !sintro_aberto() && !pipintro_aberto() &&
-                     !novidades_aberto() && !novidades11_aberto() && !novidades12_aberto() &&
-                     !novidades13_aberto() && !novidades131_aberto() && !novidades132_aberto() &&
-                     !novidades133_aberto() && !novidades134_aberto() && !novidades139_aberto() && !novidades1312_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades170_aberto() && !novidades180_aberto() && !novidades20_aberto() && !telemetria_aberto() &&
-                     !recintro_aberto() && !atualizacao_aberta() && !agendaviso_aberto() &&
-                     !recomenda_aberta() && !recenviar_aberto() && !pessoas_aberto() && !faixas_aberta() &&
-                     !episodios_aberto() && !stream_folha_aberta() && !guia_overlay_aberta() &&
-                     !registro_aberto(),
-                     dt, agora);
+  { const char *porque = homeTrailerBloqueio();
+    home_trailer_topo_motivo(porque);
+    home_trailer_passo(porque == NULL, dt, agora); }
   trailer_atualizar(agora);
   perfil_atualizar(dt, agora);
   spainel_atualizar(dt, agora);

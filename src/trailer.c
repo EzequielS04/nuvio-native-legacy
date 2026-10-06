@@ -260,6 +260,7 @@ static int quadroInteiroEnviado;
 #define NV_TRAILER_TPK_SEM_TOCAR_MS   6000
 static Uint32 recorteEnviadoEm;
 static int    mostraLogado;
+static int    volumeTocandoEnviado;   // ver nativoAplicar (#281)
 // O FURO SO COM IMAGEM (#188, #195). O host manda `pronto` e `tocando` logo
 // depois do prepare e do Start, antes do primeiro quadro; um furo aberto ai
 // mostra o que esta atras do app (no Tizen 9, a tela inicial da Samsung) ate a
@@ -299,7 +300,25 @@ static void nativoAplicar(void) {
   if(video_tocando())tocouFonte=1;
   // O uMS setVolume funciona nesta TV (provado ao contrario: sem ele o
   // trailer tocou com som).
-  if (volumePendente && video_ativo()) { video_volume(comSom ? 100 : 0); volumePendente = 0; }
+  if (volumePendente && video_ativo()) {
+    video_volume(comSom ? 100 : 0); volumePendente = 0;
+#ifdef NV_TPK
+    printf("[trailer] tpk volume %d enviado (%s)\n", comSom ? 100 : 0, video_tocando() ? "tocando" : "abertura");
+    fflush(stdout);
+#endif
+  }
+#ifdef NV_TPK
+  // DE NOVO NO PRIMEIRO `tocando` DA FONTE (#281). O pedido da abertura chega
+  // ao host com o Player ainda preparando; o host ja reaplica sozinho
+  // (Video.cs, AplicaVolume), e este reenvio cobre um host que nao reaplique.
+  // A linha "[audio] volume alvo=... lido=..." do host diz o que pegou.
+  if (!volumeTocandoEnviado && video_tocando()) {
+    volumeTocandoEnviado = 1;
+    video_volume(comSom ? 100 : 0);
+    printf("[trailer] tpk volume %d reenviado no primeiro tocando\n", comSom ? 100 : 0);
+    fflush(stdout);
+  }
+#endif
   // O RECORTE SO DEPOIS DE `playing` + um respiro. E a ordem do player, a
   // unica em que o recorte comprovadamente pega nesta TV: la o modo salvo vai
   // ao plano no videoInfo como quadro INTEIRO e o zoom de verdade so e pedido
@@ -367,6 +386,7 @@ void trailer_abrir(const char *fonte, GfxRect r, int som, int modoCheia) {
     tocandoDesde = 0; quadroInteiroEnviado = 0;
 #ifdef NV_TPK
     recorteEnviadoEm = 0; mostraLogado = 0; imagemVista = 0; tocandoVisto = 0;
+    volumeTocandoEnviado = 0;
 #endif
   } else if (comSom != som) volumePendente = 1;
   video_janela((int)r.x, (int)r.y, (int)r.w, (int)r.h);

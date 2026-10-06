@@ -54,6 +54,9 @@ void home_ir_topo(void);
 // Trailer no destaque: `topo` = 1 quando a home e o que esta na frente (sem
 // detalhe, player, painel, menu ou cartao por cima). app.c chama por quadro.
 void home_trailer_passo(int topo, float dt, Uint32 agora);
+// Why `topo` is 0 ("profile-choice", "detail"...), or NULL. Only for the
+// "[home-trailer] autoplay gate=top-overlay (...)" line; call before the step.
+void home_trailer_topo_motivo(const char *motivo);
 void home_desenhar(Uint32 agora);
 
 // Onde a ARTE do hero foi desenhada no ultimo quadro. A tela de detalhe usa
