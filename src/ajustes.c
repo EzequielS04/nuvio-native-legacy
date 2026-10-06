@@ -964,7 +964,7 @@ static const Opcao OPCOES[AJ_N] = {
   NUM("Arredondamento",             0, 40, 1, " dp"),   // posterCardCornerRadiusDp
   ESC("Qualidade da imagem",        V_QUALIMG, 3),
 
-  ESC("Idioma",                     V_IDIOMA, IDIOMA_N + 1),
+  ESC("Idioma do app",              V_IDIOMA, IDIOMA_N + 1),
   ESC("Animações",                  V_ANIM, 2),
   ESC("Resolução da interface",     V_RESOLUCAO, 3),
   ESC("Cor de destaque",            V_TEMA, AJ_N_TEMAS_OPC),  // selected_theme (+4 locais)
@@ -6695,6 +6695,11 @@ int ajustes_teste_quadro(const char *id) {
       int sN = atoi(id + 8);
       if (sN >= nSecoes) return 0;
       focarSecao(sN); uxIndice = 2 + sN; focoIndice = 1;
+    }
+    else if (!strncmp(id, "v2-sec-", 7) && id[7] >= '0' && id[7] <= '9') {   // category N opened, first row focused
+      int sN = atoi(id + 7);
+      if (sN >= nSecoes) return 0;
+      focar(primeiroDaSecao(sN)); focoIndice = 0;
     }
     else if (!strcmp(id, "v2-menu-passando")) { ajArteFundoN = 13; focarSecao(1); uxIndice = 3; focoIndice = 1; }
     else if (!strcmp(id, "v2-aberto") || !strcmp(id, "v2-130")) focarOpcao(AJ_HOME_LAYOUT);

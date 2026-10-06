@@ -198,15 +198,46 @@ static float aj2MenuAberta(int j) {
 }
 static int aj2MenuFocado(void) { return focoIndice ? uxIndice : -1; }
 // Os tres grupos do indice: so a apresentacao. As categorias seguem a ordem de
-// TELA[] (reordenada em ajustes_ux_tela.inc: Telas = 0-4, Assistir = 5-7, o
+// TELA[] (reordenada em ajustes_ux_tela.inc: Telas = 0-4, Assistir = 5-8, o
 // resto em Conta e sistema); nada aqui mexe em valor[] nem em CHAVE[].
-static int aj2Grupo(int s) { return s < 5 ? 0 : s < 8 ? 1 : 2; }
+static int aj2Grupo(int s) { return s < AJS_REPRODUCAO ? 0 : s < AJS_CONTAS ? 1 : 2; }
 static int aj2GrupoIni(int s) { return s == 0 || aj2Grupo(s) != aj2Grupo(s - 1); }
 static const char *aj2GrupoNome(int g) { return g == 0 ? "Telas" : g == 1 ? "Assistir" : "Conta e sistema"; }
-static int aj2ContaOpcoes(int sec) {
-  int i, n = 0;
-  for (i = secIni[sec] + 1; i < secFim(sec); i++) if (TELA[i].tipo == IT_OPC) n++;
-  return n;
+// O VALOR VIVO DE CADA CATEGORIA no indice (2.0.2), como o Ajustes de um
+// celular: o que a pessoa mais quer saber dela sem abrir ("Moderna",
+// "Automatica", "Portugues", "3 de 5"). So valores que a tela ja mostra nas
+// linhas, ja traduzidos; nada de conta ou servidor (TV ao vivo fica vazia).
+static void aj2MenuValor(int sec, char *b, size_t n) {
+  int op = -1;
+  b[0] = 0;
+  switch (sec) {
+    case AJS_HOME: op = AJ_HOME_LAYOUT; break;
+    case AJS_TITULO: {   // as notas ligadas, pelos nomes
+      int k, q = 0;
+      size_t u = 0;
+      for (k = AJ_NT_IMDB; k <= AJ_NT_SCORE && q < 3; k++) {
+        const char *r;
+        if (!lig(k) || inativa(k)) continue;
+        r = i18n(rotuloOpcao(k));
+        u += (size_t)snprintf(b + u, u < n ? n - u : 0, "%s%.*s", q ? " · " : "", (int)strcspn(r, " ("), r);
+        if (u >= n) break;
+        q++;
+      }
+      return; }
+    case AJS_TRAILERS: {   // quantos dos quatro lugares tocam trailer
+      int q = lig(AJ_HERO_TRAILER) + lig(AJ_FOCO_TRAILER) + lig(AJ_DET_TRAILER_AUTO) + lig(AJ_DET_TRAILER);
+      snprintf(b, n, i18n("%d de %d"), q, 4);
+      return; }
+    case AJS_APARENCIA: op = AJ_TEMA; break;
+    case AJS_REPRODUCAO: op = AJ_QUALIDADE; break;
+    case AJS_FONTES: snprintf(b, n, "%s", ajEstadoAcao(AJ_ADDONS)); return;
+    case AJS_IDIOMAS: op = AJ_IDIOMA; break;
+    case AJS_CONTAS: op = AJ_PERFIL_ATIVO; break;
+    case AJS_DESEMPENHO: op = AJ_RESOLUCAO; break;
+    case AJS_SOBRE: op = AJ_VERSAO_I; break;
+    default: return;
+  }
+  if (op >= 0) snprintf(b, n, "%s", textoValor(op));
 }
 static float aj2MenuAltura(int j) { return j < 2 ? AJ2_MENU_CHIP : AJ2_MENU_LN; }
 // y do alto da linha j relativo ao topo do conteudo (sem a rolagem). Cada
@@ -363,19 +394,39 @@ static void aj2DesenharMenu(const Aj2Pose *p) {
     // o rotulo fica no alto da linha que abre: centro 38 fechada, 39 aberta
     lc = y + (h > AJ2_MENU_LN + 1 ? AJ2_MENU_LN * 0.5f + (h - AJ2_MENU_LN) / (aj2MenuAberta(j) - AJ2_MENU_LN + 0.001f) : h * 0.5f);
     if (ativa && !foco) gfx_cor((GfxRect){ rx + 9.0f, lc - 4.0f, 8, 8 }, 0.5f, ar, ag, ab, mk);
-    ajIcone(aj2MenuIcone(j), rx + 28.0f, lc - AJ2_MENU_ICO * 0.5f, AJ2_MENU_ICO, al * mk);
+    // O icone num ladrilho (2.0.2): neutro parado, cheio no acento em foco,
+    // com o icone na tinta dele. Le de longe qual categoria e qual.
+    { float tl = AJ2_MENU_LN - 10.0f > 48.0f ? 48.0f : AJ2_MENU_LN - 10.0f;
+      GfxRect tr = { rx + 28.0f + AJ2_MENU_ICO * 0.5f - tl * 0.5f, lc - tl * 0.5f, tl, tl };
+      if (foco) {
+        gfx_cor(tr, 14.0f / tl, ar, ag, ab, 0.95f * mk);
+        ajIconeT(aj2MenuIcone(j), rx + 28.0f + 5.0f, lc - (AJ2_MENU_ICO - 10.0f) * 0.5f, AJ2_MENU_ICO - 10.0f, mk);
+      } else {
+        gfx_cor(tr, 14.0f / tl, 1, 1, 1, (ativa ? 0.12f : 0.07f) * mk);
+        ajIcone(aj2MenuIcone(j), rx + 28.0f + 5.0f, lc - (AJ2_MENU_ICO - 10.0f) * 0.5f, AJ2_MENU_ICO - 10.0f, al * mk);
+      } }
     if (p->mRot > 0.003f) {
-      TxtLinha t, cn;
-      char qn[16];
-      snprintf(qn, sizeof qn, "%d", aj2ContaOpcoes(j - 2));
-      cn = ajTxt(TXT_V2_26, qn);
-      { float livre = AJ2_MENU_W - 2 * AJ2_MENU_PAD - 28 - AJ2_MENU_ICO - AJ2_MENU_ICO_GAP - 20 - cn.w - 16;
+      TxtLinha t;
+      // Sem a contagem de opcoes a direita (2.0.2): o numero nao ajuda a achar
+      // nada e roubava a largura que os nomes longos (alemao, russo) pedem.
+      // A contagem continua no resumo ("32 opcoes · 7 avancadas").
+      { float livre = AJ2_MENU_W - 2 * AJ2_MENU_PAD - 28 - AJ2_MENU_ICO - AJ2_MENU_ICO_GAP - 20;
         TxtEstilo e = ativa ? TXT_V2_MENU_B : TXT_V2_MENU;
         // Nome que nao cabe inteiro (idiomas longos): um corpo menor antes do
         // corte com reticencias.
         if ((float)txt_largura(e, aj2MenuTitulo(j)) > livre) e = TXT_V2_28;
-        t = ajTxtC(e, aj2MenuTitulo(j), livre); }
-      txt_desenhar_alpha(cn, m.x + m.w - AJ2_MENU_PAD - 28.0f - cn.w, lc - cn.h * 0.5f, 0.5f * mk * p->mRot);
+        t = ajTxtC(e, aj2MenuTitulo(j), livre);
+        // O valor vivo a direita, no que o nome deixa (nome sempre primeiro).
+        { char vb[160];
+          float sobra = livre - t.w - 28.0f;
+          aj2MenuValor(j - 2, vb, sizeof vb);
+          if (vb[0] && sobra >= 70.0f) {
+            TxtLinha v = ajTxtC(TXT_V2_24, vb, sobra);
+            float vx = m.x + m.w - AJ2_MENU_PAD - 28.0f - v.w;
+            txt_desenhar_alpha(v, vx, lc - v.h * 0.5f, (foco ? 0.8f : 0.5f) * mk * p->mRot);
+            if (j - 2 == AJS_APARENCIA && vx - 26.0f > rx + 28 + AJ2_MENU_ICO + AJ2_MENU_ICO_GAP + t.w + 8.0f)
+              gfx_cor((GfxRect){ vx - 24.0f, lc - 8.0f, 16, 16 }, 0.5f, ar, ag, ab, mk * p->mRot);
+          } } }
       txt_desenhar_alpha(t, rx + 28 + AJ2_MENU_ICO + AJ2_MENU_ICO_GAP, lc - t.h * 0.5f, al * mk * p->mRot);
       if (aj2MDesc[j] > 0.003f && h > AJ2_MENU_LN + 4) {
         float dy = (1.0f - aj2MDesc[j]) * 6.0f;
@@ -413,6 +464,7 @@ static float aj2DicasLinha(const AjDica *d, int n, float x, float yc, TxtEstilo 
 // A ilha da direita nao repete titulo nem descricao (o menu ja diz): a previa
 // real grande, os grupos em chips e a contagem ("32 opções · 7 avançadas").
 static float aj2PreviaCategoria(int sec, float x, float y, float w, float h);
+#define AJ2_USO_H 54.0f   // as linhas "como esta" do resumo
 static void aj2DesenharResumo(float a) {
   GfxRect r = aj2ResumoR();
   float x = r.x + 40.0f, w = r.w - 80.0f, y = r.y + 40.0f, grupo = gfx_opacidade_grupo;
@@ -422,11 +474,11 @@ static void aj2DesenharResumo(float a) {
   ajIlha(r, 40.0f, 1, 0);
   if (uxIndice >= 2) {
     // A imagem da categoria preenche o quadro de cima (16:9, arte real de ponta
-    // a ponta); embaixo, a descricao com a contagem a direita, os grupos em
-    // chips e as dicas no rodape — o mesmo raio e o mesmo vao da camada 2.
-    int sec = uxIndice - 2, i, nOp = 0, nAv = 0, nl = 1;
-    float ph = w * 9.0f / 16.0f, numW, descW, descH, chipsH, abaixo, fimUtil, cx, cy;
-    const float CH = 46.0f, CG = 10.0f, LH = 34.0f;
+    // a ponta); embaixo, a descricao com a contagem a direita, as primeiras
+    // opcoes com o valor de agora e as dicas no rodape — o mesmo raio e o mesmo vao da camada 2.
+    int sec = uxIndice - 2, i, nOp = 0, nAv = 0, uso[3], nUso = 0;
+    float ph = w * 9.0f / 16.0f, numW, descW, descH, chipsH, abaixo, fimUtil;
+    const float LH = 34.0f;
     const char *desc = sec < (int)(sizeof SECAO_AJUDA / sizeof *SECAO_AJUDA) ? SECAO_AJUDA[sec] : TELA[secIni[sec]].sub;
     char q[16], t[96];
     TxtLinha ln, lt;
@@ -439,16 +491,13 @@ static void aj2DesenharResumo(float a) {
     descW = w - numW - 40.0f;
     descH = txt_bloco(TXT_V2_26, desc, 0, 0, 0, x, -4000, descW, LH, 0, 2);
     if (descH < ln.h) descH = ln.h;
-    // chips: mede as linhas antes de desenhar
-    cx = x;
-    for (i = secIni[sec] + 1; i < secFim(sec); i++) {
-      float bw;
-      if (TELA[i].tipo != IT_ROT) continue;
-      bw = 20 + ajTxt(TXT_V2_24, TELA[i].titulo).w + 20;
-      if (cx > x && cx + bw > x + w) { cx = x; nl++; }
-      cx += bw + CG;
-    }
-    chipsH = cx == x ? 0 : nl * CH + (nl - 1) * CG;
+    // 2.0.2: no lugar dos chips dos blocos, as tres primeiras opcoes da
+    // categoria com o valor de agora: o resumo responde "como esta?" sem abrir.
+    { int k = 0;
+      for (i = secIni[sec] + 1; i < secFim(sec) && k < 3; i++)
+        if (TELA[i].tipo == IT_OPC && visivel(i) && !uxAvancada(TELA[i].op)) uso[k++] = TELA[i].op;
+      nUso = k; }
+    chipsH = nUso ? nUso * AJ2_USO_H : 0;
     abaixo = 24.0f + descH + (chipsH > 0 ? 18.0f + chipsH : 0);
     fimUtil = r.y + r.h - 40.0f - 40.0f - 24.0f;   // acima das dicas
     if (y + ph + abaixo > fimUtil) ph = fimUtil - abaixo - y;
@@ -459,17 +508,20 @@ static void aj2DesenharResumo(float a) {
       txt_desenhar(ln, nx, y - 4.0f);
       txt_desenhar_alpha(lt, nx + ln.w + 10.0f, base - lt.h * 0.80f - 4.0f, 0.55f); }
     y += descH + 18.0f;
-    cx = x; cy = y;
-    for (i = secIni[sec] + 1; i < secFim(sec); i++) {
-      TxtLinha c;
-      float bw;
-      if (TELA[i].tipo != IT_ROT) continue;
-      c = ajTxt(TXT_V2_24, TELA[i].titulo);
-      bw = 20 + c.w + 20;
-      if (cx > x && cx + bw > x + w) { cx = x; cy += CH + CG; }
-      ajNeutro((GfxRect){ cx, cy, bw, CH }, CH * 0.5f, 0.08f, AJ_CHIP_SOL, 1);
-      txt_desenhar_alpha(c, cx + 20, cy + (CH - c.h) * 0.5f, 0.85f);
-      cx += bw + CG;
+    for (i = 0; i < nUso; i++) {
+      int op = uso[i];
+      float yc = y + AJ2_USO_H * 0.5f, xd = x + w - 4.0f, mw;
+      TxtLinha l;
+      gfx_cor((GfxRect){ x, y, w, 1 }, 0, 1, 1, 1, 0.07f);
+      if (ajTipo(op) == AJL_TOG) mw = aj2ChipLiga(op, xd, yc, lig(op), inativa(op) ? 0.45f : 1.0f);
+      else {
+        TxtLinha v = ajTxtC(TXT_V2_24, ajTipo(op) == AJL_ACAO ? ajEstadoAcao(op) : textoValor(op), w * 0.45f);
+        txt_desenhar_alpha(v, xd - v.w, yc - v.h * 0.5f, inativa(op) ? 0.3f : 0.6f);
+        mw = v.w;
+      }
+      l = ajTxtC(TXT_V2_26, rotuloOpcao(op), w - mw - 40.0f);
+      txt_desenhar_alpha(l, x, yc - l.h * 0.5f, inativa(op) ? 0.4f : 0.85f);
+      y += AJ2_USO_H;
     }
   } else if (uxIndice == 1) {
     // Diferentes do padrao: as opcoes fora do padrao, com o valor de agora.
