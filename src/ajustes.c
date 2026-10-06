@@ -7,6 +7,7 @@
 #include "ajustes_ux.h"
 #include "trailerfonte.h"   // NV_TRAILER_CONTINUA_DETALHE, nas ajudas do trailer
 #include "dados.h"
+#include "resolucao.h"
 #include "enquete.h"
 #include "stalker.h"
 #include "xtream.h"
@@ -581,7 +582,8 @@ static const char *V_FONTE_UI[]  = { "Inter", "LG Display", "Droid Sans",
 // 720p entra no FIM (valor 2) para nao mexer no que ja esta gravado: 0 = 1080p e
 // 1 = 4K continuam como eram. 720p = alvo de desenho interno 1280x720 ampliado
 // para a janela (o nivel 3 de gpunivel.h), em qualquer plataforma.
-static const char *V_RESOLUCAO[] = { "1080p", "4K (experimental)", "720p (leve)" };
+// Order = RES_* (resolucao.h). The old order lives only in res_migrar.
+static const char *V_RESOLUCAO[] = { "Automática", "1080p", "4K (experimental)", "720p (leve)" };
 // `collapseSidebar`: recolhida = a rail some e o conteudo comeca em 104.
 static const char *V_RAIL[]      = { "Recolhida", "Fixa" };
 // `continueWatchingCardStyle`, validado em layoutPreferences.js contra
@@ -973,7 +975,7 @@ static const Opcao OPCOES[AJ_N] = {
 
   ESC("Idioma do app",              V_IDIOMA, IDIOMA_N + 1),
   ESC("Animações",                  V_ANIM, 2),
-  ESC("Resolução da interface",     V_RESOLUCAO, 3),
+  ESC("Resolução da interface",     V_RESOLUCAO, 4),
   ESC("Cor de destaque",            V_TEMA, AJ_N_TEMAS_OPC),  // selected_theme (+4 locais)
   // So vale com um tema dinamico: o destaque sai do LOGO do titulo em vez da
   // arte de fundo (dono, 25/09/2026: "matching color da logo tambem como
@@ -1244,7 +1246,7 @@ static const char *CHAVE[] = {
   "cardDepthContinueWatchingEnabled", "cardDepthEpisodeCardsEnabled",
   "cardDepthCastEnabled", "cardDepthTrailersEnabled",
   "posterCardWidthDp", "posterCardCornerRadiusDp", "qualidadeImagem",
-  "idioma", "animacoes", "resolucao_ui",
+  "idioma", "animacoes", "resolucaoUi",
   // A conta JA MANDAVA esta chave e o app a jogava fora: ela vem dentro de
   // theme_settings no blob de ajustes (profileSettingsSyncService.js), e o
   // laco de ajustes_aplicar_blob so procura as chaves que estao nesta lista.
@@ -1652,8 +1654,8 @@ int ajustes_animacoes_reduzidas(void) { return valor[AJ_ANIM] == 1; }
 // seguro.c: varios testes compilam ajustes.c com uma lista curta de fontes.
 static int perfilSeguro;
 #define SEGURO perfilSeguro
-int ajustes_4k(void)                  { return valor[AJ_RESOLUCAO] == 1 && !SEGURO; }
-int ajustes_720p(void)                { return valor[AJ_RESOLUCAO] == 2 && !SEGURO; }
+int ajustes_4k(void)                  { return valor[AJ_RESOLUCAO] == RES_4K && !SEGURO; }
+int ajustes_720p(void)                { return valor[AJ_RESOLUCAO] == RES_720 && !SEGURO; }
 int ajustes_dolby_vision(void)        { return lig(AJ_DV); }
 int ajustes_dolby_atmos(void)         { return lig(AJ_ATMOS); }
 int ajustes_pausa_overlay(void)       { return lig(AJ_PAUSA_OVERLAY); }
@@ -2787,7 +2789,7 @@ void ajustes_dir(const char *dir) {
     return;
   }
   { int viuIdioma = 0, viuAuto = 0, idiomaGravado = IDIOMA_EN, autoGravado = 0;
-    int medidorAntigo = -1, viuMedidor = 0;
+    int medidorAntigo = -1, viuMedidor = 0, resAntiga = -1, viuRes = 0;
   while (fgets(linha, sizeof linha, f)) {
     char chave[64]; int v, i;
     if (sscanf(linha, "%63s %d", chave, &v) != 2) continue;
@@ -2798,6 +2800,9 @@ void ajustes_dir(const char *dir) {
       continue;
     }
     if (!strcmp(chave, "idiomaAutoLocal")) { autoGravado = v == 1; viuAuto = 1; continue; }
+    // "resolucao_ui" (ate a 2.0.1) virou "resolucaoUi" com Automatica na
+    // frente: ver res_migrar. A chave nova, quando existe, vence.
+    if (!strcmp(chave, "resolucao_ui")) { resAntiga = v; continue; }
     // O MEDIDOR ERA LIGA/DESLIGA ("medidorDesempenhoLocal", V_LIGA: 0 = ligado)
     // e virou a forma na ilha (V_MEDIDOR). Ligado continua visivel: Grande, o
     // painel inteiro de antes; desligado continua desligado.
@@ -2813,10 +2818,15 @@ void ajustes_dir(const char *dir) {
       // padrao em vez de indexar fora do vetor.
       valor[i] = limita(i, v);
       if (i == AJ_MEDIDOR) viuMedidor = 1;
+      if (i == AJ_RESOLUCAO) viuRes = 1;
       break;
     }
   }
   if (!viuMedidor && medidorAntigo >= 0) valor[AJ_MEDIDOR] = medidorAntigo == 0 ? 3 : 0;
+  if (!viuRes && resAntiga >= 0) {
+    valor[AJ_RESOLUCAO] = res_migrar(resAntiga);
+    printf("[ajustes] resolucao da interface: resolucao_ui %d -> resolucaoUi %d\n", resAntiga, valor[AJ_RESOLUCAO]);
+  }
   // Escolha manual: "idioma" gravado e SEM a marca de automatico (arquivo de
   // antes da marca, ou de quem escolheu). Sem "idioma" nenhum, nunca houve
   // escolha e o automatico vale.
@@ -4880,7 +4890,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_TRAILER_ZOOM_TPK: return "Tira as barras pretas do trailer ampliando a imagem; em algumas TVs Samsung pode deixar a tela preta ou mostrar a tela inicial da TV.";
     case AJ_CACHE_SEEK: return "Guarda no disco o trecho já baixado do vídeo, para voltar sem baixar de novo. Apagado ao fechar o player.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
-    case AJ_RESOLUCAO: return "4K desenha a interface em 4K nas TVs que permitem; muitas ignoram o pedido e continuam em 1080p. 720p desenha em 1280x720 e amplia para a tela: mais leve em TV fraca, com texto um pouco mais suave. Reinicie o app depois de mudar. O vídeo não muda: segue a qualidade da fonte.";
+    case AJ_RESOLUCAO: return "Automática desenha em 1080p e, se a TV for fraca, tira efeitos em vez de baixar a resolução. 4K só nas TVs que permitem; se a TV não aguentar, o app volta para 1080p e avisa. Para tentar 4K de novo, escolha 4K outra vez. 720p desenha em 1280x720 e amplia: mais leve, com texto mais suave. Reinicie o app depois de mudar. O vídeo não muda.";
     case AJ_PERFIL_ATIVO: return "Perfil em uso nesta TV. Trocar de perfil é feito na tela de perfis, ao abrir o app.";
     case AJ_SYNC: return "Estado da última troca de dados com a sua conta: addons, progresso, coleções e preferências.";
     case AJ_ADDONS: return "Abre a lista de addons da sua conta, para ligar e desligar cada um nesta TV.";
@@ -5391,7 +5401,7 @@ typedef struct {
 static int nvFileiras(int v) { return v > FIL_LIMITE_VIGIADO ? v : 0; }
 static int nvItens(int v)    { return v > 0 ? v : 0; }
 static int nvLigado(int v)   { return v == 0; }        // V_LIGA: 0 = Ligado
-static int nv4k(int v)       { return v == 1; }
+static int nv4k(int v)       { return v == RES_4K; }
 static int nvImersiva(int v) { return v == AJ_TEMA_IMERSIVA; }
 static int nvQualAlta(int v) { return v == 2; }
 static int nvTexAlto(int v)  { return v >= 5 ? v : 0; }   // 400 e 512 MB
@@ -5604,6 +5614,11 @@ static int definirValorDireto(int op, int novo) {
   if (op == AJ_CW_ORDEM || op == AJ_CW_NAO_EXIBIDOS || op == AJ_CW_CONCLUIDO)
     desc_refazer_continuar();
   if (op == AJ_TEX_MB) tex_definir_orcamento_mb(ajustes_tex_mb());
+  // Picking 4K again = try again: forget that this TV did not hold it.
+  if (op == AJ_RESOLUCAO && novo == RES_4K) {
+    char *m = dados_ler(RES_ARQ_RECUO);
+    if (m) { free(m); dados_apagar(RES_ARQ_RECUO); printf("[4k] 4K escolhido de novo: tenta outra vez no proximo arranque\n"); }
+  }
   if (op == AJ_ENQUETES) enquete_definir_optout(novo != 0);
   if (op == AJ_ADDONS_PRINCIPAL) sync_iniciar();
   if (op == AJ_SELOS_PACOTE) { selospacote_escolher(novo - 1); spEspelhar(); }

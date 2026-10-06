@@ -23,7 +23,7 @@ int main(void) {
 
   // Perfil 1: destaque desligado, 4K pedido.
   valor[AJ_HERO] = 1;
-  valor[AJ_RESOLUCAO] = 1;
+  valor[AJ_RESOLUCAO] = RES_4K;
   valor[AJ_ADDONS_PRINCIPAL] = 0;
   ajustes_perfil_guardar(1);
 

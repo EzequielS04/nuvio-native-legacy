@@ -52,11 +52,12 @@ int main(void) {
   assert(valor[AJ_IDIOMA] == 0);              // Automatico
   assert(ajustes_idioma() == IDIOMA_EN);      // sem conta nem TV: English (release publico)
   assert(valor[AJ_ANIM] == 0);                // animacoes completas
-  assert(valor[AJ_RESOLUCAO] == 0);           // 1080p
+  assert(valor[AJ_RESOLUCAO] == RES_AUTO);    // Automatica (06/10: 1080p, nunca 720p sozinha)
   assert(!ajustes_4k() && !ajustes_720p());
-  valor[AJ_RESOLUCAO] = 1; assert(ajustes_4k() && !ajustes_720p());    // 4K: valor 1, como sempre
-  valor[AJ_RESOLUCAO] = 2; assert(!ajustes_4k() && ajustes_720p());    // 720p: valor novo no fim
-  valor[AJ_RESOLUCAO] = 0;
+  valor[AJ_RESOLUCAO] = RES_1080; assert(!ajustes_4k() && !ajustes_720p());
+  valor[AJ_RESOLUCAO] = RES_4K;   assert(ajustes_4k() && !ajustes_720p());
+  valor[AJ_RESOLUCAO] = RES_720;  assert(!ajustes_4k() && ajustes_720p());
+  valor[AJ_RESOLUCAO] = RES_AUTO;
   assert(ajustes_relogio_ligado() && ajustes_relogio_pos() == 0);   // relogio: ligado, automatico
   assert(ajustes_selo_visto());   // selo de visto no cartaz: ligado (#212)
   assert(valor[AJ_TEMA] == AJ_TEMA_DINAMICA && valor[AJ_FUNDO] == 2);   // aparencia de fabrica da 2.0: Da arte + Frost

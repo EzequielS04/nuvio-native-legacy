@@ -368,11 +368,14 @@ int   ajustes_local_descobrir(void);
 int   ajustes_descobrir_na_busca(void); // searchDiscoverEnabled (derivado)
 
 // --- LAYOUT: continuar assistindo -------------------------------------------
-// 1 = pedir uma superficie 3840x2160 na criacao da janela. A TV pode ignorar,
-// e a maioria ignora — a linha `janela=... drawable=...` do log diz o que ela
-// respondeu. Ver a nota em main.c.
+// "Resolucao da interface" (RES_* em resolucao.h; padrao Automatica = 1080p).
+// ajustes_4k: 1 = a pessoa escolheu 4K: pedir uma superficie 3840x2160 na
+// criacao da janela. A TV pode ignorar — a linha `janela=... drawable=...` do
+// log diz o que ela respondeu — e se conceder e nao aguentar, main.c recua
+// para 1080p (resolucao.h). Ver a nota em main.c.
 int   ajustes_4k(void);
-// 1 = desenhar a interface em 1280x720 e ampliar para a janela (gpun_forcar_720).
+// 1 = a pessoa escolheu 720p: desenhar em 1280x720 e ampliar (gpun_forcar_720).
+// Nunca automatico.
 int   ajustes_720p(void);
 // Ilha do relogio (ilha.h). _ligado: 0 = sem pilula em repouso (os avisos
 // continuam saindo dela). _pos: 0 automatica, 1 esquerda, 2 direita.

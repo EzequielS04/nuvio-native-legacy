@@ -168,7 +168,7 @@ int main(void) {
     saida = NULL;
     n = ajustes_mesclar_blob(
       "{\"features\":{\"layout_settings\":{"
-      "\"resolucao_ui\":{\"type\":\"int\",\"value\":0},"
+      "\"resolucaoUi\":{\"type\":\"int\",\"value\":0},"
       "\"texturas_mb\":{\"type\":\"int\",\"value\":0}}}}", &saida);
     confere("ajuste de aparelho fica local", n, 0);
     free(saida); }
