@@ -68,6 +68,14 @@ extern void NV_CAT_TEST_ANTES_TRAVA(void);
 #else
 #define CAT_TESTE_ANTES_TRAVA() ((void)0)
 #endif
+#ifdef NV_CAT_TEST_CACHE_MEIO
+// Teste (tests/catcachecorrida.c): outro fio mexe no catalogo no meio da
+// codificacao do cache.
+extern void NV_CAT_TEST_CACHE_MEIO(void);
+#define CAT_TESTE_CACHE_MEIO() NV_CAT_TEST_CACHE_MEIO()
+#else
+#define CAT_TESTE_CACHE_MEIO() ((void)0)
+#endif
 
 // --- QUANDO O BLOCO VELHO PODE MORRER ----------------------------------------
 // O bloco trocado fora morria na troca SEGUINTE. Isso protegia o leitor de UMA
@@ -911,6 +919,7 @@ int cat_gravar_cache_se_identidade(const char *dirArte, const char *donoEsperado
     encN = rleCodificar((const unsigned char *)itens, rawN, NULL);
     enc = malloc(encN ? encN : 1);
     if (!enc) return 0;
+    CAT_TESTE_CACHE_MEIO();
     rleCodificar((const unsigned char *)itens, rawN, enc);
     c.magia = CACHE_MAGIA_RLE;
     encN64 = encN;
