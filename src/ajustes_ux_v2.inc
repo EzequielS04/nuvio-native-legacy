@@ -198,9 +198,9 @@ static float aj2MenuAberta(int j) {
 }
 static int aj2MenuFocado(void) { return focoIndice ? uxIndice : -1; }
 // Os tres grupos do indice: so a apresentacao. As categorias seguem a ordem de
-// TELA[] (reordenada em ajustes_ux_tela.inc: Telas = 0-4, Assistir = 5-7, o
+// TELA[] (reordenada em ajustes_ux_tela.inc: Telas = 0-4, Assistir = 5-8, o
 // resto em Conta e sistema); nada aqui mexe em valor[] nem em CHAVE[].
-static int aj2Grupo(int s) { return s < 5 ? 0 : s < 8 ? 1 : 2; }
+static int aj2Grupo(int s) { return s < AJS_REPRODUCAO ? 0 : s < AJS_CONTAS ? 1 : 2; }
 static int aj2GrupoIni(int s) { return s == 0 || aj2Grupo(s) != aj2Grupo(s - 1); }
 static const char *aj2GrupoNome(int g) { return g == 0 ? "Telas" : g == 1 ? "Assistir" : "Conta e sistema"; }
 static int aj2ContaOpcoes(int sec) {

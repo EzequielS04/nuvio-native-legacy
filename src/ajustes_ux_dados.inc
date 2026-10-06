@@ -197,6 +197,34 @@ static const char *uxSinonimos(int op) {
   }
 }
 
+/* Onde a opcao morava ANTES da reorganizacao de 2.0.2 (categoria e bloco
+ * antigos). Entra no indice da busca, em portugues e traduzido, para quem
+ * procura pelo nome que ja conhecia: "contas", "chaves", "escolha da fonte". */
+static const char *uxCaminhoAntigo(int op) {
+  switch (op) {
+    case AJ_ADDONS: case AJ_PLUGINS: case AJ_ADDONS_PRINCIPAL:
+      return "Contas e serviços";
+    case AJ_DEBRID_RD: case AJ_DEBRID_TB: case AJ_DEBRID_PM: case AJ_DEBRID_AD: case AJ_DEBRID_AD_TESTAR:
+    case AJ_MDB_CHAVE: case AJ_FANART_CHAVE:
+      return "Chaves";
+    case AJ_P2P_LIGADO: case AJ_P2P_URL: case AJ_P2P_TESTAR:
+    case AJ_JF_LIGADO: case AJ_JF_SERVIDOR: case AJ_JF_ENTRAR: case AJ_JF_SAIR:
+    case AJ_EM_SERVIDOR: case AJ_EM_ENTRAR: case AJ_EM_SAIR:
+    case AJ_PX_ENTRAR: case AJ_PX_SERVIDOR: case AJ_PX_SAIR:
+    case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR: case AJ_SAIR:
+    case AJ_TRAKT: case AJ_SIMKL: case AJ_DISCORD: case AJ_SALVOS_DEST: case AJ_CW_FONTE: case AJ_ENQUETES:
+      return "Contas e serviços";
+    case AJ_FONTE_MANUAL: case AJ_FONTE_AUTO: case AJ_FONTE_REPOR: case AJ_FONTE_PRIORIDADE:
+    case AJ_FONTE_HDR: case AJ_FONTE_PRAZO: case AJ_FONTE_TEXTO: case AJ_TAM_MAX: case AJ_TAM_MIN:
+    case AJ_SELOS_CORES: case AJ_SELOS_PACOTE: case AJ_SELOS_PACOTE_ADD: case AJ_SELOS_PACOTE_REM:
+      return "Reprodução";
+    case AJ_BUSCA_CINEMETA: return "Busca";
+    case AJ_AVANCADAS: return "Aparência";
+    case AJ_IDIOMA: return "Idioma";
+    default: return "";
+  }
+}
+
 static void uxIndiceAcrescentar(char *indice, size_t tam, const char *texto) {
   char normal[1536];
   size_t usado = strlen(indice), n;
@@ -260,6 +288,8 @@ int ajustes_buscar(const char *consulta, AjusteBuscaResultado *resultados, int c
     uxIndiceAcrescentar(indice, sizeof indice, titulo);
     uxIndiceAcrescentar(indice, sizeof indice, tituloPt);
     uxIndiceAcrescentar(indice, sizeof indice, aliases);
+    uxIndiceAcrescentar(indice, sizeof indice, uxCaminhoAntigo(op));
+    uxIndiceAcrescentar(indice, sizeof indice, i18n(uxCaminhoAntigo(op)));
     uxIndiceAcrescentar(indice, sizeof indice, secao);
     uxIndiceAcrescentar(indice, sizeof indice, i18n(secao));
     uxIndiceAcrescentar(indice, sizeof indice, grupo);

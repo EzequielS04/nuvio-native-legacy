@@ -454,7 +454,7 @@ static void desenhaVinculo(const char *servico, const char *codigo,
   ajCentraModal(&m);
   ajIlha(m, 36, 1, 1);
   x = m.x + 56 + 356 + 56; y = m.y + 50;
-  ajKicker("Contas e serviços", x, y, 1);
+  ajKicker("Fontes e addons", x, y, 1);
   y += 22 + 4;
   snprintf(t, sizeof t, i18n("Conectar %s"), servico);
   { TxtLinha l = ajTxtC(TXT_ILHA_TITULO, t, m.x + m.w - 56 - x); txt_desenhar(l, x, y); y += 48; }
@@ -928,7 +928,7 @@ static void ajDesenharAddons(int foco) {
   fr = ajFolhaR(); ir = ajInspR();
   ajIlha(fr, 36, 1, 0);
   snprintf(sub, sizeof sub, i18n("%d de %d ligados nesta TV"), lig, n);
-  topo = ajCabecalhoFolha(fr, "Contas e serviços", "Addons", n ? sub : "Nenhum addon nesta conta.", 0, 1);
+  topo = ajCabecalhoFolha(fr, "Fontes e addons", "Addons", n ? sub : "Nenhum addon nesta conta.", 0, 1);
   if (foco >= n) foco = n - 1;
   alvo = foco * 84.0f - (base - topo - 80.0f) * 0.5f;
   if (alvo > n * 84.0f - (base - topo)) alvo = n * 80.0f - (base - topo);
@@ -1048,7 +1048,7 @@ static void ajDesenharPlugins(const AjPluginsVista *v) {
     int lig, tot = plugins_repo_scrapers(v->repo, &lig);
     snprintf(sub, sizeof sub, i18n("%d scrapers · %d ligados"), tot, lig);
   }
-  topo = ajCabecalhoFolha(fr, v->nivel == 1 ? "Plugins" : "Contas e serviços",
+  topo = ajCabecalhoFolha(fr, v->nivel == 1 ? "Plugins" : "Fontes e addons",
                           v->nivel == 1 ? (rp.nome[0] ? rp.nome : rp.url) : "Plugins", sub, 0, 1);
   n = !disp ? 1 : v->nivel == 0 ? 2 + nr : 1 + plugins_repo_scrapers(v->repo, NULL);
   if (foco >= n) foco = n - 1;
