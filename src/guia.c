@@ -435,16 +435,11 @@ static void recLer(void) {
   fclose(f);
 }
 
-// A mesma normalizacao de baseNormalizada em addons.c (que e estatica la):
-// sem query, sem /manifest.json, sem barra final. E o que faz "instalado"
-// bater com addons_base(i) para a URL que o dono escreveu no arquivo.
+// A mesma normalizacao de addons.c (nv_addon_base, addonurl.h). E o que faz
+// "instalado" bater com addons_base(i) para a URL que o dono escreveu no
+// arquivo.
 static void baseDaUrl(const char *url, char *dst, size_t tam) {
-  size_t k; char *q;
-  snprintf(dst, tam, "%s", url);
-  q = strchr(dst, '?'); if (q) *q = 0;
-  k = strlen(dst);
-  if (k > 14 && !strcmp(dst + k - 14, "/manifest.json")) { k -= 14; dst[k] = 0; }
-  while (k && dst[k - 1] == '/') dst[--k] = 0;
+  nv_addon_base(url, dst, tam);
 }
 
 static int recInstalado(const GRec *r) {
@@ -606,10 +601,10 @@ static int lerPagina(const GFonte *f, int skip, int teto, int *novos) {
   const char *p;
   int n = 0, w, semBase = 0;
   if (skip > 0)
-    w = snprintf(url, sizeof url, "%s/catalog/%s/%s/skip=%d.json",
-                 f->base, f->tipo, f->id, skip);
+    w = nv_addon_url(url, sizeof url, f->base, "/catalog/%s/%s/skip=%d.json",
+                     f->tipo, f->id, skip);
   else
-    w = snprintf(url, sizeof url, "%s/catalog/%s/%s.json", f->base, f->tipo, f->id);
+    w = nv_addon_url(url, sizeof url, f->base, "/catalog/%s/%s.json", f->tipo, f->id);
   *novos = 0;
   // Pedido cortado nao sai (addonurl.h); o log leva o nome do catalogo.
   if (!nv_addon_pedido_coube(f->nome, w, sizeof url)) return 0;
@@ -740,7 +735,7 @@ static void sondaManifestos(void) {
     // ADDON DESLIGADO TAMBEM E LIDO, so que nao vira fonte. Custa um GET por
     // addon desligado (medido: 0 a 3 numa conta tipica) e e o que permite ao
     // painel dizer se vale a pena religa-lo para o guia.
-    corpo = nv_addon_pedido_coube(addons_nome(a), snprintf(url, sizeof url, "%s/manifest.json", base),
+    corpo = nv_addon_pedido_coube(addons_nome(a), nv_addon_url(url, sizeof url, base, "/manifest.json"),
                                   sizeof url)
             ? rede_baixar(url, 15) : NULL;
     if (!ativo) {

@@ -38,6 +38,7 @@ void marco(const char *s) { (void)s; }
 const char *rede_url_publica(const char *url, char *d, unsigned tam) {
   snprintf(d, tam, "%s", url); return d;
 }
+const char *rede_ultimo_erro(void) { return ""; }
 char *rede_baixar(const char *url, int timeout) {
   (void)timeout;
   assert(strstr(url, "/stream/") && strstr(url, ".json"));

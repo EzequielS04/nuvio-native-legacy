@@ -440,15 +440,6 @@ static DiagResultado classificar(int status, const char *corpo) {
   return DR_OK;
 }
 
-static void urlJoin(char *dst, size_t cap, const char *base, const char *path) {
-  size_t n;
-  if (!dst || !cap) return;
-  snprintf(dst, cap, "%s", base ? base : "");
-  n = strlen(dst);
-  while (n && dst[n - 1] == '/') dst[--n] = 0;
-  snprintf(dst + n, cap - n, "/%s", path ? path : "");
-}
-
 // Id do titulo da amostra `ordem`. Le a COPIA feita no fio de desenho: o
 // catalogo pode recarregar enquanto o fio do diagnostico roda.
 static const char *amostraTitulo(int ordem) {
@@ -463,8 +454,8 @@ static char *baixarFontesAddon(int i, const char *id, const RedeControle *contro
                                RedeMedida *medida) {
   char url[NV_ADDON_PEDIDO_MAX];
   // Pedido cortado nao sai (addonurl.h): mediria outra URL como se fosse o addon.
-  if (!nv_addon_pedido_coube(addons_nome(i), snprintf(url, sizeof url, "%s/stream/movie/%s.json",
-                                                      addons_base(i), id), sizeof url)) {
+  if (!nv_addon_pedido_coube(addons_nome(i), nv_addon_url(url, sizeof url, addons_base(i),
+                                                      "/stream/movie/%s.json", id), sizeof url)) {
     if (medida) memset(medida, 0, sizeof *medida);
     return NULL;
   }
@@ -1252,7 +1243,7 @@ static int diagnosticoWorker(void *arg) {
       atomic_fetch_add(&d.feitos, 1);
       continue;
     }
-    urlJoin(url, sizeof url, base, "manifest.json");
+    nv_addon_url(url, sizeof url, base, "/manifest.json");
     corpo = rede_baixar_medido_controle(url, DIAG_TIMEOUT_S, NULL, &controle, &medida);
     a->manifest_ms = (int)medida.ms;
     d.manifestMs += a->manifest_ms;
@@ -1282,8 +1273,8 @@ static int diagnosticoWorker(void *arg) {
         char catalogUrl[NV_ADDON_PEDIDO_MAX];
         char *catalogo;
         int coube = nv_addon_pedido_coube(addons_nome(i),
-                      snprintf(catalogUrl, sizeof catalogUrl, "%s/catalog/movie/%s.json", base,
-                               amostraTitulo(catalogTestados)), sizeof catalogUrl);
+                      nv_addon_url(catalogUrl, sizeof catalogUrl, base, "/catalog/movie/%s.json",
+                                   amostraTitulo(catalogTestados)), sizeof catalogUrl);
         controle = controleDiagnostico(2L * 1024L * 1024L);
         if (!coube) memset(&medida, 0, sizeof medida);
         catalogo = coube ? rede_baixar_medido_controle(catalogUrl, DIAG_TIMEOUT_S, NULL, &controle, &medida)
