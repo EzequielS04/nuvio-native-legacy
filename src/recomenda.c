@@ -3557,12 +3557,21 @@ static int ciclo(void) {
     lerPedidos(cab);
     lerFeedNovo(cab, 1);
     contatosMs = SDL_GetTicks() + REC_CONTATOS_MS;
-  } else if ((Sint32)(SDL_GetTicks() - contatosMs) >= 0) {
-    lerContatos(cab);
-    lerSugestoes(cab);
+  } else {
+    if ((Sint32)(SDL_GetTicks() - contatosMs) >= 0) {
+      lerContatos(cab);
+      lerSugestoes(cab);
+      lerFeedNovo(cab, 1);
+      contatosMs = SDL_GetTicks() + REC_CONTATOS_MS;
+    }
+    // OS PEDIDOS NAO ESPERAM OS DEZ MINUTOS DOS CONTATOS (06/10, relato do
+    // dono: "nao da pra ver quando alguem te adicionou, e nao mostra na ilha").
+    // Eles moravam neste bloco: um pedido feito com a TV ligada so chegava na
+    // proxima volta do relogio de 600 s — nem a ilha, nem a aba Amigos (que so
+    // chama recomenda_pedir_agora, que nao mexe nesse relogio) ficavam sabendo.
+    // Agora sao lidos a cada ciclo (60 s, ou na hora em que a aba abre): um
+    // GET pequeno, do tamanho do feed que ja sai a cada ciclo.
     lerPedidos(cab);
-    lerFeedNovo(cab, 1);
-    contatosMs = SDL_GetTicks() + REC_CONTATOS_MS;
   }
   lerFeedNovo(cab, 0);
   enviarAparecer(cab);
