@@ -224,7 +224,14 @@ int  video_tem_dolby_vision(void) { return SIM.dv; }
 const char *video_hdr(void) { return SIM.hdr[0] ? SIM.hdr : "none"; }
 int  video_largura(void) { return SIM.largura; }
 int  video_altura(void) { return SIM.altura; }
+#ifdef NV_SHOT_HOOKS
+// Capturas: a folha de Fontes com o "Sem HDR" da LG (6 botoes no cabecalho).
+static int shotSdr;
+void video_shot_pode_forcar_sdr(int sim) { shotSdr = sim; }
+int  video_pode_forcar_sdr(void) { return shotSdr; }
+#else
 int  video_pode_forcar_sdr(void) { return 0; }
+#endif
 // No Mac nao ha plano de video: 1 para que a tela de aspecto ofereca todos os
 // modos ao desenvolver, que e o mesmo que a LG faz.
 int  video_recorte_fonte(void) { return 1; }

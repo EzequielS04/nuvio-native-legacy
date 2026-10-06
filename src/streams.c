@@ -55,9 +55,6 @@
 #define FOLHA_PAD_E     48.0f  // da borda da folha ao cartao da linha
 #define FOLHA_PAD_D     56.0f
 #define FOLHA_TXT       26.0f  // do cartao ao texto
-// Onde a lista comeca. Desce uma linha quando os filtros nao cabem ao lado do
-// titulo (cabExtra, ver medirCabecalho).
-static float cabExtra;
 // NO PLAYER A FOLHA NASCE DA ILHA DO RELOGIO (dono, 03/10: "no player o
 // componente do source tem que sair da ilha do relogio"), como Audio,
 // Legendas e Episodios: plrilha.h cresce a pilula da hora ate o corpo, no
@@ -69,8 +66,17 @@ static float folhaOY, folhaBase;
 #define FOLHA_ILHA_CAB   64.0f   // plrilha.c: CAB_H (a linha da hora)
 #define FOLHA_ILHA_BASE  48.0f   // margem de baixo = a de cima
 #define FOLHA_ILHA_PAD   22.0f   // do cabecalho ao kicker, como os Episodios
-#define FOLHA_TOPO     (286.0f + cabExtra + folhaOY)
-static int medirCabecalho(void);
+// CABECALHO COMPACTO (dono, 06/10: "subir os botoes para o lado do titulo e
+// as abas em cima, para o cabecalho nao ficar tao grande"). Tres faixas, de
+// cima: a linha do kicker (contexto, ou a ajuda do botao em foco), a linha do
+// titulo com TODOS os botoes a direita (nunca mais desce uma linha, ver
+// medirCabecalho) e as abas de addon. A lista comeca logo abaixo das abas.
+#define FOLHA_CAB_Y    100.0f  // topo dos botoes, centrados no titulo
+#define FOLHA_ABAS_Y   168.0f  // topo da faixa das abas
+#define FOLHA_ABAS_H    56.0f
+#define FOLHA_ABA_H     44.0f  // a pilula de cada aba, dentro da faixa
+#define FOLHA_TOPO     (FOLHA_ABAS_Y + FOLHA_ABAS_H + 24.0f + folhaOY)
+static void medirCabecalho(void);
 #define FOLHA_LINHA_H  112.0f  // linha sem marca e sem arquivo
 #define FOLHA_MARCA_H   30.0f  // "SUA ESCOLHA ANTERIOR" / "REPRODUZINDO AGORA"
 #define FOLHA_ARQ_H     34.0f  // nome do arquivo, so na linha em foco
@@ -2215,6 +2221,11 @@ void stream_folha_evento(const SDL_Event *e) {
   if(k==SDLK_r) {recarregar=1;return;}
   montar(automaticaDaFolha());
   int nf=nOrdem;
+  // ORDEM DO FOCO, de cima: fileira de botoes (grupo -1) -> abas de addon
+  // (grupo 0) -> lista (grupo 1). CIMA na primeira linha vai as abas; CIMA
+  // nas abas vai ao ultimo botao (Fechar, o mais perto do canto); BAIXO desce
+  // na mesma ordem. ESQUERDA/DIREITA andam dentro da fileira de botoes, e nas
+  // abas e na lista trocam de aba. Voltar fecha a folha de qualquer grupo.
   // `foco` e indice de BOTAO no cabecalho e de LINHA na lista: ao trocar de
   // grupo ele recomeca, senao descer do quarto botao caia na quarta linha.
   if(k==SDLK_UP) {
@@ -2472,12 +2483,14 @@ static float caixaAlta(const char *s, int r, int g, int b, float x, float y, flo
 // CHIP DO CABECALHO: mais baixo e mais leve que a pilula primaria do app —
 // e acao secundaria de uma folha, nao o Play. Repouso em branco a 8%, foco no
 // acento com a tinta calculada, e `ligado` (o filtro MP4 ativo) num acento a
-// 22% com texto no acento: estado, nao foco.
+// 22% com texto no acento: estado, nao foco. Com icone E rotulo (o filtro em
+// foco na fileira compacta), o icone vai a esquerda do rotulo.
 #define FOLHA_CHIP_H 56.0f
+#define FOLHA_CHIP_GAP 10.0f
 #define FOLHA_LOGO_H 36.0f   // logo do titulo na linha: caixa da altura do nome
 #define FOLHA_LOGO_VAO 12.0f // folga da logo ate a fileira de selos (dono, 05/10: "grudada")
 #define FOLHA_LOGO_W 220.0f
-static void chipFolha(GfxRect r, const char *rot, const char *icone, int foco, int ligado, float a) {
+static void chipFolha(GfxRect r, const char *rot, float rotW, const char *icone, int foco, int ligado, float a) {
   float ar, ag, ab;
   int c = 225, cr, cg, cb;
   ajustes_acento(&ar, &ag, &ab);
@@ -2491,35 +2504,77 @@ static void chipFolha(GfxRect r, const char *rot, const char *icone, int foco, i
   else gfx_cor(r, .5f, .14f, .148f, .17f, a);
   cr = cg = cb = c;
   if (!foco && ligado) { cr = (int)(ar * 255); cg = (int)(ag * 255); cb = (int)(ab * 255); }
-  if (icone) {
-    float g = r.h * .42f;
+  float g = r.h * .42f;
+  if (icone && !rot) {
     gfx_icone((GfxRect){ r.x + (r.w - g) * .5f, r.y + (r.h - g) * .5f, g, g }, icone,
               cr / 255.0f, cg / 255.0f, cb / 255.0f, a);
+  } else if (icone) {
+    TxtLinha l = txt_linha_corta(TXT_HERO_META, rot, cr, cg, cb, 255, rotW);
+    float x0 = r.x + (r.w - g - 10.0f - l.w) * .5f;
+    gfx_icone((GfxRect){ x0, r.y + (r.h - g) * .5f, g, g }, icone, cr / 255.0f, cg / 255.0f, cb / 255.0f, a);
+    txt_desenhar_alpha(l, x0 + g + 10.0f, r.y + (r.h - l.h) * .5f, a);
   } else {
-    TxtLinha l = txt_linha(TXT_HERO_META, rot, cr, cg, cb, 255);
+    TxtLinha l = txt_linha_corta(TXT_HERO_META, rot, cr, cg, cb, 255, rotW);
     txt_desenhar_alpha(l, r.x + (r.w - l.w) * .5f, r.y + (r.h - l.h) * .5f, a);
   }
 }
 
-// OS BOTOES NAO CABEM AO LADO DO TITULO com seis botoes (a LG tem "Sem HDR")
-// nem em ingles ("MP4 only", "Cached"): passavam por cima de "Fontes". Medido,
-// e nao suposto por lingua: se a fila nao cabe, o titulo fica com os discos
-// (Recarregar, Fechar) e os filtros descem para uma linha propria.
-#define FOLHA_CAB_LINHA 68.0f
-static float bwCab[6];
-static int medirCabecalho(void) {
-  float rw = FOLHA_W - FOLHA_PAD_E - FOLHA_PAD_D, soma = 0;
+// TODOS OS BOTOES NA LINHA DO TITULO (#202). Antes, com seis botoes (a LG tem
+// "Sem HDR") ou em ingles/alemao, os filtros desciam para uma linha propria e
+// a lista comecava 68 px mais baixo. Agora a fileira encolhe ate caber, em
+// degraus, MEDIDO e nao suposto por lingua:
+//   0. rotulos inteiros, folga de 20 de cada lado;
+//   1. rotulos inteiros, folga de 14;
+//   2. filtros viram discos de icone (Lucide), como Recarregar e Fechar; o
+//      filtro EM FOCO abre o rotulo ao lado do icone quando o rotulo cabe
+//      INTEIRO (reticencias em "Em cache" viravam "Em..."), e a linha do
+//      kicker explica o que ele faz em qualquer caso.
+// No degrau 2 o filtro ligado continua no acento, entao "qual esta ativo" se
+// le sem foco. Se nem os discos couberem (titulo enorme), o titulo e cortado.
+static float bwCab[6], rotWCab[6], titMaxCab, gapCab;
+static const char *rotCab[6], *icoCab[6];
+static int nivelCab;
+static const char *iconeFiltro(int b) {
+  return b == BT_SEM_HDR ? "aj_sun-dim" : b == BT_SO_MP4 ? "aj_film"
+       : b == BT_CACHE ? "aj_zap" : b == BT_DUB ? "aj_languages" : NULL;
+}
+static void medirCabecalho(void) {
+  float rw = FOLHA_W - FOLHA_PAD_E - FOLHA_PAD_D;
   float tit = (float)txt_linha(TXT_ILHA_TITULO, "Fontes", 255, 255, 255, 255).w;
-  int nbt = nBotoes(), dois;
-  for (int i = 0; i < nbt; i++) {
-    int b = botaoDe(i);
-    bwCab[i] = iconeBotao(b) ? FOLHA_CHIP_H
-             : (float)txt_linha(TXT_HERO_META, rotuloBotao(b), 255, 255, 255, 255).w + 40.0f;
-    soma += bwCab[i] + (i ? 10.0f : 0.0f);
+  float livre = rw - FOLHA_TXT - tit - 24.0f, soma = 0;
+  int nbt = nBotoes();
+  for (nivelCab = 0; nivelCab < 3; nivelCab++) {
+    float pad = nivelCab == 0 ? 20.0f : 14.0f;
+    gapCab = nivelCab < 2 ? FOLHA_CHIP_GAP : 8.0f;
+    soma = (nbt - 1) * gapCab;
+    for (int i = 0; i < nbt; i++) {
+      int b = botaoDe(i);
+      const char *ic = iconeBotao(b);
+      rotWCab[i] = 0;
+      if (ic) { icoCab[i] = ic; rotCab[i] = NULL; bwCab[i] = FOLHA_CHIP_H; }
+      else if (nivelCab < 2) {
+        icoCab[i] = NULL; rotCab[i] = rotuloBotao(b);
+        rotWCab[i] = (float)txt_linha(TXT_HERO_META, rotCab[i], 255, 255, 255, 255).w;
+        bwCab[i] = rotWCab[i] + 2 * pad;
+      } else {
+        icoCab[i] = iconeFiltro(b); rotCab[i] = NULL; bwCab[i] = FOLHA_CHIP_H;
+      }
+      soma += bwCab[i];
+    }
+    if (soma <= livre) break;
   }
-  dois = soma > rw - FOLHA_TXT - tit - 28.0f;
-  cabExtra = dois ? FOLHA_CAB_LINHA : 0.0f;
-  return dois;
+  if (nivelCab == 3) nivelCab = 2, gapCab = 8.0f;
+  // Degrau 2: o filtro em foco abre o rotulo no espaco que sobrou.
+  if (nivelCab == 2 && grupo == -1 && foco >= 0 && foco < nbt && !iconeBotao(botaoDe(foco))) {
+    float g = FOLHA_CHIP_H * .42f, w;
+    rotCab[foco] = rotuloBotao(botaoDe(foco));
+    w = (float)txt_linha(TXT_HERO_META, rotCab[foco], 255, 255, 255, 255).w + 1.0f;
+    if (soma - FOLHA_CHIP_H + 16.0f + g + 10.0f + w + 18.0f > livre) rotCab[foco] = NULL;
+    else { rotWCab[foco] = w; bwCab[foco] = 16.0f + g + 10.0f + w + 18.0f; soma += bwCab[foco] - FOLHA_CHIP_H; }
+  }
+  titMaxCab = rw - FOLHA_TXT - 24.0f - soma;
+  if (titMaxCab < tit) titMaxCab = titMaxCab < 80.0f ? 80.0f : titMaxCab;
+  else titMaxCab = tit + 1.0f;
 }
 
 static void stream_folha_desenharCorpo_(Uint32 agora);
@@ -2590,39 +2645,15 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
     // O painel em si absorve o clique no vazio (nao fecha, nao da OK).
     ponteiro_alvo(x, 0, FOLHA_W, NV_TELA_H, NULL, NULL, 0, 0);
   }
-  // CABECALHO: a linha de contexto (episodio) pequena e espacada sobre
-  // "Fontes"; os botoes alinhados a direita, centrados no titulo.
-  { float cw = 0, ch = 0;
-    if (contexto[0]) {
-      // Kicker do Glass UI: 15/700 em caixa alta espacada, cinza 45%.
-      cw = plrui_kicker(contexto,tx,oy+74,243,242,239,anim*.45f) + 22.0f; ch = 18.0f;
-    }
-    // AINDA HA ADDON RESPONDENDO, com fonte ja na lista (#221): a lista vai
-    // crescer, e quem escolhe agora escolhe entre o que chegou. Na linha do
-    // contexto, no acento, para nao disputar com o titulo nem com a ajuda.
-    if (n > 0 && addons_ocupado() && rw-360-cw > 80) {
-      if (cw > 0) gfx_cor((GfxRect){tx+cw-13.5f,oy+74+ch*.5f-2.5f,5,5},.5f,.5f,.5f,.49f,anim);
-      txt_desenhar_alpha(txt_linha_corta(TXT_HERO_META,"Buscando mais fontes…",ai,(int)(ag*255),(int)(ab*255),255,rw-360-cw),tx+cw,oy+72,anim);
-    } }
-  txt_desenhar_alpha(txt_linha(TXT_ILHA_TITULO,"Fontes",243,242,239,255),tx,oy+94,anim);
-  { int nbt=nBotoes(), dois=medirCabecalho(); float *bw=bwCab, bx=lx+rw, fx=lx;
-    // Linha do titulo: tudo (uma linha) ou so os discos (duas), a direita.
-    for(int i=nbt-1;i>=0;i--){
-      if(dois && !iconeBotao(botaoDe(i))) continue;
-      bx-=bw[i]+10.0f; }
-    bx+=10.0f;
-    for(int i=0;i<nbt;i++){
-      int b=botaoDe(i);
-      GfxRect r;
-      if(dois && !iconeBotao(b)) { r=(GfxRect){fx,oy+100+FOLHA_CAB_LINHA,bw[i],FOLHA_CHIP_H}; fx+=bw[i]+10.0f; }
-      else { r=(GfxRect){bx,oy+100,bw[i],FOLHA_CHIP_H}; bx+=bw[i]+10.0f; }
-      if (ptr) ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroFolhaBotao, NULL, i, 0);
-      chipFolha(r,rotuloBotao(b),iconeBotao(b),grupo==-1&&foco==i,botaoLigado(b),anim);
-    } }
-  // A LINHA DE AJUDA so aparece com o cabecalho em foco: "Sem HDR" nao se
-  // explica pelo rotulo, e o rotulo nao pode crescer sem estourar a pilula.
+  // CABECALHO, tres faixas (ver FOLHA_CAB_Y): kicker, titulo com os botoes a
+  // direita, abas de addon.
+  //
+  // A LINHA DE AJUDA so aparece com a fileira de botoes em foco, NO LUGAR do
+  // kicker: "Sem HDR" nao se explica pelo rotulo (e no degrau compacto o
+  // filtro e so um icone), e uma linha propria empurrava as abas para baixo
+  // a cada vez que o foco subia.
+  const char *ajuda=NULL;
   if (grupo==-1) {
-    const char *ajuda=NULL;
     if(botaoDe(foco)==BT_SEM_HDR)
       ajuda="Imagem preta com o áudio tocando? Recarrega esta fonte sem HDR nem Dolby Vision.";
     else if(botaoDe(foco)==BT_RECARREGAR)
@@ -2639,11 +2670,37 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
       ajuda=soMp4
         ? "Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro."
         : "Filtra a lista para fontes em MP4. OK liga o filtro.";
-    if(ajuda) txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,ajuda,160,160,158,255,rw),lx,oy+170+cabExtra,anim);
   }
+  if (ajuda) txt_desenhar_alpha(txt_linha_corta(TXT_HERO_META,ajuda,160,160,158,255,rw-FOLHA_TXT),tx,oy+70,anim);
+  else { float cw = 0, ch = 0;
+    if (contexto[0]) {
+      // Kicker do Glass UI: 15/700 em caixa alta espacada, cinza 45%.
+      cw = plrui_kicker(contexto,tx,oy+74,243,242,239,anim*.45f) + 22.0f; ch = 18.0f;
+    }
+    // AINDA HA ADDON RESPONDENDO, com fonte ja na lista (#221): a lista vai
+    // crescer, e quem escolhe agora escolhe entre o que chegou. Na linha do
+    // contexto, no acento, para nao disputar com o titulo nem com a ajuda.
+    if (n > 0 && addons_ocupado() && rw-360-cw > 80) {
+      if (cw > 0) gfx_cor((GfxRect){tx+cw-13.5f,oy+74+ch*.5f-2.5f,5,5},.5f,.5f,.5f,.49f,anim);
+      txt_desenhar_alpha(txt_linha_corta(TXT_HERO_META,"Buscando mais fontes…",ai,(int)(ag*255),(int)(ab*255),255,rw-360-cw),tx+cw,oy+72,anim);
+    } }
+  medirCabecalho();
+  txt_desenhar_alpha(txt_linha_corta(TXT_ILHA_TITULO,"Fontes",243,242,239,255,titMaxCab),tx,oy+94,anim);
+  // Os botoes alinhados a direita, centrados no titulo. Ordem do foco = ordem
+  // visivel, da esquerda: [Sem HDR] Só MP4, Em cache, Dublado, Recarregar, Fechar.
+  { int nbt=nBotoes(); float bx=lx+rw;
+    for(int i=0;i<nbt;i++) bx-=bwCab[i]+(i?gapCab:0.0f);
+    for(int i=0;i<nbt;i++){
+      int b=botaoDe(i);
+      GfxRect r={bx,oy+FOLHA_CAB_Y,bwCab[i],FOLHA_CHIP_H};
+      if (ptr) ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroFolhaBotao, NULL, i, 0);
+      chipFolha(r,rotCab[i],rotWCab[i],icoCab[i],grupo==-1&&foco==i,botaoLigado(b),anim);
+      bx+=bwCab[i]+gapCab;
+    } }
   // SELETOR DE ADDON, segmentado: o selecionado em superficie clara, o foco
   // no acento. Quantas fontes cada addon tem, ao lado do nome.
-  { int cnt[13]={0}; float iw[14], sx, segY=(grupo==-1?204.0f:186.0f)+cabExtra+oy, maxW=rw+4.0f;
+  { int cnt[13]={0}; float iw[14], sx, segY=FOLHA_ABAS_Y+oy, maxW=rw+4.0f;
+    const float pin=(FOLHA_ABAS_H-FOLHA_ABA_H)*.5f;
     TxtLinha nome[14], num[14];
     for(int i=0;i<n;i++){ if(!passaChips(i)) continue; cnt[0]++;
       for(int j=1;j<nProvedores;j++) if(!strcmp(provedores[j],lista[i].provedor)){cnt[j]++;break;} }
@@ -2655,23 +2712,23 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
       num[qidx]=txt_linha(TXT_PG_FIM,q,foc?c:sel?170:100,foc?c:sel?170:100,foc?c:sel?170:100,255);
       iw[qidx]=nome[qidx].w+10.0f+num[qidx].w+44.0f; }
     int ini=-1; float soma;
-    for(;;){ soma=12.0f; for(int i=ini;i<=filtro&&i<nProvedores;i++) soma+=iw[i+1]+6.0f;
+    for(;;){ soma=2*pin; for(int i=ini;i<=filtro&&i<nProvedores;i++) soma+=iw[i+1]+6.0f;
       if(soma<=maxW||ini>=filtro) break; ini++; }
-    soma=12.0f; int fim=ini;
+    soma=2*pin; int fim=ini;
     while(fim<nProvedores && soma+iw[fim+1]+6.0f<=maxW){ soma+=iw[fim+1]+6.0f; fim++; }
     if(fim==ini) fim=ini+1;
     sx=lx-2.0f;
-    if (ajustes_vidro()) gfx_cor((GfxRect){sx,segY,soma-6.0f,60},.5f,1,1,1,.05f*anim);
-    else gfx_cor((GfxRect){sx,segY,soma-6.0f,60},.5f,.113f,.118f,.137f,anim);
-    sx+=6.0f;
+    if (ajustes_vidro()) gfx_cor((GfxRect){sx,segY,soma-6.0f,FOLHA_ABAS_H},.5f,1,1,1,.05f*anim);
+    else gfx_cor((GfxRect){sx,segY,soma-6.0f,FOLHA_ABAS_H},.5f,.113f,.118f,.137f,anim);
+    sx+=pin;
     for(int i=ini;i<fim;i++){
       int qidx=i+1;
-      GfxRect r={sx,segY+6,iw[qidx],48}; int sel=i==filtro;
+      GfxRect r={sx,segY+pin,iw[qidx],FOLHA_ABA_H}; int sel=i==filtro;
       if (ptr) ponteiro_alvo(r.x, r.y, r.w, r.h, NULL, ponteiroFolhaFiltro, i, 0);
       if(sel&&grupo==0) focoFonte(r,.5f,anim);
       else if(sel) { if (ajustes_vidro()) gfx_cor(r,.5f,1,1,1,.12f*anim); else gfx_cor(r,.5f,.204f,.212f,.243f,anim); }
-      txt_desenhar_alpha(nome[qidx],r.x+22,r.y+(48-nome[qidx].h)*.5f,anim);
-      txt_desenhar_alpha(num[qidx],r.x+22+nome[qidx].w+10,r.y+(48-num[qidx].h)*.5f+1,anim);
+      txt_desenhar_alpha(nome[qidx],r.x+22,r.y+(FOLHA_ABA_H-nome[qidx].h)*.5f,anim);
+      txt_desenhar_alpha(num[qidx],r.x+22+nome[qidx].w+10,r.y+(FOLHA_ABA_H-num[qidx].h)*.5f+1,anim);
       sx+=iw[qidx]+6.0f; } }
   automatica = automaticaDaFolha();
   melhor = melhorFolha = stream_automatico();
