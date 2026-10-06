@@ -40,8 +40,22 @@ ARES="${NUVIO_ARES_PACKAGE:-../NuvioWeb-0.3.38-beta/node_modules/.bin/ares-packa
 CONTAINER_RUNTIME="${NUVIO_CONTAINER_RUNTIME:-docker}"
 BUILD_PLATFORM="${NUVIO_BUILD_PLATFORM:-linux/arm64}"
 SDK_IMAGE="${NUVIO_SDK_IMAGE:-nuvio-webos-sdk}"
-DTS_ENABLED="${NUVIO_DTS_FFMPEG:-1}"
-case "$DTS_ENABLED" in 0|1) ;; *) echo 'NUVIO_DTS_FFMPEG deve ser 0 ou 1' >&2; exit 2;; esac
+# DTS (PR #259): o FFmpeg mora na IMAGEM, e so imagem reconstruida depois do
+# PR o tem. Sem NUVIO_DTS_FFMPEG a build olha a imagem: com o FFmpeg leva a
+# conversao, sem ele sai sem (e diz), em vez de parar o deploy de todo dia
+# ate alguem reconstruir a imagem. 1 exige, 0 recusa.
+DTS_ENABLED="${NUVIO_DTS_FFMPEG:-auto}"
+case "$DTS_ENABLED" in 0|1|auto) ;; *) echo 'NUVIO_DTS_FFMPEG deve ser 0, 1 ou auto' >&2; exit 2;; esac
+if [ "$DTS_ENABLED" = auto ]; then
+  if "$CONTAINER_RUNTIME" run --rm --platform "$BUILD_PLATFORM" "$SDK_IMAGE" \
+       sh -c 'test -f "${NUVIO_DTS_ROOT:-/opt/nuvio-dts}/include/libavcodec/avcodec.h"' 2>/dev/null; then
+    DTS_ENABLED=1
+  else
+    DTS_ENABLED=0
+    echo "==> ATENCAO: a imagem $SDK_IMAGE nao tem o FFmpeg do DTS; build SEM a conversao de DTS"
+    echo "    (docker build --platform linux/arm64 -t $SDK_IMAGE tools/  para incluir)"
+  fi
+fi
 
 # --high-cache pode vir antes ou depois de --build/--ipk. So muda uma -D e os
 # nomes; o codigo e o mesmo — e por isso a variante nao precisa de branch.
@@ -107,7 +121,7 @@ if [ -n "${NUVIO_DTS_ROOT:-}" ]; then DTS_ENV=(-e "NUVIO_DTS_ROOT=$NUVIO_DTS_ROO
   DTS_CFLAGS=""
   DTS_LIBS=""
   if [ "${NUVIO_DTS_FFMPEG:-1}" = "1" ]; then
-    DTS=$NUVIO_DTS_ROOT
+    DTS=${NUVIO_DTS_ROOT:-/opt/nuvio-dts}
     [ -f "$DTS/include/libavcodec/avcodec.h" ] || { echo "FFmpeg DTS ausente; reconstrua tools/Dockerfile ou use NUVIO_DTS_FFMPEG=0" >&2; exit 2; }
     DTS_CFLAGS="-DNV_DTS_FFMPEG -I$DTS/include"
     DTS_LIBS="-L$DTS/lib -Wl,--start-group -lavformat -lavcodec -lswresample -lavutil -Wl,--end-group -lpthread -lm"
@@ -324,6 +338,16 @@ if [ "$1" = "--ipk" ]; then
     rm -f "$IPK"
     exit 1
   fi
+  # DTS: com a conversao, os dois adaptadores e o aviso LGPL do FFmpeg TEM de
+  # estar no pacote; sem ela, nenhum (um adaptador sem o FFmpeg no binario e
+  # lixo, e o aviso sem o FFmpeg e mentira).
+  for f in lib/dts-starfish-webos3.so lib/dts-starfish-webos4.so licenses/dts/COPYING.LGPLv2.1 licenses/dts/SOURCE.txt; do
+    if printf '%s\n' "$LISTA" | grep -qE "(^|/)$f$"; then tem=1; else tem=0; fi
+    if [ "$tem" != "$DTS_ENABLED" ]; then
+      echo "    ABORTADO: DTS=$DTS_ENABLED e o pacote $([ $tem = 1 ] && echo leva || echo nao leva) $f"; rm -f "$IPK"; exit 1
+    fi
+  done
+  echo "    DTS: $([ "$DTS_ENABLED" = 1 ] && echo 'conversao incluida (adaptadores + aviso LGPL)' || echo 'sem conversao')"
   # AVISOS DE LICENCA do motor (libtorrent, Boost, OpenSSL, nuvio-engine).
   printf '%s\n' "$LISTA" | grep -qE 'licencas/p2p-avisos\.txt$' || {
     echo "    ABORTADO: o pacote nao leva licencas/p2p-avisos.txt"; rm -f "$IPK"; exit 1; }
