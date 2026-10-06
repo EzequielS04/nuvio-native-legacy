@@ -218,6 +218,9 @@ void  ajustes_textura_quadro(void);
 // "Automática", "4K", "1080p" ou "720p" — o rotulo exibido, para quem seleciona
 // a fonte de video mostrar exatamente o que o usuario escolheu.
 const char *ajustes_qualidade(void);
+// Faixa de tamanho da escolha automatica, em GB (0 = sem limite).
+int ajustes_tamanho_max_gb(void);
+int ajustes_tamanho_min_gb(void);
 // LIVE TV. Resolucao principal: 0 Automatica, 1 4K, 2 1080p, 3 720p, 4 SD
 // (livetv_regras.h converte em altura). Formato do Xtream: 0 Automatico,
 // 1 HLS, 2 TS. Espera: 0 = a automatica de cada caminho, senao o prazo em ms.

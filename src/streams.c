@@ -567,9 +567,36 @@ static int alturaMax(void) {
 // 1 quando a fonte cabe no teto. Fonte SEM altura declarada cabe: a maioria dos
 // canais nao diz resolucao nenhuma, e recusar o que nao se sabe deixaria a
 // pessoa sem fonte por causa de um campo que o addon nao preencheu.
-static int cabeNoTeto(const Stream *s) {
+static int cabeNaAltura(const Stream *s) {
   int teto = alturaMax();
   return !teto || !s->altura || s->altura <= teto;
+}
+
+// FAIXA DE TAMANHO DA ESCOLHA AUTOMATICA (Ajustes > Reproducao > Imagem e som:
+// "Tamanho maximo" / "Tamanho minimo", em GB). Pedido de quem tem franquia de
+// dados curta: o automatico so pega arquivo dentro da faixa. Mesma regra do
+// teto de qualidade — preferencia, nao filtro: fora da faixa vai para o fim da
+// fila (cabeNoTeto), e se so ha fonte fora dela a melhor ainda toca.
+// Tamanho DESCONHECIDO cabe (como altura desconhecida). Bytes exatos do addon
+// mandam; sem eles vale o tamanho em MB lido do texto. 1 GB = 1024 MB.
+// MINIMO MAIOR QUE O MAXIMO: o minimo e ignorado (vale so o maximo), porque
+// uma faixa vazia deixaria TODA fonte "fora" e o maximo e o pedido que protege
+// a franquia. Devolve 0 (cabe) / 1 (acima do maximo) / 2 (abaixo do minimo).
+static unsigned long long tamanhoMBFonte(const Stream *s) {
+  if (s->tamanhoBytes) return s->tamanhoBytes >> 20;
+  return s->tamanhoMB > 0 ? (unsigned long long)s->tamanhoMB : 0;
+}
+static int foraDaFaixaTamanho(const Stream *s) {
+  int max = ajustes_tamanho_max_gb(), min = ajustes_tamanho_min_gb();
+  unsigned long long mb = tamanhoMBFonte(s);
+  if (!mb) return 0;
+  if (max && min > max) min = 0;
+  if (max && mb > (unsigned long long)max * 1024) return 1;
+  if (min && mb < (unsigned long long)min * 1024) return 2;
+  return 0;
+}
+static int cabeNoTeto(const Stream *s) {
+  return cabeNaAltura(s) && !foraDaFaixaTamanho(s);
 }
 
 // PLUGIN / EMBED (R9, 04/10). Fonte de scraper QuickJS (MegaEmbed etc.): o
@@ -1040,7 +1067,8 @@ static void faixaPontos(const Stream *s, char *dst, size_t tam) {
   static const char *const hdrNome[] = { "SDR", "HDR", "HDR10", "HDR10+", "DV" };
   snprintf(dst, tam, "%dp %s%s%s%s%s", s->altura, hdrNome[nivelHdr(s)], s->mp4 ? " mp4" : "",
            s->foraCache ? " uncached" : " cached", ehPlugin(s) ? " plugin" : " addon",
-           cabeNoTeto(s) ? "" : " over-cap");
+           !cabeNaAltura(s) ? " over-cap" : foraDaFaixaTamanho(s) == 1 ? " over-size"
+           : foraDaFaixaTamanho(s) == 2 ? " under-size" : "");
 }
 static void logarEscolha(int escolhida, int pref, int modoPrimeira) {
   char a[96], b[96] = "none", fit[96];
@@ -1048,9 +1076,17 @@ static void logarEscolha(int escolhida, int pref, int modoPrimeira) {
   long pv = 0, pe;
   StreamfitResultado r;
   const Stream *w;
+  int foraTam = 0, tamMax = ajustes_tamanho_max_gb(), tamMin = ajustes_tamanho_min_gb();
+  char tam[64] = "off";
   pthread_mutex_lock(&verTrava);
   if (escolhida < 0 || escolhida >= n) { pthread_mutex_unlock(&verTrava); return; }
   w = &lista[escolhida];
+  for (k = 0; k < n; k++) if (foraDaFaixaTamanho(&lista[k])) foraTam++;
+  if (tamMax || tamMin) {
+    if (tamMax && tamMin > tamMax) tamMin = 0;   // minimo maior que o maximo e ignorado
+    snprintf(tam, sizeof tam, "min=%dGB max=%dGB out-of-range=%d/%d%s", tamMin, tamMax, foraTam, n,
+             foraDaFaixaTamanho(w) ? " (winner outside: nothing inside)" : "");
+  }
   pe = pontos(w);
   for (k = 0; k < n; k++) {
     long p;
@@ -1069,12 +1105,12 @@ static void logarEscolha(int escolhida, int pref, int modoPrimeira) {
     snprintf(fit, sizeof fit, "unknown (%s, quality not downgraded)",
              r.razao == SF_SEM_REDE ? "no network epoch" : r.razao == SF_SEM_TAMANHO ? "no exact size" :
              r.razao == SF_SEM_DURACAO ? "no runtime" : r.razao == SF_SEM_HOST ? "no host" : "no measurement");
-  printf("[fonte] auto pick: \"%s\" [%s] points=%ld reason=%s | prefs: priority=%s hdr=%s dv=%s | fit=%s | runner-up=",
+  printf("[fonte] auto pick: \"%s\" [%s] points=%ld reason=%s | prefs: priority=%s hdr=%s dv=%s | size=%s | fit=%s | runner-up=",
          w->rotulo, a, pe, escolhida == pref ? "remembered for this title" : modoPrimeira ? "first in addon order"
          : "best score (quality/HDR > cached > addon over plugin)",
          ajustes_fonte_prioridade() == 1 ? "max-quality" : ajustes_fonte_prioridade() == 2 ? "smoothness" : "balanced",
          ajustes_fonte_hdr() == 1 ? "indifferent" : ajustes_fonte_hdr() == 2 ? "avoid" : "prefer",
-         ajustes_dolby_vision() ? "on" : "off", fit);
+         ajustes_dolby_vision() ? "on" : "off", tam, fit);
   if (vice >= 0) printf("\"%s\" [%s] points=%ld\n", lista[vice].rotulo, b, pv);
   else printf("none\n");
   pthread_mutex_unlock(&verTrava);

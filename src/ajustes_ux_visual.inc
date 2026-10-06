@@ -136,6 +136,7 @@ static const char *ajVisualIcone(int op) {
     case AJ_AUD_LINGUA: return "aj_audio-lines";
     case AJ_LEG_LINGUA: case AJ_LEG_LINGUA2: return "aj_captions";
     case AJ_CACHE_SEEK: return "aj_database";
+    case AJ_TAM_MAX: case AJ_TAM_MIN: return "aj_database";
     case AJ_TMDB_IDIOMA: return "aj_file-text";
     case AJ_TEMA: return "aj_palette";
     case AJ_FUNDO: return "aj_images";

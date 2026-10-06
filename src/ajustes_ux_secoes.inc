@@ -213,7 +213,7 @@ static int ajCenaSecao(int op) {
     case AJ_FONTE_PRAZO: case AJ_FONTE_TEXTO: case AJ_SELOS_CORES: case AJ_SELOS_PACOTE: case AJ_SELOS_PACOTE_ADD:
     case AJ_SELOS_PACOTE_REM:
       return AJC_REP_FONTE;
-    case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: case AJ_CACHE_SEEK: return AJC_REP_IMAGEM;
+    case AJ_QUALIDADE: case AJ_TAM_MAX: case AJ_TAM_MIN: case AJ_DV: case AJ_ATMOS: case AJ_CACHE_SEEK: return AJC_REP_IMAGEM;
     case AJ_PAUSA_OVERLAY: case AJ_REACAO_CREDITOS: case AJ_SAIDA_PLAYER: case AJ_MANTER_VIDEO: return AJC_REP_DURANTE;
     case AJ_SEEKR_LIGADO: case AJ_SEEKR_CHAVE: case AJ_SEEKR_TESTAR: case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE:
       return AJC_REP_SEEKR;
