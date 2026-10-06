@@ -3581,6 +3581,11 @@ static int linhasAbrindo(const Stream *st, AbrLinha *L) {
     plrui_decimal(L[n].val);
     n++;
   }
+  if (!st->url[0] && st->infoHash[0] && st->temSemeadores && n < ABR_MAX) {
+    snprintf(L[n].rot, sizeof L[n].rot, "Seeds");
+    snprintf(L[n].val, sizeof L[n].val, "%d", st->semeadores);
+    n++;
+  }
   if (abrFitIdx != stream_atual()) {   // a medida e relida so quando a fonte muda
     abrFitIdx = stream_atual();
     stream_fit_abrindo(st, abrFit1, sizeof abrFit1, abrFit2, sizeof abrFit2);
