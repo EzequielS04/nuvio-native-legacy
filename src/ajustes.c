@@ -6696,6 +6696,11 @@ int ajustes_teste_quadro(const char *id) {
       if (sN >= nSecoes) return 0;
       focarSecao(sN); uxIndice = 2 + sN; focoIndice = 1;
     }
+    else if (!strncmp(id, "v2-sec-", 7) && id[7] >= '0' && id[7] <= '9') {   // category N opened, first row focused
+      int sN = atoi(id + 7);
+      if (sN >= nSecoes) return 0;
+      focar(primeiroDaSecao(sN)); focoIndice = 0;
+    }
     else if (!strcmp(id, "v2-menu-passando")) { ajArteFundoN = 13; focarSecao(1); uxIndice = 3; focoIndice = 1; }
     else if (!strcmp(id, "v2-aberto") || !strcmp(id, "v2-130")) focarOpcao(AJ_HOME_LAYOUT);
     else if (!strcmp(id, "v2-transicao")) {
