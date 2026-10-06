@@ -270,6 +270,7 @@ int stream_extrair(const char *json, const char *provedor, Stream **saida) {
       { const char *bh = strstr(p, "\"behaviorHints\"");
         if (bh && bh < fim) {
           js_texto_raiz_em(bh, fim, "bingeGroup", s.bingeGroup, sizeof s.bingeGroup);
+          js_texto_raiz_em(bh, fim, "videoHash", s.videoHash, sizeof s.videoHash);
           lerProxyHeaders(bh, fim, s.cabecalhos, sizeof s.cabecalhos);
         } }
       if (!s.descricao[0]) snprintf(s.descricao, sizeof s.descricao, "%s", titulo);

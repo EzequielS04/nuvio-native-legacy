@@ -49,6 +49,9 @@ typedef struct {
   // texto livre. Cortado dos dois lados igual continua casando, pelo mesmo
   // motivo de FONTEPREF_TRILHA.
   char bingeGroup[128];
+  // behaviorHints.videoHash (hash do OpenSubtitles) quando o addon de fonte
+  // manda; vai para a busca de legendas como extra do Stremio (#201).
+  char videoHash[24];
   // Stream SEM url, so com o hash do torrent (Torrentio/Comet sem debrid na
   // URL). So entra na lista quando debrid_ativo(); a url e preenchida na
   // verificacao, por debrid_resolver.

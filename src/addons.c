@@ -16,6 +16,7 @@
 // So para a cache UNICA de manifesto (desc_manifesto_cache_obter/guardar): ver
 // a nota grande em sondar(), mais abaixo.
 #include "descoberta.h"
+#include "legextras.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -712,6 +713,23 @@ static pthread_t fioLeg;
 static int fioLegVivo, fioLegCriado, legParar;
 static char legId[64], legTipo[16];
 static unsigned legGeracao;
+// Extras do Stremio do arquivo que toca (#201). Valem so para `id`: o titulo
+// seguinte nao herda o nome nem o hash do anterior.
+typedef struct {
+  char id[64];
+  char arquivo[256];
+  unsigned long long tamanho;
+  char hash[20];
+  char video[4096];
+  int exigeCab;
+} LegExtras;
+static LegExtras legExt;
+// A busca em curso e um REFAZER com extras: a lista anterior fica na tela ate
+// esta terminar inteira (publicarLegendas so publica no fim).
+static int legManter;
+// Hash ja medido, para a mesma fonte nao ir de novo ao CDN a cada busca.
+static char hashDeUrl[4096], hashMedido[20];
+static unsigned long long hashTam;
 static pthread_mutex_t legTrava = PTHREAD_MUTEX_INITIALIZER;
 
 int addons_n_legendas(void) {
@@ -889,6 +907,8 @@ static int distribuirLegendas(const LegLote *lotes, int nLotes, int nGrupos,
 typedef struct {
   LegLote *lotes;          // um por addon
   int nLotes, nGrupos;
+  int manter;              // refazer com extras: publica so no fim
+  char extras[1200];       // segmento legextras_segmento; "" = sem extras
   const char *grupos[3];
   char gruposTexto[3][16];
   char id[64], tipo[16];
@@ -899,9 +919,10 @@ typedef struct {
 
 typedef struct { LegBusca *B; int i; } LegFio;
 
-static void publicarLegendas(LegBusca *B) {
+static void publicarLegendas(LegBusca *B, int final) {
   Legenda achadas[LEG_MAX] = {{0}};
   int n;
+  if (B->manter && !final) return;
   pthread_mutex_lock(&B->m);
   n = distribuirLegendas(B->lotes, B->nLotes, B->nGrupos, achadas);
   pthread_mutex_unlock(&B->m);
@@ -916,16 +937,29 @@ static void publicarLegendas(LegBusca *B) {
 static void *buscarUmAddon(void *u) {
   LegFio *F = u;
   LegBusca *B = F->B;
-  int i = F->i, array = 0, recebidas = 0, gi;
-  char url[NV_ADDON_PEDIDO_MAX], *corpo;
+  int i = F->i, array = 0, recebidas = 0, gi, comExtras = 0, recuou = 0, cortadas = 0;
+  char url[NV_ADDON_PEDIDO_MAX], *corpo = NULL;
   const char *p, *q;
   RedeMedida medida = {0};
   LegLote *lote = calloc(1, sizeof *lote);
   if (!lote) return NULL;
   if (pedidoMudou(B->geracao)) { free(lote); return NULL; }
-  corpo = pedidoCoube(i, snprintf(url, sizeof url, "%s/subtitles/%s/%s.json",
-                                  addon[i].base, B->tipo, B->id), sizeof url)
-          ? rede_baixar_medido_controle(url, LEG_TETO_S, NULL, NULL, &medida) : NULL;
+  // Com extras (#201) quando ha; o formato antigo continua sendo o pedido de
+  // quem nao sabe o arquivo. O protocolo diz que extra e opcional, mas um addon
+  // que responder 4xx/5xx ao caminho com extras ganha o pedido antigo em
+  // seguida: legenda generica e melhor que nenhuma.
+  if (B->extras[0] && legextras_url(url, sizeof url, addon[i].base, B->tipo, B->id, B->extras)) {
+    comExtras = 1;
+    corpo = rede_baixar_medido_controle(url, LEG_TETO_S, NULL, NULL, &medida);
+    if (pedidoMudou(B->geracao)) { free(corpo); free(lote); return NULL; }
+    if (medida.status >= 400) { free(corpo); corpo = NULL; recuou = 1; }
+  }
+  if (!comExtras || recuou) {
+    memset(&medida, 0, sizeof medida);
+    corpo = pedidoCoube(i, legextras_url(url, sizeof url, addon[i].base, B->tipo, B->id, NULL)
+                             ? (int)strlen(url) : (int)sizeof url, sizeof url)
+            ? rede_baixar_medido_controle(url, LEG_TETO_S, NULL, NULL, &medida) : NULL;
+  }
   if (pedidoMudou(B->geracao)) { free(corpo); free(lote); return NULL; }
   p = js_array(corpo, NULL, "subtitles");
   // js_array devolve NULL tambem para []: o diagnostico precisa distinguir
@@ -941,7 +975,7 @@ static void *buscarUmAddon(void *u) {
     int noGrupo = 0, teto = LEG_MAX / B->nGrupos;
     for (q = p; q && noGrupo < teto;) {
       const char *f = js_fim(q);
-      char l[64] = "", cod[16], nome[120] = "";
+      char l[64] = "", cod[16], nome[120] = "", link[2048];
       Legenda *d = &lote->itens[lote->n];
       if (!f || f <= q) break;
       if (*q == '{' && episodioCorreto(q, f, B->temporada, B->episodio) &&
@@ -950,7 +984,12 @@ static void *buscarUmAddon(void *u) {
         // codigo so; antes o nome entrava cortado em 8 bytes ("PORTUGU") e
         // nao casava com a preferencia.
         ling_normalizar(l, cod, sizeof cod);
-        if (ling_casa(cod, B->grupos[gi]) && js_texto(q, f, "url", d->url, sizeof d->url)) {
+        // Link lido num buffer MAIOR que o campo: o que nao cabe em d->url e
+        // descartado e contado, em vez de virar um link cortado que so falha
+        // na hora de baixar.
+        if (ling_casa(cod, B->grupos[gi]) && js_texto(q, f, "url", link, sizeof link) &&
+            !(strlen(link) >= sizeof d->url && ++cortadas)) {
+          snprintf(d->url, sizeof d->url, "%s", link);
           js_texto(q, f, "subtitleFileName", nome, sizeof nome);
           if (!nome[0]) js_texto(q, f, "movieReleaseName", nome, sizeof nome);
           snprintf(d->idioma, sizeof d->idioma, "%s", cod);
@@ -971,16 +1010,17 @@ static void *buscarUmAddon(void *u) {
   }
   // Somente medidas e enumeracoes publicas. Nao registrar URL, id do
   // titulo, corpo, nome de arquivo, nome configurado ou cabecalhos.
-  printf("[addon-recurso] addon=%d resource=subtitles tipo=%s http=%d bytes=%ld ms=%lu array=%d recebidas=%d candidatas=%d\n",
+  printf("[addon-recurso] addon=%d resource=subtitles tipo=%s http=%d bytes=%ld ms=%lu array=%d recebidas=%d candidatas=%d extras=%d%s cortadas=%d\n",
          i + 1, !strcmp(B->tipo, "movie") ? "movie" : !strcmp(B->tipo, "series") ? "series" : "outro",
-         medida.status, medida.bytes, medida.ms, array, recebidas, lote->n);
+         medida.status, medida.bytes, medida.ms, array, recebidas, lote->n,
+         comExtras && !recuou, recuou ? " (recusou extras: pedido antigo)" : "", cortadas);
   fflush(stdout);
   free(corpo);
   pthread_mutex_lock(&B->m);
   B->lotes[i] = *lote;
   pthread_mutex_unlock(&B->m);
   free(lote);
-  publicarLegendas(B);
+  publicarLegendas(B, 0);
   return NULL;
 }
 
@@ -988,6 +1028,68 @@ static unsigned relogioMs(void) {
   struct timespec t;
   clock_gettime(CLOCK_MONOTONIC, &t);
   return (unsigned)(t.tv_sec * 1000u + t.tv_nsec / 1000000u);
+}
+
+// HASH DO OPENSUBTITLES PELA REDE (#201): dois Range de 64 KiB, comeco e fim.
+// So 206 com o trecho inteiro vale — servidor que ignora o Range devolve o
+// comeco do arquivo com 200, e somar isso como "o fim" daria um hash errado,
+// pior que nenhum (o addon casaria a legenda de OUTRO arquivo).
+static int medirHash(const char *url, unsigned long long tam, char out[17],
+                     const char **motivo) {
+  long n1 = 0, n2 = 0;
+  int st1 = 0, st2 = 0, e = 0, ok = 0;
+  char *a, *b = NULL;
+  a = rede_baixar_trecho_st(url, 6, 0, LEGEXTRAS_BLOCO - 1, &n1, &st1, &e, NULL, 0);
+  if (a && st1 == 206 && n1 == LEGEXTRAS_BLOCO)
+    b = rede_baixar_trecho_st(url, 6, (long)(tam - LEGEXTRAS_BLOCO), (long)(tam - 1),
+                              &n2, &st2, &e, NULL, 0);
+  if (b && st2 == 206 && n2 == LEGEXTRAS_BLOCO)
+    ok = legextras_hash((const unsigned char *)a, (size_t)n1, (const unsigned char *)b,
+                        (size_t)n2, tam, out);
+  *motivo = ok ? "measured" : !a ? "network failure" : st1 != 206 || (b && st2 != 206) ? "no Range support" : "short range";
+  free(a); free(b);
+  return ok;
+}
+
+// Prepara o segmento de extras de uma busca, com o hash quando da para
+// medir. Roda no fio da busca, antes dos addons: o hash custa dois pedidos
+// curtos (prazo de 6 s cada) e o resultado vale para todos eles.
+static void prepararExtras(LegBusca *B) {
+  LegExtras e;
+  char hash[20] = "", nome[256];
+  const char *motivo = "no source";
+  pthread_mutex_lock(&legTrava);
+  e = legExt;
+  pthread_mutex_unlock(&legTrava);
+  B->extras[0] = 0;
+  if (!e.id[0] || strcmp(e.id, B->id)) return;
+  snprintf(nome, sizeof nome, "%s", e.arquivo);
+  if (!nome[0]) legextras_nome_da_url(e.video, nome, sizeof nome);
+  if (e.hash[0]) { snprintf(hash, sizeof hash, "%s", e.hash); motivo = "from the addon"; }
+  else if (!e.video[0] || !legextras_url_remota(e.video)) motivo = "local or P2P";
+  else if (e.exigeCab) motivo = "source needs headers";
+  else if (e.tamanho < 2ull * LEGEXTRAS_BLOCO) motivo = "no exact size";
+  else {
+    int cache;
+    pthread_mutex_lock(&legTrava);
+    cache = hashMedido[0] && hashTam == e.tamanho && !strcmp(hashDeUrl, e.video);
+    if (cache) snprintf(hash, sizeof hash, "%s", hashMedido);
+    pthread_mutex_unlock(&legTrava);
+    if (cache) motivo = "measured (cached)";
+    else if (medirHash(e.video, e.tamanho, hash, &motivo)) {
+      pthread_mutex_lock(&legTrava);
+      snprintf(hashDeUrl, sizeof hashDeUrl, "%s", e.video);
+      snprintf(hashMedido, sizeof hashMedido, "%s", hash);
+      hashTam = e.tamanho;
+      pthread_mutex_unlock(&legTrava);
+    }
+  }
+  if (legextras_segmento(B->extras, sizeof B->extras, nome, e.tamanho, hash) < 0)
+    legextras_segmento(B->extras, sizeof B->extras, NULL, e.tamanho, hash);   // nome enorme: sem ele
+  // Sem valores no log: nome de arquivo e hash identificam o que a pessoa ve.
+  printf("[legendas] extras: nome=%d tamanho=%d hash=%d (%s)\n", nome[0] != 0,
+         e.tamanho != 0, hash[0] != 0, motivo);
+  fflush(stdout);
 }
 
 static void *buscarLegendas(void *u) {
@@ -1007,7 +1109,9 @@ static void *buscarLegendas(void *u) {
     snprintf(B.id, sizeof B.id, "%s", legId);
     snprintf(B.tipo, sizeof B.tipo, "%s", legTipo);
     B.geracao = legGeracao;
+    B.manter = legManter;
     pthread_mutex_unlock(&legTrava);
+    prepararExtras(&B);
     episodioPedido(B.id, &B.temporada, &B.episodio);
     B.nGrupos = gruposIdioma(B.grupos);
     for (i = 0; i < B.nGrupos; i++) {
@@ -1027,12 +1131,16 @@ static void *buscarLegendas(void *u) {
     }
     for (i = 0; i < B.nLotes; i++) if (criado[i]) pthread_join(th[i], NULL);
 
+    // Refazer com extras: a lista nova entra de uma vez, agora que todos
+    // responderam (publicarLegendas descarta se a geracao ja mudou).
+    if (B.manter && B.lotes) publicarLegendas(&B, 1);
     free(B.lotes);
     pthread_mutex_destroy(&B.m);
     pthread_mutex_lock(&legTrava);
     if (legParar) { fioLegVivo = 0; pthread_mutex_unlock(&legTrava); return NULL; }
     if (B.geracao != legGeracao) { pthread_mutex_unlock(&legTrava); continue; }
     fioLegVivo = 0;
+    legManter = 0;
     i = nLegs;
     pthread_mutex_unlock(&legTrava);
     printf("[legendas] concluida: %d (%d addon(s) em paralelo, %u ms)\n", i, nAtivos,
@@ -1453,6 +1561,8 @@ void addons_legendas_reiniciar(void) {
   if (id[0]) addons_buscar_legendas(id, tp[0] ? tp : "movie");
 }
 
+static void dispararLegendas(int juntar);
+
 void addons_buscar_legendas(const char *imdb, const char *tipo) {
   int serie, juntar = 0;
   char id[64], tp[16];
@@ -1472,11 +1582,64 @@ void addons_buscar_legendas(const char *imdb, const char *tipo) {
   snprintf(legId, sizeof legId, "%s", id);
   snprintf(legTipo, sizeof legTipo, "%s", tp);
   legGeracao++;
+  legManter = 0;
   nLegs = 0;
   if (fioLegVivo) { pthread_mutex_unlock(&legTrava); return; }
   juntar = fioLegCriado;
   pthread_mutex_unlock(&legTrava);
+  dispararLegendas(juntar);
+}
 
+// Ver addons.h. Mesmo id normalizado de addons_buscar_legendas, para que os
+// extras e a lista falem do MESMO pedido.
+void addons_legendas_fonte(const char *imdb, const char *tipo, const char *arquivo,
+                           unsigned long long tamanho, const char *hash,
+                           const char *urlVideo, int exigeCabecalhos) {
+  int serie, juntar, manter;
+  char id[64], tp[16];
+  LegExtras novo;
+  if (!nAddon || !imdb || !*imdb || jfid_e(imdb)) return;
+  serie = tipo && !strcmp(tipo, "series");
+  if (serie && !idbase_tem_episodio(imdb))
+    snprintf(id, sizeof id, idbase_e_imdb(imdb) ? "%s:1:1" : "%s:1", imdb);
+  else
+    snprintf(id, sizeof id, "%s", imdb);
+  snprintf(tp, sizeof tp, "%s", serie ? "series" : "movie");
+  memset(&novo, 0, sizeof novo);
+  snprintf(novo.id, sizeof novo.id, "%s", id);
+  snprintf(novo.arquivo, sizeof novo.arquivo, "%s", arquivo ? arquivo : "");
+  novo.tamanho = tamanho;
+  snprintf(novo.hash, sizeof novo.hash, "%s", hash ? hash : "");
+  snprintf(novo.video, sizeof novo.video, "%s", urlVideo ? urlVideo : "");
+  novo.exigeCab = exigeCabecalhos != 0;
+  // Nada que um addon possa usar: o pedido sem extras ja e o que esta feito.
+  if (!novo.arquivo[0] && !novo.tamanho && !novo.hash[0] &&
+      !legextras_url_remota(novo.video)) return;
+
+  pthread_mutex_lock(&legTrava);
+  if (!memcmp(&novo, &legExt, sizeof novo) && !strcmp(id, legId) && !strcmp(tp, legTipo)) {
+    pthread_mutex_unlock(&legTrava);
+    return;
+  }
+  legExt = novo;
+  // Mesmo titulo: a lista atual fica ate a nova terminar. Titulo outro (a
+  // fonte chegou antes da busca do episodio): busca normal.
+  manter = !strcmp(id, legId) && !strcmp(tp, legTipo) && nLegs > 0;
+  snprintf(legId, sizeof legId, "%s", id);
+  snprintf(legTipo, sizeof legTipo, "%s", tp);
+  legGeracao++;
+  legManter = manter;
+  if (!manter) nLegs = 0;
+  printf("[legendas] fonte conhecida: refazendo a busca com extras%s\n",
+         manter ? " (lista atual fica ate a nova chegar)" : "");
+  fflush(stdout);
+  if (fioLegVivo) { pthread_mutex_unlock(&legTrava); return; }
+  juntar = fioLegCriado;
+  pthread_mutex_unlock(&legTrava);
+  dispararLegendas(juntar);
+}
+
+static void dispararLegendas(int juntar) {
   if (juntar) pthread_join(fioLeg, NULL);
   pthread_mutex_lock(&legTrava);
   fioLegCriado = 0;

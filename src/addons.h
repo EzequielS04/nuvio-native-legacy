@@ -129,12 +129,28 @@ int  addons_pendente_nome(const char *nome);
 typedef struct {
   char rotulo[64];   // "Portugues (BR)  ·  Silo.S01E05.WEB"
   char idioma[8];
-  char url[600];
+  // 1024 e nao 600 (#201): addon que embute a configuracao no link de
+  // download (o Community Subtitles poe um base64 do contexto, que cresce com
+  // o nome do arquivo) passava de 600 e o link saia CORTADO, sem erro nenhum,
+  // ate a hora de baixar. Link que nem assim cabe e descartado (addons.c).
+  char url[1024];
   char provedor[64]; // nome do addon que devolveu esta legenda
   char arquivo[96];  // subtitleFileName / movieReleaseName as sent; "" = not sent
 } Legenda;
 
 void addons_buscar_legendas(const char *imdb, const char *tipo);
+
+// O ARQUIVO QUE TOCA, para os extras do Stremio (legextras.h, #201): com a
+// fonte confirmada, a busca do titulo e refeita mandando `filename`,
+// `videoSize` e `videoHash`. `hash` e o behaviorHints.videoHash quando o addon
+// de fonte manda; vazio, ele e medido aqui por dois Range de 64 KiB em
+// `urlVideo` (so link remoto, sem cabecalho exigido e com `tamanho` exato).
+// A lista que ja esta na tela FICA ate a busca nova terminar inteira: trocar a
+// fonte nao pode esvaziar a folha de legendas por segundos. Mesmo id e mesmos
+// extras de antes: nao faz nada.
+void addons_legendas_fonte(const char *imdb, const char *tipo, const char *arquivo,
+                           unsigned long long tamanho, const char *hash,
+                           const char *urlVideo, int exigeCabecalhos);
 
 // REFAZ a busca do titulo que esta carregado agora, descartando a lista atual.
 //

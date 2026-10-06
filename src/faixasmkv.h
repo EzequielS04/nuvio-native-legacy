@@ -8,9 +8,11 @@
 // Mac poder exercitar o que a TV desenha.
 //
 // CASAMENTO POR ORDINAL DENTRO DO TIPO, com a mesma guarda do video_tizen.c:
-// so aplica num tipo quando a QUANTIDADE bate entre o player e o arquivo.
-// Contagem diferente quer dizer que um dos lados filtrou faixa e o ordinal ja
-// nao alinha — e rotulo errado e pior que "Audio 1".
+// aplica quando a QUANTIDADE bate entre o player e o arquivo. Desde o #269,
+// duas saidas a mais, as duas medidas no log do .tpk: sem as legendas de
+// imagem (PGS/VobSub, que o player nao lista) e, quando o player lista MENOS,
+// pelo comeco se os idiomas concordarem. Fora disso, rotulo errado e pior que
+// "Audio 1": fica como veio.
 #ifndef NV_FAIXASMKV_H
 #define NV_FAIXASMKV_H
 
@@ -25,5 +27,9 @@ int faixasmkv_aplicar(VideoFaixa *aud, int nAud, VideoFaixa *leg, int nLeg,
 
 // "2.0", "5.1", "7.1" ou "" (mesma tabela do sourceInfo da LG, video.c).
 const char *faixasmkv_canais(int canais);
+
+// Nome curto do CodecID de audio ("A_EAC3" -> "E-AC3", "A_AAC/MPEG4/LC" ->
+// "AAC"); "" quando nao conhece. Vai no rotulo da faixa de audio (#269).
+const char *faixasmkv_codec(const char *codecId);
 
 #endif

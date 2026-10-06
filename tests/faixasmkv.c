@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
     player(a, 2, l, 4);
     faixasmkv_aplicar(a, 2, l, 4, g, nf);
     faixasmkv_aplicar(a, 2, l, 4, g, nf);
-    ok(!strcmp(a[0].rotulo, "Áudio 1  \xc2\xb7  5.1"), "sem idioma: Audio 1 + 5.1", a[0].rotulo); }
+    ok(!strcmp(a[0].rotulo, "Áudio 1  \xc2\xb7  AAC 5.1"), "sem idioma: Audio 1 + codec + 5.1", a[0].rotulo); }
 
   // Contagem diferente (o player escondeu uma legenda): legendas ficam como
   // vieram, o audio (que bate) ainda ganha rotulo.
@@ -73,6 +73,31 @@ int main(int argc, char **argv) {
   faixasmkv_aplicar(a, 2, l, 3, fx, nf);
   ok(!strcmp(l[1].rotulo, "Húngaro") && !l[1].letreiro, "legendas 3x4: nada aplicado", l[1].rotulo);
   ok(strstr(a[1].rotulo, "2.0") != NULL, "audio 2x2: aplicado mesmo assim", a[1].rotulo);
+
+  // #269: o player do .tpk nao lista legenda de IMAGEM (PGS). Arquivo com 4
+  // legendas, uma delas PGS no meio; player com 3: casa sem a PGS.
+  { MkvFaixa g[MKV_MAX_FAIXAS]; memcpy(g, fx, sizeof g);
+    snprintf(g[4].codec, sizeof g[4].codec, "S_HDMV/PGS");   // a legenda 2 (Forced)
+    player(a, 2, l, 3);
+    faixasmkv_aplicar(a, 2, l, 3, g, nf);
+    ok(!strcmp(l[0].rotulo, "Húngaro") && strstr(l[1].rotulo, "Letreiros") && strstr(l[2].rotulo, "English SDH"),
+       "legendas 3x4 com uma PGS: casa sem ela", l[2].rotulo); }
+
+  // #269: codigos do player da Samsung e o MKV mandando no idioma.
+  { MkvFaixa g[MKV_MAX_FAIXAS]; memcpy(g, fx, sizeof g);
+    player(a, 2, l, 4);
+    snprintf(l[3].idioma, 8, "jp");            // o que o player diz
+    snprintf(g[6].idioma, sizeof g[6].idioma, "pt-BR");   // o que o arquivo diz
+    g[6].nome[0] = 0;
+    faixasmkv_aplicar(a, 2, l, 4, g, nf);
+    ok(!strcmp(l[3].idioma, "pt-BR") && !strcmp(l[3].rotulo, "Português (BR)"),
+       "idioma do MKV vence o do player", l[3].rotulo);
+    snprintf(g[2].codec, sizeof g[2].codec, "A_EAC3"); g[2].canais = 8; g[2].nome[0] = 0;
+    player(a, 2, l, 4);
+    faixasmkv_aplicar(a, 2, l, 4, g, nf);
+    ok(!strcmp(a[1].rotulo, "Inglês  \xc2\xb7  E-AC3 7.1"), "audio: codec + 7.1", a[1].rotulo); }
+  ok(!strcmp(faixasmkv_codec("A_DTS/LOSSLESS"), "DTS-HD MA") && !strcmp(faixasmkv_codec("A_AAC/MPEG4/LC"), "AAC") &&
+     !faixasmkv_codec("V_MPEGH")[0], "nomes de codec", NULL);
 
   printf(falhas ? "faixasmkv: %d FALHA(S)\n" : "faixasmkv: tudo ok\n", falhas);
   return falhas != 0;

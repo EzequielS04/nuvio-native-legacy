@@ -2,6 +2,8 @@
 #include "../src/addons.c"
 #include <assert.h>
 static const char *responses[3];
+static char ultimaUrl[3][2048];
+static int recusaExtras, semRange, trechos;
 static _Atomic int requests;
 static int status[3] = {200, 200, 200};
 char *rede_baixar_medido_controle(const char *url, int seconds,
@@ -16,8 +18,29 @@ char *rede_baixar_medido_controle(const char *url, int seconds,
   }
   assert(idx >= 0 && strstr(url, "/subtitles/") && strstr(url, ".json"));
   requests++;
+  snprintf(ultimaUrl[idx], sizeof ultimaUrl[idx], "%s", url);
+  if (recusaExtras && strstr(url, "videoSize=")) {
+    *medida = (RedeMedida){ .status = 400, .bytes = 5, .ms = 7 };
+    return strdup("nope!");
+  }
   *medida = (RedeMedida){ .status = status[idx], .bytes = responses[idx] ? (long)strlen(responses[idx]) : 0, .ms = 7 };
   return responses[idx] ? strdup(responses[idx]) : NULL;
+}
+// #201: os dois Range do hash. Conteudo deterministico: byte = posicao % 251.
+char *rede_baixar_trecho_st(const char *url, int segundos, long ini, long fim,
+                            long *tam, int *st, int *erro, char *final, unsigned tamFinal) {
+  char *b;
+  (void)segundos; (void)final; (void)tamFinal;
+  assert(!strncmp(url, "https://cdn.fixture.invalid/", 28));
+  trechos++;
+  if (erro) *erro = 0;
+  if (semRange) { if (st) *st = 200; }
+  else if (st) *st = 206;
+  b = malloc((size_t)(fim - ini + 2));
+  for (long i = ini; i <= fim; i++) b[i - ini] = (char)(i % 251);
+  b[fim - ini + 1] = 0;
+  *tam = fim - ini + 1;
+  return b;
 }
 const char *i18n(const char *text) { return text; }
 static void run(int n, const char *id, const char *tipo) {
@@ -84,5 +107,59 @@ int main(void) {
   responses[0] = "{\"subtitles\":[{\"lang\":\"ron\",\"url\":\"https://fixture.invalid/ok.srt\",\"season\":2,\"episode\":4},{\"lang\":\"ron\",\"url\":\"https://fixture.invalid/wrong.srt\",\"season\":2,\"episode\":3},{\"lang\":\"ron\",\"url\":\"https://fixture.invalid/filename-wrong.srt\",\"subtitleFileName\":\"Show.S02E03.srt\"}]}";
   status[0] = 200; run(1, "tt123:2:4", "series");
   assert(nLegs == 1 && strstr(legs[0].url, "/ok.srt"));
+  // #201: extras do Stremio. Hash medido por dois Range, valores codificados,
+  // ordem hash/tamanho/nome; addon que recusa extras ganha o pedido antigo.
+  {
+    unsigned long long tam = 1000000;
+    unsigned char *ini = malloc(LEGEXTRAS_BLOCO), *fim = malloc(LEGEXTRAS_BLOCO);
+    char hash[17], esperado[1024];
+    for (long i = 0; i < LEGEXTRAS_BLOCO; i++) {
+      ini[i] = (unsigned char)(i % 251);
+      fim[i] = (unsigned char)(((long)tam - LEGEXTRAS_BLOCO + i) % 251);
+    }
+    assert(legextras_hash(ini, LEGEXTRAS_BLOCO, fim, LEGEXTRAS_BLOCO, tam, hash));
+    free(ini); free(fim);
+    responses[0] = "{\"subtitles\":[{\"lang\":\"ces\",\"url\":\"https://fixture.invalid/cs.srt\"},{\"lang\":\"Hebrew (Auto-Subs)\",\"url\":\"https://fixture.invalid/he.srt\"}]}";
+    status[0] = 200; ling_local_legenda(""); ling_conta_legenda("cs"); ling_conta_legenda2("he");
+    memset(&legExt, 0, sizeof legExt);
+    snprintf(legExt.id, sizeof legExt.id, "tt123");
+    snprintf(legExt.arquivo, sizeof legExt.arquivo, "Movie Name \xc3\xa7\xc3\xa3o [1080p].mkv");
+    legExt.tamanho = tam;
+    snprintf(legExt.video, sizeof legExt.video, "https://cdn.fixture.invalid/x/v.mkv");
+    trechos = 0; run(1, "tt123", "movie");
+    snprintf(esperado, sizeof esperado,
+             "https://fixture.invalid/provider0/subtitles/movie/tt123/videoHash=%s&videoSize=1000000&filename=Movie%%20Name%%20%%C3%%A7%%C3%%A3o%%20%%5B1080p%%5D.mkv.json", hash);
+    assert(trechos == 2 && !strcmp(ultimaUrl[0], esperado));
+    // ISO 639-2/T e nome por extenso: os dois entram.
+    assert(nLegs == 2 && !strcmp(legs[0].idioma, "ces") && !strcmp(legs[1].idioma, "heb"));
+    // Mesma fonte de novo: o hash vem do cache, sem Range.
+    trechos = 0; run(1, "tt123", "movie"); assert(trechos == 0 && strstr(ultimaUrl[0], hash));
+    // Servidor sem Range (200): sem hash, nunca um hash errado.
+    hashMedido[0] = 0; semRange = 1; trechos = 0; run(1, "tt123", "movie");
+    assert(!strstr(ultimaUrl[0], "videoHash=") && strstr(ultimaUrl[0], "/tt123/videoSize=1000000&filename="));
+    semRange = 0;
+    // P2P local: nada de Range; nome pela URL quando o addon nao deu.
+    legExt.arquivo[0] = 0; legExt.tamanho = 0;
+    snprintf(legExt.video, sizeof legExt.video, "http://127.0.0.1:11470/abc/0/Show.S01E02.mkv");
+    trechos = 0; run(1, "tt123", "movie");
+    assert(trechos == 0 && strstr(ultimaUrl[0], "/tt123/filename=Show.S01E02.mkv.json"));
+    // Addon que recusa o caminho com extras: pedido antigo em seguida.
+    legExt.tamanho = tam; snprintf(legExt.video, sizeof legExt.video, "https://cdn.fixture.invalid/x/v.mkv");
+    recusaExtras = 1; antes = requests; run(1, "tt123", "movie");
+    assert(requests - antes == 2 && !strcmp(ultimaUrl[0], "https://fixture.invalid/provider0/subtitles/movie/tt123.json") && nLegs == 2);
+    recusaExtras = 0;
+    // Extras de OUTRO titulo nao vazam.
+    run(1, "tt999", "movie"); assert(!strcmp(ultimaUrl[0], "https://fixture.invalid/provider0/subtitles/movie/tt999.json"));
+    // Refazer com extras: a lista antiga fica ate o fim e e trocada inteira.
+    legManter = 1; run(1, "tt123", "movie"); assert(nLegs == 2 && !legManter);
+    // Link de legenda maior que o campo: descartado, nunca cortado.
+    { static char longo[3000]; char *q = longo;
+      q += sprintf(q, "{\"subtitles\":[{\"lang\":\"ces\",\"url\":\"https://fixture.invalid/");
+      for (int i = 0; i < 1500; i++) *q++ = 'a';
+      sprintf(q, ".srt\"},{\"lang\":\"ces\",\"url\":\"https://fixture.invalid/curto.srt\"}]}");
+      responses[0] = longo; memset(&legExt, 0, sizeof legExt); run(1, "tt123", "movie");
+      assert(nLegs == 1 && strstr(legs[0].url, "curto.srt")); }
+  }
+
   puts("addon subtitles: provider fairness, real origin, ordered languages, empty/missing/HTTP and episode checks ok");
 }
