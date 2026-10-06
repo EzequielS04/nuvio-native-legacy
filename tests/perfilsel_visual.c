@@ -278,11 +278,12 @@ int main(void) {
     perfilsel_teste_estado(&depois);
     assert(depois.pin > antes.pin && depois.pin < 1.0f);
     assert(depois.mural_tempo == antes.mural_tempo); }
-  tecla(SDLK_UP); tecla(SDLK_UP); tecla(SDLK_UP);   // sobe para a linha do "1"
-  tecla(SDLK_RETURN);                               // 1
-  tecla(SDLK_RIGHT); tecla(SDLK_RETURN);            // 2
-  tecla(SDLK_DOWN); tecla(SDLK_RETURN);             // 5
-  tecla(SDLK_DOWN); tecla(SDLK_RETURN);             // 8
+  // #289: three digits only — the 4th would verify against the server. The
+  // pad opens on "5"; the bottom row is blank, 0, delete (no OK key).
+  tecla(SDLK_UP); tecla(SDLK_LEFT); tecla(SDLK_RETURN);  // 1
+  tecla(SDLK_RIGHT); tecla(SDLK_RETURN);                 // 2
+  tecla(SDLK_8);                                         // remote number key
+  tecla(SDLK_DOWN); tecla(SDLK_DOWN); tecla(SDLK_DOWN);  // focus on "0"
   captura("/tmp/nuvio-perfilsel-pin.bmp");
 
   // Oito perfis: o pior caso do layout (CONTA_PERFIL_MAX).

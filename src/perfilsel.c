@@ -140,14 +140,19 @@ static float muralLuzTempo;
 // Teclado 3x4, na ordem do telefone. O que havia aqui era 5 colunas com 12
 // teclas: as duas ultimas (apagar e OK) sobravam sozinhas numa terceira linha
 // encostada a esquerda, e o olho procurava o OK no canto errado toda vez.
+// #289: profile PINs are ALWAYS 4 digits (PROFILE_PIN_LENGTH in the official
+// web app, which also creates them), so the 4th digit verifies by itself and
+// the OK key is gone. Bottom row is the phone's: blank, 0, delete.
 #define PS_PIN_MAX       8
+#define PS_PIN_LEN       4
 #define PS_TECLA        96.0f
 #define PS_TECLA_GAP    18.0f
 #define PS_TECLA_COLS       3
 #define PS_TECLA_LINS       4
-#define PS_PIN_APAGAR       9
+#define PS_PIN_VAZIO        9   // no key: focus never lands here
 #define PS_PIN_ZERO        10
-#define PS_PIN_OK          11
+#define PS_PIN_APAGAR      11
+#define PS_PIN_INICIO       4   // "5", the middle of the pad
 #define PS_PONTO        22.0f    // diametro do ponto que mascara um digito
 #define PS_PONTO_PASSO  40.0f
 
@@ -167,6 +172,7 @@ static int pinDe = -1;
 static char pin[PS_PIN_MAX + 1];
 static int pinFoco;              // indice na grade 3x4; ver PS_PIN_*
 static int pinErrado, pinRede;
+static float pinTremor;          // s left of the wrong-PIN shake (#289)
 static pthread_t fioPin;
 static int verificando;
 static _Atomic int resultadoPin; // 0 pendente, 1 ok, -1 PIN incorreto, -2 rede
@@ -762,7 +768,7 @@ void perfilsel_iniciar(void) {
   preparando = 0;
   pinDe = -1;
   pin[0] = 0;
-  pinFoco = PS_PIN_OK;
+  pinFoco = PS_PIN_INICIO;
   pinErrado = 0;
   pinRede = 0;
   verificando = 0;
@@ -818,7 +824,7 @@ static void escolher(int i) {
   const ContaPerfil *p = perfis_item(i);
   switch (perfis_acao(i)) {
     case PERFIL_ACAO_PIN:
-      pinDe = i; pin[0] = 0; pinFoco = PS_PIN_OK; pinErrado = pinRede = 0;
+      pinDe = i; pin[0] = 0; pinFoco = PS_PIN_INICIO; pinErrado = pinRede = 0;
       return;
     case PERFIL_ACAO_ENTRAR:
       if (p) perfis_definir_ativo(p->indice);
@@ -827,6 +833,32 @@ static void escolher(int i) {
     default:
       return;
   }
+}
+
+// Starts the async check of the typed PIN (one server round trip, in a thread
+// so the screen does not freeze).
+static void pinVerificar(void) {
+  PinTarefa *t;
+  const ContaPerfil *p = perfis_item(pinDe);
+  if (!pin[0]) return;
+  t = malloc(sizeof *t);
+  if (!t || !p) { free(t); pinRede = 1; return; }
+  t->geracao = atomic_load(&pinGeracao); t->slot = pinDe; t->indice = p->indice;
+  snprintf(t->valor, sizeof t->valor, "%s", pin);
+  verificando = 1;
+  pinErrado = pinRede = 0;
+  atomic_store(&resultadoPin, 0);
+  if (pthread_create(&fioPin, NULL, fioVerificar, t) == 0) pthread_detach(fioPin);
+  else { memset(t->valor, 0, sizeof t->valor); free(t); verificando = 0; pinRede = 1; }
+}
+
+// One digit, from the pad or the remote's number keys. The 4th one verifies.
+static void pinDigito(int digito) {
+  size_t z = strlen(pin);
+  if (z >= PS_PIN_LEN) return;
+  pin[z] = (char)('0' + digito); pin[z + 1] = 0;
+  pinErrado = pinRede = 0;
+  if (z + 1 == PS_PIN_LEN) pinVerificar();
 }
 
 static void eventoPin(SDL_Keycode k) {
@@ -842,34 +874,29 @@ static void eventoPin(SDL_Keycode k) {
     else pinDe = -1;
     return;
   }
-  if (k == SDLK_LEFT)  { if (pinFoco % PS_TECLA_COLS > 0) pinFoco--; return; }
+  // The remote's number keys type straight in, wherever the focus is.
+  if (k >= SDLK_0 && k <= SDLK_9) { pinDigito((int)(k - SDLK_0)); return; }
+  if (k >= SDLK_KP_1 && k <= SDLK_KP_9) { pinDigito((int)(k - SDLK_KP_1) + 1); return; }
+  if (k == SDLK_KP_0) { pinDigito(0); return; }
+  if (k == SDLK_BACKSPACE) { if (pin[0]) { pin[strlen(pin) - 1] = 0; pinErrado = pinRede = 0; } return; }
+  if (k == SDLK_LEFT) {
+    if (pinFoco % PS_TECLA_COLS > 0 && pinFoco - 1 != PS_PIN_VAZIO) pinFoco--;
+    return;
+  }
   if (k == SDLK_RIGHT) { if (pinFoco % PS_TECLA_COLS < PS_TECLA_COLS - 1) pinFoco++; return; }
   if (k == SDLK_UP)    { if (pinFoco >= PS_TECLA_COLS) pinFoco -= PS_TECLA_COLS; return; }
-  if (k == SDLK_DOWN)  { if (pinFoco + PS_TECLA_COLS < PS_TECLA_COLS * PS_TECLA_LINS)
-                           pinFoco += PS_TECLA_COLS; return; }
+  if (k == SDLK_DOWN)  {
+    if (pinFoco + PS_TECLA_COLS < PS_TECLA_COLS * PS_TECLA_LINS) {
+      pinFoco += PS_TECLA_COLS;
+      if (pinFoco == PS_PIN_VAZIO) pinFoco = PS_PIN_ZERO;   // "7" goes down to "0"
+    }
+    return;
+  }
   if (k != SDLK_RETURN && k != SDLK_KP_ENTER) return;
 
   if (pinFoco == PS_PIN_APAGAR) { if (pin[0]) pin[strlen(pin) - 1] = 0; return; }
-  if (pinFoco == PS_PIN_OK) {
-    PinTarefa *t;
-    const ContaPerfil *p = perfis_item(pinDe);
-    if (!pin[0]) return;
-    t = malloc(sizeof *t);
-    if (!t || !p) { free(t); pinRede = 1; return; }
-    t->geracao = atomic_load(&pinGeracao); t->slot = pinDe; t->indice = p->indice;
-    snprintf(t->valor, sizeof t->valor, "%s", pin);
-    verificando = 1;
-    pinErrado = pinRede = 0;
-    atomic_store(&resultadoPin, 0);
-    // Verificar BLOQUEIA (uma viagem ao servidor). Num fio, para a tela nao
-    // congelar por um segundo a cada tentativa.
-    if (pthread_create(&fioPin, NULL, fioVerificar, t) == 0) pthread_detach(fioPin);
-    else { memset(t->valor, 0, sizeof t->valor); free(t); verificando = 0; pinRede = 1; }
-    return;
-  }
-  { size_t z = strlen(pin);
-    int digito = (pinFoco == PS_PIN_ZERO) ? 0 : pinFoco + 1;
-    if (z < PS_PIN_MAX) { pin[z] = (char)('0' + digito); pin[z + 1] = 0; } }
+  if (pinFoco == PS_PIN_VAZIO) return;
+  pinDigito(pinFoco == PS_PIN_ZERO ? 0 : pinFoco + 1);
 }
 
 static void perfilFocar(int slot, int indice) {
@@ -886,7 +913,8 @@ static void perfilAtivar(int slot, int indice) {
 static void pinFocar(int tecla, int b) {
   (void)b;
   if (pinDe >= 0 && !verificando && !preparando &&
-      tecla >= 0 && tecla < PS_TECLA_COLS * PS_TECLA_LINS) pinFoco = tecla;
+      tecla >= 0 && tecla < PS_TECLA_COLS * PS_TECLA_LINS && tecla != PS_PIN_VAZIO)
+    pinFoco = tecla;
 }
 static void perfisRetentar(int a, int b) {
   (void)a; (void)b;
@@ -1016,6 +1044,7 @@ void perfilsel_atualizar(float dt, Uint32 agora) {
     if (reduzida) animFoco[i] = alvo;
   }
 
+  if (pinTremor > 0.0f) { pinTremor -= dt; if (pinTremor < 0.0f) pinTremor = 0.0f; }
   { int resultado = atomic_load(&resultadoPin);
   if (verificando && resultado) {
     atomic_store(&resultadoPin, 0);
@@ -1034,6 +1063,7 @@ void perfilsel_atualizar(float dt, Uint32 agora) {
     } else {
       pinErrado = 1;
       memset(pin, 0, sizeof pin);
+      pinTremor = reduzida ? 0.0f : 0.40f;
     }
   }
   }
@@ -1196,7 +1226,7 @@ static void desenhaFundo(void) {
 
 static void desenhaPin(void) {
   static const char *ROT[PS_TECLA_COLS * PS_TECLA_LINS] =
-    { "1","2","3", "4","5","6", "7","8","9", "←","0","OK" };
+    { "1","2","3", "4","5","6", "7","8","9", "","0","←" };
   const ContaPerfil *p = perfis_item(pinDe);
   float largura = PS_TECLA_COLS * PS_TECLA + (PS_TECLA_COLS - 1) * PS_TECLA_GAP;
   float x0 = (NV_TELA_W - largura) * 0.5f;
@@ -1231,6 +1261,8 @@ static void desenhaPin(void) {
   if (mostrar > PS_PIN_MAX) mostrar = PS_PIN_MAX;
   { float total = (float)mostrar * PS_PONTO_PASSO - (PS_PONTO_PASSO - PS_PONTO);
     float px = (NV_TELA_W - total) * 0.5f;
+    // Wrong PIN: the dots shake sideways and settle (decaying sine, 0.4 s).
+    if (pinTremor > 0.0f) px += sinf(pinTremor * 50.0f) * 18.0f * (pinTremor / 0.40f);
     size_t k;
     for (k = 0; k < mostrar; k++) {
       GfxRect d = { px + (float)k * PS_PONTO_PASSO, 434.0f, PS_PONTO, PS_PONTO };
@@ -1252,6 +1284,7 @@ static void desenhaPin(void) {
     GfxRect r = { x0 + col * (PS_TECLA + PS_TECLA_GAP),
                   y0 + lin * (PS_TECLA + PS_TECLA_GAP), PS_TECLA, PS_TECLA };
     int f = (i == pinFoco && !verificando);
+    if (i == PS_PIN_VAZIO) continue;
     if (pinDe >= 0 && !verificando && !preparando)
       ponteiro_alvo(r.x, r.y, r.w, r.h, pinFocar, NULL, i, pinDe);
     TxtLinha l;
