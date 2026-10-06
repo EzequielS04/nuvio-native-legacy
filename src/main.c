@@ -1163,6 +1163,7 @@ int main(int argc, char **argv) {
   double fEv=0, fBomb=0, fUpd=0, fDes=0, fSwap=0, fAux=0, fClr=0;
   int fUplN=0, pUplN=0; long fUplB=0, pUplB=0;
   double pEv=0, pBomb=0, pUpd=0, pDes=0, pSwap=0, pAux=0, pClr=0;
+  double pPrep=0, pGlClr=0;
   // Dentro de `des`: quanto e travessia de GL e quanto e busca no cache.
   double fFill=0, pFill=0; int fNCheio=0, pNCheio=0;
   double fGfxMs=0, fTexMs=0, fOutMs=0; int fNRect=0, fNProg=0, fNBind=0, fNBusca=0, fNOut=0;
@@ -1343,7 +1344,7 @@ int main(int argc, char **argv) {
     // com FPS de 0,1 a janela inteira tem 1 quadro, e o pior saia 0.0.
     if (quadros > 20 || dtms > 1000.0) {
       if (dtms > pior) { pior = dtms; piorTxtMs = txtMsQuadro; piorTxtN = txtNQuadro;
-                         pEv=fEv; pBomb=fBomb; pUpd=fUpd; pDes=fDes; pSwap=fSwap; pAux=fAux; pClr=fClr;
+                         pEv=fEv; pBomb=fBomb; pUpd=fUpd; pDes=fDes; pSwap=fSwap; pAux=fAux; pClr=fClr; pPrep=fPrep; pGlClr=fGlClr;
                          pUplN=fUplN; pUplB=fUplB;
                          pGfxMs=fGfxMs; pTexMs=fTexMs; pNRect=fNRect; pNProg=fNProg;
                          pNBind=fNBind; pNBusca=fNBusca; pOutMs=fOutMs; pNOut=fNOut; pFill=fFill; pNCheio=fNCheio; }
@@ -1632,6 +1633,13 @@ int main(int argc, char **argv) {
                " upd=%.1f clr=%.1f des=%.1f aux=%.1f swap=%.1f\n",
                pior, pEv, pBomb, pUplN, pUplB / 1048576.0,
                pUpd, pClr, pDes, pAux, pSwap);
+        // 2.0.1: `clr` de 6 e 14 s no Android ao abrir video (Expressluck, TCL
+        // A14) e o numero junta seis passos. Aberto em partes so quando pesa:
+        // prep = luz ambiente + vidro fosco, gl = o glClear (primeira chamada
+        // GL depois do swap: e onde o driver espera o buffer da janela).
+        if (pClr > 100.0)
+          printf("[quadro-clr] clr=%.1f prep=%.1f gl=%.1f resto=%.1f\n",
+                 pClr, pPrep, pGlClr, pClr - pPrep - pGlClr);
         // O `des` DO PIOR QUADRO REPARTIDO, NO LOG. Ate aqui so ia para
         // /tmp/nuvio-fps.txt, que no Android nao existe: a TCL do dono
         // (04/10/2026) mostrava `des=30..45 ms` com texto 0 e upload 0, e nada

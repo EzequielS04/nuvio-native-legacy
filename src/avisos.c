@@ -1,4 +1,5 @@
 #include "avisos.h"
+#include "queda.h"
 #include "ilha.h"
 #include "ilhasalvar.h"
 #define AV_ILHA_CHAVE "avisos"   // o "N avisos novos" da central na ilha (ilha.c junta)
@@ -627,8 +628,51 @@ static void *fioCanalFn(void *u) {
 }
 
 // --- ciclo ---------------------------------------------------------------------------
+#ifdef NV_WEBOS
+// "chave":"valor" de um JSON raso do nyx, sem depender de js.c: 1 se achou.
+static int nyxCampo(const char *txt, const char *chave, char *out, size_t cap) {
+  char alvo[64];
+  const char *p, *f;
+  snprintf(alvo, sizeof alvo, "\"%s\"", chave);
+  out[0] = 0;
+  if (!txt || !(p = strstr(txt, alvo))) return 0;
+  p = strchr(p + strlen(alvo), '"');
+  if (!p || !(f = strchr(++p, '"')) || (size_t)(f - p) >= cap) return 0;
+  memcpy(out, p, (size_t)(f - p)); out[f - p] = 0;
+  return 1;
+}
+// A LINHA [tv] DO webOS. Android e .tpk ja mandam modelo e sistema; a LG nao
+// mandava nada, e a issue #265 (50NANO80ASA, travas e quedas na 2.0.0) nao
+// tinha como ser casada com log nenhum. Os dois arquivos sao do nyx; se a
+// jaula do app nao deixar ler, a linha diz isso em vez de sumir.
+static void tvWebos(void) {
+  static const char *const arqs[] = { "/var/run/nyx/device_info.json", "/var/run/nyx/os_info.json" };
+  char buf[2][4096] = { "", "" }, modelo[64], placa[64], versao[48], build[64];
+  for (int i = 0; i < 2; i++) {
+    FILE *f = fopen(arqs[i], "rb");
+    if (!f) continue;
+    buf[i][fread(buf[i], 1, sizeof buf[i] - 1, f)] = 0;
+    fclose(f);
+  }
+  if (!buf[0][0] && !buf[1][0]) { printf("[tv] webos: /var/run/nyx ilegivel\n"); return; }
+  if (!nyxCampo(buf[0], "product_id", modelo, sizeof modelo)) nyxCampo(buf[0], "device_name", modelo, sizeof modelo);
+  nyxCampo(buf[0], "hardware_id", placa, sizeof placa);
+  nyxCampo(buf[1], "webos_release", versao, sizeof versao);
+  nyxCampo(buf[1], "webos_manufacturing_version", build, sizeof build);
+  printf("[tv] modelo=%s host=webos-%s placa=%s fw=%s app=%s\n", modelo[0] ? modelo : "?",
+         versao[0] ? versao : "?", placa[0] ? placa : "?", build[0] ? build : "?", NV_VERSAO);
+}
+#endif
+
 void avisos_iniciar(void) {
   char *m;
+#ifdef NV_WEBOS
+  tvWebos();
+  // Antes de tudo: o relato da queda anterior entra no log desta sessao (e
+  // o que o envio automatico leva) e o registrador volta a ficar armado.
+  { char qd[700];
+    if (dados_caminho(qd, sizeof qd, "queda.txt")) { queda_relatar(qd); queda_armar(qd); } }
+#endif
   vistosLer();
   m = dados_ler(AV_MARCA_ARQ);
   // MARCA PRESENTE NAO E CRASH quando a sessao anterior se despediu por fora

@@ -142,7 +142,7 @@ static void gravar(void) {
   if (!dados_gravar(GPUN_ARQ, buf)) printf("[gpu-nivel] nao gravou %s\n", GPUN_ARQ);
 }
 
-#if (defined(NV_TPK) || defined(NV_ANDROID)) && !defined(NV_TPK_NIVEL_FORCADO)
+#if (defined(NV_TPK) || defined(NV_ANDROID) || defined(NV_WEBOS)) && !defined(NV_TPK_NIVEL_FORCADO)
 static void ler(void) {
   char *t = dados_ler(GPUN_ARQ);
   unsigned long c = 0;
@@ -220,9 +220,14 @@ void gpun_iniciar(int w, int h) {
 #if defined(NV_TPK_NIVEL_FORCADO)
   nivel = NV_TPK_NIVEL_FORCADO;
   origem = "forcado na build (NV_TPK_NIVEL_FORCADO)";
-#elif defined(NV_TPK) || defined(NV_ANDROID)
+#elif defined(NV_TPK) || defined(NV_ANDROID) || defined(NV_WEBOS)
   // ANDROID tambem mede: TV box e Google TV vao de Mali-G52 a GPUs bem mais
   // fortes. Na TCL Smart TV Pro o vidro + cor viva dava 29 fps sustentado.
+  // LG TAMBEM (2.0.1): log de uma LG webOS 5+ com Mali-G52 r23 na 2.0.0, 668
+  // amostras de FPS, mediana 25 e 504 abaixo de 40, em todas as telas (perfil,
+  // menu, ajustes, home) e com vidro desligado. A LG ficava no nivel 0 para
+  // sempre. Quem roda a 60 (C9, Mali-G510, Mali-G52 r46) nao desce: a regra
+  // so mexe com FPS < 45 e a espera da GPU dominando o quadro.
   adaptativo = 1;
   origem = "adaptativo";
   ler();
@@ -250,7 +255,7 @@ void gpun_forcar_720(void) {
 
 void gpun_preferencia(int p) {
   if (forca720) return;
-#if (defined(NV_TPK) || defined(NV_ANDROID)) && !defined(NV_TPK_NIVEL_FORCADO)
+#if (defined(NV_TPK) || defined(NV_ANDROID) || defined(NV_WEBOS)) && !defined(NV_TPK_NIVEL_FORCADO)
   if (p == 1) { adaptativo = 0; aplicar(0, "ajuste: efeitos completos"); return; }
   if (p == 2) { adaptativo = 0; aplicar(1, "ajuste: efeitos leves"); return; }
   adaptativo = 1; decidido = 0; origem = "adaptativo"; nivel = 0;

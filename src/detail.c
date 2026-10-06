@@ -26,6 +26,8 @@
 #include "episodios.h"
 #include "fontepref.h"
 #include "idioma.h"
+#include "ctxmenu.h"
+#include "ilha.h"
 #include "idiomacod.h"
 #include "badges.h"
 #include "marco.h"
@@ -3167,6 +3169,23 @@ void detail_atualizar(float dt, Uint32 agora) {
       }
     }
     aberto = 0; saindo = 0; t = 0.0f; carro = 0; trailer_fechar(); return;
+  }
+
+  // SEGURAR OK SEM RESPOSTA NA TELA (dono, 06/10): na home o cartao ganha a
+  // barra "Segure para opcoes"; aqui o menu do episodio, o da temporada e as
+  // fontes do botao principal so abriam ao soltar, sem nada mostrando que o
+  // gesto estava contando. A barra mora na ilha do relogio (ilha_atividade):
+  // a pagina nao tem um retangulo de foco unico, e a ilha e o lugar do 2.0
+  // para estado em andamento. Os primeiros 150 ms nao contam: e um toque.
+  if (okDesceEm && !ctx_aberto()) {
+    Uint32 dur = agora - okDesceEm;
+    int alvoHold = (nivel >= 1 && (foco.fileira == SEC_EPISODIOS || foco.fileira == SEC_TEMPORADAS)) ||
+                   (nivel == 0 && !focoAmigos && acaoEm(botao) == ACAO_PRIMARIO);
+    if (alvoHold && dur >= 150u) {
+      float p = (float)(dur - 150u) / (float)(NV_HOLD_MS - 150);
+      if (p > 1.0f) p = 1.0f;
+      ilha_atividade(i18n(p >= 1.0f ? "Solte para abrir opções" : "Segure para opções"), p);
+    }
   }
 
   for (int r = 0; r < N_SECOES; r++)
