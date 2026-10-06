@@ -1,14 +1,15 @@
-// Captura do cartao de novidades da 2.0.2 SEM janela visivel (janela GL
+// Captura do cartao de novidades da 2.0.1 SEM janela visivel (janela GL
 // escondida, FBO, glReadPixels), como tests/novidades148_shot.c. Antes, as
 // regras do cartao por tecla; depois a previa em varios momentos das tres
 // cenas, a pagina "Apoie o projeto", ingles e animacoes reduzidas.
-#include "novidades202.h"
+#include "novidades201.h"
 #include "apoio.h"
 #include "dados.h"
 #include "ajustes.h"
 #include "gfx.h"
 #include "text.h"
 #include "tex_cache.h"
+#include "idiomacod.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -34,7 +35,7 @@ static void tecla(SDL_Keycode k) {
   memset(&e, 0, sizeof e);
   e.type = SDL_KEYDOWN;
   e.key.keysym.sym = k;
-  novidades202_evento(&e);
+  novidades201_evento(&e);
 }
 
 static int existe(const char *arq) {
@@ -46,57 +47,73 @@ static int existe(const char *arq) {
 
 static void regras(void) {
   // Foco inicial = Continuar: OK vai para a pagina de apoio, sem fechar.
-  dados_apagar(N202_ARQ);
-  novidades202_abrir();
-  assert(novidades202_pagina() == 0);
+  dados_apagar(N201_ARQ);
+  novidades201_abrir();
+  assert(novidades201_pagina() == 0);
   tecla(SDLK_RETURN);
-  assert(novidades202_aberto() && novidades202_pagina() == 1);
+  assert(novidades201_aberto() && novidades201_pagina() == 1);
   // Voltar (tecla) volta para as novidades; OK em Concluir fecha.
   tecla(SDLK_ESCAPE);
-  assert(novidades202_aberto() && novidades202_pagina() == 0);
+  assert(novidades201_aberto() && novidades201_pagina() == 0);
   tecla(SDLK_RETURN);
-  assert(novidades202_pagina() == 1);
+  assert(novidades201_pagina() == 1);
   tecla(SDLK_RETURN);
-  assert(!novidades202_aberto());
-  assert(novidades202_pedido() == N202_PEDIU_NADA);
-  assert(existe(N202_ARQ));
+  assert(!novidades201_aberto());
+  assert(novidades201_pedido() == N201_PEDIU_NADA);
+  assert(existe(N201_ARQ));
   // Esquerda + OK = Abrir a Central.
-  dados_apagar(N202_ARQ);
-  novidades202_abrir();
+  dados_apagar(N201_ARQ);
+  novidades201_abrir();
   tecla(SDLK_LEFT);
   tecla(SDLK_RETURN);
-  assert(!novidades202_aberto());
-  assert(novidades202_pedido() == N202_PEDIU_CENTRAL);
-  assert(novidades202_pedido() == N202_PEDIU_NADA);
-  assert(existe(N202_ARQ));
+  assert(!novidades201_aberto());
+  assert(novidades201_pedido() == N201_PEDIU_CENTRAL);
+  assert(novidades201_pedido() == N201_PEDIU_NADA);
+  assert(existe(N201_ARQ));
   // Agora nao fecha direto, sem passar pela pagina de apoio.
-  dados_apagar(N202_ARQ);
-  novidades202_abrir();
+  dados_apagar(N201_ARQ);
+  novidades201_abrir();
   tecla(SDLK_LEFT); tecla(SDLK_LEFT); tecla(SDLK_LEFT);
   tecla(SDLK_RETURN);
-  assert(!novidades202_aberto() && novidades202_pedido() == N202_PEDIU_NADA);
+  assert(!novidades201_aberto() && novidades201_pedido() == N201_PEDIU_NADA);
   // Voltar na primeira pagina = Agora nao.
-  dados_apagar(N202_ARQ);
-  novidades202_abrir();
+  dados_apagar(N201_ARQ);
+  novidades201_abrir();
   tecla(SDLK_ESCAPE);
-  assert(!novidades202_aberto() && existe(N202_ARQ));
+  assert(!novidades201_aberto() && existe(N201_ARQ));
   // Os dois enderecos preenchidos.
   assert(apoio_n() == 2);
   assert(!strcmp(apoio_url(APOIO_PATREON), "https://www.patreon.com/cw/CraaazyDevs"));
   assert(!strcmp(apoio_url(APOIO_KOFI), "https://ko-fi.com/iqui27"));
   assert(!strcmp(apoio_url_curta(APOIO_PATREON), "patreon.com/cw/CraaazyDevs"));
-  puts("PASS: regras do cartao da 2.0.2");
+  puts("PASS: regras do cartao da 2.0.1");
 }
 
 static void primeiraVez(void) {
-  // Quem ainda nao viu o guia da 2.0 (instalacao nova, vindo da 1.x) recebe o
-  // guia: este cartao nao abre e fica visto. (A decisao e uma por processo.)
+  // Instalacao nova (ou vindo da 1.x): sem a marca do guia da 2.0 o guia abre
+  // e este cartao NAO abre, mas fica visto.
   dados_apagar("novidades-20-guia.txt");
-  dados_apagar(N202_ARQ);
-  novidades202_primeira_vez();
-  assert(!novidades202_aberto());
-  assert(existe(N202_ARQ));
-  puts("PASS: sem o guia da 2.0 visto, o cartao da 2.0.2 nao abre");
+  dados_apagar(N201_ARQ);
+  novidades201_teste_esquecer();
+  novidades201_primeira_vez();
+  assert(!novidades201_aberto());
+  assert(existe(N201_ARQ));
+  puts("PASS: instalacao nova: o cartao da 2.0.1 nao abre e fica visto");
+  // Vindo da 2.0.0: o guia ja foi visto, a marca da 2.0.1 nao existe. Abre
+  // uma vez; fechar grava a marca.
+  dados_gravar("novidades-20-guia.txt", "1\n");
+  dados_apagar(N201_ARQ);
+  novidades201_teste_esquecer();
+  novidades201_primeira_vez();
+  assert(novidades201_aberto());
+  tecla(SDLK_ESCAPE);
+  assert(!novidades201_aberto() && existe(N201_ARQ));
+  puts("PASS: vindo da 2.0.0: o cartao abre uma vez e grava a marca");
+  // Ja visto: nao abre de novo (em outra sessao do app).
+  novidades201_teste_esquecer();
+  novidades201_primeira_vez();
+  assert(!novidades201_aberto());
+  puts("PASS: ja visto: nao abre de novo");
 }
 
 static void quadro(float dt) {
@@ -105,12 +122,12 @@ static void quadro(float dt) {
   tex_novo_quadro();
   tex_bombear(8);
   gfx_novo_quadro();
-  novidades202_atualizar(dt, SDL_GetTicks());
+  novidades201_atualizar(dt, SDL_GetTicks());
   glBindFramebuffer(GL_FRAMEBUFFER, fbo);
   glViewport(0, 0, 1920, 1080);
   glClearColor(0.051f, 0.051f, 0.051f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
-  novidades202_desenhar(SDL_GetTicks());
+  novidades201_desenhar(SDL_GetTicks());
   glFinish();
 }
 
@@ -135,27 +152,51 @@ static void grava(const char *nome) {
 static void captura(const char *saida, const char *nome, float seg, int pagina) {
   char cam[700];
   int i;
-  novidades202_abrir();
-  for (i = 0; i < 900 && !novidades202_previa_pronta(); i++) { quadro(0.0f); SDL_Delay(4); }
-  assert(novidades202_previa_pronta());
+  novidades201_abrir();
+  for (i = 0; i < 900 && !novidades201_previa_pronta(); i++) { quadro(0.0f); SDL_Delay(4); }
+  assert(novidades201_previa_pronta());
   for (i = 0; i < 40; i++) quadro(1.0f / 60.0f);   // entrada do cartao e da lista
   if (pagina) { tecla(SDLK_RETURN); for (i = 0; i < 40; i++) quadro(1.0f / 60.0f); }
-  novidades202_teste_relogio(seg);
+  novidades201_teste_relogio(seg);
   // Quadros parados: icones e texto novos terminam de carregar.
   for (i = 0; i < 12; i++) { quadro(0.0f); SDL_Delay(2); }
   snprintf(cam, sizeof cam, "%s-%s.bmp", saida, nome);
   grava(cam);
 }
 
+// A lista tem de caber acima dos botoes em TODOS os idiomas: com duas linhas
+// por item, ou com alguns em uma (reticencias) onde duas nao cabem.
+static void cabeEmTodos(void) {
+  int idi, i, comCorte = 0;
+  for (idi = 0; idi < IDIOMA_N; idi++) {
+    int l;
+    ajustesDeTeste(idi, 0, 2);
+    novidades201_abrir();
+    for (i = 0; i < 30; i++) quadro(1.0f / 60.0f);
+    l = novidades201_teste_cortados();
+    if (l) {
+      int k;
+      printf("idioma %d (%s): %d item(ns) em uma linha:", idi, idioma_iso(idi), l);
+      for (k = 0; k < 12; k++) if (novidades201_teste_cortado(k)) printf(" %d", k);
+      putchar('\n');
+    }
+    assert(l >= 0);
+    if (l) comCorte++;
+    tecla(SDLK_ESCAPE);
+    for (i = 0; i < 20; i++) quadro(1.0f / 60.0f);
+  }
+  printf("PASS: a lista cabe nos %d idiomas (%d com algum item cortado)\n", IDIOMA_N, comCorte);
+}
+
 int main(int argc, char **argv) {
-  const char *saida = argc > 1 ? argv[1] : "/tmp/nuvio-novidades202";
+  const char *saida = argc > 1 ? argv[1] : "/tmp/nuvio-novidades201";
   const char *dir = getenv("NUVIO_DADOS");
   SDL_Window *w;
   SDL_GLContext gl;
   if (!dir || !dir[0]) return 2;
   dados_iniciar(dir);
   if (strcmp(dados_dir(), dir)) return 2;
-  novidades202_dir("deploy/app/art");
+  novidades201_dir("deploy/app/art");
   primeiraVez();
 
   SDL_SetHint("SDL_MAC_BACKGROUND_APP", "1");
@@ -163,7 +204,7 @@ int main(int argc, char **argv) {
   IMG_Init(IMG_INIT_PNG | IMG_INIT_JPG);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-  w = SDL_CreateWindow("novidades202-shot", 0, 0, 64, 64, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
+  w = SDL_CreateWindow("novidades201-shot", 0, 0, 64, 64, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
   assert(w);
   gl = SDL_GL_CreateContext(w);
   assert(gl);
@@ -197,8 +238,15 @@ int main(int argc, char **argv) {
   captura(saida, "en-central", 3.70f, 0);
   captura(saida, "en-apoio", 1.0f, 1);
 
+  ajustesDeTeste(IDIOMA_DE, 0, 2);
+  captura(saida, "de-central", 3.70f, 0);
+  ajustesDeTeste(IDIOMA_JA, 0, 2);
+  captura(saida, "ja-central", 3.70f, 0);
+
   ajustesDeTeste(0, 1, 2);
   captura(saida, "reduzido", 0.5f, 0);
+
+  cabeEmTodos();
 
   tex_encerrar();
   txt_encerrar();
@@ -207,6 +255,6 @@ int main(int argc, char **argv) {
   SDL_DestroyWindow(w);
   IMG_Quit();
   SDL_Quit();
-  puts("PASS: capturas da 2.0.2 gravadas.");
+  puts("PASS: capturas da 2.0.1 gravadas.");
   return 0;
 }

@@ -2,8 +2,8 @@
 //
 // Pedido do dono (06/10): "colocar o qr code do patreon e do ko-fi no final
 // [do what's new] e na settings tb". Aparecem em dois lugares, os dois
-// discretos e opcionais: a ultima pagina do cartao de novidades da 2.0.2
-// (novidades202.c) e Ajustes › Sobre e ajuda › Apoiar o projeto.
+// discretos e opcionais: a ultima pagina do cartao de novidades da 2.0.1
+// (novidades201.c) e Ajustes › Sobre e ajuda › Apoiar o projeto.
 //
 // UM LUGAR SO PARA OS ENDERECOS: trocar aqui troca nos dois. Endereco vazio
 // = aquele QR some (e o outro fica sozinho, centrado).

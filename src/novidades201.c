@@ -1,4 +1,4 @@
-// Cartao de NOVIDADES DA 2.0.2. Ver novidades202.h.
+// Cartao de NOVIDADES DA 2.0.1. Ver novidades201.h.
 //
 // O PADRAO E O DA 1.4.8 (dono: "ficou lindo"): um cartao, a previa viva a
 // esquerda, o texto a direita, as pilulas no canto de baixo. O que muda aqui:
@@ -17,7 +17,7 @@
 // CUSTO DE GPU: nenhuma passada de desfoque. A previa e uma arte do pacote
 // (uma passada do tamanho da previa), veus de cor e retangulos pequenos; na
 // troca de cena sao duas artes por ~0,5 s. O resto e texto em cache.
-#include "novidades202.h"
+#include "novidades201.h"
 #include "apoio.h"
 #include "ajustes.h"
 #include "anim.h"
@@ -70,12 +70,17 @@ static int   aberto, decidido, pagina, foco = P0_CONTINUAR, pedido;
 static float entrada, pag, relogio;
 static char  dirArte[512] = "deploy/app/art";
 static char  arte[CENAS][600];
+// Linhas da frase de cada item: 2. No idioma em que a lista nao cabe acima
+// dos botoes, os itens que quebram linha passam a 1 (com reticencias), de
+// baixo para cima, so ate caber (vaoItens).
+#define N_ITENS_MAX 12
+static int linhasItem[N_ITENS_MAX], cortados, coube = 1;
 
 // A arte de fundo de cada cena (do pacote, sem rede). A da Central e uma
 // home; a dos Ajustes nao tem arte (o Frost e cor); a do player e uma cena.
 static const int ARTE_N[CENAS] = { 12, -1, 15 };
 
-void novidades202_dir(const char *d) {
+void novidades201_dir(const char *d) {
   int i;
   if (d && d[0]) snprintf(dirArte, sizeof dirArte, "%s", d);
   for (i = 0; i < CENAS; i++)
@@ -85,24 +90,27 @@ void novidades202_dir(const char *d) {
 
 static void pedirArtes(void) {
   int i;
-  if (!arte[0][0]) novidades202_dir(NULL);
+  if (!arte[0][0]) novidades201_dir(NULL);
   for (i = 0; i < CENAS; i++) if (arte[i][0]) tex_obter_hero(arte[i]);
 }
 
-int novidades202_previa_pronta(void) {
+int novidades201_previa_pronta(void) {
   int i;
   for (i = 0; i < CENAS; i++) if (arte[i][0] && !tex_obter_hero(arte[i])) return 0;
   return 1;
 }
 
-int novidades202_aberto(void) { return aberto; }
-int novidades202_pagina(void) { return pagina; }
-int novidades202_foco(void) { return foco; }
-void novidades202_teste_relogio(float s) { relogio = s; }
+int novidades201_aberto(void) { return aberto; }
+int novidades201_pagina(void) { return pagina; }
+int novidades201_foco(void) { return foco; }
+void novidades201_teste_relogio(float s) { relogio = s; }
+void novidades201_teste_esquecer(void) { decidido = 0; aberto = 0; }
+int novidades201_teste_cortados(void) { return coube ? cortados : -1; }
+int novidades201_teste_cortado(int i) { return i >= 0 && i < N_ITENS_MAX && linhasItem[i] == 1; }
 
-int novidades202_pedido(void) {
+int novidades201_pedido(void) {
   int p = pedido;
-  pedido = N202_PEDIU_NADA;
+  pedido = N201_PEDIU_NADA;
   return p;
 }
 
@@ -117,19 +125,19 @@ static void comecar(float e) {
   pedirArtes();
 }
 
-void novidades202_abrir(void) { comecar(0.0f); }
+void novidades201_abrir(void) { comecar(0.0f); }
 
-void novidades202_primeira_vez(void) {
+void novidades201_primeira_vez(void) {
   char *s;
   if (decidido) return;
   decidido = 1;
-  s = dados_ler(N202_ARQ);
+  s = dados_ler(N201_ARQ);
   if (s) { free(s); return; }
   // Sem a marca do guia da 2.0 o guia abre agora (novidades20_primeira_vez,
   // logo depois desta): ele ja conta o app inteiro, e um segundo cartao em
   // seguida seria demais. Fica visto.
   s = dados_ler("novidades-20-guia.txt");
-  if (!s) { dados_gravar(N202_ARQ, "1\n"); return; }
+  if (!s) { dados_gravar(N201_ARQ, "1\n"); return; }
   free(s);
   comecar(0.0f);
 }
@@ -137,7 +145,7 @@ void novidades202_primeira_vez(void) {
 static void fechar(int oQue) {
   aberto = 0;
   pedido = oQue;
-  dados_gravar(N202_ARQ, "1\n");
+  dados_gravar(N201_ARQ, "1\n");
 }
 
 static void irPagina(int p) {
@@ -148,16 +156,16 @@ static void irPagina(int p) {
 
 static void ok(void) {
   if (!pagina) {
-    if (foco == P0_DEPOIS) fechar(N202_PEDIU_NADA);
-    else if (foco == P0_CENTRAL) fechar(N202_PEDIU_CENTRAL);
+    if (foco == P0_DEPOIS) fechar(N201_PEDIU_NADA);
+    else if (foco == P0_CENTRAL) fechar(N201_PEDIU_CENTRAL);
     else irPagina(1);
   } else {
     if (foco == P1_VOLTAR) irPagina(0);
-    else fechar(N202_PEDIU_NADA);
+    else fechar(N201_PEDIU_NADA);
   }
 }
 
-void novidades202_evento(const SDL_Event *e) {
+void novidades201_evento(const SDL_Event *e) {
   SDL_Keycode k;
   int n;
   if (!aberto || e->type != SDL_KEYDOWN) return;
@@ -169,17 +177,17 @@ void novidades202_evento(const SDL_Event *e) {
   if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE ||
       k == SDLK_DELETE || e->key.keysym.scancode == NV_SCANCODE_BACK) {
     if (pagina) irPagina(0);
-    else fechar(N202_PEDIU_NADA);
+    else fechar(N201_PEDIU_NADA);
   }
 }
 
-void novidades202_atualizar(float dt, Uint32 agora) {
+void novidades201_atualizar(float dt, Uint32 agora) {
   int red = ajustes_animacoes_reduzidas();
   (void)agora;
   if (!aberto && entrada < 0.002f) { entrada = 0.0f; return; }
   if (aberto) {
     pedirArtes();
-    if (novidades202_previa_pronta()) relogio += dt;
+    if (novidades201_previa_pronta()) relogio += dt;
   }
   if (red) { entrada = aberto ? 1.0f : 0.0f; pag = (float)pagina; return; }
   entrada = anim_rampa(entrada, aberto ? 1.0f : 0.0f, dt, aberto ? ABRIR_MS : FECHAR_MS);
@@ -326,7 +334,7 @@ static void cenaCentral(GfxRect p, float t, float a) {
     char ver[64];
     ajustes_ui_kicker(i18n("Central de controle"), x, topo + CC_PIL_H * 0.5f - 8.0f, ca);
     y += infoLinha("Internet", i18n("Conectado"), x, y, w, ca);
-    snprintf(ver, sizeof ver, "%s%s%s", N202_VERSAO, nomePlataforma()[0] ? " · " : "", nomePlataforma());
+    snprintf(ver, sizeof ver, "%s%s%s", N201_VERSAO, nomePlataforma()[0] ? " · " : "", nomePlataforma());
     y += infoLinha("Versão", ver, x, y, w, ca);
     gfx_cor((GfxRect){ x, y, w, 1 }, 0, 1, 1, 1, 0.07f * ca);
     y += 20.0f;
@@ -568,18 +576,19 @@ static const Item ITENS[] = {
     "Segure CH+: abre da ilha do relógio, com atalhos que você escolhe." },
   { NULL, "aj_settings-2", "Ajustes",
     "Categorias em cartões grandes e uma busca que sugere o mais perto." },
-  { NULL, "aj_bell", "Avisos",
-    "Dispensar nos cartões da ilha. Na lista de Avisos, segure OK." },
   { "Assistir", "aj_gauge", "Velocidade",
     "De 0,75x a 2x na folha de Áudio. Não vale com áudio pelo receptor." },
   { NULL, "aj_captions", "Legendas",
-    "Escolha a versão exata da legenda em cada idioma." },
+    "Versão exata por idioma. Add-ons recebem nome, tamanho e hash." },
   { NULL, "aj_puzzle", "Fontes e addons",
-    "Add-ons funcionam como no Nuvio oficial. Topo de Fontes mais enxuto." },
-  { "Android TV", "aj_tv-minimal-play", "Imagem e fluidez",
-    "Dolby Vision e HDR certos na TCL. Página do título mais leve." },
+    "Faixa de tamanho para tocar sozinho. Links longos de addon funcionam." },
+  { "Correções", "aj_shield-check", "Estabilidade",
+    "LG e Android não fecham mais sozinhos. Android TV mais leve." },
+  { NULL, "aj_sparkles", "E mais",
+    "Coleções além de 256 pastas, árabe, Encontrar pessoas e ícone novo." },
 };
 #define N_ITENS ((int)(sizeof ITENS / sizeof *ITENS))
+typedef char nItensCabe[N_ITENS <= N_ITENS_MAX ? 1 : -1];
 
 // Um item: disco com o icone, nome e a linha apagada (ate duas linhas).
 // Devolve a altura. `mede` = 1 nao desenha (gfx_opacidade_grupo zerado).
@@ -593,7 +602,7 @@ static float item(int i, float y, float a) {
   n = txt_linha_corta(TXT_ILHA_NOME, i18n(ITENS[i].nome), 246, 247, 250, 255, tw);
   txt_desenhar_alpha(n, tx, y, a);
   h = (float)n.h + 4.0f;
-  h += txt_bloco(TXT_CAPTION, i18n(ITENS[i].linha), 186, 192, 204, tx, y + h, tw, 28.0f, 0.92f * a, 2);
+  h += txt_bloco_corta(TXT_CAPTION, i18n(ITENS[i].linha), 186, 192, 204, tx, y + h, tw, 28.0f, 0.92f * a, linhasItem[i] ? linhasItem[i] : 2);
   return h < ICONE ? ICONE : h;
 }
 
@@ -605,23 +614,35 @@ static float grupo(const char *g, float y, float a) {
 
 // Mede a lista uma vez por idioma (o texto e o que muda a altura) e escolhe
 // o vao entre itens para ela caber entre o titulo e o rodape.
+#define VAO_MIN 6.0f
 static float vaoItens(float disponivel) {
   static int idiomaMedido = -999;
   static float vao = 22.0f;
   int idi = ajustes_idioma(), i;
   if (idi != idiomaMedido) {
-    float g = gfx_opacidade_grupo, total = 0.0f;
-    int ng = 0;
+    float g = gfx_opacidade_grupo, alt[N_ITENS_MAX], total = 0.0f;
+    int ng = 0, k;
     gfx_opacidade_grupo = 0.0f;
     for (i = 0; i < N_ITENS; i++) {
+      linhasItem[i] = 2;
+      alt[i] = item(i, 0.0f, 1.0f);
       if (ITENS[i].grupo) { total += 34.0f; ng++; }
-      total += item(i, 0.0f, 1.0f);
+      total += alt[i];
+    }
+    cortados = 0;
+    for (k = N_ITENS - 1; ; k--) {
+      // Vao entre itens e um pouco a mais antes de cada grupo novo.
+      vao = (disponivel - total) / ((float)(N_ITENS - 1) + 0.8f * (float)(ng - 1));
+      if (vao >= VAO_MIN || k < 0) break;
+      linhasItem[k] = 1;
+      { float h1 = item(k, 0.0f, 1.0f);
+        if (h1 < alt[k]) { total -= alt[k] - h1; alt[k] = h1; cortados++; }
+        else linhasItem[k] = 2; }
     }
     gfx_opacidade_grupo = g;
-    // Vao entre itens e um pouco a mais antes de cada grupo novo.
-    vao = (disponivel - total) / ((float)(N_ITENS - 1) + 0.8f * (float)(ng - 1));
+    coube = vao >= VAO_MIN;
     if (vao > 26.0f) vao = 26.0f;
-    if (vao < 8.0f) vao = 8.0f;
+    if (vao < VAO_MIN) vao = VAO_MIN;
     idiomaMedido = idi;
   }
   return vao;
@@ -632,7 +653,7 @@ static void paginaNovidades(float y0, float a, float dx) {
   char t[64];
   int i, g = 0;
   if (a <= 0.004f) return;
-  snprintf(t, sizeof t, i18n("Novidades da %s"), N202_VERSAO);
+  snprintf(t, sizeof t, i18n("Novidades da %s"), N201_VERSAO);
   { TxtLinha l = txt_linha_corta(TXT_NOV_TITULO, t, 248, 249, 252, 255, TW);
     txt_desenhar_alpha(l, TX + dx, y, a);
     y += (float)l.h + 34.0f; }
@@ -708,7 +729,9 @@ static void rodape(float y0, float a) {
     if (aberto) ponteiro_alvo(r.x, r.y, r.w, r.h, ptFoco, NULL, i, 0);
     xd = r.x - BOTAO_GAP;
   }
-  // As duas paginas, como dois tracos no comeco do rodape.
+  // As duas paginas, como dois tracos no comeco do rodape. Somem quando os
+  // botoes (rotulos longos, japones) chegam ate eles.
+  if (xd + BOTAO_GAP > TX + 14.0f + 40.0f + 10.0f + 24.0f)
   { float ar, ag, ab, x = TX, yc = yBase - BOTAO_H_PRIMARIO * 0.5f;
     ajustes_acento(&ar, &ag, &ab);
     for (i = 0; i < 2; i++) {
@@ -746,7 +769,7 @@ static void desenharCorpo(void) {
 }
 
 // Cartao de tela quase cheia: ampliado so se ainda couber (escala.h).
-void novidades202_desenhar(Uint32 agora) {
+void novidades201_desenhar(Uint32 agora) {
   (void)agora;
   ESCALA_SE_COUBER_INI(N_W, N_H);
   desenharCorpo();
