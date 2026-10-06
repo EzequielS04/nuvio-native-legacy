@@ -112,6 +112,10 @@ void ilhacart_tecla(Uint32 agora) { ultimaTecla = agora; }
 // "Fechar" no modal tira o cartao deste evento; um evento novo volta a por.
 // O feed e relido pelo proprio recomenda.c a cada 10 min (ou ao abrir o
 // Social): esta sonda so le a copia em memoria, sem rede.
+//
+// SO O QUE DIZ ALGO (dono, 06/10/2026: "deixar a TV so quando assistiu ou
+// curtiu"): o aviso sai para terminou / gostou / nao gostou / nota e para o
+// comeco de uma SERIE. Filme comecado, saida do player ("parou"), salvo: nada.
 #define AMIGO_AGORA_S   (15 * 60)
 #define AMIGO_SONDA_MS  5000u
 static IlhaCartao amigo;
@@ -119,40 +123,78 @@ static int temAmigo;
 static char amigoDispensado[96], amigoAnunciado[96];
 static Uint32 amigoSonda;
 
+int ilhacart_noticia(const RecEvento *ev, long long agora, char *txt, size_t tam) {
+  char f1[96], f2[200];
+  const char *nome, *tit;
+  if (tam) txt[0] = 0;
+  if (!ev || !tam || ev->grau > 1 || !ev->imdb[0] || ev->quando <= 0) return 0;
+  if (agora - ev->quando > AMIGO_AGORA_S || agora - ev->quando < -60) return 0;
+  nome = ilha_forte(f1, sizeof f1, ev->pessoaNome[0] ? ev->pessoaNome : "?");
+  tit = ilha_forte(f2, sizeof f2, ev->titulo[0] ? ev->titulo : "?");
+  switch (ev->acao) {
+    case REC_ACAO_INICIO:
+      // O servidor novo so manda o comeco de uma serie; o antigo manda todo
+      // "comecou" — filme comecado nao e noticia.
+      if (strcmp(ev->midia, "series")) return 0;
+      snprintf(txt, tam, i18n("%s está vendo %s"), nome, tit);
+      return 1;
+    case REC_ACAO_FIM: {
+      int r = ev->temReacFim ? ev->reacFim : 2;
+      if (ev->eps > 1)
+        snprintf(txt, tam, i18n("%s viu %d episódios de %s"), nome, ev->eps, tit);
+      else if (r == 1) snprintf(txt, tam, i18n("%s terminou %s e gostou"), nome, tit);
+      else if (r == -1) snprintf(txt, tam, i18n("%s terminou %s e não gostou"), nome, tit);
+      else snprintf(txt, tam, i18n("%s terminou %s"), nome, tit);
+      return 2; }
+    case REC_ACAO_REACAO:
+      if (ev->reacao > 0) snprintf(txt, tam, i18n("%s gostou de %s"), nome, tit);
+      else if (ev->reacao < 0) snprintf(txt, tam, i18n("%s não gostou de %s"), nome, tit);
+      else snprintf(txt, tam, i18n("%s achou %s mais ou menos"), nome, tit);
+      return 2;
+    case REC_ACAO_NOTA:
+      if (ev->nota <= 0) return 0;
+      snprintf(txt, tam, i18n("%s deu %d/10 para %s"), nome, (ev->nota + 5) / 10, tit);
+      return 2;
+    default:
+      return 0;          // abandono (saiu do player), salvo: nao e aviso
+  }
+}
+
 static void amigoAtualizar(Uint32 agora) {
   RecEvento ev;
-  int i, n, achou = 0;
+  int i, n, tipo = 0;
   long long t = (long long)time(NULL);
-  char chave[96];
+  char chave[96], txt[240];
   if (amigoSonda && agora - amigoSonda < AMIGO_SONDA_MS) return;
   amigoSonda = agora ? agora : 1;
   n = recomenda_ativo() ? recomenda_feed_n() : 0;
-  for (i = 0; i < n && i < 12; i++) {
+  for (i = 0; i < n && i < 12 && !tipo; i++) {
     if (!recomenda_feed_item(i, &ev)) continue;
-    if (ev.acao != REC_ACAO_INICIO || ev.grau > 1 || !ev.imdb[0] || ev.quando <= 0) continue;
-    if (t - ev.quando > AMIGO_AGORA_S || t - ev.quando < -60) continue;
-    achou = 1;
-    break;
+    tipo = ilhacart_noticia(&ev, t, txt, sizeof txt);
   }
-  if (!achou) {
+  if (!tipo) {
     if (temAmigo) { temAmigo = 0; ilha_cartao(ILHA_AMIGO, NULL); }
     return;
   }
   snprintf(chave, sizeof chave, "amigo:%.40s:%.24s:%lld", ev.pessoa, ev.imdb, ev.quando);
   // O AVISO, uma vez por evento.
   if (strcmp(amigoAnunciado, chave)) {
-    char txt[240], f1[96], f2[200], meta[24] = "";
+    char meta[24] = "";
     IlhaAvisoEx e;
     snprintf(amigoAnunciado, sizeof amigoAnunciado, "%s", chave);
-    snprintf(txt, sizeof txt, i18n("%s está vendo %s"),
-             ilha_forte(f1, sizeof f1, ev.pessoaNome[0] ? ev.pessoaNome : "?"), ilha_forte(f2, sizeof f2, ev.titulo));
-    if (ev.temporada > 0 && ev.episodio > 0) snprintf(meta, sizeof meta, i18n("T%dE%d"), ev.temporada, ev.episodio);
+    if (ev.temporada > 0 && ev.episodio > 0 && !(ev.acao == REC_ACAO_FIM && ev.eps > 1))
+      snprintf(meta, sizeof meta, i18n("T%dE%d"), ev.temporada, ev.episodio);
     memset(&e, 0, sizeof e);
-    e.chave = "amigo-vendo"; e.tipo = ILHA_INFO; e.texto = txt; e.ms = 6000u;
+    e.chave = tipo == 1 ? "amigo-vendo" : "amigo-noticia"; e.tipo = ILHA_INFO; e.texto = txt; e.ms = 6000u;
     e.rosto = ev.pessoaAvatar; e.rostoNome = ev.pessoaNome[0] ? ev.pessoaNome : "?";
-    e.capa = ev.poster[0] ? ev.poster : "-"; e.meta = meta; e.vivo = 1;
+    e.capa = ev.poster[0] ? ev.poster : "-"; e.meta = meta; e.vivo = tipo == 1;
     ilha_avisar_ex(&e);
-    printf("[ilha] amigo vendo agora: %s %s\n", ev.pessoa, ev.imdb);
+    printf("[ilha] amigo %s: %s %s\n", tipo == 1 ? "vendo agora" : "noticia", ev.pessoa, ev.imdb);
+  }
+  // Terminou/reagiu e so aviso: o cartao "vendo agora" e de quem esta vendo.
+  if (tipo != 1) {
+    if (temAmigo) { temAmigo = 0; ilha_cartao(ILHA_AMIGO, NULL); }
+    return;
   }
   // O CARTAO, como os outros, so com o relogio na tela (Ajustes > Relogio).
   if (!strcmp(amigoDispensado, chave) || !ajustes_relogio_ligado()) {

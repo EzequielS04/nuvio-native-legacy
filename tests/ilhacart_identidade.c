@@ -124,5 +124,29 @@ int main(void) {
   assert(ilha_pediu(&c, &perfil) == ILHA_PEDIU_TOCAR && perfil == ILHA_ESTREIA);
   assert(!strcmp(c.imdb, ep.imdb) && ilha_tem("fixture-aviso") && !vistos);
   puts("ok estreia/modal/pedido e aviso preservados na invalidacao de ILHA_VIVO");
+  // AVISO DE AMIGO SO DO QUE DIZ ALGO (06/10/2026): terminou / reagiu / nota /
+  // comecou uma SERIE. Filme comecado, saida do player e salvo nao avisam.
+  { RecEvento r; char tx[240]; long long t0 = 2000000000LL;
+    memset(&r, 0, sizeof r);
+    r.grau = 1; r.quando = t0 - 60; snprintf(r.imdb, sizeof r.imdb, "tt1");
+    snprintf(r.pessoaNome, sizeof r.pessoaNome, "Ana"); snprintf(r.titulo, sizeof r.titulo, "X");
+    snprintf(r.midia, sizeof r.midia, "movie");
+    r.acao = REC_ACAO_INICIO; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 0 && !tx[0]);
+    r.acao = REC_ACAO_ABANDONO; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 0);
+    r.acao = REC_ACAO_SALVO; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 0);
+    snprintf(r.midia, sizeof r.midia, "series");
+    r.acao = REC_ACAO_INICIO; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 1);
+    assert(!strcmp(tx, "\x02" "Ana\x02 está vendo \x02X\x02"));
+    r.acao = REC_ACAO_FIM; r.eps = 3; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 2);
+    assert(!strcmp(tx, "\x02" "Ana\x02 viu 3 episódios de \x02X\x02"));
+    r.eps = 0; r.temReacFim = 1; r.reacFim = 1; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 2);
+    assert(strstr(tx, "e gostou"));
+    r.acao = REC_ACAO_REACAO; r.reacao = -1; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 2);
+    assert(strstr(tx, "não gostou de"));
+    r.acao = REC_ACAO_NOTA; r.nota = 80; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 2);
+    assert(strstr(tx, "deu 8/10 para"));
+    r.quando = t0 - 3600; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 0);     // velho
+    r.quando = t0 - 60; r.grau = 2; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 0); }
+  puts("ok aviso de amigo so para terminou/reagiu/nota/serie nova");
   puts("ilhacart_identidade: tudo ok"); return 0;
 }
