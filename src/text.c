@@ -511,8 +511,8 @@ static Uint32 decodifica(const unsigned char *p, int *n) {
 // ASCII — o caminho comum sai na primeira comparacao. A linha rasterizada e
 // cacheada por text.c, mas a CHAVE do cache e montada com o texto ja limpo,
 // entao este passe roda por quadro; e por isso que a saida rapida importa.
-static const char *semDecorativoSemGlifo(TTF_Font *fonte, const char *s,
-                                         char *dst, size_t tam) {
+static const char *semDecorativoSemGlifo(TTF_Font *fonte, TTF_Font *alt, TTF_Font *alt2,
+                                         const char *s, char *dst, size_t tam) {
   const unsigned char *p = (const unsigned char *)s;
   size_t k = 0;
   int algum = 0;
@@ -528,7 +528,9 @@ static const char *semDecorativoSemGlifo(TTF_Font *fonte, const char *s,
     int tirar = 0, falta = 0;
     char comum = 0;
     if (cp >= 0x80)
-      falta = cp >= 0x10000 || !TTF_GlyphIsProvided(fonte, (Uint16)cp);
+      falta = cp >= 0x10000 || (!TTF_GlyphIsProvided(fonte, (Uint16)cp) &&
+                                !(alt && TTF_GlyphIsProvided(alt, (Uint16)cp)) &&
+                                !(alt2 && TTF_GlyphIsProvided(alt2, (Uint16)cp)));
     // LETRA ESTILIZADA SEM GLIFO VIRA A LETRA COMUM (#144): "RᴇLᴇAꜱᴇ" sai
     // "RELEASE", e nao "R▯L▯AS▯" nem a linha inteira na fonte de reserva.
     if (falta) comum = nv_dobra_estilizada(cp);
@@ -748,46 +750,120 @@ static int arTemGlifo(unsigned cp, void *u) {
   return (arMem[c->slot].tem[i >> 3] >> (i & 7)) & 1;
 }
 
-// Linha de legenda, ja quebrada, em ordem visual (ver bidi.h). O arabe so e
-// "moldado" para as formas de apresentacao se a fonte que desenharia o arabe
-// (a que fonteDe escolhe para uma letra arabe) tem esses glifos; sem eles so
-// reordena, e o texto continua legivel (letras soltas) em vez de virar quadrado.
-int txt_bidi_legenda(TxtFamilia familia, TxtEstilo estilo, const char *in, char *out, size_t tam) {
-  ArCtx c = { NULL, 0 };
-  int r, i, livre = -1;
-  if (!tam) return 0;
-  { const unsigned char *p = (const unsigned char *)in;      // fast path sem consultar fonte
-    while (p && *p && *p < 0x80) p++;
-    if (!p || !*p) return bidi_visual_utf8(in, out, tam); }
-  camadaAtualizar();
-  if (estilo >= 0 && estilo < TXT_NFONTES) c.f = fonteDe(familia, estilo, "\xd8\xa7");  // alef
-  if (c.f) {
-    for (i = 0; i < AR_FONTES; i++) {
-      if (arMem[i].f == c.f) { c.slot = i; livre = -2; break; }
-      if (!arMem[i].f && livre == -1) livre = i;
-    }
-    if (livre != -2) {
-      if (livre < 0) { livre = 0; memset(&arMem[0], 0, sizeof arMem[0]); }
-      arMem[livre].f = c.f; c.slot = livre;
-    }
-    // Uma linha por FAMILIA, nao por troca de fonte: cada tamanho e um
-    // TTF_Font proprio e a alternancia entre eles repetia a linha 113 vezes
-    // num log de 200 KB (Samsung, 05/10/2026).
-    if (arLogada != c.f) {
-      const char *nome = TTF_FontFaceFamilyName(c.f);
-      static char familiaLogada[64];
-      arLogada = c.f;
-      if (strcmp(familiaLogada, nome ? nome : "?")) {
-        snprintf(familiaLogada, sizeof familiaLogada, "%s", nome ? nome : "?");
-        if (arTemGlifo(0xFEFB, &c) && arTemGlifo(0xFEE1, &c) && arTemGlifo(0xFEB3, &c))
-          printf("[bidi] arabic: shaping on (font %s)\n", nome ? nome : "?");
-        else
-          printf("[bidi] arabic: reorder only, font %s lacks presentation forms\n", nome ? nome : "?");
-      }
+// O contexto de arTemGlifo para a fonte `f` (a que desenha o arabe): uma casa
+// de arMem por fonte. Loga uma vez por FAMILIA se a juncao esta ligada.
+static void arCtxDe(TTF_Font *f, ArCtx *c) {
+  int i, livre = -1;
+  c->f = f; c->slot = 0;
+  if (!f) return;
+  for (i = 0; i < AR_FONTES; i++) {
+    if (arMem[i].f == f) { c->slot = i; livre = -2; break; }
+    if (!arMem[i].f && livre == -1) livre = i;
+  }
+  if (livre != -2) {
+    if (livre < 0) { livre = 0; memset(&arMem[0], 0, sizeof arMem[0]); }
+    arMem[livre].f = f; c->slot = livre;
+  }
+  // Uma linha por FAMILIA, nao por troca de fonte: cada tamanho e um
+  // TTF_Font proprio e a alternancia entre eles repetia a linha 113 vezes
+  // num log de 200 KB (Samsung, 05/10/2026).
+  if (arLogada != f) {
+    const char *nome = TTF_FontFaceFamilyName(f);
+    static char familiaLogada[64];
+    arLogada = f;
+    if (strcmp(familiaLogada, nome ? nome : "?")) {
+      snprintf(familiaLogada, sizeof familiaLogada, "%s", nome ? nome : "?");
+      if (arTemGlifo(0xFEFB, c) && arTemGlifo(0xFEE1, c) && arTemGlifo(0xFEB3, c))
+        printf("[bidi] arabic: shaping on (font %s)\n", nome ? nome : "?");
+      else
+        printf("[bidi] arabic: reorder only, font %s lacks presentation forms\n", nome ? nome : "?");
     }
   }
-  r = bidi_visual_utf8_ex(in, out, tam, c.f ? arTemGlifo : NULL, &c);
-  return r;
+}
+
+// Tem letra de escrita da direita para a esquerda (hebraico, arabe, formas de
+// apresentacao)? So entao o texto passa pelo bidi.
+static int temRtl(const char *s) {
+  const unsigned char *p = (const unsigned char *)s;
+  while (*p) {
+    int n = 1;
+    Uint32 cp;
+    if (*p < 0x80) { p++; continue; }
+    cp = decodifica(p, &n);
+    p += n;
+    if ((cp >= 0x0590 && cp <= 0x08FF) || (cp >= 0xFB1D && cp <= 0xFDFF) ||
+        (cp >= 0xFE70 && cp <= 0xFEFC)) return 1;
+  }
+  return 0;
+}
+
+// Controles de direcao e de formato que o TMDB e os addons mandam no meio do
+// texto arabe (LRM/RLM, LRE..RLO/PDF, isolates, ALM, BOM). Nenhuma fonte deste
+// app tem glifo para quase todos: viravam o quadradinho "do lado da frase". O
+// bidi.c nao implementa embutimento, entao eles tambem nao ajudariam a ordem.
+// Os de EMBUTIMENTO (LRE..RLO/PDF, isolates) e o BOM saem antes do bidi; as
+// MARCAS (LRM, RLM, ALM) entram nele como letra forte — "John Wick\u200E (2014)"
+// depende disso — e saem depois, junto com ZWJ/ZWNJ.
+static int formatoInvisivel(Uint32 cp) {
+  return (cp >= 0x202A && cp <= 0x202E) || (cp >= 0x2066 && cp <= 0x2069) || cp == 0xFEFF;
+}
+static int marcaInvisivel(Uint32 cp) {
+  return cp == 0x200C || cp == 0x200D || cp == 0x200E || cp == 0x200F || cp == 0x061C;
+}
+
+// TEXTO RTL EM ORDEM VISUAL, PARA TODA LINHA (TMDB, addons, legenda). O
+// SDL_ttf do .tpk 4/5 (2.22, sem HarfBuzz) desenha um codepoint por vez da
+// esquerda para a direita: sinopse, elenco e meta em arabe saiam com as letras
+// soltas e de tras para frente. Antes so a legenda passava pelo bidi.c; agora
+// linhaFamilia e a medida passam aqui, entao todo caminho (txt_linha, corte com
+// reticencias, txt_bloco) recebe o mesmo tratamento. A quebra e o corte
+// continuam no texto LOGICO, linha por linha, como bidi.h pede.
+// Latim (nenhuma letra RTL) volta o proprio `s`, byte a byte igual.
+static const char *visualDe(TTF_Font *f, const char *s, char *dst, size_t tam) {
+  char tmp[1024];
+  size_t k = 0;
+  const unsigned char *p;
+  ArCtx c;
+  int r;
+  if (!temRtl(s) || strlen(s) >= sizeof tmp) return s;
+  for (p = (const unsigned char *)s; *p;) {
+    int n = 1;
+    Uint32 cp = decodifica(p, &n);
+    if (!formatoInvisivel(cp)) { memcpy(tmp + k, p, (size_t)n); k += (size_t)n; }
+    p += n;
+  }
+  tmp[k] = 0;
+  arCtxDe(f, &c);
+  r = bidi_visual_utf8_ex(tmp, dst, tam, c.f ? arTemGlifo : NULL, &c);
+  if (r < 0) return s;
+  // As marcas ja fizeram o seu trabalho (juncao, direcao); desenhadas, viram caixa.
+  { char *w = dst; const unsigned char *q = (const unsigned char *)dst;
+    while (*q) {
+      int n = 1;
+      Uint32 cp = decodifica(q, &n);
+      if (!marcaInvisivel(cp)) { memmove(w, q, (size_t)n); w += n; }
+      q += n;
+    }
+    *w = 0; }
+  return dst;
+}
+
+// Linha de legenda, ja quebrada. Era aqui que a legenda ganhava a ordem
+// visual; desde que linhaFamilia faz isso para TODA linha (visualDe), aplicar
+// de novo inverteria o texto uma segunda vez. Fica a copia, para quem chama
+// (player.c, legendasui.c) nao mudar.
+int txt_bidi_legenda(TxtFamilia familia, TxtEstilo estilo, const char *in, char *out, size_t tam) {
+  size_t n;
+  (void)familia; (void)estilo;
+  if (!tam) return 0;
+  n = in ? strlen(in) : 0;
+  if (n >= tam) {
+    n = tam - 1;
+    while (n && ((unsigned char)in[n] & 0xC0) == 0x80) n--;
+  }
+  if (n) memcpy(out, in, n);
+  out[n] = 0;
+  return 0;
 }
 
 // Qual fonte desenharia a linha, em texto: "principal", "inter" (a Inter
@@ -901,6 +977,12 @@ static TTF_Font *fonteComEnfase(TxtFamilia familia, TxtEstilo estilo, TTF_Font *
   if (enfase & TXT_ENF_ITALICO) novo |= TTF_STYLE_ITALIC;
   *estiloTtf = novo;
   return fonte;
+}
+
+// Os bits TTF de uma enfase, para as fontes de corrida (ver renderCorridas).
+static int enfaseTtf(int enfase) {
+  return ((enfase & TXT_ENF_NEGRITO) ? TTF_STYLE_BOLD : 0) |
+         ((enfase & TXT_ENF_ITALICO) ? TTF_STYLE_ITALIC : 0);
 }
 
 static void liberarFamilia(TxtFamilia familia) {
@@ -1227,6 +1309,156 @@ void txt_encerrar(void) {
   TTF_Quit();
 }
 
+// UMA LINHA, MAIS DE UMA FONTE. A linha com arabe vai inteira para a fonte de
+// reserva (fonteDe), e na Samsung a unica e a NotoNaskhArabic-Subset.ttf
+// embarcada, que NAO TEM LATIM: so espaco, digitos e ", . : !". Um "·" da linha
+// de meta, os parenteses, aspas «», o hifen, o "…" do corte e qualquer nome em
+// latim ("Breaking Bad") no meio da sinopse saiam como .notdef — os quadrados
+// "do lado das frases" do relato do .tpk 4/5. Agora a linha e desenhada em
+// CORRIDAS: cada caractere que a reserva nao tem e a fonte da interface (ou a
+// Inter) tem vai para ela, e as corridas sao coladas lado a lado na mesma linha
+// de base. So acontece quando a fonte da linha e uma reserva; a linha comum (a
+// fonte principal ou a Inter) nao passa aqui e sai identica a antes.
+#define TXT_CORR_MAX 32
+typedef struct { int ini, fim; TTF_Font *f; } Corrida;
+
+// As fontes que completam a reserva `f`: a principal da familia e a Inter.
+// NULL nas duas quando `f` ja e uma delas.
+static void altDe(TxtFamilia familia, TxtEstilo estilo, TTF_Font *f,
+                  TTF_Font **a, TTF_Font **b) {
+  *a = *b = NULL;
+  if (familia < TXT_FAMILIA_INTER || familia >= TXT_FAMILIA_N) familia = TXT_FAMILIA_INTER;
+  if (!f || estilo < 0 || estilo >= TXT_NFONTES) return;
+  if (f == fontes[familia][estilo] || f == fontes[TXT_FAMILIA_INTER][estilo]) return;
+  if (estilo >= TXT_LEG_50 && estilo <= TXT_LEG_200 && f == fontesLegendaLG[estilo - TXT_LEG_50]) return;
+  *a = fontes[familia][estilo];
+  *b = fontes[TXT_FAMILIA_INTER][estilo];
+  if (*b == *a) *b = NULL;
+}
+
+// Corta `s` em corridas de uma fonte so. Espaco fica na corrida de antes (nao
+// vira corrida propria). Mais corridas que `max`: uma so, na fonte da linha.
+static int corridasDe(TTF_Font *f, TTF_Font *a, TTF_Font *b, const char *s,
+                      Corrida *c, int max) {
+  const unsigned char *p = (const unsigned char *)s;
+  int n = 0;
+  if (!a && !b) { c[0].ini = 0; c[0].fim = (int)strlen(s); c[0].f = f; return 1; }
+  while (*p) {
+    int tam = 1, pos = (int)((const char *)p - s);
+    Uint32 cp = decodifica(p, &tam);
+    TTF_Font *g = f;
+    if (cp == ' ' && n) g = c[n - 1].f;
+    else if (cp < 0x10000 && !TTF_GlyphIsProvided(f, (Uint16)cp)) {
+      if (a && TTF_GlyphIsProvided(a, (Uint16)cp)) g = a;
+      else if (b && TTF_GlyphIsProvided(b, (Uint16)cp)) g = b;
+    }
+    if (n && c[n - 1].f == g) c[n - 1].fim = pos + tam;
+    else if (n == max) { c[0].ini = 0; c[0].fim = (int)strlen(s); c[0].f = f; return 1; }
+    else { c[n].ini = pos; c[n].fim = pos + tam; c[n].f = g; n++; }
+    p += tam;
+  }
+  return n;
+}
+
+// Estilo TTF somado a uma fonte de corrida (o negrito/italico da legenda), e
+// devolvido depois.
+static int estiloSoma(TTF_Font *g, TTF_Font *f, int extra) {
+  int ant = TTF_GetFontStyle(g);
+  if (g != f && extra && (ant | extra) != ant) TTF_SetFontStyle(g, ant | extra);
+  return ant;
+}
+static void estiloVolta(TTF_Font *g, TTF_Font *f, int ant) {
+  if (g != f && TTF_GetFontStyle(g) != ant) TTF_SetFontStyle(g, ant);
+}
+
+static int medirCorridas(TTF_Font *f, TTF_Font *a, TTF_Font *b, const char *s,
+                         int extra, int *w) {
+  Corrida c[TXT_CORR_MAX];
+  int n = corridasDe(f, a, b, s, c, TXT_CORR_MAX), i, soma = 0;
+  if (n <= 1) { int h; return TTF_SizeUTF8(f, s, w, &h); }
+  for (i = 0; i < n; i++) {
+    char pedaco[1600];
+    int cw = 0, ch = 0, ant, len = c[i].fim - c[i].ini;
+    if (len <= 0 || len >= (int)sizeof pedaco) continue;
+    memcpy(pedaco, s + c[i].ini, (size_t)len); pedaco[len] = 0;
+    ant = estiloSoma(c[i].f, f, extra);
+    if (TTF_SizeUTF8(c[i].f, pedaco, &cw, &ch) == 0) soma += cw;
+    estiloVolta(c[i].f, f, ant);
+  }
+  *w = soma;
+  return 0;
+}
+
+static SDL_Surface *renderCorridas(TTF_Font *f, TTF_Font *a, TTF_Font *b,
+                                   const char *s, SDL_Color cor, int extra) {
+  Corrida c[TXT_CORR_MAX];
+  SDL_Surface *sf[TXT_CORR_MAX], *out;
+  int n = corridasDe(f, a, b, s, c, TXT_CORR_MAX), i, asc = 0, abaixo = 0, w = 0, x = 0;
+  if (n <= 1) return TTF_RenderUTF8_Blended(f, s, cor);
+  for (i = 0; i < n; i++) {
+    char pedaco[1600];
+    int ant, len = c[i].fim - c[i].ini, as = TTF_FontAscent(c[i].f);
+    sf[i] = NULL;
+    if (len <= 0 || len >= (int)sizeof pedaco) continue;
+    memcpy(pedaco, s + c[i].ini, (size_t)len); pedaco[len] = 0;
+    ant = estiloSoma(c[i].f, f, extra);
+    sf[i] = TTF_RenderUTF8_Blended(c[i].f, pedaco, cor);
+    estiloVolta(c[i].f, f, ant);
+    if (!sf[i]) continue;
+    if (as > asc) asc = as;
+    if (sf[i]->h - as > abaixo) abaixo = sf[i]->h - as;
+    w += sf[i]->w;
+  }
+  out = w > 0 && asc + abaixo > 0
+      ? SDL_CreateRGBSurfaceWithFormat(0, w, asc + abaixo, 32, SDL_PIXELFORMAT_ARGB8888) : NULL;
+  if (out) SDL_FillRect(out, NULL, 0);
+  for (i = 0; i < n; i++) {
+    if (!sf[i]) continue;
+    if (out) {
+      SDL_Rect d = { x, asc - TTF_FontAscent(c[i].f), sf[i]->w, sf[i]->h };
+      // Copia crua (alfa incluso): as corridas nao se sobrepoem.
+      SDL_SetSurfaceBlendMode(sf[i], SDL_BLENDMODE_NONE);
+      SDL_BlitSurface(sf[i], NULL, out, &d);
+    }
+    x += sf[i]->w;
+    SDL_FreeSurface(sf[i]);
+  }
+  return out;
+}
+
+// O que linhaFamilia desenharia para `s` (ver text.h): a string visual, em
+// quantas corridas e quantos caracteres ficam sem glifo na fonte da corrida
+// (o quadradinho). Para o teste e o diagnostico, como txt_fonte_da_linha.
+int txt_visual_da_linha(TxtFamilia familia, TxtEstilo estilo, const char *s,
+                        char *out, size_t tam, int *nCorridas) {
+  char limpo[1024], vis[1600];
+  Corrida c[TXT_CORR_MAX];
+  TTF_Font *fl, *a1, *a2;
+  const char *v;
+  int n, i, falta = 0;
+  if (out && tam) out[0] = 0;
+  if (nCorridas) *nCorridas = 0;
+  camadaAtualizar();
+  if (familia < TXT_FAMILIA_INTER || familia >= TXT_FAMILIA_N) familia = TXT_FAMILIA_INTER;
+  if (!s || estilo < 0 || estilo >= TXT_NFONTES || !(fl = fonteDe(familia, estilo, s))) return -1;
+  altDe(familia, estilo, fl, &a1, &a2);
+  s = semDecorativoSemGlifo(fl, a1, a2, s, limpo, sizeof limpo);
+  v = visualDe(fl, s, vis, sizeof vis);
+  n = corridasDe(fl, a1, a2, v, c, TXT_CORR_MAX);
+  for (i = 0; i < n; i++) {
+    const unsigned char *p = (const unsigned char *)v + c[i].ini;
+    while ((const char *)p < v + c[i].fim) {
+      int k = 1;
+      Uint32 cp = decodifica(p, &k);
+      if (cp != ' ' && (cp >= 0x10000 || !TTF_GlyphIsProvided(c[i].f, (Uint16)cp))) falta++;
+      p += k;
+    }
+  }
+  if (out && tam) snprintf(out, tam, "%s", v);
+  if (nCorridas) *nCorridas = n;
+  return falta;
+}
+
 // `enfase` e a combinacao TXT_ENF_* pedida pela LEGENDA ASS, e so por ela.
 //
 // NEGRITO E ITALICO AQUI SAO SINTETICOS, e isso e uma escolha e nao um
@@ -1258,7 +1490,9 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
   // era so da Inter, e com "LG Display" ou "Droid Sans" o ⚡ dos nomes de fonte
   // de addon aparecia como caixa.
   {
-    s = semDecorativoSemGlifo(fonteDe(familia, estilo, s), s, limpo, sizeof limpo);
+    TTF_Font *fl = fonteDe(familia, estilo, s), *a1, *a2;
+    altDe(familia, estilo, fl, &a1, &a2);
+    s = semDecorativoSemGlifo(fl, a1, a2, s, limpo, sizeof limpo);
     if (!*s) return vazia;
   }
 
@@ -1331,8 +1565,11 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
 
   Uint64 t0 = SDL_GetPerformanceCounter();
   SDL_Color cor = { (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)a };
-  TTF_Font *fonte = fonteLegendaDe(estilo, s, familia);
+  TTF_Font *fonte = fonteLegendaDe(estilo, s, familia), *alt1, *alt2;
   if (!fonte) return vazia;
+  altDe(familia, estilo, fonte, &alt1, &alt2);
+  char vis[1600];
+  const char *v = visualDe(fonte, s, vis, sizeof vis);
   // SOMA ao estilo que a fonte ja tem, e RESTAURA depois. As familias de
   // reserva nascem com TTF_STYLE_BOLD ligado (ver txt_iniciar); zerar aqui
   // tiraria delas o peso que o app inteiro conta com.
@@ -1340,7 +1577,7 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
   if (enfase) fonte = fonteComEnfase(familia, estilo, fonte, enfase, &novo);
   estiloAnt = TTF_GetFontStyle(fonte);
   if (enfase && novo != estiloAnt) TTF_SetFontStyle(fonte, novo);
-  SDL_Surface *sf = TTF_RenderUTF8_Blended(fonte, s, cor);
+  SDL_Surface *sf = renderCorridas(fonte, alt1, alt2, v, cor, enfaseTtf(enfase));
   if (enfase && novo != estiloAnt) TTF_SetFontStyle(fonte, estiloAnt);
   if (!sf) return vazia;
   SDL_Surface *cv = SDL_ConvertSurfaceFormat(sf, SDL_PIXELFORMAT_ABGR8888, 0);
@@ -1419,20 +1656,24 @@ static int larguraLinha(TxtEstilo estilo, const char *s, TxtFamilia familia,
 
 static int larguraLinhaMedir(TxtEstilo estilo, const char *s, TxtFamilia familia,
                              int enfase) {
-  char limpo[1024];
-  if (!fonteDe(familia, estilo, s)) return 0;
+  char limpo[1024], vis[1600];
+  TTF_Font *fl = fonteDe(familia, estilo, s), *a1, *a2;
+  if (!fl) return 0;
   {
-    s = semDecorativoSemGlifo(fonteDe(familia, estilo, s), s, limpo, sizeof limpo);
+    altDe(familia, estilo, fl, &a1, &a2);
+    s = semDecorativoSemGlifo(fl, a1, a2, s, limpo, sizeof limpo);
     if (!*s) return 0;
   }
   TTF_Font *fonte = fonteLegendaDe(estilo, s, familia);
   if (!fonte) return 0;
+  altDe(familia, estilo, fonte, &a1, &a2);
+  const char *v = visualDe(fonte, s, vis, sizeof vis);
   int estiloAnt, novo = 0;
   if (enfase) fonte = fonteComEnfase(familia, estilo, fonte, enfase, &novo);
   estiloAnt = TTF_GetFontStyle(fonte);
   if (enfase && novo != estiloAnt) TTF_SetFontStyle(fonte, novo);
-  int w = 0, h = 0;
-  int ok = TTF_SizeUTF8(fonte, s, &w, &h);
+  int w = 0;
+  int ok = medirCorridas(fonte, a1, a2, v, enfaseTtf(enfase), &w);
   if (enfase && novo != estiloAnt) TTF_SetFontStyle(fonte, estiloAnt);
   if (ok != 0) return 0;
   return (int)(w / ESC_T + 0.5f);
