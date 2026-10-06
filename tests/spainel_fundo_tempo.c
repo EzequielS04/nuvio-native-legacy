@@ -222,6 +222,17 @@ int main(void) {
       if (abs(a - b) > 12) dif++;
     }
     printf("copia parada x desenho direto: %.1f%% dos pixels diferem\n", dif * 100.0 / (1000 * 1080));
+    // O RODAPE DA HOME (a fileira que espia sob o destaque): a copia parada
+    // tem de ter os cartazes que o desenho direto tem. 5 % dos pixels
+    // diferentes (acima) nao pega 80 px de cartaz em branco.
+    { long sa = 0, sb = 0; int y;
+      for (y = 0; y < 100; y++) for (k = 0; k < 1000; k++) {
+        long o = ((long)y * 1000 + k) * 4;
+        sa += (ref[o] + ref[o + 1] + ref[o + 2]) / 3;
+        sb += (pix[o] + pix[o + 1] + pix[o + 2]) / 3;
+      }
+      printf("rodape da home (copia x direto): brilho %.2f x %.2f\n", sa / 100000.0, sb / 100000.0);
+      if (sa < sb * 0.9) { printf("FALHA: a copia parada ficou sem os cartazes do rodape da home\n"); falhas++; } }
     if (b1 != b0 || c1 != c0) { printf("FALHA: a copia mudou so com o tempo\n"); falhas++; }
     if (c2 < c0 * 0.8) { printf("FALHA: a home sumiu com arte nova no cache\n"); falhas++; }
     if (dif > 1000 * 1080 / 20 || b3 < bd * 0.85) { printf("FALHA: depois de republicar a copia nao e a home (sumiu)\n"); falhas++; } }

@@ -3348,6 +3348,9 @@ static GLuint tex_obter_limite(const char *caminho, int limite, int urgente,
         }
       }
     }
+    // Falhou mas ainda vai tentar de novo: e arte que pode chegar, e o fundo
+    // parado do painel de Salvos precisa saber (ver spainel_fundo).
+    if (itens[i].falhas < 4) tex_n_falta++;
     SDL_UnlockMutex(mtx);
     return 0;
   }
