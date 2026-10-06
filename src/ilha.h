@@ -245,8 +245,19 @@ int  ilha_modal_visivel(void);
 int  ilha_evento(const SDL_Event *e);
 // Acao pedida no modal, entregue uma vez (o contrato de avisos_pediu). `c`
 // recebe o cartao em que ela foi pedida.
+//
+// OS TRES GESTOS DE SAIDA (06/10, "muito alerta sem dispensar"), iguais em
+// todo modal de cartao e de aviso:
+//   - VOLTAR recolhe o modal para a pilula e NAO muda nada: o cartao fica, o
+//     aviso continua na lista como estava;
+//   - "Depois" / "Agora nao" ADIA: o cartao da estreia sai da pilula ate o app
+//     fechar (ILHA_PEDIU_DEPOIS; avisodisp_sessao_*), o item fica na lista;
+//   - "Dispensar" (ou "Fechar" no cartao ao vivo e no do amigo, que nao
+//     guardam nada) DISPENSA: some da pilula e da lista e a mesma chave nao
+//     volta, nem depois de reiniciar (ILHA_PEDIU_DISPENSAR; avisodisp.h).
+// Estreia: Assistir · Depois · Dispensar.
 enum { ILHA_PEDIU_NADA = 0, ILHA_PEDIU_TOCAR, ILHA_PEDIU_DETALHES,
-       ILHA_PEDIU_DISPENSAR, ILHA_PEDIU_SALVOS };
+       ILHA_PEDIU_DISPENSAR, ILHA_PEDIU_SALVOS, ILHA_PEDIU_DEPOIS };
 int  ilha_pediu(IlhaCartao *c, int *qual);
 
 // MINIMIZAR NA ILHA: o player saiu no meio e a sessao virou o cartao

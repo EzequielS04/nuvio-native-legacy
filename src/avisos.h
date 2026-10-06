@@ -123,6 +123,7 @@ void avisos_teste_queda(const char *texto);
 // ao fechar. Uma linha mede AVISOS_LINHA_H, EXCETO a linha em foco de um aviso
 // do canal, que cresce para o texto inteiro: o hospedeiro posiciona por
 // avisos_lista_y / avisos_lista_altura_linha, que sabem disso.
+#include <stddef.h>
 #define AVISOS_LINHA_H 164.0f
 int   avisos_lista_n(void);
 float avisos_lista_altura(void);
@@ -132,9 +133,25 @@ void  avisos_lista_desenhar(float x, float y, float w, float a, int focoLinha);
 int   avisos_lista_ok(int linha);
 void  avisos_marcar_lidos(void);
 
+// DISPENSAR (06/10, avisodisp.h). Tira o item da lista e grava a chave por
+// perfil: a mesma chave nao volta, nem depois de reiniciar; um evento novo
+// (outro episodio, outra versao) volta. "rec" e excecao: responde a
+// recomendacao em vez de gravar. A ULTIMA LINHA da lista, quando ha itens, e
+// "Dispensar todos": avisos_lista_linhas() = n + 1 (o hospedeiro navega por
+// ela; avisos_lista_n() continua sendo a contagem de avisos), e
+// avisos_lista_ok(n) dispensa todos e devolve 0 (a lista fica, vazia).
+// avisos_lista_item: o id, o titulo para o menu e, numa estreia com o lembrete
+// ainda ligado, o imdb para "Remover lembrete" ("" sem). 0 = linha invalida.
+void  avisos_dispensar(const char *id);
+void  avisos_dispensar_todos(void);
+int   avisos_lista_dispensar(int linha);
+int   avisos_lista_linhas(void);
+int   avisos_lista_item(int linha, char *id, size_t tamId, char *titulo, size_t tamTit,
+                        char *imdbLembrete, size_t tamImdb);
+
 // A ilha (ilhacart.c): o episodio novo (AV_AGENDA) ainda nao lido mais
-// recente — o id do item e o imdb da serie — e marcar UM item como lido.
-#include <stddef.h>
+// recente — o id do item e o imdb da serie — e marcar UM item como lido. Uma
+// estreia ADIADA nesta sessao ("Depois", avisodisp_sessao_*) nao conta.
 int  avisos_estreia_pendente(char *id, size_t tamId, char *imdb, size_t tamImdb);
 void avisos_marcar_visto(const char *id);
 

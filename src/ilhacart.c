@@ -1,5 +1,6 @@
 // Cartoes da ilha — ver ilhacart.h.
 #include "ilhacart.h"
+#include "avisodisp.h"
 #include "ilha.h"
 #include "agenda.h"
 #include "ajustes.h"
@@ -186,7 +187,18 @@ void ilhacart_dispensar(int qual) {
     temAmigo = 0; ilha_cartao(ILHA_AMIGO, NULL);
     return;
   }
-  if (temEstreia) avisos_marcar_visto(estreia.avisoId);
+  // "Dispensar" (06/10): o episodio sai da lista de Avisos e nao volta, nem
+  // depois de reiniciar (avisodisp.h). O lembrete da serie continua ligado.
+  if (temEstreia) avisos_dispensar(estreia.avisoId);
+  temEstreia = 0;
+  ilha_cartao(ILHA_ESTREIA, NULL);
+}
+
+void ilhacart_adiar(int qual) {
+  if (qual != ILHA_ESTREIA) { ilhacart_dispensar(qual); return; }
+  // "Depois": so nesta sessao. avisos_estreia_pendente pula o adiado, entao a
+  // proxima sonda nao o repoe; o item fica nao lido na lista.
+  if (temEstreia) avisodisp_sessao_por(estreia.avisoId);
   temEstreia = 0;
   ilha_cartao(ILHA_ESTREIA, NULL);
 }
