@@ -638,7 +638,9 @@ static struct { unsigned long long h; unsigned n; unsigned char fam, estilo, var
 // e 3-5 FPS. A resposta so muda com o texto, a fonte e a variante CJK, e a
 // tabela e esquecida junto com a de fonteDe.
 #define LG_MEM 4096
-static struct { unsigned long long h; unsigned n; unsigned char fam, estilo, enf, var, ok, cam; int w; } lgMem[LG_MEM];
+#define LG_VIAS 4
+static struct { unsigned long long h; unsigned n; unsigned char fam, estilo, enf, var, ok, cam; int w; unsigned uso; } lgMem[LG_MEM];
+static unsigned lgRelogio;
 // COBERTURA DAS FORMAS ARABES (bidi.c). Um bit por codepoint de FB50-FEFF, por
 // fonte: "ja perguntei" e "tem". Chaveado pelo ponteiro da fonte, esquecido junto
 // com as outras tabelas (a fonte pode ser fechada e reaberta).
@@ -1402,17 +1404,31 @@ static int larguraLinha(TxtEstilo estilo, const char *s, TxtFamilia familia,
   if (!s || !*s || estilo < 0 || estilo >= TXT_NFONTES) return 0;
   { const unsigned char *p = (const unsigned char *)s;
     for (; *p; p++, n++) { h ^= *p; h *= 1099511628211ull; } }
-  slot = (unsigned)(h % LG_MEM);
-  var = (unsigned char)variacaoCjk();
-  if (lgMem[slot].ok && lgMem[slot].h == h && lgMem[slot].n == n &&
-      lgMem[slot].fam == familia && lgMem[slot].estilo == estilo &&
-      lgMem[slot].enf == (unsigned char)enfase && lgMem[slot].var == var &&
-      lgMem[slot].cam == (unsigned char)camada)
-    return lgMem[slot].w;
+  // QUATRO CASAS POR CHAVE, a menos usada sai. Era mapeamento direto: duas
+  // linhas vivas na MESMA casa se expulsavam a cada quadro e as duas iam ao
+  // HarfBuzz de novo, para sempre. MEDIDO no Mac (06/10/2026): na home, a
+  // sinopse do destaque ("A science teacher wakes" e a frase inteira, casa
+  // 3379) — milhares de medidas a cada 2 s; nos Ajustes, 26% do desenho em
+  // larguraLinha -> TTF_SizeUTF8, sem nenhuma limpeza da tabela no meio.
+  { unsigned base = (unsigned)(h % (LG_MEM / LG_VIAS)) * LG_VIAS, k, velha = base;
+    var = (unsigned char)variacaoCjk();
+    for (k = base; k < base + LG_VIAS; k++) {
+      if (lgMem[k].ok && lgMem[k].h == h && lgMem[k].n == n &&
+          lgMem[k].fam == familia && lgMem[k].estilo == estilo &&
+          lgMem[k].enf == (unsigned char)enfase && lgMem[k].var == var &&
+          lgMem[k].cam == (unsigned char)camada) {
+        lgMem[k].uso = ++lgRelogio;
+        return lgMem[k].w;
+      }
+      if (!lgMem[k].ok) { if (lgMem[velha].ok) velha = k; }
+      else if (lgMem[velha].ok && lgMem[k].uso < lgMem[velha].uso) velha = k;
+    }
+    slot = velha; }
   w = larguraLinhaMedir(estilo, s, familia, enfase);
   lgMem[slot].h = h; lgMem[slot].n = n; lgMem[slot].fam = (unsigned char)familia;
   lgMem[slot].estilo = (unsigned char)estilo; lgMem[slot].enf = (unsigned char)enfase;
   lgMem[slot].var = var; lgMem[slot].w = w; lgMem[slot].ok = 1;
+  lgMem[slot].uso = ++lgRelogio;
   lgMem[slot].cam = (unsigned char)camada;
   return w;
 }
