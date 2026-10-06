@@ -3,7 +3,7 @@
 #   bash tests/legref_fixtures.sh DIR
 set -eu
 D=${1:-${TMPDIR:-/tmp}/nv-legref-fx}; mkdir -p "$D"
-[ -f "$D/.ok" ] && [ -f "$D/ext_traduzida_mais2000.srt" ] && [ -f "$D/filme.mkv" ] && [ -f "$D/frag.mp4" ] && exit 0
+[ -f "$D/.ok" ] && [ -f "$D/ext_traduzida_mais2000.srt" ] && [ -f "$D/filme.mkv" ] && [ -f "$D/cruz2.mkv" ] && exit 0
 command -v ffmpeg >/dev/null && command -v mkvmerge >/dev/null || { echo "precisa de ffmpeg e mkvmerge"; exit 2; }
 python3 - "$D" <<'PY'
 import random, sys
@@ -79,6 +79,12 @@ mkvmerge -q -o mm.mkv video.mkv --language 0:eng --forced-display-flag 0:1 --tra
   --language 0:eng emb.ass --language 0:por ext_mais2500.srt
 # Sem Cues para a legenda: o indice so aponta o video.
 mkvmerge -q -o semcues.mkv video.mkv --cues 0:none --language 0:eng emb.srt
+# Validacao cruzada: a primeira faixa em ingles esta +1,5 s fora; outra em
+# ingles e uma em portugues concordam no tempo certo. Em cruz2 so as duas
+# primeiras (sem como desempatar).
+mkvmerge -q -o cruz.mkv video.mkv --language 0:eng --sync 0:1500 emb.srt --language 0:eng --track-name 0:English2 emb.srt \
+  --language 0:por emb.srt
+mkvmerge -q -o cruz2.mkv video.mkv --language 0:eng --sync 0:1500 emb.srt --language 0:eng --track-name 0:English2 emb.srt
 # So letreiro.
 mkvmerge -q -o soforced.mkv video.mkv --language 0:eng --forced-display-flag 0:1 emb.srt
 ffmpeg -loglevel error -y -i video.mkv -c copy video.mp4

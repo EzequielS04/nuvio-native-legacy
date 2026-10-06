@@ -145,6 +145,13 @@ int main(int argc, char **argv) {
     casos += 3;
   }
   assert(!colher(r, "frag.mp4", "en", NULL, 0, LEGREF_SEM_INDICE, NULL)); casos++;   // fragmentado: fora
+
+  // 3c. Validacao cruzada (zero Range a mais: os tempos de todas estao no Cues).
+  //     A preferida +1,5 s fora cai quando duas outras concordam entre si; com
+  //     uma so outra nao ha como saber qual esta fora e fica a preferida.
+  d = colher(r, "cruz.mkv", "en", NULL, 0, LEGREF_OK, &s); assert(d && s.faixa == 3);
+  conferirIgual(d, emb, 0, 1); legenda_documento_liberar(d); casos++;
+  d = colher(r, "cruz2.mkv", "en", NULL, 0, LEGREF_OK, &s); assert(d && s.faixa == 2); legenda_documento_liberar(d); casos++;
   assert(!colher(r, "video.mkv", "en", NULL, 0, LEGREF_SEM_FAIXA, NULL)); casos++;
   l.semRange = 1; assert(!colher(r, "ff.mkv", "en", NULL, 0, LEGREF_SEM_RANGE, NULL)); l.semRange = 0; casos++;
 

@@ -471,6 +471,66 @@ static void anunciar(Job *j, LegRefStatus *st, int numero, const char *idioma, c
   pthread_mutex_unlock(&j->r->m);
 }
 
+// --- ESCOLHA E VALIDACAO CRUZADA DAS FAIXAS --------------------------------------
+// Ordem de preferencia: o idioma pedido antes; dentro dele, a faixa comum
+// antes da SDH/CC (que traz [porta batendo] a mais). Comentario fica de fora:
+// nao e o dialogo do filme.
+static int comentario(const char *nome) {
+  return contemSemCaixa(nome, "comment") || contemSemCaixa(nome, "coment");
+}
+static int sdh(const char *nome) {
+  return contemSemCaixa(nome, "sdh") || contemSemCaixa(nome, "hearing") || contemSemCaixa(nome, "cc") ||
+         contemSemCaixa(nome, "surdo");
+}
+static int ordenar(const char *const *idiomas, const char *const *nomes, const int *ok, int n,
+                   const char *quer, int *ordem) {
+  int k = 0;
+  for (int passo = 0; passo < 4; passo++)
+    for (int i = 0; i < n; i++) {
+      if (!ok[i]) continue;
+      int mesmo = mesmoIdioma(idiomas[i], quer), s = sdh(nomes[i]);
+      if ((passo == 0 && mesmo && !s) || (passo == 1 && mesmo && s) || (passo == 2 && !mesmo && !s) ||
+          (passo == 3 && !mesmo && s)) ordem[k++] = i;
+    }
+  return k;
+}
+// Fracao dos inicios de a com um inicio de b a ate 250 ms, com b deslocado.
+static double concordancia(const Tempo *a, int na, const Tempo *b, int nb, double off) {
+  int j = 0, c = 0;
+  if (na <= 0 || nb <= 0) return 0;
+  for (int i = 0; i < na; i++) {
+    while (j < nb && b[j].inicio + off < a[i].inicio - .25) j++;
+    if (j < nb && b[j].inicio + off <= a[i].inicio + .25) c++;
+  }
+  return (double)c / na;
+}
+// 1 concordam no tempo; -1 a mesma estrutura DESLOCADA (uma das duas esta
+// fora); 0 sem como dizer (traducao com outro corte, faixa curta).
+static int comparar(const Tempo *a, int na, const Tempo *b, int nb) {
+  double z = concordancia(a, na, b, nb, 0), melhor = 0, mo = 0;
+  if (na < 20 || nb < 20) return 0;
+  if (z >= .5) return 1;
+  for (int k = -100; k <= 100; k++) {
+    double c = concordancia(a, na, b, nb, k * .1);
+    if (c > melhor) { melhor = c; mo = k * .1; }
+  }
+  return melhor >= .5 && (mo >= .5 || mo <= -.5) && z < .25 ? -1 : 0;
+}
+// A preferida cai so se discorda (deslocada) de DUAS outras que concordam
+// entre si: com uma so, nao ha como saber qual das duas esta fora. Devolve a
+// posicao em v[] da faixa a usar (0 = a preferida).
+static int validar(Tempo *const *v, const int *n, int nv, int *descartou) {
+  *descartou = 0;
+  for (int x = 1; x < nv; x++) {
+    if (!v[x] || comparar(v[0], n[0], v[x], n[x]) != -1) continue;
+    for (int y = x + 1; y < nv; y++)
+      if (v[y] && comparar(v[0], n[0], v[y], n[y]) == -1 && comparar(v[x], n[x], v[y], n[y]) == 1) {
+        *descartou = 1; return x;
+      }
+  }
+  return 0;
+}
+
 // --- MP4 / MOV -----------------------------------------------------------------
 // Le so o `moov`: as caixas de topo sao puladas pelo tamanho declarado (um
 // `mdat` de 20 GB custa os 16 bytes do cabecalho). Da faixa de texto (tx3g,
@@ -649,17 +709,27 @@ static LegendaDocumento *coletarMp4(Job *j, LegRefStatus *st, const unsigned cha
     while (caixa(&c, t, &d, &m) && nF < LR_FAIXAS)
       if (!memcmp(t, "trak", 4) && mp4Faixa(d, m, escalaFilme, &fx[nF])) nF++;
   }
-  for (k = 0; k < 2 && escolhida < 0; k++)
+  {
+    const char *ids[LR_FAIXAS], *nms[LR_FAIXAS]; int ok[LR_FAIXAS], cand[LR_FAIXAS], nCand, e;
+    Tempo *v[8] = { 0 }; int nv, nt[8] = { 0 }, desc = 0, x;
     for (i = 0; i < nF; i++) {
-      int e, fora = 0;
-      if (letreiroMp4(&fx[i])) continue;
-      for (e = 0; e < j->p.nExcl; e++) if (j->p.excl[e] == fx[i].numero) fora = 1;
-      if (fora || (k == 0 && !mesmoIdioma(fx[i].idioma, j->p.idioma))) continue;
-      escolhida = i; break;
+      ids[i] = fx[i].idioma; nms[i] = fx[i].nome;
+      ok[i] = !letreiroMp4(&fx[i]) && !comentario(fx[i].nome);
+      for (e = 0; e < j->p.nExcl; e++) if (j->p.excl[e] == fx[i].numero) ok[i] = 0;
     }
-  if (escolhida < 0) { free(moov); j->erro = LEGREF_SEM_FAIXA; return NULL; }
+    nCand = ordenar(ids, nms, ok, nF, j->p.idioma, cand);
+    if (!nCand) { free(moov); j->erro = LEGREF_SEM_FAIXA; return NULL; }
+    // Todas as tabelas ja estao no moov: validacao cruzada sem Range a mais.
+    nv = nCand < 8 ? nCand : 8;
+    for (x = 0; x < nv; x++) { nt[x] = mp4Tempos(&fx[cand[x]], &v[x]); if (nt[x] < 0) { free(v[x]); v[x] = NULL; nt[x] = 0; } }
+    x = v[0] ? validar(v, nt, nv, &desc) : 0;
+    if (desc) fprintf(stderr, "[legref] cross_check dropped track=%d (shifted against two agreeing tracks) using=%d\n",
+                      fx[cand[0]].numero, fx[cand[x]].numero);
+    escolhida = cand[x];
+    for (i = 0; i < nv; i++) if (i != x) free(v[i]);
+    tv = v[x]; k = v[x] ? nt[x] : mp4Tempos(&fx[escolhida], &tv);
+  }
   anunciar(j, st, fx[escolhida].numero, fx[escolhida].idioma, fx[escolhida].codec);
-  k = mp4Tempos(&fx[escolhida], &tv);
   if (k == -2) j->erro = LEGREF_ORCAMENTO;
   else if (k < 0) j->erro = LEGREF_SEM_INDICE;
   else if (k == 0) j->erro = LEGREF_SEM_FAIXA;
@@ -678,7 +748,7 @@ static LegendaDocumento *coletar(Job *j, LegRefStatus *st) {
   unsigned char *cab = NULL, *tracks = NULL, *cues = NULL, *bufTr;
   long long segData = -1, posTracks = -1, posCues = -1, posInfo = -1;
   double escala = 1e-6;   // TimestampScale padrao (1 ms) em segundos
-  Faixa fx[LR_FAIXAS]; int nF = 0, escolhida = -1, i, k, semRel = 0, nP;
+  Faixa fx[LR_FAIXAS]; int nF = 0, escolhida = -1, i, semRel = 0, nP, cand[LR_FAIXAS], nCand = 0;
   LegRefPonto *pts = NULL; Evento *ev = NULL; int nEv = 0;
   LegendaDocumento *doc = NULL; int ass;
   // 1. Cabeca do arquivo. O primeiro pedido segue redirects (debrid) e guarda
@@ -743,22 +813,50 @@ static LegendaDocumento *coletar(Job *j, LegRefStatus *st) {
     nF = lerTracks(tracks + oTr, nTr, fx, LR_FAIXAS);
   }
   (void)posInfo;
-  // 2. A faixa: texto, nao letreiro, nao excluida; o idioma pedido primeiro.
-  for (k = 0; k < 2 && escolhida < 0; k++)
+  // 2. As faixas candidatas: texto, nao letreiro, nao comentario, nao
+  // excluidas; em ordem de preferencia (ordenar).
+  {
+    const char *ids[LR_FAIXAS], *nms[LR_FAIXAS]; int ok[LR_FAIXAS];
     for (i = 0; i < nF; i++) {
-      int e, fora = 0;
-      if (!textoFaixa(&fx[i]) || letreiro(&fx[i])) continue;
-      for (e = 0; e < j->p.nExcl; e++) if (j->p.excl[e] == fx[i].numero) fora = 1;
-      if (fora || (k == 0 && !mesmoIdioma(fx[i].idioma, j->p.idioma))) continue;
-      escolhida = i; break;
+      int e;
+      ids[i] = fx[i].idioma; nms[i] = fx[i].nome;
+      ok[i] = textoFaixa(&fx[i]) && !letreiro(&fx[i]) && !comentario(fx[i].nome);
+      for (e = 0; e < j->p.nExcl; e++) if (j->p.excl[e] == fx[i].numero) ok[i] = 0;
     }
-  if (escolhida < 0) { j->erro = LEGREF_SEM_FAIXA; goto fim; }
+    nCand = ordenar(ids, nms, ok, nF, j->p.idioma, cand);
+  }
+  if (!nCand) { j->erro = LEGREF_SEM_FAIXA; goto fim; }
+  escolhida = cand[0];
   anunciar(j, st, fx[escolhida].numero, fx[escolhida].idioma, fx[escolhida].codec);
-  ass = strcmp(fx[escolhida].codec, "S_TEXT/UTF8") != 0;
   // 3. O indice.
   if (posCues < 0) { j->erro = LEGREF_SEM_INDICE; goto fim; }
   cues = lerElemento(j, segData + posCues, 0x1C53BB6B, LR_CUES_MAX, &oCu, &nCu);
   if (!cues) goto fim;
+  // 3b. Validacao cruzada: o mesmo Cues traz os tempos das outras faixas de
+  // texto (com CueDuration). Custa zero Range a mais.
+  if (nCand > 1) {
+    Tempo *tv[8] = { 0 }; int nt[8] = { 0 }, nv = nCand < 8 ? nCand : 8, desc = 0, x;
+    for (x = 0; x < nv; x++) {
+      LegRefPonto *pp = NULL; int sr = 0, np = legref_cues(cues + oCu, nCu, fx[cand[x]].numero, escala, &pp, &sr), todos = np > 0 && !sr;
+      for (i = 0; i < np && todos; i++) if (!(pp[i].dur > 0)) todos = 0;
+      if (todos && (tv[x] = malloc((size_t)np * sizeof **tv))) {
+        for (i = 0; i < np; i++) { tv[x][i].inicio = pp[i].inicio; tv[x][i].fim = pp[i].inicio + pp[i].dur; }
+        qsort(tv[x], (size_t)np, sizeof **tv, cmpTempo); nt[x] = np;
+      }
+      free(pp);
+    }
+    if (tv[0]) {
+      x = validar(tv, nt, nv, &desc);
+      if (desc) {
+        fprintf(stderr, "[legref] cross_check dropped track=%d (shifted against two agreeing tracks) using=%d\n",
+                fx[cand[0]].numero, fx[cand[x]].numero);
+        escolhida = cand[x];
+        anunciar(j, st, fx[escolhida].numero, fx[escolhida].idioma, fx[escolhida].codec);
+      }
+    }
+    for (x = 0; x < nv; x++) free(tv[x]);
+  }
+  ass = strcmp(fx[escolhida].codec, "S_TEXT/UTF8") != 0;
   nP = legref_cues(cues + oCu, nCu, fx[escolhida].numero, escala, &pts, &semRel);
   if (nP < 0) { j->erro = LEGREF_ORCAMENTO; goto fim; }
   // Um CuePoint sem posicao relativa e um bloco que nao sabemos buscar: a
