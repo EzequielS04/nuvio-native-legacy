@@ -399,7 +399,9 @@ int main(void) {
     perfis_esquecer(); dados_iniciar(NULL);
     escreverCache("1\t0\t1\t0\t#1E88E5\tHenrique\t\tdeploy/app/art/03.jpg\n"
                   "2\t0\t0\t1\t#E53935\tÁlvaro\t\t\n"
-                  "3\t1\t0\t0\t#43A047\tInfantil\t\tdeploy/app/art/07.jpg\n", 1);
+                  "3\t1\t0\t0\t#43A047\tInfantil\t\tdeploy/app/art/07.jpg\n"
+                  // #295: avatar but no background art.
+                  "4\t0\t0\t0\t#8E24AA\tLia\tdeploy/app/art/poster/05.jpg\t\n", 1);
     perfis_carregar_ativo();
     ajustesDeTeste(0);
     perfilsel_iniciar();
@@ -424,9 +426,18 @@ int main(void) {
     }
     perfilsel_teste_estado(&e);
     assert(e.amb_t == 1.0f);
-    // Perfil sem arte: o mural volta.
+    perfilsel_teste_estado(&e);
+    assert(e.amb_fonte == 1);
+    // #295: no art and no avatar -> the profile's colour light, not the wall.
     tecla(SDLK_LEFT);
     captura("/tmp/nuvio-perfilsel-amb-sem-arte.bmp");
+    perfilsel_teste_estado(&e);
+    assert(e.amb_atual == 1 && e.amb_fonte == 0);
+    // #295: avatar only -> the blurred avatar with the profile colour.
+    tecla(SDLK_RIGHT); tecla(SDLK_RIGHT); tecla(SDLK_RIGHT);
+    captura("/tmp/nuvio-perfilsel-amb-avatar.bmp");
+    perfilsel_teste_estado(&e);
+    assert(e.amb_atual == 3 && e.amb_fonte == 2 && e.amb_t == 1.0f);
   }
 
   tex_encerrar(); txt_encerrar(); gfx_encerrar();

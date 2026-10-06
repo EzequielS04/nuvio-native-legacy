@@ -1795,7 +1795,7 @@
   { "Fundo", "Background" },
   { "Fundo da escolha de perfil", "Profile picker background" },
   { "Fundo da segunda legenda", "Second subtitle background" },
-  { "Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Também a arte do perfil desfocada ou as listras do login.", "Background of the profile picker. Movies: posters of what each profile watched, on a tilted wall. Light: black with a light in the profile's color. Projector: a movie theater before the show. Also the blurred profile art or the login stripes." },
+  { "Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Arte do perfil: o fundo escolhido ao editar o perfil no app Nuvio; sem ele, o avatar desfocado. Ou as listras do login.", "Background of the profile picker. Movies: posters of what each profile watched, on a tilted wall. Light: black with a light in the profile's color. Projector: a movie theater before the show. Profile art: the background picked when editing the profile in the Nuvio app; without one, the blurred avatar. Or the login stripes." },
   { "Fundo da tela de escolha de perfil: o mural de capas do catálogo, a arte do perfil em foco desfocada (sem arte, o mural) ou as listras do login.", "Background of the profile selection screen: the catalog cover mural, the focused profile's own art blurred (the mural if it has none), or the login stripes." },
   { "Fundo de perfil", "Profile backdrop" },
   { "Fundo do destaque do addon", "Addon hero background" },

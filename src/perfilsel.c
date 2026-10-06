@@ -643,26 +643,63 @@ static void contDesenhar(int i, float cx, float yTopo, float f, float a) {
 // (ContaPerfil.fundoUrl), desfocada e com veu, e a troca de foco e um
 // cross-fade de 0,45 s. O desfoque vem de gfx_desfocado (copia 96x54 guardada
 // por arte), entao o quadro nao aloca nem refaz nada: so desenha duas texturas.
-// Perfil sem arte cai no mural, que entra na proporcao do que a arte nao cobre.
+// #295: a profile WITHOUT background art used to fall back to the poster wall,
+// which is exactly the "Filmes" screen — the setting looked broken. The art
+// now falls back to the profile's own AVATAR, blurred and enlarged through the
+// same gfx_desfocado copy, under a wash of the profile colour; with no avatar
+// either, the uncovered part is the "Luz" style (the profile colour as light),
+// never the movie wall.
 #define PS_AMB_FADE_S  0.45f
 #define PS_AMB_VEU     0.55f   // brilho .6 + veu .34 do mockup, num so preto
+// A blurred avatar is a saturated colour field, much brighter than a backdrop:
+// it gets a darker veil and a wash of the profile colour on top.
+#define PS_AMB_VEU_AV  0.62f
+#define PS_AMB_COR_AV  0.22f
 #define PS_AMB_LARG    480.0f
 static int   ambAtual = -1, ambAnt = -1;
 static float ambT = 1.0f;                       // 0..1: de ambAnt para ambAtual
 static GLuint ambFonte[CONTA_PERFIL_MAX];       // textura nitida (pedida no update)
 static int   ambAtualPronto;                    // o desenho conseguiu a copia desfocada
 
-static int ambTemUrl(int i) {
-  const ContaPerfil *p = i >= 0 ? perfis_item(i) : NULL;
-  return p && p->fundoUrl[0];
+// The image behind profile i: its background art, else its avatar (#295).
+static const char *ambUrl(int i) {
+  const ContaPerfil *p = i >= 0 && i < CONTA_PERFIL_MAX ? perfis_item(i) : NULL;
+  if (!p) return NULL;
+  if (p->fundoUrl[0]) return p->fundoUrl;
+  if (p->avatarUrl[0]) return p->avatarUrl;
+  return NULL;
 }
+static int ambEhAvatar(int i) {
+  const ContaPerfil *p = i >= 0 && i < CONTA_PERFIL_MAX ? perfis_item(i) : NULL;
+  return p && !p->fundoUrl[0] && p->avatarUrl[0];
+}
+
+static int ambTemUrl(int i) { return ambUrl(i) != NULL; }
 
 // Copia desfocada pronta de um perfil, ou 0 (sem arte, ainda baixando, ou o
 // limite de geracoes por quadro do gfx_desfocado).
 static GLuint ambDesfocada(int i) {
-  const ContaPerfil *p = i >= 0 && i < CONTA_PERFIL_MAX ? perfis_item(i) : NULL;
-  if (!p || !p->fundoUrl[0] || !ambFonte[i]) return 0;
-  return gfx_desfocado(ambFonte[i], p->fundoUrl);
+  const char *u = ambUrl(i);
+  if (!u || !ambFonte[i]) return 0;
+  return gfx_desfocado(ambFonte[i], u);
+}
+
+// One profile's layer: the blurred image, plus the colour wash on an avatar.
+static void ambCamada(int i, GLuint t, float alfa) {
+  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+  float r, g, b;
+  const ContaPerfil *p = perfis_item(i);
+  // A square (or portrait) avatar would be letterboxed by GFX_CARD's contain
+  // rule; the ambient must fill the screen, so it is forced to cover.
+  gfx_tex_aspect_atual = tex_aspecto(ambUrl(i));
+  gfx_card_forcar_cover_atual = ambEhAvatar(i) ? 1.0f : 0.0f;
+  gfx_rect(tela, t, GFX_CARD, 0, 0, 0, 0.0f, 1, 1, 1, alfa);
+  gfx_card_forcar_cover_atual = 0.0f;
+  gfx_tex_aspect_atual = 0;
+  if (ambEhAvatar(i) && p && corDe(p->corHex, &r, &g, &b)) {
+    corLegivel(&r, &g, &b);
+    gfx_cor(tela, 0.0f, r, g, b, PS_AMB_COR_AV * alfa);
+  }
 }
 
 static void ambTrocar(int novo) {
@@ -678,8 +715,8 @@ static void ambAtualizar(float dt, int reduzida) {
   // O pedido fica no update, como o do mural: o desenho so consulta GLuint.
   for (i = 0; i < CONTA_PERFIL_MAX; i++) {
     const ContaPerfil *p = i < m ? perfis_item(i) : NULL;
-    ambFonte[i] = p && p->fundoUrl[0]
-      ? tex_obter_larg_qualquer(p->fundoUrl, PS_AMB_LARG) : 0;
+    const char *u = p ? ambUrl(i) : NULL;
+    ambFonte[i] = u ? tex_obter_larg_qualquer(u, PS_AMB_LARG) : 0;
   }
   if (ambAtual < 0) { ambAtual = ambAnt = foco; ambT = 1.0f; }
   else ambTrocar(foco);
@@ -705,17 +742,17 @@ static float ambDesenhar(float a) {
   float na = tn ? te : 0.0f;
   float cob = 1.0f - (1.0f - pa) * (1.0f - na);
   ambAtualPronto = tn != 0 || !ambTemUrl(ambAtual);
-  if (pa > 0.0f) {
-    gfx_tex_aspect_atual = tex_aspecto(perfis_item(ambAnt)->fundoUrl);
-    gfx_rect(tela, ta, GFX_CARD, 0, 0, 0, 0.0f, 1, 1, 1, a * pa);
-    gfx_tex_aspect_atual = 0;
+  if (pa > 0.0f) ambCamada(ambAnt, ta, a * pa);
+  if (na > 0.0f) ambCamada(ambAtual, tn, a * na);
+  if (cob > 0.0f) {
+    // The veil follows whichever layer dominates, so the cross-fade between a
+    // backdrop and an avatar does not pump in brightness.
+    float vAt = ambEhAvatar(ambAtual) ? PS_AMB_VEU_AV : PS_AMB_VEU;
+    float vAn = ambEhAvatar(ambAnt) ? PS_AMB_VEU_AV : PS_AMB_VEU;
+    float veu = (pa > 0.0f && na > 0.0f) ? vAn + (vAt - vAn) * te
+              : (na > 0.0f ? vAt : vAn);
+    gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f, veu * a * cob);
   }
-  if (na > 0.0f) {
-    gfx_tex_aspect_atual = tex_aspecto(perfis_item(ambAtual)->fundoUrl);
-    gfx_rect(tela, tn, GFX_CARD, 0, 0, 0, 0.0f, 1, 1, 1, a * na);
-    gfx_tex_aspect_atual = 0;
-  }
-  if (cob > 0.0f) gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f, PS_AMB_VEU * a * cob);
   return cob;
 }
 
@@ -941,6 +978,10 @@ void perfilsel_atualizar(float dt, Uint32 agora) {
     if (modo == PS_FUNDO_FILMES || modo == PS_FUNDO_LUZ || modo == PS_FUNDO_PROJETOR) {
       montarCena(&cena, reduzida);
       psestilos_atualizar(dt, &cena, modo);
+    } else if (modo == PS_FUNDO_ARTE) {
+      // The light behind a profile with no art and no avatar (#295).
+      montarCena(&cena, reduzida);
+      psestilos_atualizar(dt, &cena, PS_FUNDO_LUZ);
     } }
   { int mudou = 0;
     for (i = 0; i < 6; i++)
@@ -1256,9 +1297,15 @@ void perfilsel_desenhar(Uint32 agora) {
       psestilos_desenhar(&cena, modo, a * (pinDe >= 0 ? 0.30f : 1.0f));
     } else {
       float cob = modo == PS_FUNDO_ARTE ? ambDesenhar(a) : 0.0f;
-      // Modo "Arte do perfil": o mural so aparece onde a arte nao cobre (perfil
-      // sem arte, ou a arte ainda baixando).
-      if (modo != PS_FUNDO_LISTRAS && cob < 0.999f)
+      // "Profile art": where the art does not cover (no art and no avatar, or
+      // still downloading) the profile's colour light shows — never the movie
+      // wall, which made this option look identical to "Filmes" (#295).
+      if (modo == PS_FUNDO_ARTE && cob < 0.999f) {
+        PSCena cena;
+        montarCena(&cena, reduzida);
+        psestilos_desenhar(&cena, PS_FUNDO_LUZ,
+                           a * (1.0f - cob) * (pinDe >= 0 ? 0.30f : 1.0f));
+      } else if (modo != PS_FUNDO_LISTRAS && modo != PS_FUNDO_ARTE && cob < 0.999f)
         muralDesenhar(a * (1.0f - cob) * (pinDe >= 0 ? 0.30f : 1.0f), reduzida);
     } }
 
@@ -1396,6 +1443,7 @@ void perfilsel_teste_estado(PerfilSelTesteEstado *e) {
 #endif
   for (i = 0; i < 8; i++) e->cont_tem[i] = contCard[i].tem;
   e->amb_t = ambT; e->amb_atual = ambAtual; e->amb_ant = ambAnt;
+  e->amb_fonte = !ambTemUrl(ambAtual) ? 0 : ambEhAvatar(ambAtual) ? 2 : 1;
 }
 #endif
 

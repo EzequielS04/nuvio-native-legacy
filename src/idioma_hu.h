@@ -1796,7 +1796,7 @@
   T("Fundo", "Háttér"),
   T("Fundo da escolha de perfil", "Profilválasztó háttere"),
   T("Fundo da segunda legenda", "A második felirat háttere"),
-  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Também a arte do perfil desfocada ou as listras do login.", "A profilválasztó képernyő háttere. Filmek: annak a plakátjai, amit az egyes profilok néztek, egy ferde falon. Fény: fekete, a profil színében világító fénnyel. Projektor: moziterem az előadás előtt. Emellett az elmosott profilkép vagy a bejelentkezés csíkjai."),
+  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Arte do perfil: o fundo escolhido ao editar o perfil no app Nuvio; sem ele, o avatar desfocado. Ou as listras do login.", "A profilválasztó képernyő háttere. Filmek: annak a plakátjai, amit az egyes profilok néztek, egy ferde falon. Fény: fekete, a profil színében világító fénnyel. Projektor: moziterem az előadás előtt. Profilkép: a Nuvio appban a profil szerkesztésekor választott háttér; ha nincs, az elmosott avatar. Vagy a bejelentkezés csíkjai."),
   T("Fundo da tela de escolha de perfil: o mural de capas do catálogo, a arte do perfil em foco desfocada (sem arte, o mural) ou as listras do login.", "A profilválasztó képernyő háttere: a katalógus borítóiból álló mozaik, a kijelölt profil elmosott képe (kép nélkül a mozaik) vagy a bejelentkezés csíkjai."),
   T("Fundo de perfil", "Profilháttér"),
   T("Fundo do destaque do addon", "Főkép háttere a bővítményből"),

@@ -1796,7 +1796,7 @@
   T("Fundo", "Latar belakang"),
   T("Fundo da escolha de perfil", "Latar belakang pemilih profil"),
   T("Fundo da segunda legenda", "Latar subtitle kedua"),
-  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Também a arte do perfil desfocada ou as listras do login.", "Latar layar pemilihan profil. Film: poster dari yang ditonton setiap profil, di dinding miring. Cahaya: hitam dengan cahaya berwarna profil. Proyektor: ruang bioskop sebelum pemutaran. Juga gambar profil yang diburamkan atau garis-garis dari layar masuk."),
+  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Arte do perfil: o fundo escolhido ao editar o perfil no app Nuvio; sem ele, o avatar desfocado. Ou as listras do login.", "Latar layar pemilihan profil. Film: poster dari yang ditonton setiap profil, di dinding miring. Cahaya: hitam dengan cahaya berwarna profil. Proyektor: ruang bioskop sebelum pemutaran. Gambar profil: latar yang dipilih saat mengedit profil di aplikasi Nuvio; tanpa itu, avatar yang diburamkan. Atau garis-garis dari layar masuk."),
   T("Fundo da tela de escolha de perfil: o mural de capas do catálogo, a arte do perfil em foco desfocada (sem arte, o mural) ou as listras do login.", "Latar layar pemilihan profil: mozaik sampul katalog, gambar profil yang difokuskan dalam keadaan buram (tanpa gambar, mozaik) atau garis-garis layar masuk."),
   T("Fundo de perfil", "Backdrop profil"),
   T("Fundo do destaque do addon", "Latar belakang hero dari addon"),

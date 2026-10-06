@@ -1796,7 +1796,7 @@
   T("Fundo", "Pozadina"),
   T("Fundo da escolha de perfil", "Pozadina izbora profila"),
   T("Fundo da segunda legenda", "Pozadina drugog titla"),
-  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Também a arte do perfil desfocada ou as listras do login.", "Pozadina ekrana za izbor profila. Filmovi: posteri onoga što je svaki profil gledao, na nagnutom zidu. Svjetlo: crna sa svjetlom u boji profila. Projektor: kino sala prije projekcije. Također zamućena slika profila ili pruge sa prijave."),
+  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Arte do perfil: o fundo escolhido ao editar o perfil no app Nuvio; sem ele, o avatar desfocado. Ou as listras do login.", "Pozadina ekrana za izbor profila. Filmovi: posteri onoga što je svaki profil gledao, na nagnutom zidu. Svjetlo: crna sa svjetlom u boji profila. Projektor: kino sala prije projekcije. Slika profila: pozadina odabrana pri uređivanju profila u aplikaciji Nuvio; bez nje, zamućeni avatar. Ili pruge sa prijave."),
   T("Fundo da tela de escolha de perfil: o mural de capas do catálogo, a arte do perfil em foco desfocada (sem arte, o mural) ou as listras do login.", "Pozadina ekrana za izbor profila: mozaik naslovnica iz kataloga, zamućena slika odabranog profila (bez slike mozaik) ili pruge prijave."),
   T("Fundo de perfil", "Pozadina profila"),
   T("Fundo do destaque do addon", "Pozadina glavnog prikaza iz dodatka"),

@@ -1795,7 +1795,7 @@
   T("Fundo", "Тло"),
   T("Fundo da escolha de perfil", "Тло вибору профілю"),
   T("Fundo da segunda legenda", "Тло других субтитрів"),
-  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Também a arte do perfil desfocada ou as listras do login.", "Фон екрана вибору профілю. Фільми: постери того, що дивився кожен профіль, на похилій стіні. Світло: чорний фон зі світлом кольору профілю. Проєктор: кінозал перед сеансом. Також розмитий арт профілю або смуги екрана входу."),
+  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Arte do perfil: o fundo escolhido ao editar o perfil no app Nuvio; sem ele, o avatar desfocado. Ou as listras do login.", "Фон екрана вибору профілю. Фільми: постери того, що дивився кожен профіль, на похилій стіні. Світло: чорний фон зі світлом кольору профілю. Проєктор: кінозал перед сеансом. Арт профілю: фон, вибраний під час редагування профілю в застосунку Nuvio; без нього — розмитий аватар. Або смуги екрана входу."),
   T("Fundo da tela de escolha de perfil: o mural de capas do catálogo, a arte do perfil em foco desfocada (sem arte, o mural) ou as listras do login.", "Фон екрана вибору профілю: мозаїка обкладинок з каталогу, розмитий арт профілю у фокусі (без арту — мозаїка) або смуги входу."),
   T("Fundo de perfil", "Тло профілю"),
   T("Fundo do destaque do addon", "Тло головного банера з аддона"),

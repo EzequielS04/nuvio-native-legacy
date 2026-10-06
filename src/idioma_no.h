@@ -1796,7 +1796,7 @@
   T("Fundo", "Bakgrunn"),
   T("Fundo da escolha de perfil", "Bakgrunn for profilvalget"),
   T("Fundo da segunda legenda", "Bakgrunn for sekundær undertekst"),
-  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Também a arte do perfil desfocada ou as listras do login.", "Bakgrunn på skjermen for profilvalg. Filmer: plakatene for det hver profil har sett, på en skrå vegg. Lys: svart med et lys i profilens farge. Projektor: en kinosal før forestillingen. Også det uskarpe profilbildet eller stripene fra innloggingen."),
+  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Arte do perfil: o fundo escolhido ao editar o perfil no app Nuvio; sem ele, o avatar desfocado. Ou as listras do login.", "Bakgrunn på skjermen for profilvalg. Filmer: plakatene for det hver profil har sett, på en skrå vegg. Lys: svart med et lys i profilens farge. Projektor: en kinosal før forestillingen. Profilbilde: bakgrunnen valgt da profilen ble redigert i Nuvio-appen; uten den, den uskarpe avataren. Eller stripene fra innloggingen."),
   T("Fundo da tela de escolha de perfil: o mural de capas do catálogo, a arte do perfil em foco desfocada (sem arte, o mural) ou as listras do login.", "Bakgrunn på profilvalget: omslagsmosaikken fra katalogen, det uskarpe bildet av den valgte profilen (uten bilde mosaikken) eller innloggingsstripene."),
   T("Fundo de perfil", "Profilbakgrunn"),
   T("Fundo do destaque do addon", "Bakgrunn i hovedbanneret fra add-on"),

@@ -1796,7 +1796,7 @@
   T("Fundo", "Arka plan"),
   T("Fundo da escolha de perfil", "Profil seçicinin arka planı"),
   T("Fundo da segunda legenda", "İkincil altyazı arka planı"),
-  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Também a arte do perfil desfocada ou as listras do login.", "Profil seçme ekranının arka planı. Filmler: her profilin izlediklerinin afişleri, eğik bir duvarda. Işık: profil renginde bir ışıkla siyah. Projektör: gösterimden önce bir sinema salonu. Ayrıca bulanık profil görseli ya da giriş ekranının çizgileri."),
+  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Arte do perfil: o fundo escolhido ao editar o perfil no app Nuvio; sem ele, o avatar desfocado. Ou as listras do login.", "Profil seçme ekranının arka planı. Filmler: her profilin izlediklerinin afişleri, eğik bir duvarda. Işık: profil renginde bir ışıkla siyah. Projektör: gösterimden önce bir sinema salonu. Profil görseli: Nuvio uygulamasında profil düzenlenirken seçilen arka plan; yoksa bulanık avatar. Ya da giriş ekranının çizgileri."),
   T("Fundo da tela de escolha de perfil: o mural de capas do catálogo, a arte do perfil em foco desfocada (sem arte, o mural) ou as listras do login.", "Profil seçim ekranının arka planı: katalogdaki kapak mozaiği, odaktaki profilin bulanık görseli (görseli yoksa mozaik) veya girişteki çizgiler."),
   T("Fundo de perfil", "Profil arka planı"),
   T("Fundo do destaque do addon", "Eklentinin banner arka planı"),
