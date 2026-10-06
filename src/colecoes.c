@@ -69,10 +69,34 @@ int col_extra_definir(const ColFolder *v, int n) {
 // Fonte da conta vem com addonId e sem URL; a URL so existe depois que a sonda
 // leu o manifesto daquele addon. Resolver no acesso deixa a pasta pronta assim
 // que a sonda passar, sem ninguem precisar avisar.
+//
+// ColSource.base FICA EM 600 (#201), e nao em NV_ADDON_URL_MAX: sao
+// COL_MAX x COL_SOURCE_MAX = 8192 fontes, e 2048 em cada uma custaria ~12 MB.
+// Ela e so um atalho: a base inteira mora na tabela de addons e toda leitura
+// cai em addons_base_por_id(addonId) quando o atalho esta vazio. Entao a regra
+// e NUNCA guardar aqui uma base cortada — o que nao cabe fica vazio.
+static int baseCabe(ColSource *a, const char *base) {
+  if (!base || strlen(base) >= sizeof a->base) { a->base[0] = 0; return 0; }
+  snprintf(a->base, sizeof a->base, "%s", base);
+  return 1;
+}
+// Le a base de uma fonte do JSON para `a->base`, sem nunca deixa-la cortada.
+// 0 quando a chave nao existe. A base que nao cabe fica VAZIA e a linha do log
+// diz a pasta e o tamanho (nunca a URL: ela carrega a chave do addon).
+static int lerBase(const char *s, const char *se, const char *chave, ColSource *a, const char *pasta) {
+  char lida[NV_ADDON_URL_MAX];
+  a->base[0] = 0;
+  if (!js_texto(s, se, chave, lida, sizeof lida)) return 0;
+  if (!baseCabe(a, lida))
+    printf("[col] %s: base de addon com %lu caracteres ou mais nao cabe na fonte (maximo %lu): resolvida pelo id do addon\n",
+           pasta && *pasta ? pasta : "pasta", (unsigned long)strlen(lida),
+           (unsigned long)sizeof a->base - 1);
+  return 1;
+}
 static void resolverBases(ColFolder *v) {
   for (int s = 0; s < v->nSources; s++)
     if (!v->sources[s].prov[0] && !v->sources[s].base[0] && v->sources[s].addonId[0])
-      snprintf(v->sources[s].base, sizeof v->sources[s].base, "%s", addons_base_por_id(v->sources[s].addonId));
+      baseCabe(&v->sources[s], addons_base_por_id(v->sources[s].addonId));
 }
 const ColFolder *col_folder(int i) {
   pthread_mutex_lock(&colTrava);
@@ -370,7 +394,7 @@ static int carregarPacote(const char *dir) {
       }
       for(const char *s=js_array(p,pe,"sources");s&&v->nSources<COL_SOURCE_MAX;s=js_prox(js_fim(s))) {
         const char *se=js_fim(s);ColSource *a=&v->sources[v->nSources];
-        js_texto(s,se,"title",a->title,sizeof a->title);js_texto(s,se,"base",a->base,sizeof a->base);
+        js_texto(s,se,"title",a->title,sizeof a->title);lerBase(s,se,"base",a,v->title);
         js_texto(s,se,"type",a->type,sizeof a->type);js_texto(s,se,"catId",a->catId,sizeof a->catId);js_texto(s,se,"genre",a->genre,sizeof a->genre);
         if(a->base[0]&&a->type[0]&&a->catId[0])v->nSources++;
       }
@@ -500,10 +524,10 @@ static void lerColecaoWeb(const char *c, const char *ce) {
         snprintf(a->prov, sizeof a->prov, "trakt"); v->nSources++; continue;
       }
       if (prov[0] && strcasecmp(prov, "addon")) { fPulProvedor++; continue; }
-      if (!js_texto(s, se, "addonBaseUrl", a->base, sizeof a->base)) js_texto(s, se, "addon_base_url", a->base, sizeof a->base);
+      if (!lerBase(s, se, "addonBaseUrl", a, v->title)) lerBase(s, se, "addon_base_url", a, v->title);
       tirarManifest(a->base);
       js_texto(s, se, "addonId", a->addonId, sizeof a->addonId);
-      if (!a->base[0]) snprintf(a->base, sizeof a->base, "%s", addons_base_por_id(a->addonId));
+      if (!a->base[0]) baseCabe(a, addons_base_por_id(a->addonId));
       js_texto(s, se, "type", a->type, sizeof a->type);
       if (!js_texto(s, se, "catalogId", a->catId, sizeof a->catId)) js_texto(s, se, "catalog_id", a->catId, sizeof a->catId);
       if (!js_texto(s, se, "title", a->title, sizeof a->title) && !js_texto(s, se, "catalogName", a->title, sizeof a->title))

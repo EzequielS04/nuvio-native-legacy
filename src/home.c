@@ -113,7 +113,7 @@ typedef struct {
   // O card "Ver tudo" ocupa a coluna `n` (a seguinte a ultima arte). Guardado
   // por fileira porque so as que vieram de catalogo de addon o tem.
   int verTudo;
-  char base[600], catId[96];
+  char base[NV_ADDON_URL_MAX], catId[96];   // a de CatFileira (addonurl.h)
   // "movie" | "series" do CATALOGO. O `tipo` acima e a forma do card
   // (retrato/deitado), que e outra coisa — nao da para deduzir um do outro.
   char catTipo[8];

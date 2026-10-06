@@ -48,7 +48,7 @@
 // inicial. A diferenca importa na tela: "ainda nao sei" e diferente de "nao
 // fornece".
 static struct {
-  char nome[64]; char base[600];
+  char nome[64]; char base[NV_ADDON_URL_MAX];
   int fonte, catalogo, legenda;
   int meta;      // declara o resource "meta" (ficha e lista de episodios)
   int ativo, sondado;
@@ -86,14 +86,14 @@ static int jfAlvo;
 // perguntar a quem nao publicou o canal — o id do canal e do addon que o
 // declarou, e outro addon nao o conhece (o Meu Futebol responde 404 a id
 // alheio, ja se mediu hoje).
-static char alvoBase[600];
+static char alvoBase[NV_ADDON_URL_MAX];
 // A COPIA QUE O FIO LE. app.c chama addons_definir_origem(NULL) logo depois de
 // addons_buscar, e o fio so acorda depois disso: lendo alvoBase direto ele
 // achava a origem vazia e perguntava a TODOS os addons — MEDIDO na C9 em
 // 18/09 (Debridio e AIOStreams consultados por canal do Meu Futebol com a
 // origem definida). A busca copia no disparo; o que o app zere depois nao
 // importa mais.
-static char fioBase[600];
+static char fioBase[NV_ADDON_URL_MAX];
 static int fioVivo;
 static Stream *resultado;
 static int nResultado;
@@ -245,6 +245,11 @@ static void baseNormalizada(const char *url, char *dst, size_t tam) {
   while (k && dst[k - 1] == '/') dst[--k] = 0;
 }
 
+// O pedido ao addon `i` coube no buffer? Ver nv_addon_pedido_coube (addonurl.h).
+static int pedidoCoube(int i, int w, size_t tam) {
+  return nv_addon_pedido_coube(addon[i].nome, w, tam);
+}
+
 // --- leitura do arquivo de configuracao -------------------------------------
 
 // Perfil cuja conta mandou a lista atual; 0 = pacote ou nada. Ver addons.h.
@@ -253,7 +258,8 @@ void addons_marcar_da_conta(int perfil) { perfilLista = perfil > 0 ? perfil : 0;
 int  addons_perfil_da_lista(void) { return perfilLista; }
 
 int addons_carregar(const char *dirArte) {
-  char caminho[600], linha[900];
+  // A linha e nome<TAB>url<TAB>colunas: a URL inteira mais folga para o resto.
+  char caminho[600], linha[NV_ADDON_URL_MAX + 256];
   FILE *f;
   perfilLista = 0;
   snprintf(caminho, sizeof caminho, "%s/addons.txt", dirArte ? dirArte : ".");
@@ -263,6 +269,16 @@ int addons_carregar(const char *dirArte) {
   while (nAddon < ADD_MAX && fgets(linha, sizeof linha, f)) {
     char *tab = strchr(linha, '\t');
     char *fim;
+    // LINHA MAIOR QUE O BUFFER: o fgets devolveria o resto dela como se fosse
+    // outra linha. Come o resto e pula o addon, dizendo — metade de uma URL e
+    // outra URL (addonurl.h).
+    if (!strchr(linha, '\n') && !feof(f)) {
+      int c, extra = 0;
+      while ((c = fgetc(f)) != EOF && c != '\n') extra++;
+      if (tab) *tab = 0;
+      nv_addon_url_cabe(tab ? linha : "addons.txt", sizeof linha - 1 + (size_t)extra);
+      continue;
+    }
     // TAB e nao "|" como separador: nome de addon contem "|" de verdade
     // ("AIOStreams | ElfHosted") e partir no primeiro pipe corrompia a URL.
     if (!tab) continue;
@@ -270,6 +286,9 @@ int addons_carregar(const char *dirArte) {
     fim = tab + 1 + strlen(tab + 1);
     while (fim > tab + 1 && (fim[-1] == '\n' || fim[-1] == '\r' || fim[-1] == ' ')) *--fim = 0;
     if (linha[0] == '#' || !tab[1]) continue;
+    { const char *fimUrl = strchr(tab + 1, '\t');
+      size_t lenUrl = fimUrl ? (size_t)(fimUrl - (tab + 1)) : strlen(tab + 1);
+      if (!nv_addon_url_cabe(linha, lenUrl)) continue; }
     // Terceira coluna (opcional): 1 = fornece stream. Ausente vale 1, para
     // arquivo antigo continuar funcionando.
     addon[nAddon].fonte = 1;
@@ -320,7 +339,7 @@ int addons_carregar(const char *dirArte) {
 static int listaIgual(const AddonRemoto *nova, int n) {
   int i, k = 0;
   for (i = 0; i < n && k < ADD_MAX; i++) {
-    char base[600];
+    char base[NV_ADDON_URL_MAX];
     if (!nova[i].url[0]) continue;
     baseNormalizada(nova[i].url, base, sizeof base);
     if (k >= nAddon) return 0;
@@ -898,14 +917,15 @@ static void *buscarUmAddon(void *u) {
   LegFio *F = u;
   LegBusca *B = F->B;
   int i = F->i, array = 0, recebidas = 0, gi;
-  char url[900], *corpo;
+  char url[NV_ADDON_PEDIDO_MAX], *corpo;
   const char *p, *q;
   RedeMedida medida = {0};
   LegLote *lote = calloc(1, sizeof *lote);
   if (!lote) return NULL;
   if (pedidoMudou(B->geracao)) { free(lote); return NULL; }
-  snprintf(url, sizeof url, "%s/subtitles/%s/%s.json", addon[i].base, B->tipo, B->id);
-  corpo = rede_baixar_medido_controle(url, LEG_TETO_S, NULL, NULL, &medida);
+  corpo = pedidoCoube(i, snprintf(url, sizeof url, "%s/subtitles/%s/%s.json",
+                                  addon[i].base, B->tipo, B->id), sizeof url)
+          ? rede_baixar_medido_controle(url, LEG_TETO_S, NULL, NULL, &medida) : NULL;
   if (pedidoMudou(B->geracao)) { free(corpo); free(lote); return NULL; }
   p = js_array(corpo, NULL, "subtitles");
   // js_array devolve NULL tambem para []: o diagnostico precisa distinguir
@@ -1070,9 +1090,11 @@ int addons_alternar(int i) {
 // por base NORMALIZADA, e nao pela URL crua: "<base>", "<base>/" e
 // "<base>/manifest.json" sao o mesmo addon.
 int addons_adicionar(const char *nome, const char *urlManifest) {
-  char nova[600];
+  char nova[NV_ADDON_URL_MAX];
   int i;
   if (!urlManifest || !*urlManifest) return 0;
+  // Antes de normalizar: o que nao cabe nao entra, nem cortado (addonurl.h).
+  if (!nv_addon_url_cabe(nome, strlen(urlManifest))) return 0;
   if (nAddon >= ADD_MAX) {
     printf("[addons] nao coube: a lista ja tem %d\n", ADD_MAX);
     fflush(stdout);
@@ -1081,7 +1103,7 @@ int addons_adicionar(const char *nome, const char *urlManifest) {
   baseNormalizada(urlManifest, nova, sizeof nova);
   if (!nova[0]) return 0;
   for (i = 0; i < nAddon; i++) {
-    char base[600];
+    char base[NV_ADDON_URL_MAX];
     baseNormalizada(addon[i].base, base, sizeof base);
     if (!strcmp(base, nova)) {
       printf("[addons] ja instalado: %s\n", addon[i].nome);
@@ -1101,8 +1123,11 @@ int addons_adicionar(const char *nome, const char *urlManifest) {
   addon[nAddon].canalLido = 0; addon[nAddon].nCanal = 0; addon[nAddon].mudoSeg = 0;
   nAddon++;
   listaMudou();
-  printf("[addons] instalado pelo guia: %s (%s)\n",
-         addon[nAddon - 1].nome, nova);
+  // So o host: a base inteira ia para o log aqui, com a chave do addon no
+  // caminho (ver rede_url_publica em rede.h).
+  { char seg[120];
+    printf("[addons] instalado pelo guia: %s (%s)\n",
+           addon[nAddon - 1].nome, rede_url_publica(nova, seg, sizeof seg)); }
   fflush(stdout);
   return 1;
 }
@@ -1376,9 +1401,10 @@ static void *sondar(void *u) {
   unsigned versao = addons_versao();
   (void)u;
   for (i = 0; i < nAddon; i++) {
-    char url[700], *corpo;
+    char url[NV_ADDON_PEDIDO_MAX], *corpo;
     if (addon[i].sondado) continue;
-    snprintf(url, sizeof url, "%s/manifest.json", addon[i].base);
+    if (!pedidoCoube(i, snprintf(url, sizeof url, "%s/manifest.json", addon[i].base),
+                     sizeof url)) continue;
     corpo = desc_manifesto_cache_obter(url, versao);
     if (corpo) {
       printf("[addons] %s: manifesto do cache da descoberta (sem rede)\n", addon[i].nome);
@@ -1567,7 +1593,7 @@ static void *fioFontes(void *u) {
   Consulta *c = u;
   for (;;) {
     int meu, i, n;
-    char url[900], *corpo;
+    char url[NV_ADDON_PEDIDO_MAX], *corpo;
     const char *t1, *t2;
     Stream *achados;
     pthread_mutex_lock(&c->trava);
@@ -1585,10 +1611,11 @@ static void *fioFontes(void *u) {
     { const char *dec = c->tipoAlt && c->tipoAlt[0] ? tipoCanalDeclarado(i) : NULL;
       t1 = c->tipo; t2 = c->tipoAlt;
       if (dec && !strcmp(dec, c->tipoAlt)) { t1 = c->tipoAlt; t2 = c->tipo; } }
-    snprintf(url, sizeof url, "%s/stream/%s/%s.json", addon[i].base, t1, c->id);
     // 12 s e nao 25: com os addons em paralelo o timeout deixa de ser somado,
     // mas continua sendo o tempo que o dono espera pelo mais lento.
-    corpo = rede_baixar(url, c->timeout > 0 ? c->timeout : 12);
+    corpo = pedidoCoube(i, snprintf(url, sizeof url, "%s/stream/%s/%s.json",
+                                    addon[i].base, t1, c->id), sizeof url)
+            ? rede_baixar(url, c->timeout > 0 ? c->timeout : 12) : NULL;
     achados = NULL; n = 0;
     if (corpo) n = stream_extrair(corpo, addon[i].nome, &achados);
     // CANAL AO VIVO TEM DOIS NOMES DE TIPO NO PROTOCOLO, e addons diferentes
@@ -1616,8 +1643,9 @@ static void *fioFontes(void *u) {
     // Origin: null e User-Agent a resposta e a mesma, byte a byte.
     if (n <= 0 && t2 && t2[0] && !(c->cancelado && c->cancelado(c->ctx))) {
       char *alt;
-      snprintf(url, sizeof url, "%s/stream/%s/%s.json", addon[i].base, t2, c->id);
-      alt = rede_baixar(url, c->timeout > 0 ? c->timeout : 12);
+      alt = pedidoCoube(i, snprintf(url, sizeof url, "%s/stream/%s/%s.json",
+                                    addon[i].base, t2, c->id), sizeof url)
+            ? rede_baixar(url, c->timeout > 0 ? c->timeout : 12) : NULL;
       if (alt) {
         Stream *a2 = NULL;
         int n2 = stream_extrair(alt, addon[i].nome, &a2);
@@ -1876,7 +1904,7 @@ static int consultar(const char *id, const char *tipo, const char *base, int fio
     // SO O ADDON DE ORIGEM, quando se sabe qual e. Comparacao por base
     // normalizada — "<base>" e "<base>/manifest.json" sao o mesmo addon.
     if (base && *base) {
-      char alvo[600], mine[600];
+      char alvo[NV_ADDON_URL_MAX], mine[NV_ADDON_URL_MAX];
       baseNormalizada(base, alvo, sizeof alvo);
       for (i = 0; i < nAddon; i++) {
         if (!addon[i].ativo || !addon[i].fonte) continue;

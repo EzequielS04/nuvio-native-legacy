@@ -50,6 +50,9 @@ void servidores_esquecer_todos(void);   // servidores.c: wipe every profile's to
 #include <sys/stat.h>
 
 #define SY_ADD_MAX   32   // o mesmo teto de ADD_MAX (addons.c)
+// URL lida da conta ANTES de caber em AddonRemoto: maior que o limite de
+// proposito, para o log dizer o tamanho de verdade em vez de "nao coube".
+#define SY_URL_LEITURA (NV_ADDON_URL_MAX * 4)
 
 static pthread_t fio;
 static int fioVivo, fioPronto;
@@ -175,8 +178,13 @@ static int addonsLer(AddonsPendencia *p, const char *texto) {
     if (*a != '{' || n == SY_ADD_MAX) return 0;
     f = js_fim(a);
     if (f <= a || f > fim || f[-1] != '}') return 0;
-    if (!js_texto_raiz_em(a, f, "url", p->lista[n].url, sizeof p->lista[n].url) ||
-        !p->lista[n].url[0] ||
+    // Mesma regra de lerAddons: URL que nao cabe invalida a edicao inteira em
+    // vez de entrar cortada — esta lista e a que vai ser EMPURRADA para a conta.
+    { static char url[SY_URL_LEITURA];   // sob addonsTrava (addonsRestaurar)
+      if (!js_texto_raiz_em(a, f, "url", url, sizeof url) ||
+          !nv_addon_url_cabe("edicao local", strlen(url))) return 0;
+      snprintf(p->lista[n].url, sizeof p->lista[n].url, "%s", url); }
+    if (!p->lista[n].url[0] ||
         !js_bruto(a, f, "enabled", habilitado, sizeof habilitado) ||
         (strcmp(habilitado, "true") && strcmp(habilitado, "false"))) return 0;
     // O servidor aceita addon sem nome. O texto vazio nao invalida sua URL
@@ -194,7 +202,9 @@ static int addonsLer(AddonsPendencia *p, const char *texto) {
 // Reentrar na mesma identidade nao relê nem refaz descoberta.
 static void addonsRestaurar(void) {
   AddonsPendencia *p;
-  AddonRemoto lista[SY_ADD_MAX];
+  // static: 32 x ~2 KB (NV_ADDON_URL_MAX) nao pertence a pilha. So o fio
+  // principal entra aqui.
+  static AddonRemoto lista[SY_ADD_MAX];
   char nome[220], *texto;
   const char *dono = sessao_usuario();
   int perfil = perfis_ativo_addons(), n = 0, leituraFalhou = 0;
@@ -256,6 +266,12 @@ static int addonsPendentes(void) {
 // de addons no meio de um quadro que ja estava lendo dela.
 static AddonRemoto addonsRem[SY_ADD_MAX];
 static int nAddonsRem, temAddonsRem;
+// QUANTOS ADDONS DA ULTIMA LEITURA DA CONTA FICARAM DE FORA por terem URL maior
+// que NV_ADDON_URL_MAX (addonurl.h). Com isto acima de zero a lista desta TV e
+// MENOR que a da conta, e o push manda a lista INTEIRA: empurrar apagaria da
+// conta, em todos os aparelhos, justamente o addon que nao coube aqui. Ver
+// sync_sujar_addons.
+static volatile int addonsDeFora;
 // Addons prontos ANTES do fim do ciclo. Ver a publicacao antecipada em
 // sync_passo. `volatile` porque quem escreve e o fio de sync e quem le e o fio
 // principal, e a barreira aqui e a mesma que `fioPronto` sempre foi: o valor so
@@ -429,6 +445,7 @@ static void addonsEsquecer(void) {
   while ((p = addonsFila) != NULL) { addonsFila = p->prox; free(p); }
   addonsContexto[0] = 0; addonsContextoPerfil = 0;
   addonsLeituraDono[0] = 0; addonsLeituraPerfil = 0;
+  addonsDeFora = 0;
   pthread_mutex_unlock(&addonsTrava);
 }
 
@@ -460,20 +477,28 @@ static int ok2xx(const char *r, int st) { return r && st >= 200 && st < 300; }
 
 // Le a resposta da tabela `addons` (ou a copia dela) para addonsRem.
 static int lerAddons(const char *r) {
+  // static: so o fio do sync le a conta, e 8 KB nao pertencem a pilha dele.
+  static char url[SY_URL_LEITURA];
   const char *p;
-  int k = 0;
+  int k = 0, fora = 0;
   for (p = js_raiz_array(r); p && k < SY_ADD_MAX; p = js_prox(js_fim(p))) {
     const char *f = js_fim(p);
     char b[16];
     memset(&addonsRem[k], 0, sizeof addonsRem[k]);
-    if (!js_texto(p, f, "url", addonsRem[k].url, sizeof addonsRem[k].url)) continue;
+    if (!js_texto(p, f, "url", url, sizeof url)) continue;
     js_texto(p, f, "name", addonsRem[k].nome, sizeof addonsRem[k].nome);
+    // A URL QUE NAO CABE NAO ENTRA CORTADA (#201). js_texto corta em silencio
+    // no tamanho do destino, e era aqui que a URL do Comet (870) virava 599: o
+    // addon recebia meia configuracao e respondia como se ela fosse valida.
+    if (!nv_addon_url_cabe(addonsRem[k].nome, strlen(url))) { fora++; continue; }
+    snprintf(addonsRem[k].url, sizeof addonsRem[k].url, "%s", url);
     // Ausente conta como LIGADO: e assim que o web le, e um addon que some por
     // causa de um campo que o servidor nao mandou e pior que um a mais.
     addonsRem[k].ativo = js_bruto(p, f, "enabled", b, sizeof b)
                          ? (strcmp(b, "false") != 0) : 1;
     k++;
   }
+  addonsDeFora = fora;
   return k;
 }
 
@@ -1663,6 +1688,15 @@ void        sync_sujar_addons(void) {
   const char *dono = sessao_usuario();
   int perfil = perfis_ativo_addons();
   if (!sessao_logada() || !addonsNome(nome, sizeof nome, dono, perfil)) return;
+  // A LISTA DESTA TV ESTA INCOMPLETA (ver addonsDeFora): o push substitui a
+  // lista da conta pela daqui, e a daqui nao tem o addon que nao coube. A
+  // mudanca vale nesta TV ate o proximo pull; para a conta ela nao sobe.
+  if (addonsDeFora > 0) {
+    printf("[sync] edicao de addons nao enviada: %d addon(s) da conta nao cabem nesta TV\n",
+           addonsDeFora);
+    fflush(stdout);
+    return;
+  }
   pthread_mutex_lock(&addonsTrava);
   p = addonsEdicao(dono, perfil);
   if (!p) p = addonsNova(dono, perfil);

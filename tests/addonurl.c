@@ -1,0 +1,188 @@
+// A URL DE UM ADDON CHEGA INTEIRA AO PEDIDO? (#201)
+//
+// Este teste existe por um defeito mudo: a base do addon era guardada em
+// `char[600]`, e a URL do Comet — que embute a configuracao inteira num base64
+// de ~830 caracteres — tem 870. Ela era cortada em silencio, o Comet recebia
+// meia configuracao e respondia o manifesto "❌ | Comet" com uma fonte so. Nada
+// no log dizia que a URL tinha sido cortada.
+//
+// O que se confere, com uma URL de 1500 caracteres:
+//   1. instalar (addons_adicionar) guarda a base inteira;
+//   2. exportar (o que o sync grava em disco e empurra para a conta) devolve a
+//      mesma base;
+//   3. recarregar da conta (addons_definir_lista) e do arquivo (addons_carregar)
+//      devolve a mesma base;
+//   4. o pedido de fontes sai para <base>/stream/movie/<id>.json, byte a byte.
+// E, com uma URL acima de NV_ADDON_URL_MAX: ela e RECUSADA, nunca cortada —
+// nenhum pedido sai para ela, e o log diz o nome do addon e o tamanho. O .sh
+// confere a linha e confere que a URL em si nao apareceu no log.
+//
+// So addons.c e js.c; a rede e um duble que anota a URL pedida.
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include "addons.h"
+#include "fontecache.h"
+
+// ---------------------------------------------------------------- duble
+static char pedido[8192];      // a ultima URL que chegou a rede
+static int  nPedidos, nPedidosGrande;
+char *rede_baixar(const char *url, int s) {
+  (void)s;
+  nPedidos++;
+  if (strstr(url, "grande.test")) nPedidosGrande++;
+  snprintf(pedido, sizeof pedido, "%s", url);
+  return strdup("{\"streams\":[{\"url\":\"https://x/a.mp4\"}]}");
+}
+void ondever_pedir(const char *id, int series, long tmdb) { (void)id; (void)series; (void)tmdb; }
+int stream_extrair(const char *json, const char *prov, Stream **saida) {
+  int n = 0; const char *p = json;
+  (void)prov;
+  while ((p = strstr(p, "\"url\"")) != NULL) { n++; p += 5; }
+  *saida = n ? calloc((size_t)n, sizeof(Stream)) : NULL;
+  return n;
+}
+#include "jellyfin.h"
+int servidores_fontes_pedir(const char *alvo) { (void)alvo; return 0; }
+int servidores_fontes_colher(const char *alvo, Stream **l, int *n) {
+  (void)alvo; if (l) *l = NULL; if (n) *n = 0; return JF_FONTES_FALHOU; }
+uint64_t badges_detectar(const char *m) { (void)m; return 0; }
+void stream_definir_lista(const Stream *l, int n) { (void)l; (void)n; }
+void stream_definir_lista_idade(const Stream *l, int n, Uint32 idade) {
+  (void)idade; stream_definir_lista(l, n); }
+void stream_lista_acrescentar(const Stream *l, int n, int o) { (void)l; (void)n; (void)o; }
+void stream_invalidar(const char *p) { (void)p; }
+int stream_n(void) { return 0; }
+int stream_lista_do_alvo(const char *id) { (void)id; return 0; }
+Uint32 SDL_GetTicks(void) { return 1000; }
+const char *sessao_usuario(void) { return ""; }
+int perfis_ativo(void) { return 1; }
+void debrid_definir_episodio(int t, int e) { (void)t; (void)e; }
+void debrid_nova_busca(void) {}
+const char *i18n(const char *s) { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
+// So o host, como o de verdade: o caminho carrega a chave do addon.
+const char *rede_url_publica(const char *url, char *dst, unsigned tam) {
+  const char *p = url ? strstr(url, "://") : NULL;
+  p = p ? p + 3 : (url ? url : "");
+  snprintf(dst, tam, "%.*s", (int)strcspn(p, "/"), p); return dst; }
+void marco(const char *s) { (void)s; }
+int  fontecache_pegar(const char *id, const char *tipo, Stream **l, int *n) {
+  (void)id; (void)tipo; *l = NULL; *n = 0; return FC_NADA; }
+void fontecache_guardar(const char *id, const char *tipo, const Stream *l, int n) {
+  (void)id; (void)tipo; (void)l; (void)n; }
+void fontecache_ceder(void) {}
+void fontecache_avancar(void) {}
+unsigned fontecache_vod_geracao(void) { return 0; }
+void fontecache_vod_limpar(void) {}
+void fontecache_vod_apagar(const char *id, const char *tipo, const char *origem,
+                          const FontecacheEscopo *escopo) {
+  (void)id; (void)tipo; (void)origem; (void)escopo;
+}
+void fontecache_vod_guardar(const char *id, const char *tipo, const char *origem,
+                           const FontecacheEscopo *escopo,
+                           const Stream *l, int n, Uint32 quando) {
+  (void)id; (void)tipo; (void)origem; (void)escopo; (void)l; (void)n; (void)quando;
+}
+int fontecache_vod_pegar(const char *id, const char *tipo, const char *origem,
+                        const FontecacheEscopo *escopo,
+                        Stream **l, int *n, Uint32 *idade) {
+  (void)id; (void)tipo; (void)origem; (void)escopo;
+  *l = NULL; *n = 0; *idade = 0; return FC_NADA;
+}
+
+// ---------------------------------------------------------------- roteiro
+static int falhas;
+static void conferir(const char *o_que, long obtido, long esperado) {
+  if (obtido == esperado) return;
+  printf("FALHOU %s: obtido %ld, esperado %ld\n", o_que, obtido, esperado);
+  falhas++;
+}
+// Compara sem imprimir nenhuma das duas: sao URLs de addon. Diz so onde
+// divergem.
+static void conferirUrl(const char *o_que, const char *obtido, const char *esperado) {
+  size_t i = 0;
+  if (!strcmp(obtido, esperado)) return;
+  while (obtido[i] && obtido[i] == esperado[i]) i++;
+  printf("FALHOU %s: %lu caracteres (esperado %lu), diverge na posicao %lu\n", o_que,
+         (unsigned long)strlen(obtido), (unsigned long)strlen(esperado), (unsigned long)i);
+  falhas++;
+}
+
+// "https://<host>/SEGREDO<enchimento>/manifest.json" com `total` caracteres. O
+// enchimento NAO e uniforme: um corte ou um deslocamento muda o texto. A
+// palavra SEGREDO esta la para o .sh provar que a URL nao foi parar no log.
+static void montarUrl(char *dst, size_t total, const char *host) {
+  size_t k = (size_t)snprintf(dst, total + 1, "https://%s/SEGREDO", host), i = 0;
+  while (k < total - 14) dst[k++] = (char)('a' + (int)((i++ * 7) % 26));
+  snprintf(dst + k, 15, "/manifest.json");
+}
+
+static void buscar(const char *id) {
+  pedido[0] = 0;
+  addons_buscar(id, "movie");
+  while (addons_estado() == ADD_BUSCANDO) usleep(1000);
+}
+
+int main(void) {
+  static char longa[1501], grande[2101], base[1501], esperado[1700];
+  static AddonRemoto conta[2];
+  char dir[] = "/tmp/nuvio-addonurl-XXXXXX";
+  char caminho[600];
+  FILE *f;
+
+  montarUrl(longa, 1500, "longo.test");
+  montarUrl(grande, 2100, "grande.test");
+  snprintf(base, sizeof base, "%.*s", 1500 - 14, longa);   // sem /manifest.json
+  conferir("a URL longa tem 1500 caracteres", (long)strlen(longa), 1500);
+  conferir("a URL grande passa do limite", strlen(grande) >= NV_ADDON_URL_MAX, 1);
+
+  // 1. instalar
+  conferir("addon de URL longa entra", addons_adicionar("Longo", longa), 1);
+  conferir("um addon na lista", addons_n(), 1);
+  conferirUrl("base guardada", addons_base(0), base);
+
+  // 2. o que o sync grava e empurra
+  conferir("exporta um", addons_exportar(conta, 2), 1);
+  conferirUrl("base exportada", conta[0].url, base);
+
+  // 3a. recarregar da conta
+  addons_esquecer();
+  conferir("lista esquecida", addons_n(), 0);
+  conferir("a lista da conta e aplicada", addons_definir_lista(conta, 1), 1);
+  conferirUrl("base vinda da conta", addons_base(0), base);
+  // A mesma lista de novo NAO muda nada (listaIgual compara a base inteira).
+  conferir("lista identica nao reaplica", addons_definir_lista(conta, 1), 0);
+
+  // 4. o pedido
+  snprintf(esperado, sizeof esperado, "%s/stream/movie/tt0111161.json", base);
+  buscar("tt0111161");
+  conferir("a busca terminou com fonte", addons_estado(), ADD_PRONTO);
+  conferirUrl("pedido de fontes", pedido, esperado);
+
+  // 3b. recarregar do arquivo, com a linha de 1500 e uma linha acima do limite
+  if (!mkdtemp(dir)) { printf("FALHOU: sem diretorio temporario\n"); return 1; }
+  snprintf(caminho, sizeof caminho, "%s/addons.txt", dir);
+  f = fopen(caminho, "w");
+  if (!f) { printf("FALHOU: sem arquivo temporario\n"); return 1; }
+  fprintf(f, "Grande\t%s\t1\t1\t0\n", grande);
+  fprintf(f, "Longo\t%s\t1\t1\t0\n", longa);
+  fprintf(f, "Curto\thttps://curto.test/manifest.json\n");
+  fclose(f);
+  conferir("o arquivo traz dois (o grande fica de fora)", addons_carregar(dir), 2);
+  conferirUrl("base vinda do arquivo", addons_base(0), base);
+  conferirUrl("a linha seguinte nao foi comida", addons_base(1), "https://curto.test");
+  unlink(caminho); rmdir(dir);
+
+  // ---- acima do limite: recusada, nunca cortada
+  conferir("addon de URL grande NAO entra", addons_adicionar("Grande", grande), 0);
+  conferir("a lista continua com dois", addons_n(), 2);
+  nPedidos = nPedidosGrande = 0;
+  buscar("tt0068646");
+  conferir("os dois addons validos foram consultados", nPedidos, 2);
+  conferir("nenhum pedido saiu para a URL grande", nPedidosGrande, 0);
+
+  printf(falhas ? "addonurl: FALHOU (%d)\n" : "addonurl: ok\n", falhas);
+  return falhas ? 1 : 0;
+}

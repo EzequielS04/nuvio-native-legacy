@@ -11,6 +11,7 @@
 // stream_definir_lista, e a tela so precisa olhar addons_estado().
 #ifndef NV_ADDONS_H
 #define NV_ADDONS_H
+#include "addonurl.h"
 
 typedef enum { ADD_PARADO = 0, ADD_BUSCANDO, ADD_PRONTO, ADD_VAZIO } AddEstado;
 
@@ -25,7 +26,9 @@ int  addons_carregar(const char *dirArte);
 // perfil errado, 401 mal tratado ou queda — e nenhum desses e "o usuario
 // removeu todos os addons". Trocar por vazio deixaria a pessoa sem fonte
 // nenhuma e sem entender por que.
-typedef struct { char nome[64]; char url[600]; int ativo; } AddonRemoto;
+// `url` com NV_ADDON_URL_MAX (addonurl.h), e nao 600: a URL do Comet tem 870
+// e era cortada aqui, antes de qualquer outro modulo ve-la (#201).
+typedef struct { char nome[64]; char url[NV_ADDON_URL_MAX]; int ativo; } AddonRemoto;
 // Devolve 1 quando a lista MUDOU e foi aplicada; 0 quando nada mudou, quando
 // veio vazia, ou quando nada nela era utilizavel. Quem chama usa isso para
 // decidir se vale remontar o catalogo — e nao para saber quantos addons ha.
@@ -175,7 +178,7 @@ const char *addons_nome(int i);
 int  addons_ativo(int i);
 int  addons_alternar(int i);          // devolve o estado NOVO
 // Acrescenta um addon sem refazer a lista (ver a nota em addons.c). 1 = entrou,
-// 0 = lista cheia ou ja instalado. Quem chama deve chamar sync_sujar_addons().
+// 0 = lista cheia, ja instalado ou URL que nao cabe (addonurl.h). Quem chama deve chamar sync_sujar_addons().
 int  addons_adicionar(const char *nome, const char *urlManifest);
 // O addon fornece este recurso? Ate a sonda responder e uma suposicao
 // otimista; addons_sondado() diz qual dos dois casos e.

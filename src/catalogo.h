@@ -7,6 +7,7 @@
 // lugar do nome em texto.
 #ifndef NV_CATALOGO_H
 #define NV_CATALOGO_H
+#include "addonurl.h"
 
 // 40 titulos hoje (14 do historico do dono + 26 dos catalogos). A folga evita
 // o corte silencioso que ja aconteceu: com 32 os oito ultimos sumiam sem aviso.
@@ -214,7 +215,7 @@ int  cat_ler_cache(const char *dirArte);
 // trocar de conta mostra a home da conta ANTERIOR — watchlist, continuar
 // assistindo, feed de amigos com nome e avatar — ate a rede substituir.
 //
-// E o dano nao para no estetico: cada CatFileira grava `base[600]`, campo desse
+// E o dano nao para no estetico: cada CatFileira grava `base` (addonurl.h), campo desse
 // tamanho porque o Xperience embute um JWT no CAMINHO do addon (ver a nota do
 // campo). Um cache que sobrevive ao logout e credencial do usuario anterior
 // deixada em disco, do mesmo tipo que fez collections.json ser excluido do
@@ -380,8 +381,9 @@ void cat_definir(const CatItem *lista, int n);
 // mexer em mais nada. CONTA, nao medicao em TV: o custo de uma fileira e o dos
 // seus itens, e CatItem pesa 15,6 KB; 40 fileiras x 24 itens = 960 titulos
 // (~15 MB de catalogo) contra CAT_MAX = 2000, entao o vetor de itens continua
-// sendo o teto de verdade e nao estoura. Cada CatFileira pesa ~1 KB: os vetores
-// de fileira (40 x 1 KB = 40 KB) sao static onde eram de pilha — ver
+// sendo o teto de verdade e nao estoura. Cada CatFileira pesa ~2,5 KB (era ~1 KB
+// ate a base passar a NV_ADDON_URL_MAX, #201): os vetores
+// de fileira (40 x 2,5 KB = 100 KB) sao static onde eram de pilha — ver
 // cat_ler_cache, cat_trocar_continuar e montar().
 #define CAT_FIL_MAX 40
 
@@ -397,7 +399,12 @@ typedef struct {
   // caracteres. Com 300 ela era truncada em silencio, a URL montada aqui virava
   // outra coisa e o catalogo respondia sem `metas` — a tela "Ver tudo" abria
   // vazia sem nenhum erro. addons.c ja usa 600 pelo mesmo motivo.
-  char base[600];
+  // 600 TAMBEM NAO BASTAVA (#201): a URL do Comet tem 870. O tamanho agora e o
+  // de addonurl.h, o mesmo de quem guarda a lista. O campo vai CRU para o
+  // catalogo-rede.bin; o cabecalho do arquivo leva sizeof(CatFileira)
+  // (tamFileira), entao o cache de uma build de 600 e recusado e apagado na
+  // primeira leitura, e a home daquela abertura vem da rede.
+  char base[NV_ADDON_URL_MAX];
   char catId[96];
   // Janela no vetor de itens. As fileiras NAO tem vetor proprio: apontam para
   // o catalogo unico, que e o que a biblioteca e a busca varrem. Duplicar os
