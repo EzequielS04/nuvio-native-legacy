@@ -43,6 +43,8 @@ The first time you open it, a short guide walks through what changed. It stays i
 
 **Samsung .tpk: install this version by hand.** The in-app update only swaps the app's core library; 2.0 also changes the .NET host and the bundled images and fonts, so it has to be a full install. Later versions update from inside the app again.
 
+**Samsung: also on [Apps2Samsung](https://github.com/Apps2Samsung/tizen-community-packages).** Nuvio is now in Tizen Community Packages, which picks up each release automatically (thanks, Patrick), so you can install it from there too.
+
 | Platform | File |
 | --- | --- |
 | LG webOS 3+ | `space.nuvio.native.legacy_2.0.0_arm.ipk` |

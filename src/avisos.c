@@ -398,6 +398,8 @@ int avisos_enviar_diagnostico(const char *execucao_id, const char *relatorio,
            "tizen-tpk",
 #elif defined(NV_ANDROID)
            "android",
+#elif defined(NV_LINUX_DESKTOP)
+           "linux-desktop",
 #elif defined(__APPLE__)
            "mac",
 #else
@@ -494,6 +496,8 @@ static void *enviarRegistro(void *u) {
              "tizen-tpk",
 #elif defined(NV_ANDROID)
              "android",
+#elif defined(NV_LINUX_DESKTOP)
+           "linux-desktop",
 #elif defined(__APPLE__)
              "mac",
 #else

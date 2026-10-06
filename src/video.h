@@ -167,6 +167,8 @@ const char *video_erro_texto(void);
 // nunca comeca" — o sintoma do #158, com bufferRange subindo e nenhum
 // videoInfo. Onde a plataforma nao da o sinal (Tizen), 1: nao afirma nada.
 int video_decoder_anunciou(void);
+int video_dts_legenda_desenhar(double seconds, int delay_ms, float x, float y, float w, float h, float alpha);
+const char *video_dts_saida(void);  // actual local conversion output, empty for native playback
 int    video_audio_nao_suportado(void);  // uMS errorCode 200: video segue sem som
 int    video_terminou(void); // 1 depois do fim de fluxo (endOfStream) da fonte atual
 // 1 depois que OUTRO app tomou o video da TV nesta sessao (so o .tpk sabe:
@@ -206,6 +208,9 @@ typedef struct {
   // Faixa so de LETREIROS ("Signs", "Songs", "Signs & Songs", FlagForced): nao
   // traduz o dialogo. A folha rotula como tal e lista por ultimo.
   int  letreiro;
+  int canais;        // original audio channels, 0 unknown
+  int stream_index;  // source demux index for DTS sessions, -1 in native webOS
+  int stream_id;     // original container track ID, -1 when unknown
 } VideoFaixa;
 
 int  video_n_audio(void);
@@ -221,6 +226,22 @@ int  video_mkv_sondado(void);
 // Dispara a sonda ja, sem esperar o gatilho de buffer. Inocuo se ja rodou.
 void video_sondar_mkv_agora(void);
 int  video_audio_atual(void);
+// A faixa e DTS? 0 nao, 1 DTS, 2 DTS-HD (MA/HRA/Express), 3 DTS:X. Le o codec
+// e o rotulo (o uMS e o MKV escrevem "DTS", "A_DTS/LOSSLESS", "DTS-HD MA";
+// a sessao convertida, o nome do FFmpeg "dts"). Codigo puro, todos os alvos.
+int  video_faixa_dts(const VideoFaixa *f);
+// O que aconteceu com o audio DTS da faixa atual (marca DTS no player e o
+// aviso da ilha). A marca aparece em TODOS os estados diferentes de NENHUM:
+// o DTS e da fonte, e o estado so diz como ele chega (pedido do dono, 06/10).
+enum {
+  VIDEO_DTS_NENHUM = 0,     // faixa atual nao e DTS (ou nada tocando)
+  VIDEO_DTS_NATIVO,         // a TV decodifica o DTS sozinha
+  VIDEO_DTS_PREPARANDO,     // a conversao local (PR #259) esta abrindo
+  VIDEO_DTS_CONVERTIDO,     // DTS -> AAC estereo convertido no app
+  VIDEO_DTS_FALHOU,         // a conversao falhou; voltou ao nativo sem som
+  VIDEO_DTS_SEM_SOM         // a TV recusa DTS e a conversao esta desligada aqui
+};
+int  video_dts_estado(void);
 int  video_legenda_atual(void);   // -1 = desligada
 
 void video_escolher_audio(int i);
@@ -342,7 +363,7 @@ void video_encerrar(void);
 // que estiver aqui — faixas, tamanho, HDR, Atmos, buffer — para as telas do
 // player serem desenhadas com dados de um video "de verdade". Zerado (o padrao)
 // e o mesmo coto mudo de sempre. Nos alvos de TV a funcao nao existe.
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(NV_LINUX_DESKTOP)
 typedef struct {
   int nAudio, nLeg, audioAtual, legAtual;
   VideoFaixa audio[8], leg[8];
@@ -351,6 +372,7 @@ typedef struct {
   int pronto, reconectando;
   unsigned bufferandoMs;
   double pos, duracao, bufferFim;
+  int dts;           // VIDEO_DTS_* que video_dts_estado devolve
 } VideoSimulacao;
 void video_simular(const VideoSimulacao *s);
 #endif

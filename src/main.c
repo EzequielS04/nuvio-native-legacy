@@ -1,4 +1,9 @@
 // Bootstrap: janela, contexto GL, loop e telemetria. Toda a UI vive nos modulos.
+#include "app_id.h"
+#ifdef NV_DTS_DEBUG
+#include "dts/dts_engine.h"
+#include "dts/dts_pipeline.h"
+#endif
 #include <SDL2/SDL.h>
 #include "tpkteclas.h"
 #include "central.h"
@@ -14,7 +19,7 @@
 // o alvo Tizen (WASM) precisa pular exatamente os mesmos. Nomear a condicao
 // evita ter de lembrar de dois simbolos em cada ponto - sem isto o primeiro
 // build para o navegador ainda tentava abrir libwayland-client.so.0.
-#if defined(__APPLE__) || defined(__EMSCRIPTEN__) || defined(NV_TPK) || defined(NV_ANDROID)
+#if defined(__APPLE__) || defined(NV_LINUX_DESKTOP) || defined(__EMSCRIPTEN__) || defined(NV_TPK) || defined(NV_ANDROID)
 #define NV_SEM_WEBOS 1
 #endif
 #ifdef NV_ANDROID
@@ -663,8 +668,13 @@ int main(int argc, char **argv) {
   // o compositor NAO exibe a janela — o app roda a 60fps desenhando para
   // ninguem. Medido: "Invalid appId specified OR Unsupported Application Type".
 #ifndef NV_SEM_WEBOS
-  setenv("APPID", "space.nuvio.native.legacy", 0);
-  setenv("LS2_APPID", "space.nuvio.native.legacy", 0);
+#ifdef NV_DTS_DEBUG
+  setenv("APPID", NV_APP_ID, 1);
+  setenv("LS2_APPID", NV_APP_ID, 1);
+#else
+  setenv("APPID", NV_APP_ID, 0);
+  setenv("LS2_APPID", NV_APP_ID, 0);
+#endif
   setenv("SDL_VIDEODRIVER", "wayland", 0);
 #endif
   // Lancado pelo SAM, stdout e stderr vao para /dev/null — toda a telemetria
@@ -695,10 +705,20 @@ int main(int argc, char **argv) {
 #if defined(NV_TPK) || defined(NV_ANDROID)
     if (log) { rename(log, getenv("NUVIO_LOG_ANTERIOR"));
 #else
-    if (log) { rename(log, "/tmp/nuvio-anterior.log");
+    if (log) { rename(log,
+#ifdef NV_DTS_DEBUG
+        "/tmp/" NV_APP_ID "-anterior.log"
+#else
+        "/tmp/nuvio-anterior.log"
+#endif
+      );
 #endif
                if (freopen(log, "w", stdout)) { fflush(stderr); dup2(fileno(stdout), fileno(stderr)); } } }
   setvbuf(stdout, NULL, _IOLBF, 0);
+#ifdef NV_DTS_DEBUG
+  printf("[dts-debug] appId=%s engine=%d nativeAdapter=%d; diagnostic build, TV validation pending\n",
+         NV_APP_ID, dts_engine_available(), dts_pipeline_available(0));
+#endif
 #ifdef NV_ANDROID
   android_iniciar();   // [tv] no log + espelho no logcat (android.c)
 #endif
@@ -755,6 +775,9 @@ int main(int argc, char **argv) {
 #else
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+#ifdef NV_LINUX_DESKTOP
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#endif
   // Canal alpha no framebuffer. Sem ele a superficie nao tem como ficar
   // transparente, e o plano de video do aparelho — que fica ATRAS da janela e
   // so aparece pelo alpha — nunca poderia ser revelado.
@@ -766,7 +789,8 @@ int main(int argc, char **argv) {
   SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
   SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
   SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
-#ifdef __EMSCRIPTEN__
+#if defined(__EMSCRIPTEN__) || defined(NV_LINUX_DESKTOP)
+  // Desktop preview is windowed; browser fullscreen requires a user gesture.
   // O navegador da TV ja entrega a pagina em tela cheia; pedir FULLSCREEN
   // aqui exigiria um gesto do usuario e falharia em silencio.
   Uint32 flags = SDL_WINDOW_OPENGL;
@@ -870,7 +894,11 @@ int main(int argc, char **argv) {
   // SDL_CreateWindow nao muda nada. Ver android_pedir_superficie.
   if (pedeW > (int)NV_TELA_W) android_pedir_superficie(pedeW, pedeH);
 #endif
-  win = SDL_CreateWindow("Nuvio", SDL_WINDOWPOS_CENTERED,
+  const char *windowTitle = "Nuvio";
+#ifdef NV_LINUX_DESKTOP
+  windowTitle = "Nuvio - Linux UI preview";
+#endif
+  win = SDL_CreateWindow(windowTitle, SDL_WINDOWPOS_CENTERED,
                                      SDL_WINDOWPOS_CENTERED,
                                      pedeW, pedeH, flags);
   if (!win) { printf("janela: %s\n", SDL_GetError()); return 1; }
@@ -924,6 +952,12 @@ int main(int argc, char **argv) {
   }
 #endif
   SDL_GLContext ctx = SDL_GL_CreateContext(win);
+#ifdef NV_LINUX_DESKTOP
+  if (!ctx) {
+    printf("[linux] sem contexto GLES2: %s\n", SDL_GetError());
+    SDL_DestroyWindow(win); SDL_Quit(); return 2;
+  }
+#endif
 #ifdef NV_TPK
   // Sem GL (Tizen 4/5 sem superficie) nao ha o que desenhar; sai e o host
   // mostra o motivo (nv_tpk_erro).
@@ -1011,7 +1045,7 @@ int main(int argc, char **argv) {
   // Discord alone uses the bundled Mozilla roots on native TV builds.
   char discordCa[4096];
   snprintf(discordCa, sizeof discordCa, "%s/discord-ca.pem", dirArte);
-#if defined(__APPLE__) && !defined(NV_ANDROID) && !defined(NV_TPK)
+#if (defined(__APPLE__) || defined(NV_LINUX_DESKTOP)) && !defined(NV_ANDROID) && !defined(NV_TPK)
   FILE *discordRoots = fopen(discordCa, "rb");
   if (discordRoots) fclose(discordRoots);
   else discordCa[0] = 0; // Desktop development can use system trust.
@@ -1287,7 +1321,7 @@ int main(int argc, char **argv) {
       // com KEYDOWN e KEYUP quase juntos — so o KEYDOWN conta. Isto ja tinha
       // sido resolvido uma vez e voltou a quebrar quando limpei os remendos
       // antigos: o tratamento saiu junto.
-#ifdef __EMSCRIPTEN__
+#if defined(__EMSCRIPTEN__) || defined(NV_LINUX_DESKTOP)
       // TIZEN: o Return do controle Samsung e o keyCode 10009 (XF86Back), que
       // nao existe na tabela do SDL. tizen-shell.html o traduz em Escape, e
       // AQUI o Escape vira AC_BACK — o mesmo codigo que o webOS entrega.
@@ -1300,6 +1334,10 @@ int main(int argc, char **argv) {
       // conversao nao tira nada de ninguem.
       if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE)
         e.key.keysym.sym = SDLK_AC_BACK;
+#ifdef NV_LINUX_DESKTOP
+      if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_BACKSPACE)
+        e.key.keysym.sym = SDLK_AC_BACK;
+#endif
 #endif
       // CH+ segurado x tocado (central.h). Com canal na tela (zap) ele segue
       // direto, sem atraso.

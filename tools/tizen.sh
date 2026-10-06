@@ -5,7 +5,7 @@
 # .wgt; .tpk nativo e perfil mobile/wearable e o firmware da TV recusa sem
 # certificado de parceiro. Tizen .NET para TV acabou e o NaCl foi encerrado em
 # 2021. O que a Samsung oferece no lugar e WebAssembly, a partir do Tizen 5.5
-# (modelos 2020). Entao "nativo no Tizen" = este mesmo src/*.c compilado para
+# (modelos 2020). Entao "nativo no Tizen" = este mesmo src/*.c src/dts/*.c compilado para
 # WASM, com o video pela API AVPlay atras de um canvas transparente.
 #
 # EMSDK UPSTREAM, NAO O FORK DA SAMSUNG. O fork so acrescenta as APIs de WASM
@@ -163,10 +163,10 @@ if [ -n "${NUVIO_DIAG_TOKEN:-}" ]; then
 fi
 
 EXTRA_SOURCES="${NUVIO_TIZEN_EXTRA_SOURCES:-}"
-SOURCES="src/*.c"
+SOURCES="src/*.c src/dts/*.c"
 if [ -n "${NUVIO_TIZEN_EXCLUDE_MAIN:-}" ]; then
   SOURCES=""
-  for source in src/*.c; do
+  for source in src/*.c src/dts/*.c; do
     [ "$source" = "src/main.c" ] || SOURCES="$SOURCES $source"
   done
 fi

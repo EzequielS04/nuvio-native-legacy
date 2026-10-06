@@ -74,7 +74,7 @@ add_subdirectory("${TTF_DIR}" "${CMAKE_BINARY_DIR}/sdl2_ttf" EXCLUDE_FROM_ALL)
 file(COPY "${IMG_DIR}/include/SDL_image.h" "${TTF_DIR}/SDL_ttf.h" DESTINATION "${CMAKE_BINARY_DIR}/inc/SDL2")
 
 # ---- nucleo: src/*.c menos os alvos Tizen ----
-file(GLOB NUVIO_SRC CONFIGURE_DEPENDS "${NUVIO_RAIZ}/src/*.c")
+file(GLOB NUVIO_SRC CONFIGURE_DEPENDS "${NUVIO_RAIZ}/src/*.c" "${NUVIO_RAIZ}/src/dts/*.c")
 list(FILTER NUVIO_SRC EXCLUDE REGEX "/(video_tizen|video_tpk|tpk)\\.c$")
 add_library(main SHARED ${NUVIO_SRC})
 target_include_directories(main PRIVATE "${NUVIO_RAIZ}/src" "${CMAKE_BINARY_DIR}/inc")

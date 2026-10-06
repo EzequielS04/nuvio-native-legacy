@@ -1822,7 +1822,7 @@ void home_evento(const SDL_Event *e) {
 
   if (e->type != SDL_KEYDOWN) return;
   SDL_Keycode k = e->key.keysym.sym;
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(NV_LINUX_DESKTOP)
   // Rodando no Mac, o Back na home NAO fecha: fechar a janela no meio de um
   // teste custa recompilar e reabrir. No aparelho ele sai do app, como deve.
   if (k == SDLK_ESCAPE || k == SDLK_AC_BACK || k == SDLK_BACKSPACE) return;

@@ -421,6 +421,20 @@ static int idxAtual(void) {
   return idx;
 }
 static int ehCanal(void) { return canalSessao; }
+// A MARCA DO DTS da faixa que esta tocando (DTS, DTS-HD, DTS:X), ou -1. Aparece
+// em todo estado do DTS — a TV tocando sozinha, o app convertendo, a conversao
+// desligada ou falha (dono, 06/10: "a badge do DTS ... quando for ativado ou
+// quando nao for"). O DTS e da FONTE; o estado so diz como ele chega, e isso
+// vai na ilha e nas Informacoes.
+static int marcaDtsAtual(void) {
+  int e = video_dts_estado();
+  if (e == VIDEO_DTS_NENHUM) return -1;
+  switch (video_faixa_dts(video_audio(video_audio_atual()))) {
+    case 3: return FMT_DTSX;
+    case 2: return FMT_DTSHD;
+    default: return FMT_DTS;   // convertendo, a faixa vem do FFmpeg como "dts"
+  }
+}
 const char *player_id_canal(void) { return canalSessao ? itemCanal.imdb : ""; }
 
 // Programa do canal no ar: a XMLTV (epgIdx) ou, num canal Xtream que nao
@@ -2343,6 +2357,15 @@ static void avMontarOsd(AoVivoOsd *o) {
     else snprintf(o->info[k++], sizeof o->info[0], "%s", i18n("Resolução: ainda não informada"));
     if (strcasecmp(video_hdr(), "none") && video_hdr()[0])
       snprintf(o->info[k++], sizeof o->info[0], i18n("Imagem: %s"), video_tem_dolby_vision() ? "Dolby Vision" : video_hdr());
+    { const char *d = NULL;
+      switch (video_dts_estado()) {
+        case VIDEO_DTS_NATIVO:     d = "Áudio: DTS, decodificado pela TV"; break;
+        case VIDEO_DTS_PREPARANDO: d = "Áudio: DTS, preparando a conversão"; break;
+        case VIDEO_DTS_CONVERTIDO: d = "Áudio: DTS convertido para AAC estéreo nesta TV"; break;
+        case VIDEO_DTS_FALHOU:     d = "Áudio: DTS, a conversão falhou (sem som)"; break;
+        case VIDEO_DTS_SEM_SOM:    d = "Áudio: DTS, esta TV não toca (sem som)"; break;
+      }
+      if (d) snprintf(o->info[k++], sizeof o->info[0], "%s", i18n(d)); }
     if (video_tem_atmos()) snprintf(o->info[k++], sizeof o->info[0], "%s", i18n("Áudio: Dolby Atmos"));
     if (comVideo && video_bufferando_ms() > 0)
       snprintf(o->info[k++], sizeof o->info[0], i18n("Buffer: carregando há %u s"), video_bufferando_ms() / 1000u);
@@ -2355,7 +2378,9 @@ static void avMontarOsd(AoVivoOsd *o) {
       if (fm >= 0) o->marcas[o->nMarcas++] = fm;
       if (video_tem_dolby_vision()) o->marcas[o->nMarcas++] = FMT_DV;
       else if (!strcasecmp(video_hdr(), "HDR10")) o->marcas[o->nMarcas++] = FMT_HDR10;
-      if (video_tem_atmos()) o->marcas[o->nMarcas++] = FMT_ATMOS; }
+      if (video_tem_atmos()) o->marcas[o->nMarcas++] = FMT_ATMOS;
+      if (marcaDtsAtual() >= 0 && o->nMarcas < (int)(sizeof o->marcas / sizeof o->marcas[0]))
+        o->marcas[o->nMarcas++] = marcaDtsAtual(); }
   }
 }
 
@@ -3447,6 +3472,11 @@ static void desenharLegendaExternaCorpo(void) {
 }
 
 static void desenharLegendaPrincipal(float *topoPilha){
+  PlrRect bitmapArea = areaVideoLegenda();
+  float bitmapAlpha = (legEstilo.opacidade==3?.25f:legEstilo.opacidade==2?.5f:
+                      legEstilo.opacidade==1?.75f:1.f) * entrada;
+  if (video_dts_legenda_desenhar(posLegenda(), legEstilo.atrasoMs,
+        bitmapArea.x, bitmapArea.y, bitmapArea.w, bitmapArea.h, bitmapAlpha)) return;
   /* ASS completo: libass devolve uma lista de bitmaps por camada, preservando
    * karaoke, movimento, desenho vetorial, fontes e todas as tags do arquivo.
    * Da folha, so chegam ao ASS o que nao desmonta o estilo do autor: tamanho
@@ -4041,6 +4071,33 @@ void player_desenhar(Uint32 agora) {
     if (!abrindoViva) { abrindoDesde = agora; abrindoExp = 0; abrindoT = 0.0f; abrFitIdx = -2; }
     abrindoViva = 1;
   } else abrindoViva = 0;
+  // O DTS NA ILHA: como o audio DTS desta faixa chega — direto da TV,
+  // convertido pelo app (PR #259), ou sem som. Uma vez por estado, depois de
+  // ele ficar 1,5 s parado (o erro 200 da TV chega logo depois do load e
+  // trocaria "nativo" por "sem som" num piscar). "Preparando" nao entra: o
+  // cartao de abertura ja esta na tela.
+  { static int dtsVisto;
+    static Uint32 dtsDesde;
+    int e = player_carregando() || ehCanal() ? VIDEO_DTS_NENHUM : video_dts_estado();
+    if (e != dtsVisto) { dtsVisto = e; dtsDesde = agora; }
+    // A guia parental (tambem na ilha, de prioridade baixa) vem primeiro: o
+    // aviso do DTS espera ela fechar, em vez de derruba-la.
+    if (pgDesde && (float)(agora - pgDesde) / 1000.0f < PG_SEG_TOTAL) dtsDesde = agora;
+    if (e != VIDEO_DTS_NENHUM && e != VIDEO_DTS_PREPARANDO && agora - dtsDesde >= 1500u) {
+      Uint32 dur = e == VIDEO_DTS_FALHOU || e == VIDEO_DTS_SEM_SOM ? 10000u : 5000u;
+      if (agora - dtsDesde < 1500u + dur) {
+        PlrIlhaPedido pd;
+        memset(&pd, 0, sizeof pd);
+        pd.icone = "dts";
+        pd.corIcone = e == VIDEO_DTS_FALHOU || e == VIDEO_DTS_SEM_SOM ? 1 : 0;
+        pd.texto = e == VIDEO_DTS_NATIVO ? i18n("Áudio DTS nativo")
+                 : e == VIDEO_DTS_CONVERTIDO ? i18n("Áudio DTS convertido nesta TV")
+                 : e == VIDEO_DTS_FALHOU ? i18n("Não deu para converter o áudio DTS")
+                 : i18n("Esta TV não toca áudio DTS");
+        pd.semFim = 1; pd.aberta = 1;
+        plrilha_pedir(&pd);
+      }
+    } }
   if (player_carregando() && ehCanal()) {
     // CANAL SINTONIZANDO: a versao COMPACTA, uma linha na propria ilha do
     // relogio (dono, 03/10: "no player do live tv vamos usar a versao compacta
@@ -4544,7 +4601,7 @@ static void desenharOsdCorpo(Uint32 agora, float a, float ac, const CatItem *c) 
     // A classe sai da LARGURA primeiro: filme 2.39:1 em 1080p chega como
     // 1920x800. A faixa do 1440p (2560) fica SEM selo: ausente e mais honesto
     // que errado.
-    FormatoMarca selos[3];
+    FormatoMarca selos[4];
     int nSelos = 0;
     { int w = video_largura(), h = video_altura();
       if (w >= 3200 || h >= 1800)       selos[nSelos++] = FMT_4K;
@@ -4566,8 +4623,9 @@ static void desenharOsdCorpo(Uint32 agora, float a, float ac, const CatItem *c) 
     }
 #endif
     if (video_tem_atmos())        selos[nSelos++] = FMT_ATMOS;
+    if (marcaDtsAtual() >= 0)     selos[nSelos++] = (FormatoMarca)marcaDtsAtual();
     { const float mh = 34.0f;
-      float w[3], tot = 0.0f, x;
+      float w[4], tot = 0.0f, x;
       int i, esq = plrilha_direita();
       // ENTRADA ESCALONADA: o rasterizador faz poucas linhas por quadro e os
       // selos ja chegariam um a um; a curva assume a cadencia (90 ms, 10 px).
