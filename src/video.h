@@ -198,7 +198,7 @@ typedef struct {
   char rotulo[48];   // "Ingles · Atmos 5.1" ou "Legenda 3"
   char idioma[8];    // "en"; vazio quando o arquivo nao etiqueta
   int  numero;       // indice que o selectTrack espera
-  int  ordinalMkv;   // ordinal de subtitleTrack do AVPlay; -1 se nao informado
+  int  ordinalMkv;   // ordinal da legenda (AVPlay; no .tpk, o do arquivo, faixasmkv.c); -1 se nao informado
   // CodecID do Matroska ("S_TEXT/ASS", "S_TEXT/UTF8", "S_HDMV/PGS"), lido do
   // cabecalho do MKV; vazio fora de MKV. A folha de faixas marca a legenda
   // ASS com isto (#92): e a faixa que o pipeline da TV desenha mal.

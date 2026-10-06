@@ -8,7 +8,7 @@ set -eu
 cd "$(dirname "$0")/.."
 FFMPEG=${FFMPEG:-/opt/homebrew/bin/ffmpeg}
 [ -x "$FFMPEG" ] || { echo "faixasmkv.sh: ffmpeg nao encontrado em $FFMPEG"; exit 1; }
-DIR=$(mktemp -d /tmp/nuvio-faixasmkv.XXXXXX)
+DIR=$(mktemp -d "${TMPDIR:-/tmp}/nuvio-faixasmkv.XXXXXX")
 trap 'rm -rf "$DIR"' EXIT
 printf '1\n00:00:01,000 --> 00:00:02,000\nx\n' > "$DIR/s.srt"
 "$FFMPEG" -v error -y \

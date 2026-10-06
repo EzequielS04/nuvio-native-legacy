@@ -20,7 +20,11 @@
 #include "mkv.h"
 
 // Reescreve idioma/rotulo/letreiro de `aud` e `leg` com as TrackEntry de `fx`.
-// Nao mexe em `numero` nem em `ordinalMkv` (quem escolhe a faixa e o player).
+// Nao mexe em `numero` (quem escolhe a faixa e o player). #269: a legenda
+// casada ganha tambem `codec` (CodecID) e `ordinalMkv` = posicao dela entre as
+// TrackEntry de legenda do ARQUIVO (contando as de imagem que o player
+// esconde) — o ordinal que mkvass_iniciar_ordinal espera. Legenda sem par fica
+// com o que tinha.
 // Devolve quantas faixas mudaram de rotulo.
 int faixasmkv_aplicar(VideoFaixa *aud, int nAud, VideoFaixa *leg, int nLeg,
                       const MkvFaixa *fx, int n);
@@ -31,5 +35,12 @@ const char *faixasmkv_canais(int canais);
 // Nome curto do CodecID de audio ("A_EAC3" -> "E-AC3", "A_AAC/MPEG4/LC" ->
 // "AAC"); "" quando nao conhece. Vai no rotulo da faixa de audio (#269).
 const char *faixasmkv_codec(const char *codecId);
+
+// #269: a faixa de legenda deste CodecID e desenhada pelo overlay do app,
+// lida do MKV pelo mkvass, em vez do player da TV? ASS/SSA sempre (#92).
+// Texto simples (S_TEXT/UTF8 = SRT, S_TEXT/WEBVTT) so quando `textoSimples`
+// — o .tpk, cujo player nao entrega o texto da legenda embutida (#269).
+// Imagem (PGS/VobSub) e desconhecido: nunca.
+int faixasmkv_overlay(const char *codecId, int textoSimples);
 
 #endif

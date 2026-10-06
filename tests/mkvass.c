@@ -396,6 +396,54 @@ int main(int argc, char **argv) {
   mkvass_iniciar(urlSrt, 3);              // S_TEXT/UTF8
   rodarAte(1.0, 20000, 0.0);
   ok(mkvass_estado() == MKVASS_NOGO_FAIXA, "faixa SRT: NOGO_FAIXA");
+  // A faixa de verdade (ordinal 0 = a S_TEXT/UTF8) sem o pedido do .tpk:
+  // continua no-go de codec, a LG nao muda.
+  mkvass_parar(); esperarFio();
+  mkvass_iniciar_ordinal(urlSrt, 0);
+  rodarAte(1.0, 20000, 0.0);
+  ok(mkvass_estado() == MKVASS_NOGO_FAIXA, "S_TEXT/UTF8 sem aceitar_texto: NOGO_FAIXA");
+
+  printf("\n[5b] #269: texto simples (S_TEXT/UTF8) pelo overlay, como o .tpk pede\n");
+  mkvass_parar(); esperarFio(); legenda_desligar();
+  { char scSrt[64]; int i, nVivos = 0, nEsp10 = 0, bateu = 0;
+    nomeSidecar(urlSrt, -1, scSrt, sizeof scSrt);
+    dados_apagar(scSrt);
+    mkvass_aceitar_texto(1);
+    mkvass_iniciar_ordinal(urlSrt, 0);
+    rodarAte(4.0, 30000, 0.0);
+    ok(mkvass_estado() == MKVASS_COMPLETO, "S_TEXT/UTF8 aceito: COMPLETO");
+    // As falas do .ass de referencia que cabem nos 10 s do srt.mkv: cada uma
+    // tem de estar viva no overlay no meio do seu tempo, com inicio e fim
+    // iguais (±20 ms) — o relogio e o do arquivo, o mesmo do player.
+    for (i = 0; i < nEsp; i++) {
+      LegendaCue v[LEGENDA_SIMULTANEAS]; int k, m;
+      if (esp[i].fim > 10.0) continue;
+      nEsp10++;
+      m = legenda_cues((esp[i].inicio + esp[i].fim) / 2.0, 0, v, LEGENDA_SIMULTANEAS);
+      for (k = 0; k < m; k++)
+        if (fabs(v[k].inicio - esp[i].inicio) <= 0.020 && fabs(v[k].fim - esp[i].fim) <= 0.020) { nVivos++; break; }
+    }
+    printf("    %d/%d falas dos primeiros 10 s no overlay\n", nVivos, nEsp10);
+    ok(nEsp10 >= 2 && nVivos == nEsp10, "todas as falas no tempo certo (±20 ms)");
+    { LegendaCue v[LEGENDA_SIMULTANEAS]; int k, m = legenda_cues(4.8, 0, v, LEGENDA_SIMULTANEAS);
+      for (k = 0; k < m; k++) if (!strcmp(v[k].texto, "Fala numero 1\nsegunda linha")) bateu = 1;
+      ok(bateu, "texto com quebra de linha preservado"); }
+    { LegendaCue v[LEGENDA_SIMULTANEAS];
+      ok(legenda_cues(0.5, 0, v, LEGENDA_SIMULTANEAS) == 0, "nada antes da primeira fala"); }
+    esperarFio();
+    corpo = dados_ler(scSrt);
+    ok(corpo && strstr(corpo, " --> ") && !legenda_eh_ass(strchr(corpo, '\n') + 1),
+       "sidecar e SubRip (estilo do app), nao ASS");
+    free(corpo);
+    // Segunda abertura: do sidecar, sem rede.
+    mkvass_parar(); esperarFio(); legenda_desligar();
+    zerarServidor();
+    mkvass_iniciar_ordinal(urlSrt, 0);
+    rodarAte(4.0, 10000, 0.0);
+    mkvass_estatisticas(&ped, NULL, NULL, NULL);
+    ok(mkvass_estado() == MKVASS_COMPLETO && ped == 0, "texto: segunda abertura pelo sidecar, zero Ranges");
+    mkvass_aceitar_texto(0);
+    mkvass_parar(); esperarFio(); legenda_desligar(); }
 
   mkvass_parar(); esperarFio();
   zerarServidor();

@@ -337,7 +337,11 @@ typedef struct {
   Janela   jan;            // janela da varredura, viva entre trechos
   Ponto   *pontos;
   int      nPontos, nColhidos;
-  char    *corpo;          // cabecalho ASS + linhas Dialogue: colhidas
+  char    *corpo;          // cabecalho ASS + linhas Dialogue: colhidas (ou SRT, ver `texto`)
+  // #269: faixa de TEXTO SIMPLES (S_TEXT/UTF8, S_TEXT/WEBVTT), aceita so com
+  // mkvass_aceitar_texto. O corpo e SubRip: o overlay desenha com o estilo do
+  // app, igual a legenda externa (que funciona na mesma TV).
+  int      texto;
   size_t   corpoTam, corpoCap;
   ClCache  cl[CL_CACHE];
   int      clProx;
@@ -401,6 +405,10 @@ typedef struct {
   int      restoRecusado;
   int      fontesFalharam; // fontes anexadas indisponiveis: o libass usa as do app
 } Fio;
+
+// #269: ver mkvass_aceitar_texto. Lido pelo fio no cabecalho.
+static volatile int aceitaTexto;
+void mkvass_aceitar_texto(int sim) { aceitaTexto = sim ? 1 : 0; }
 
 static int minhaVez(const Fio *f) {
   int ok;
@@ -884,6 +892,46 @@ static int lerAttachments(Fio *f, const unsigned char *p, long n) {
   return 1;
 }
 
+// SubRip: "HH:MM:SS,mmm".
+static void tempoSrt(double s, char *dst, size_t tam) {
+  long long ms; int h, m, sec;
+  if (s < 0) s = 0;
+  ms = llround(s * 1000.0);
+  h = (int)(ms / 3600000LL); ms -= (long long)h * 3600000LL;
+  m = (int)(ms / 60000LL);   ms -= (long long)m * 60000LL;
+  sec = (int)(ms / 1000LL);  ms -= (long long)sec * 1000LL;
+  snprintf(dst, tam, "%02d:%02d:%02d,%03lld", h, m, sec, ms);
+}
+
+// Bloco de S_TEXT/UTF8 (o texto cru da fala, com <i>/<b> e quebras) ->
+// entrada SubRip. Linha em branco dentro da fala encerraria o bloco no parser
+// do SRT: as quebras seguidas viram uma so, e as das pontas saem. Sem numero
+// de sequencia (o parser so procura a linha com "-->").
+static int anexarTexto(Fio *f, const unsigned char *dados, long n, double ini, double fim) {
+  char a[24], b[24], *linha;
+  size_t w, cap = (size_t)n + 64u;
+  long k;
+  int temTexto = 0;
+  tempoSrt(ini, a, sizeof a); tempoSrt(fim, b, sizeof b);
+  linha = malloc(cap);
+  if (!linha) return 0;
+  w = (size_t)snprintf(linha, cap, "\n%s --> %s\n", a, b);
+  for (k = 0; k < n && w + 3 < cap; k++) {
+    char c = (char)dados[k];
+    if (c == '\r' || c == 0) continue;
+    if (c == '\n') {
+      if (!temTexto || linha[w - 1] == '\n') continue;
+    } else if (c != ' ' && c != '\t') temTexto = 1;
+    linha[w++] = c;
+  }
+  while (w && linha[w - 1] == '\n') w--;
+  if (!temTexto) { free(linha); return 0; }
+  linha[w++] = '\n'; linha[w] = 0;
+  k = corpoAnexar(f, linha, w);
+  free(linha);
+  return (int)k;
+}
+
 static void tempoAss(double s, char *dst, size_t tam) {
   long cs; int h, m, sec;
   if (s < 0) s = 0;
@@ -911,6 +959,7 @@ static int anexarEvento(Fio *f, const unsigned char *dados, long n,
   const char *p = (const char *)dados;
   long i = 0, layerIni, layerFim, k;
   size_t w, capacidade;
+  if (f->texto) return anexarTexto(f, dados, n, ini, fim);
   // Pula ReadOrder; guarda Layer.
   while (i < n && p[i] != ',') i++;
   if (i >= n) return 0;
@@ -1213,28 +1262,42 @@ static int escolherNoCabecalho(Fio *f, const unsigned char *p, long n) {
   return 0;
 }
 
-// Devolve: 1 achou a faixa e e ASS; 0 nao achou; -1 achou e NAO e ASS.
+// Devolve: 1 achou a faixa e e ASS (ou texto simples aceito); 0 nao achou;
+// -1 achou e nao serve.
 static int lerTracks(Fio *f, const unsigned char *p, long n) {
   Iter it = { p, n, 0 }; unsigned long id; const unsigned char *d; long t;
   int ordinalLeg = 0;
   if (f->faixa == 0 && escolherNoCabecalho(f, p, n) < 0) return -1;
   while (proximo(&it, &id, &d, &t)) {
     Iter j; unsigned long fid; const unsigned char *fd; long ft;
-    int numero = 0, tipo = 0, ehAss = 0; const unsigned char *priv = NULL; long privN = 0;
+    int numero = 0, tipo = 0, ehAss = 0, ehTexto = 0; const unsigned char *priv = NULL; long privN = 0;
     if (id != ID_TRACKENTRY) continue;
     j.p = d; j.n = t; j.o = 0;
     while (proximo(&j, &fid, &fd, &ft)) {
       if (fid == ID_TRACKNUMBER) numero = (int)lerUint(fd, ft);
       else if (fid == ID_TRACKTYPE) tipo = (int)lerUint(fd, ft);
-      else if (fid == ID_CODECID)
+      else if (fid == ID_CODECID) {
         ehAss = ft >= 10 && (!strncmp((const char *)fd, "S_TEXT/ASS", 10) ||
                              !strncmp((const char *)fd, "S_TEXT/SSA", 10));
+        ehTexto = (ft == 11 && !memcmp(fd, "S_TEXT/UTF8", 11)) ||
+                  (ft == 13 && !memcmp(fd, "S_TEXT/WEBVTT", 13));
+      }
       else if (fid == ID_CODECPRIV) { priv = fd; privN = ft; }
     }
     if (f->faixa < 0) {
       if (tipo != 17 || ordinalLeg++ != -f->faixa - 1) continue;
       f->faixa = numero;
     } else if (numero != f->faixa) continue;
+    // Texto simples: so com o pedido explicito (.tpk) e nunca na pre-busca —
+    // ela segura o video, e na LG a TV desenha SRT bem.
+    if (!ehAss && ehTexto && aceitaTexto && !f->prebusca) {
+      f->texto = 1;
+      f->corpoTam = 0;
+      if (!corpoAnexar(f, "", 0)) return -1;
+      printf("[mkvass] faixa %d e texto simples (SubRip pelo overlay do app)\n", f->faixa);
+      fflush(stdout);
+      return 1;
+    }
     if (!ehAss || !priv) return -1;
     return montarCabecalho(f, priv, privN) ? 1 : -1;
   }
@@ -2580,7 +2643,9 @@ static int entregarCorpoSeAtual(Fio *f, const char *corpo) {
 
 static int contarEventos(const Fio *f) {
   int n = 0; const char *p = f->corpo;
-  while (p && (p = strstr(p, "\nDialogue: ")) != NULL) { n++; p += 11; }
+  const char *marca = f->texto ? " --> " : "\nDialogue: ";
+  size_t passo = strlen(marca);
+  while (p && (p = strstr(p, marca)) != NULL) { n++; p += passo; }
   return n;
 }
 
