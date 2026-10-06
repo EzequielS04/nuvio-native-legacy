@@ -3621,6 +3621,7 @@
   T("Segure OK para marcar como assistido", "Houd OK ingedrukt om als gezien te markeren"),
   T("Segure OK para opções", "Houd OK ingedrukt voor opties"),
   T("Segure OK: Mais informações, Remover ou Marcar como assistido.", "Houd OK ingedrukt voor Meer info, Verwijderen of Markeren als gezien."),
+  T("Segure para abrir a central", "Ingedrukt houden voor het bedieningspaneel"),
   T("Segure para opções", "Ingedrukt houden voor opties"),
   T("Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "Houd ↑ of ↓ in de gids ingedrukt om tussen categorieën te springen; houd OK ingedrukt voor favoriet."),
   T("Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "Houd ↑ of ↓ vast om van categorie te springen. OK vasthouden maakt de zender favoriet."),

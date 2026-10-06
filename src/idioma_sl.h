@@ -3621,6 +3621,7 @@
   T("Segure OK para marcar como assistido", "Pridržite OK za označitev kot ogledano"),
   T("Segure OK para opções", "Pridržite OK za možnosti"),
   T("Segure OK: Mais informações, Remover ou Marcar como assistido.", "Pridržite OK za Več informacij, Odstrani ali Označi kot ogledano."),
+  T("Segure para abrir a central", "Pridržite za nadzorno središče"),
   T("Segure para opções", "Pridržite za možnosti"),
   T("Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "V vodniku pridržite ↑ ali ↓ za preskakovanje kategorij; pridržite OK za priljubljeno."),
   T("Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "Pridrži ↑ ali ↓ za skok na drugo kategorijo. Pridržan OK označi kanal kot priljubljen."),

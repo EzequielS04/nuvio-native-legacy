@@ -3620,6 +3620,7 @@
   T("Segure OK para marcar como assistido", "OK gedrückt halten, um als gesehen zu markieren"),
   T("Segure OK para opções", "OK gedrückt halten für Optionen"),
   T("Segure OK: Mais informações, Remover ou Marcar como assistido.", "OK gedrückt halten: Mehr Infos, Entfernen oder Als gesehen markieren."),
+  T("Segure para abrir a central", "Halten, um das Kontrollzentrum zu öffnen"),
   T("Segure para opções", "Halten für Optionen"),
   T("Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "↑ oder ↓ im Programm gedrückt halten, um die Kategorie zu wechseln; OK gedrückt halten markiert als Favorit."),
   T("Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "Halte ↑ oder ↓, um die Kategorie zu wechseln. Gehaltenes OK markiert den Sender als Favorit."),

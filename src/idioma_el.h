@@ -3621,6 +3621,7 @@
   T("Segure OK para marcar como assistido", "Κράτα πατημένο το OK για σήμανση ως προβλημένο"),
   T("Segure OK para opções", "Κράτα πατημένο το OK για επιλογές"),
   T("Segure OK: Mais informações, Remover ou Marcar como assistido.", "Κράτα πατημένο το OK για Περισσότερα στοιχεία, Αφαίρεση ή Σήμανση ως προβλημένο."),
+  T("Segure para abrir a central", "Κρατήστε πατημένο για το κέντρο ελέγχου"),
   T("Segure para opções", "Κράτα πατημένο για επιλογές"),
   T("Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "Κράτα πατημένο ↑ ή ↓ στον οδηγό για να πηδήξεις κατηγορίες· κράτα πατημένο το OK για αγαπημένο."),
   T("Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "Κρατήστε ↑ ή ↓ για να πηδήξετε κατηγορία. Κρατώντας το OK, το κανάλι γίνεται αγαπημένο."),

@@ -3620,6 +3620,7 @@
   T("Segure OK para marcar como assistido", "Mantén OK para marcar como visto"),
   T("Segure OK para opções", "Mantén OK para ver opciones"),
   T("Segure OK: Mais informações, Remover ou Marcar como assistido.", "Mantén OK: Más información, Quitar o Marcar como visto."),
+  T("Segure para abrir a central", "Mantén pulsado para abrir el centro de control"),
   T("Segure para opções", "Mantén para ver opciones"),
   T("Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "Mantén ↑ o ↓ en la guía para saltar de categoría; OK mantenido marca favorito."),
   T("Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "Mantén ↑ o ↓ para saltar de categoría. OK mantenido marca el canal como favorito."),

@@ -3621,6 +3621,7 @@
   T("Segure OK para marcar como assistido", "Hold OK nede for at markere som set"),
   T("Segure OK para opções", "Hold OK nede for valgmuligheder"),
   T("Segure OK: Mais informações, Remover ou Marcar como assistido.", "Hold OK nede: Mere information, Fjern eller Markér som set."),
+  T("Segure para abrir a central", "Hold nede for at åbne kontrolcenter"),
   T("Segure para opções", "Hold nede for valgmuligheder"),
   T("Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "Hold ↑ eller ↓ nede i guiden for at springe mellem kategorier; hold OK nede for at markere som favorit."),
   T("Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "Hold ↑ eller ↓ for at springe kategori. Holdt OK gør kanalen til favorit."),

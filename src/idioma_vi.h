@@ -3621,6 +3621,7 @@
   T("Segure OK para marcar como assistido", "Giữ OK để đánh dấu đã xem"),
   T("Segure OK para opções", "Giữ OK để xem tùy chọn"),
   T("Segure OK: Mais informações, Remover ou Marcar como assistido.", "Giữ OK để chọn Thêm thông tin, Xóa hoặc Đánh dấu đã xem."),
+  T("Segure para abrir a central", "Giữ để mở trung tâm điều khiển"),
   T("Segure para opções", "Giữ để xem tùy chọn"),
   T("Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "Giữ ↑ hoặc ↓ trong hướng dẫn để nhảy giữa các danh mục; giữ OK để yêu thích."),
   T("Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "Giữ ↑ hoặc ↓ để nhảy qua thể loại. Giữ OK đánh dấu kênh là yêu thích."),
