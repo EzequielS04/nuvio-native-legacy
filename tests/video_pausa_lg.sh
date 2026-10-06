@@ -9,7 +9,7 @@ flags=(-O1 -g -Isrc -I/opt/homebrew/include -I/opt/homebrew/include/SDL2
   -Wno-deprecated-declarations -Wno-macro-redefined)
 if [ "${SANITIZE:-0}" = 1 ]; then flags+=(-fsanitize=address,undefined -fno-omit-frame-pointer); fi
 sources=()
-for source in src/*.c; do
+for source in src/*.c src/dts/*.c; do
   case "$source" in src/main.c|src/video.c) continue;; esac
   sources+=("$source")
 done

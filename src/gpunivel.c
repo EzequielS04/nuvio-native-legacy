@@ -237,6 +237,8 @@ void gpun_iniciar(int w, int h) {
   (void)ext; (void)db; (void)sb;
 #ifdef __APPLE__
   snprintf(modelo, sizeof modelo, "mac");
+#elif defined(NV_LINUX_DESKTOP)
+  snprintf(modelo, sizeof modelo, "linux-desktop");
 #endif
 #endif
   ptv_definir_gpu_fraca(ptv_gpu_fraca(renderer));
@@ -258,7 +260,7 @@ void gpun_iniciar(int w, int h) {
   ler();
 #else
   { const char *e = getenv("NUVIO_GPU_NIVEL");
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(NV_LINUX_DESKTOP)
     if (e && *e) { nivel = atoi(e); origem = "NUVIO_GPU_NIVEL"; }
 #else
     (void)e;

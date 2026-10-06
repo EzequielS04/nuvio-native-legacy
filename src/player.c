@@ -2343,6 +2343,7 @@ static void avMontarOsd(AoVivoOsd *o) {
     else snprintf(o->info[k++], sizeof o->info[0], "%s", i18n("Resolução: ainda não informada"));
     if (strcasecmp(video_hdr(), "none") && video_hdr()[0])
       snprintf(o->info[k++], sizeof o->info[0], i18n("Imagem: %s"), video_tem_dolby_vision() ? "Dolby Vision" : video_hdr());
+    if (video_dts_saida()[0]) snprintf(o->info[k++], sizeof o->info[0], "%s", video_dts_saida());
     if (video_tem_atmos()) snprintf(o->info[k++], sizeof o->info[0], "%s", i18n("Áudio: Dolby Atmos"));
     if (comVideo && video_bufferando_ms() > 0)
       snprintf(o->info[k++], sizeof o->info[0], i18n("Buffer: carregando há %u s"), video_bufferando_ms() / 1000u);
@@ -3447,6 +3448,11 @@ static void desenharLegendaExternaCorpo(void) {
 }
 
 static void desenharLegendaPrincipal(float *topoPilha){
+  PlrRect bitmapArea = areaVideoLegenda();
+  float bitmapAlpha = (legEstilo.opacidade==3?.25f:legEstilo.opacidade==2?.5f:
+                      legEstilo.opacidade==1?.75f:1.f) * entrada;
+  if (video_dts_legenda_desenhar(posLegenda(), legEstilo.atrasoMs,
+        bitmapArea.x, bitmapArea.y, bitmapArea.w, bitmapArea.h, bitmapAlpha)) return;
   /* ASS completo: libass devolve uma lista de bitmaps por camada, preservando
    * karaoke, movimento, desenho vetorial, fontes e todas as tags do arquivo.
    * Da folha, so chegam ao ASS o que nao desmonta o estilo do autor: tamanho

@@ -90,7 +90,9 @@ else
 fi
 
 cp "$A" "$OUT/"
-( cd "$OUT" && shasum -a 256 Nuvio-*-android.apk > SHA256SUMS-android )
+( cd "$OUT" &&
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 Nuvio-*-android.apk
+  else sha256sum Nuvio-*-android.apk; fi > SHA256SUMS-android )
 git status --porcelain | grep -q . && { echo "release-android: o build sujou a arvore:" >&2; git status --short >&2; }
 echo
 echo "== pronto, sem publicar:"

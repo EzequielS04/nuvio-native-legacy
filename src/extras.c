@@ -1811,6 +1811,8 @@ void extras_trailer_abrir(int i) {
   // quem chamou, e fica no registro.
   printf("[trailer] extras_trailer_abrir na Samsung ignorado (%s)\n", url);
   fflush(stdout);
+#elif defined(NV_LINUX_DESKTOP)
+  SDL_OpenURL(url);
 #elif defined(__APPLE__)
   char cmd[160];
   snprintf(cmd, sizeof cmd, "open '%s'", url);
