@@ -644,6 +644,11 @@ EM_ASYNC_JS(void, nv_ceder_quadro, (), {
 });
 #endif
 
+#ifdef NV_ANDROID
+#define NV_ETAPA(n) android_etapa(n)
+#else
+#define NV_ETAPA(n) ((void)0)
+#endif
 static int nvPrimeiroQuadroFeito;
 #ifdef __EMSCRIPTEN__
 static int window_primeiro_quadro_feito(void) { return nvPrimeiroQuadroFeito; }
@@ -760,6 +765,7 @@ int main(int argc, char **argv) {
   // nao usa SDL_Delay: cede pelo rAF (nv_ceder_quadro).
   SDL_SetHint(SDL_HINT_EMSCRIPTEN_ASYNCIFY, "0");
 #endif
+  NV_ETAPA("SDL_Init");
   if (SDL_Init(SDL_INIT_VIDEO) != 0) { printf("SDL_Init: %s\n", SDL_GetError()); return 1; }
   IMG_Init(IMG_INIT_JPG | IMG_INIT_PNG);
   // Antes de qualquer fio: ver nv_blindar_formatos em sdlcompat.h (issue #65).
@@ -839,6 +845,7 @@ int main(int argc, char **argv) {
   // depois — entao o ajuste precisa estar legivel antes. Ela nao depende de
   // SDL: mexe em getenv/fopen/mkdir, e no Emscripten monta o IDBFS. `dirArte`
   // ja esta resolvido desde o topo do main.
+  NV_ETAPA("dados_iniciar");
   dados_iniciar(dirArte);
   negcache_disco(dados_ler, dados_gravar_leve);   // 404 de API de metadados lembrado entre arranques
   #ifdef NV_LEVE
@@ -898,9 +905,38 @@ int main(int argc, char **argv) {
 #ifdef NV_LINUX_DESKTOP
   windowTitle = "Nuvio - Linux UI preview";
 #endif
+  NV_ETAPA("SDL_CreateWindow");
   win = SDL_CreateWindow(windowTitle, SDL_WINDOWPOS_CENTERED,
                                      SDL_WINDOWPOS_CENTERED,
                                      pedeW, pedeH, flags);
+#ifdef NV_ANDROID
+  // CONFIG EGL DE RESERVA (#266). No Android o SDL_CreateWindow ja escolhe a
+  // config EGL e cria a superficie; um driver que recusa RGBA8888 (+ a
+  // profundidade 16 padrao do SDL) devolvia "janela: ..." e o app fechava sem
+  // dizer nada na tela. Tenta configs cada vez mais simples, cada tentativa no
+  // log. Sem alfa o video por baixo nao aparece, mas a interface abre e o
+  // registro sai — melhor que nada.
+  { static const struct { int r, g, b, a, prof; const char *nome; } reserva[] = {
+      { 8, 8, 8, 8, 0, "RGBA8888 sem profundidade" },
+      { 8, 8, 8, 0, 0, "RGB888 sem alfa" },
+      { 5, 6, 5, 0, 0, "RGB565" },
+    };
+    size_t i;
+    for (i = 0; !win && i < sizeof reserva / sizeof reserva[0]; i++) {
+      printf("[android] janela falhou (%s); tentando EGL %s\n", SDL_GetError(), reserva[i].nome);
+      fflush(stdout);
+      SDL_GL_SetAttribute(SDL_GL_RED_SIZE, reserva[i].r);
+      SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, reserva[i].g);
+      SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, reserva[i].b);
+      SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, reserva[i].a);
+      SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, reserva[i].prof);
+      SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 0);
+      win = SDL_CreateWindow(windowTitle, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                             pedeW, pedeH, flags);
+    }
+    if (win && i) { printf("[android] janela com EGL de reserva: %s\n", reserva[i - 1].nome); fflush(stdout); }
+  }
+#endif
   if (!win) { printf("janela: %s\n", SDL_GetError()); return 1; }
   // CURSOR DO SISTEMA LIGADO NO webOS, DESLIGADO NO RESTO (issue #99).
   //
@@ -951,6 +987,7 @@ int main(int argc, char **argv) {
     }
   }
 #endif
+  NV_ETAPA("SDL_GL_CreateContext");
   SDL_GLContext ctx = SDL_GL_CreateContext(win);
 #ifdef NV_LINUX_DESKTOP
   if (!ctx) {
@@ -964,6 +1001,22 @@ int main(int argc, char **argv) {
   if (!ctx) { printf("[tpk] sem contexto GL, saindo\n"); SDL_Quit(); return 2; }
 #endif
 #ifdef NV_ANDROID
+  if (!ctx) {
+    // A janela ja existe com a config escolhida; recriar janela e contexto
+    // numa config mais simples (o contexto ES2 e o mesmo pedido em todas).
+    printf("[android] sem contexto GL: %s; tentando RGB565 sem profundidade\n", SDL_GetError());
+    fflush(stdout);
+    SDL_DestroyWindow(win);
+    SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 5);
+    SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 6);
+    SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 5);
+    SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 0);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
+    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 0);
+    win = SDL_CreateWindow(windowTitle, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                           pedeW, pedeH, flags);
+    ctx = win ? SDL_GL_CreateContext(win) : NULL;
+  }
   if (!ctx) { printf("[android] sem contexto GL: %s\n", SDL_GetError()); SDL_Quit(); return 2; }
 #endif
   // O cursor do Magic Remote e desenhado pelo app (ponteiro.c). Depois do
@@ -1015,6 +1068,7 @@ int main(int argc, char **argv) {
   // qual custaria uma ida a TV por tentativa. Estes marcos custam uma linha
   // cada e respondem de primeira.
   printf("[arranque] viewport\n"); fflush(stdout);
+  NV_ETAPA("primeiro clear");
 
   // Em tela retina o drawable e maior que a janela; sem ajustar o viewport, o
   // desenho ocupa um quarto da tela.
@@ -1034,6 +1088,15 @@ int main(int argc, char **argv) {
   glClearColor(14.0f / 255.0f, 15.0f / 255.0f, 18.0f / 255.0f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
   SDL_GL_SwapWindow(win);
+  // TESTE DO VIGIA (#266): `run-as ... touch files/dados/teste-travar-arranque`
+  // prende o main() aqui, como numa TV que nao passa da tela preta.
+  { char f[600];
+    snprintf(f, sizeof f, "%s/teste-travar-arranque", dados_dir());
+    if (dados_dir()[0] && access(f, F_OK) == 0) {
+      printf("[android] teste: arranque preso de proposito (%s)\n", f); fflush(stdout);
+      android_etapa("teste-travar-arranque");
+      for (;;) SDL_Delay(1000);
+    } }
 #endif
 
   // O relogio dos marcos comeca AQUI e nao no topo do main: o que vem antes e
@@ -1041,6 +1104,7 @@ int main(int argc, char **argv) {
   printf("[arranque] marco_iniciar\n"); fflush(stdout);
   marco_iniciar();
   printf("[arranque] rede_preparar\n"); fflush(stdout);
+  NV_ETAPA("rede_preparar");
   // ANTES de tex_iniciar e de app_iniciar, que sao quem cria os fios de rede.
   // Discord alone uses the bundled Mozilla roots on native TV builds.
   char discordCa[4096];
@@ -1064,6 +1128,7 @@ int main(int argc, char **argv) {
 #endif
   printf("[arranque] gfx_iniciar (compila os shaders)\n"); fflush(stdout);
   marco("gfx_iniciar");
+  NV_ETAPA("gfx_iniciar (shaders)");
   if (!gfx_iniciar()) { printf("[arranque] gfx_iniciar FALHOU\n"); fflush(stdout); return 1; }
   printf("[arranque] gfx_iniciar ok\n"); fflush(stdout);
   // A marca da abertura (#213), ANTES do primeiro quadro: ele ja nasce com ela,
@@ -1087,6 +1152,7 @@ int main(int argc, char **argv) {
   snprintf(dirRec, sizeof dirRec, "%s", dirArte);
   char *barra = strrchr(dirRec, '/');
   if (barra) *barra = 0;
+  NV_ETAPA("txt_iniciar");
   txt_iniciar(dirRec, (float)dw / NV_TELA_W);
   // A MESMA escala vai para o cache de texturas: e ela que decide o teto de
   // decodificacao de cada arte a partir da largura com que o card a desenha.
@@ -1108,6 +1174,7 @@ int main(int argc, char **argv) {
   // podia estar preso numa tarefa longa (ver o canal direto em webp.c).
   navegador_iniciar();
 #endif
+  NV_ETAPA("tex_iniciar");
   tex_iniciar(192);
   { int mb = 0; long mem = 0;
     tex_orcamento_info(&mb, &mem, NULL, NULL);
@@ -1127,6 +1194,7 @@ int main(int argc, char **argv) {
   // A conta vem ANTES da UI: app_iniciar decide entre abrir na home e abrir no
   // login, e para decidir ele precisa saber se ha sessao gravada. (dados_iniciar
   // ja rodou la em cima, antes da janela — ver a nota do 4K.)
+  NV_ETAPA("conta");
   nuvem_configurar(dirArte);
   sessao_iniciar();
   perfis_carregar_ativo();
@@ -1137,7 +1205,9 @@ int main(int argc, char **argv) {
   // Se a tela de escolha trocar o perfil, app.c chama traktauth_trocar_perfil.
   traktauth_carregar_perfil(perfis_ativo());
   simklauth_carregar_perfil(perfis_ativo());
+  NV_ETAPA("app_iniciar");
   if (!app_iniciar(dirArte)) return 1;
+  NV_ETAPA("addons/catalogo");
   // Cor viva: a paleta da ultima cena volta ANTES do primeiro quadro, entao
   // quem usa o tema dinamico ja abre o app na cor do ultimo titulo.
   corviva_carregar();
@@ -1206,6 +1276,7 @@ int main(int argc, char **argv) {
   // minusculo (isso e que produzia blocos ao esticar) e sim o desfoque ser de
   // verdade. Esticado 4x, nenhuma borda de texel aparece.
   gfx_borrao_iniciar(480, 270);
+  NV_ETAPA("primeiro quadro");
 
   Uint32 ultRelato = SDL_GetTicks();
   double txtMsQuadro = 0, piorTxtMs = 0;
@@ -1593,12 +1664,16 @@ int main(int argc, char **argv) {
     // de 3 s, entao aquilo carimbaria "primeiro quadro" tres vezes por minuto.
     { static int jaCarimbou;
       if (!jaCarimbou) { jaCarimbou = 1; nvPrimeiroQuadroFeito = 1; marco("primeiro quadro na tela");
+        NV_ETAPA("laco");
 #ifdef __EMSCRIPTEN__
         // Chegou: zera o contador de arranques falhados (tizen-shell.html).
         EM_ASM({ try { localStorage.setItem('nv-boot-falhas', '0'); } catch (e) {} });
 #endif
       } }
     quadros++;
+#ifdef NV_ANDROID
+    android_quadro();
+#endif
 
     if (agora - ultRelato >= 3000) {
       int itens, pend, quentes; long bytes, bytesQ;
