@@ -2187,6 +2187,31 @@ static void trocaDeTituloSeSolicitada(void) {
     } }
 }
 
+// EXTRAS DE LEGENDA DA FONTE QUE TOCA (#201). Quando o video de uma fonte de
+// addon de fato comeca, a busca de legendas do titulo e refeita com o nome, o
+// tamanho e o hash do arquivo (addons_legendas_fonte). Um ponto so, olhando o
+// que toca, em vez de um aviso em cada caminho que escolhe fonte (automatica,
+// manual, guardada, torrent resolvido): esquecer um deles seria o mesmo
+// defeito de antes so naquele caminho. Esperar o video (player_com_video)
+// tambem poupa a busca das candidatas que o automatico testa e descarta.
+static void legendasDaFonte(void) {
+  static char ultimo[4096 + 64];
+  char chave[sizeof ultimo], alvo[64];
+  const Stream *s;
+  const CatItem *c;
+  if (!player_aberto() || player_id_canal()[0] || !player_com_video()) return;
+  s = stream_item(stream_atual());
+  c = cat_item(player_indice());
+  if (!s || !c || !c->imdb[0]) return;
+  alvoPlayer(alvo, sizeof alvo);
+  if (!alvo[0]) return;
+  snprintf(chave, sizeof chave, "%s|%s", alvo, s->url[0] ? s->url : s->infoHash);
+  if (!strcmp(chave, ultimo)) return;
+  snprintf(ultimo, sizeof ultimo, "%s", chave);
+  addons_legendas_fonte(alvo, c->tipo, s->arquivo, (unsigned long long)s->tamanhoBytes,
+                        s->videoHash, s->url, s->cabecalhos[0] != 0);
+}
+
 void app_atualizar(float dt, Uint32 agora) {
   if (player_aberto() || player_mini_ativo()) diagnostico_cancelar_vazao();
   // Login e escolha de perfil retornam cedo; a atividade da conta anterior
@@ -3053,6 +3078,8 @@ void app_atualizar(float dt, Uint32 agora) {
       }
     }
   }
+
+  legendasDaFonte();
 
   // Botoes do detalhe: quem sabe que existe player e biblioteca e o roteador,
   // nao a tela de detalhe.

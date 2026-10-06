@@ -5,11 +5,11 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/nuvio-addon-subtitles.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 flags=()
 if [ "${SANITIZE:-0}" = 1 ]; then flags+=(-fsanitize=address,undefined -fno-omit-frame-pointer); fi
-cc "${flags[@]}" tests/addons_legendas.c src/linguas.c src/js.c -Isrc \
+cc "${flags[@]}" tests/addons_legendas.c src/linguas.c src/js.c src/legextras.c -Isrc \
   -I/opt/homebrew/include -I/opt/homebrew/include/SDL2 \
   -std=gnu11 -pthread -ffunction-sections -fdata-sections -Wl,-dead_strip -Wall -Wextra -Wno-unused-function -o "$work/test"
 saida=$("$work/test")
-if printf '%s\n' "$saida" | rg -q 'fixture\.invalid|PRIVATE_TOKEN|tt123'; then
+if printf '%s\n' "$saida" | rg -q 'fixture\.invalid|PRIVATE_TOKEN|tt123|Movie|Show\.S01'; then
   echo "subtitle diagnostic leaked fixture URL, token, or content id" >&2
   exit 1
 fi
