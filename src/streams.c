@@ -1449,6 +1449,24 @@ int stream_canal_prazo_longo(int idx) {
   return 1;
 }
 
+// LINHA INFORMATIVA DO ADDON, nao filme. Log da 2.0.0 (Samsung): a lista
+// trouxe so "✨ | support the project!" e "Note: Start...", o automatico
+// escolheu a primeira (points=0) quatro vezes e o player tentou abrir um link
+// de doacao. Fica na folha (a pessoa pode querer abrir), sai do automatico.
+// So sem altura e sem tamanho: um filme de verdade com "support" no nome tem
+// pelo menos um dos dois.
+static int ehInformativa(const Stream *s) {
+  static const char *const marcas[] = { "support the project", "support us", "donate",
+    "ko-fi", "patreon", "buymeacoffee", "buy me a coffee", "note:" };
+  char t[sizeof s->rotulo + 512];
+  if (s->altura || s->tamanhoMB) return 0;
+  snprintf(t, sizeof t, "%s %.500s", s->rotulo, s->descricao);
+  for (char *c = t; *c; c++) *c = (char)tolower((unsigned char)*c);
+  for (size_t k = 0; k < sizeof marcas / sizeof *marcas; k++)
+    if (strstr(t, marcas[k])) return 1;
+  return 0;
+}
+
 int stream_automatico(void) {
   if (!stream_n()) return -1;
   int melhor = -1;
@@ -1457,7 +1475,7 @@ int stream_automatico(void) {
   // enchendo por addon o indice e a ordem de CHEGADA, nao a dos addons.
   for (int k = 0; k < n; k++) {
     int i = ORD(k);
-    if (automaticaExcluida(i)) continue;
+    if (automaticaExcluida(i) || ehInformativa(&lista[i])) continue;
     long p = pontos(&lista[i]);
     // `>` e nao `>=`: em empate fica o PRIMEIRO da lista, que e a ordem em que
     // o addon devolveu — e ele costuma saber algo que a pontuacao nao ve.
