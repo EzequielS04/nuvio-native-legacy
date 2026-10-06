@@ -4133,14 +4133,20 @@ enum { HERO_GATE_READY, HERO_GATE_UNSUPPORTED, HERO_GATE_OVERLAY,
        HERO_GATE_POSTER_WAIT, HERO_GATE_TRANSITION, HERO_GATE_NONCONTENT,
        HERO_GATE_NO_ID };
 static int heroTrailerGateAnterior = -1;
+static const char *heroTrailerTopoMotivo, *heroTrailerTopoAnterior;
+void home_trailer_topo_motivo(const char *motivo) { heroTrailerTopoMotivo = motivo; }
 static void heroTrailerGateLog(int motivo, int enabled) {
   static const char *const nomes[] = { "ready", "unsupported", "top-overlay",
     "hero-disabled", "focused-setting-disabled", "dynamic-poster-hidden",
     "poster-wait", "art-transition", "non-content-row", "missing-content-id" };
-  if (!enabled) { heroTrailerGateAnterior = -1; return; }
-  if (motivo != heroTrailerGateAnterior) {
+  const char *porque = motivo == HERO_GATE_OVERLAY ? heroTrailerTopoMotivo : NULL;
+  if (!enabled) { heroTrailerGateAnterior = -1; heroTrailerTopoAnterior = NULL; return; }
+  // The overlay names a string literal from app.c: pointer compare is enough.
+  if (motivo != heroTrailerGateAnterior || porque != heroTrailerTopoAnterior) {
     heroTrailerGateAnterior = motivo;
-    printf("[home-trailer] autoplay gate=%s\n", nomes[motivo]);
+    heroTrailerTopoAnterior = porque;
+    if (porque) printf("[home-trailer] autoplay gate=%s (%s)\n", nomes[motivo], porque);
+    else printf("[home-trailer] autoplay gate=%s\n", nomes[motivo]);
     fflush(stdout);
   }
 }
