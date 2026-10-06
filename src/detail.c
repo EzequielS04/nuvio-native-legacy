@@ -27,6 +27,7 @@
 #include "fontepref.h"
 #include "idioma.h"
 #include "ctxmenu.h"
+#include "ctxlista.h"
 #include "ilha.h"
 #include "idiomacod.h"
 #include "badges.h"
@@ -185,6 +186,12 @@ static int  nivel = 0;
 // Ficha da pessoa por cima da tela de titulo. Nao e um `nivel` a mais porque
 // nao e um estado da MESMA pagina: e outra tela, que aparece e sai inteira.
 static int  pessoaAberta;
+// SEGURAR OK NUMA LISTA DA PAGINA = o menu do cartaz (ctxlista.h): filmografia,
+// lista da saga e a fileira "Recomendações". Os retangulos sao os do ultimo
+// desenho do cartao em foco (antes do zoom do foco).
+static CtxHold holdLista;
+static GfxRect relFocoRect, colFocoRect, pesFocoRect;
+static char    relFocoArte[1024], colFocoArte[1024], pesFocoArte[1024];
 static int  pessoaFoco;
 // Primeira LINHA visivel da filmografia. A grade tem 6 por linha e cabem duas
 // linhas na tela; sem isto o resto dos creditos era cortado sem aviso.
@@ -204,6 +211,7 @@ static int  relFoco;
 static int   colListaAberta, colListaFoco;
 static float colListaScroll, colListaVel;
 static void abrirListaColecao(void);
+static void abrirParteColecao(void);
 static void eventoListaColecao(const SDL_Event *e);
 static void desenhaListaColecao(float a);
 // Temporada escolhida no painel de notas por episodio (indice em extras).
@@ -2109,6 +2117,78 @@ static void tocarTrailerCheio(int k) {
 #endif
 }
 
+// ---- segurar OK numa lista da pagina (ctxlista.h) -------------------------
+// A celula em foco aceita o menu? Filmografia e saga: sempre que ha obra (o
+// titulo fora do catalogo e pedido e o menu abre quando ele chega).
+// Recomendacoes: a fileira com o foco nela.
+static int listaAceitaMenu(void) {
+  if (colListaAberta)
+    return colListaFoco >= 0 && colListaFoco < extras_n_colecao() &&
+           extras_colecao_tmdb(colListaFoco) > 0;
+  if (pessoaAberta)
+    return pessoaFoco >= 0 && pessoaFoco < pessoa_n_creditos() &&
+           (pessoa_credito_imdb(pessoaFoco)[0] || pessoa_credito_tmdb(pessoaFoco) > 0);
+  return nivel >= 1 && foco.fileira == SEC_RELACIONADOS && !focoAmigos &&
+         foco.coluna >= 0 && foco.coluna < extras_n_relacionados() &&
+         extras_relacionado_imdb(foco.coluna)[0];
+}
+
+// 1 se o menu abriu ou foi pedido (abre quando o titulo chegar).
+static int menuNaLista(void) {
+  if (colListaAberta) {
+    long t = extras_colecao_tmdb(colListaFoco);
+    int idx = ctxlista_indice(NULL, t);
+    if (idx >= 0) return ctxlista_abrir(idx, colFocoRect, colFocoArte);
+    return ctxlista_pedir(NULL, t, "movie", extras_colecao_titulo(colListaFoco),
+                          extras_colecao_ano(colListaFoco),
+                          extras_colecao_poster(colListaFoco), colFocoRect, colFocoArte);
+  }
+  if (pessoaAberta) {
+    const char *id = pessoa_credito_imdb(pessoaFoco);
+    long t = pessoa_credito_tmdb(pessoaFoco);
+    int idx = ctxlista_indice(id, t);
+    if (idx >= 0) return ctxlista_abrir(idx, pesFocoRect, pesFocoArte);
+    return ctxlista_pedir(id, t, pessoa_credito_tipo(pessoaFoco),
+                          pessoa_credito_titulo(pessoaFoco), pessoa_credito_ano(pessoaFoco),
+                          pessoa_credito_poster(pessoaFoco), pesFocoRect, pesFocoArte);
+  }
+  { const char *id = extras_relacionado_imdb(foco.coluna);
+    long t = !strncmp(id, "tmdb:", 5) ? atol(id + 5) : 0;
+    int idx = ctxlista_indice(id, t);
+    if (idx >= 0) return ctxlista_abrir(idx, relFocoRect, relFocoArte);
+    return ctxlista_pedir(t > 0 ? "" : id, t, ehSerie() ? (t > 0 ? "tv" : "series") : "movie",
+                          extras_relacionado_titulo(foco.coluna),
+                          extras_relacionado_ano(foco.coluna),
+                          extras_relacionado_poster(foco.coluna), relFocoRect, relFocoArte);
+  }
+}
+
+// O OK numa obra da filmografia (toque curto): abre o titulo.
+static void abrirCredito(void) {
+  // Abre o titulo, quando ele for um dos que o catalogo ja tem meta.
+  // Quem troca de fato e o roteador (app.c) — daqui so sai o pedido.
+  //
+  // Keep the person page visible until the router opens the title.
+  const char *id = pessoa_credito_imdb(pessoaFoco);
+  int alvo = id[0] ? cat_indice_por_imdb(id) : -1;
+  if (alvo >= 0) { pedAbrir = alvo; }
+  // Nao esta no catalogo: busca o meta e abre quando chegar. Quem
+  // termina o trabalho e o roteador, que ja acompanha o resultado.
+  // O credito quase nunca traz imdb_id, entao o caminho normal e pelo
+  // id do TMDB.
+  else if (id[0]) {
+    desc_pedir_titulo_semente(id, 0, pessoa_credito_tipo(pessoaFoco),
+                              pessoa_credito_titulo(pessoaFoco), pessoa_credito_ano(pessoaFoco),
+                              pessoa_credito_poster(pessoaFoco));
+  }
+  else if (pessoa_credito_tmdb(pessoaFoco) > 0) {
+    desc_pedir_titulo_semente("", pessoa_credito_tmdb(pessoaFoco),
+                              pessoa_credito_tipo(pessoaFoco),
+                              pessoa_credito_titulo(pessoaFoco), pessoa_credito_ano(pessoaFoco),
+                              pessoa_credito_poster(pessoaFoco));
+  }
+}
+
 void detail_evento(const SDL_Event *e) {
   if (saindo) return;
   // O CARTAO "O QUE ACHOU?" aberto pela pagina e modal: a tecla e dele.
@@ -2161,6 +2241,18 @@ void detail_evento(const SDL_Event *e) {
   // dentro de `if (pessoaAberta)` exigindo `!pessoaAberta`, ou seja, nunca
   // rodavam. Era por isso que nao dava para andar nem abrir nada nas
   // recomendacoes: o codigo estava escrito e era inalcancavel.
+  // SEGURAR OK NA FILMOGRAFIA, NA LISTA DA SAGA OU NAS RECOMENDACOES = o menu do
+  // cartaz. Filmografia e saga sao telas proprias: o gesto decide na soltura.
+  // Nas Recomendacoes o resto da pagina segue como estava (OK no KEYDOWN arma o
+  // okDesceEm); aqui so se mede o limiar, que detail_atualizar dispara.
+  { int r = ctxhold_evento(&holdLista, e, listaAceitaMenu());
+    if (colListaAberta || pessoaAberta) {
+      if (r == CTXH_CONSUMIDO) return;
+      if (r == CTXH_TOQUE) {
+        if (colListaAberta) abrirParteColecao(); else abrirCredito();
+        return;
+      }
+    } }
   if (colListaAberta) { eventoListaColecao(e); return; }
   if (pessoaAberta) {
     if (e->type != SDL_KEYDOWN) return;
@@ -2188,30 +2280,7 @@ void detail_evento(const SDL_Event *e) {
         case SDLK_DELETE:
         case SDLK_AC_BACK: pessoaAberta = 0; return;
         case SDLK_RETURN:
-        case SDLK_KP_ENTER: {
-          // Abre o titulo, quando ele for um dos que o catalogo ja tem meta.
-          // Quem troca de fato e o roteador (app.c) — daqui so sai o pedido.
-          //
-          // Keep the person page visible until the router opens the title.
-          const char *id = pessoa_credito_imdb(pessoaFoco);
-          int alvo = id[0] ? cat_indice_por_imdb(id) : -1;
-          if (alvo >= 0) { pedAbrir = alvo; }
-          // Nao esta no catalogo: busca o meta e abre quando chegar. Quem
-          // termina o trabalho e o roteador, que ja acompanha o resultado.
-          // O credito quase nunca traz imdb_id, entao o caminho normal e pelo
-          // id do TMDB.
-          else if (id[0]) {
-            desc_pedir_titulo_semente(id, 0, pessoa_credito_tipo(pessoaFoco),
-                                      pessoa_credito_titulo(pessoaFoco), pessoa_credito_ano(pessoaFoco),
-                                      pessoa_credito_poster(pessoaFoco));
-          }
-          else if (pessoa_credito_tmdb(pessoaFoco) > 0) {
-            desc_pedir_titulo_semente("", pessoa_credito_tmdb(pessoaFoco),
-                                      pessoa_credito_tipo(pessoaFoco),
-                                      pessoa_credito_titulo(pessoaFoco), pessoa_credito_ano(pessoaFoco),
-                                      pessoa_credito_poster(pessoaFoco));
-          }
-          return; }
+        case SDLK_KP_ENTER: abrirCredito(); return;
         default: break;
       } }
     if (e->key.keysym.scancode == NV_SCANCODE_BACK) pessoaAberta = 0;
@@ -3189,6 +3258,13 @@ void detail_atualizar(float dt, Uint32 agora) {
       if (p > 1.0f) p = 1.0f;
       ilha_atividade(i18n(p >= 1.0f ? "Solte para abrir opções" : "Segure para opções"), p);
     }
+  }
+
+  // SEGUROU OK NUMA LISTA ATE O LIMIAR: o menu do cartaz, com o dedo ainda no
+  // botao. okDesceEm zera: o KEYUP vai ao menu, nao a pagina.
+  if (!ctx_aberto() && ctxhold_passo(&holdLista, agora, 1) && menuNaLista()) {
+    ctxhold_cancelar(&holdLista);
+    okDesceEm = 0;
   }
 
   for (int r = 0; r < N_SECOES; r++)
@@ -5416,6 +5492,7 @@ static void desenhaRelacionados(float x, float y, float a, int primeiro, int lim
     const char *ano = extras_relacionado_ano(i);
     GLuint t = po[0] ? tex_obter_larg(po, REL_CARD_W) : 0;
     float raio = raioCartaz(REL_CARD_W, REL_CARD_H);
+    if (aceso) { relFocoRect = r; snprintf(relFocoArte, sizeof relFocoArte, "%s", po); }
     // O realce de foco e o da Home (focoprof.h): so apple (Dinamica) tem o
     // painel da legenda. O cartao de vidro/accent que envolvia arte e legenda
     // era um contorno de 8 px que ignorava "Foco no cartaz".
@@ -5666,6 +5743,16 @@ static void abrirListaColecao(void) {
     colListaVel = 0.0f; }
 }
 
+// O OK numa parte da saga (toque curto). A parte traz so o id do TMDB: o
+// caminho e o mesmo do credito de um ator. OK na parte que ja esta aberta so
+// fecha a lista.
+static void abrirParteColecao(void) {
+  long t = extras_colecao_tmdb(colListaFoco);
+  if (colListaFoco != parteAtualColecao() && t > 0)
+    desc_pedir_titulo_tmdb(t, "movie");
+  colListaAberta = 0;
+}
+
 static void eventoListaColecao(const SDL_Event *e) {
   int n = extras_n_colecao(), k;
   if (e->type != SDL_KEYDOWN) return;
@@ -5677,14 +5764,7 @@ static void eventoListaColecao(const SDL_Event *e) {
   if (k == SDLK_LEFT) { pediuMenu = 1; return; }
   if (k == SDLK_DOWN && colListaFoco + 1 < n) colListaFoco++;
   else if (k == SDLK_UP && colListaFoco > 0) colListaFoco--;
-  else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
-    // A parte traz so o id do TMDB: o caminho e o mesmo do credito de um ator.
-    // OK na parte que ja esta aberta so fecha a lista.
-    long t = extras_colecao_tmdb(colListaFoco);
-    if (colListaFoco != parteAtualColecao() && t > 0)
-      desc_pedir_titulo_tmdb(t, "movie");
-    colListaAberta = 0;
-  }
+  else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) abrirParteColecao();
 }
 
 static void desenhaListaColecao(float a) {
@@ -5739,6 +5819,7 @@ static void desenhaListaColecao(float a) {
     }
     { GfxRect rp = { lx + 13.0f, ly + (COLL_LIN_H - COLL_PO_H) * 0.5f,
                      COLL_PO_W, COLL_PO_H };
+      if (foc) { colFocoRect = rp; snprintf(colFocoArte, sizeof colFocoArte, "%s", extras_colecao_poster(i)); }
       cartazColecao(rp, extras_colecao_poster(i), a); }
     ty = ly + 30.0f;
     { int c = foc ? 255 : 232;
@@ -6512,6 +6593,7 @@ static void desenhaPessoa(float a) {
       const char *po = pessoa_credito_poster(i);
       GLuint t = po[0] ? tex_obter_larg(po, PES_CARD_W) : 0;
       if (y + PES_CARD_H > NV_TELA_H - 24.0f) break;
+      if (i == pessoaFoco) { pesFocoRect = r; snprintf(pesFocoArte, sizeof pesFocoArte, "%s", po); }
       // Foco da Home (focoprof.h): anel so com o ajuste ligado, senao cresce.
       { float fp = i == pessoaFoco ? 1.0f : 0.0f;
         foco_anel(r, raioCartaz(PES_CARD_W, PES_CARD_H), fp, a);

@@ -49,6 +49,7 @@
 #include "celbotao.h"
 #include "spotpessoa.h"
 #include "spotlight.h"
+#include "ctxlista.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -187,6 +188,9 @@ static float velY = 0.0f, velX[BU_MAX_FILEIRAS];
 static float animCampo = 0.0f;
 static HomeItem itemFoco;
 static int   temItemFoco = 0;
+// SEGURAR OK NUM RESULTADO = o menu do cartaz (ctxlista.h). So titulo: a
+// fileira de pessoas abre a filmografia, que nao tem menu.
+static CtxHold holdRes;
 
 // Buscas recentes. focoRec vai de 0 a n (n = o "Limpar"). recRect/recLin sao
 // preenchidos pelo DESENHO (a largura de cada pilula depende do texto
@@ -772,6 +776,44 @@ int busca_item_focado(HomeItem *out) {
   return 1;
 }
 
+// O OK num resultado (toque curto). Titulo: o pedido do indice; pessoa: a
+// filmografia dela, que app.c abre.
+static void abrirResultado(void) {
+  if (focoRes.fileira < nFil && focoRes.coluna < fil[focoRes.fileira].n) {
+    registrarConsulta();
+    if (fil[focoRes.fileira].pessoas) {
+      int q = fil[focoRes.fileira].itens[focoRes.coluna];
+      memset(&pedidoP, 0, sizeof pedidoP);
+      pedidoP.tipo = SPOT_PESSOA; pedidoP.indice = pess[q].ref2; pedidoP.tmdb = pess[q].tmdb;
+      pedidoP.tituloTmdb = pess[q].tituloTmdb;
+      snprintf(pedidoP.tituloTipo, sizeof pedidoP.tituloTipo, "%s", pess[q].tituloTipo);
+      snprintf(pedidoP.nome, sizeof pedidoP.nome, "%s", pess[q].nome);
+      snprintf(pedidoP.arte, sizeof pedidoP.arte, "%s", pess[q].foto);
+      pedidoPessoa = 1;
+    } else pedido = fil[focoRes.fileira].itens[focoRes.coluna];
+  }
+}
+
+// O resultado em foco aceita o menu do cartaz?
+static int resultadoAceitaMenu(void) {
+  return painel == 1 && temItemFoco && focoRes.fileira >= 0 && focoRes.fileira < nFil &&
+         !fil[focoRes.fileira].pessoas && focoRes.coluna < fil[focoRes.fileira].n &&
+         itemFoco.indice >= 0 && itemFoco.indice < cat_n();
+}
+static int menuNoResultado(void) {
+  const CatItem *ci;
+  const char *arte;
+  if (!resultadoAceitaMenu()) return 0;
+  ci = cat_item(itemFoco.indice);
+  if (!ci) return 0;
+  // "Melhor resultado" mostra o backdrop deitado; o cartaz em pe usa o poster.
+  arte = itemFoco.rect.w > itemFoco.rect.h ? itemFoco.arte
+       : posterprov_card_addon(ci->origem, ci->imdb, ci->tmdb, ci->tipo, ci->poster);
+  if (!arte || !arte[0]) arte = itemFoco.arte;
+  registrarConsulta();
+  return ctxlista_abrir(itemFoco.indice, itemFoco.rect, arte);
+}
+
 void busca_evento(const SDL_Event *e) {
   if (e->type == SDL_QUIT) { sair = 1; return; }
   if (st_evento(e)) return;   // teclado da TV: o valor inteiro vem por sistexto
@@ -786,6 +828,14 @@ void busca_evento(const SDL_Event *e) {
     return;
   }
   SDL_Keycode k = e->key.keysym.sym;
+
+  // OK NUM RESULTADO DECIDE NA SOLTURA, como a pilula: toque abre o titulo,
+  // segurar abre o menu do cartaz.
+  switch (ctxhold_evento(&holdRes, e, resultadoAceitaMenu())) {
+    case CTXH_CONSUMIDO: return;
+    case CTXH_TOQUE: abrirResultado(); return;
+    default: break;
+  }
 
   // OK NA PILULA DECIDE NA SOLTURA: so ali se sabe se foi toque ou pressao
   // longa. KEYUP sem KEYDOWN visto aqui nao e clique (a barra lateral decide no
@@ -949,21 +999,7 @@ void busca_evento(const SDL_Event *e) {
       }
       break;
     case SDLK_DOWN: focus_mover(&focoRes, 0,  1); break;
-    case SDLK_RETURN: case SDLK_KP_ENTER:
-      if (focoRes.fileira < nFil && focoRes.coluna < fil[focoRes.fileira].n) {
-        registrarConsulta();
-        if (fil[focoRes.fileira].pessoas) {
-          int q = fil[focoRes.fileira].itens[focoRes.coluna];
-          memset(&pedidoP, 0, sizeof pedidoP);
-          pedidoP.tipo = SPOT_PESSOA; pedidoP.indice = pess[q].ref2; pedidoP.tmdb = pess[q].tmdb;
-          pedidoP.tituloTmdb = pess[q].tituloTmdb;
-          snprintf(pedidoP.tituloTipo, sizeof pedidoP.tituloTipo, "%s", pess[q].tituloTipo);
-          snprintf(pedidoP.nome, sizeof pedidoP.nome, "%s", pess[q].nome);
-          snprintf(pedidoP.arte, sizeof pedidoP.arte, "%s", pess[q].foto);
-          pedidoPessoa = 1;
-        } else pedido = fil[focoRes.fileira].itens[focoRes.coluna];
-      }
-      break;
+    case SDLK_RETURN: case SDLK_KP_ENTER: abrirResultado(); break;
     default: break;
   }
 }
@@ -1050,6 +1086,8 @@ void busca_atualizar(float dt, Uint32 agora) {
   if (painel != 0) campoFoco = 0;
   animFocoCampo = anim_mola(animFocoCampo, painel == 0 && campoFoco == 1 ? 1.0f : 0.0f, dt, NV_MOLA_FOCO);
   animMic = anim_mola(animMic, painel == 0 && campoFoco == 2 ? 1.0f : 0.0f, dt, NV_MOLA_FOCO);
+  if (painel != 1) ctxhold_cancelar(&holdRes);
+  else if (ctxhold_passo(&holdRes, agora, 1) && menuNoResultado()) ctxhold_cancelar(&holdRes);
   if (painel == 2 && okPress && !okLongo && agora - okDesde >= NV_HOLD_MS) {
     okLongo = 1;
     recentesRemover();
