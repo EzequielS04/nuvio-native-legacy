@@ -3692,9 +3692,9 @@ static void desenhaHero(Uint32 agora, float saida) {
     }
   }
   // TRAILER TOCANDO ATRAS DO CANVAS no lugar da arte: furo no retangulo do
-  // hero, a arte se apaga por cima dele (heroTrailerFade) e as rampas do
-  // hero ficam como veu com alpha, para o texto seguir apoiado no mesmo
-  // escuro. So no hero de titulo (colecao e social nao chegam aqui com
+  // hero e a arte se apaga por cima dele (heroTrailerFade). As rampas vao
+  // embora junto com a arte: sem veu sobre o trailer (decisao do dono,
+  // 20/09/2026, mantida no #290; ver o fim do bloco). So no hero de titulo (colecao e social nao chegam aqui com
   // trailer: ver home_trailer_passo).
   float aTrailer = (heroTrailerFade > 0.005f && heroTrailerItem == heroAtual) ? heroTrailerFade : 0.0f;
   if (aTrailer > 0.0f) {
