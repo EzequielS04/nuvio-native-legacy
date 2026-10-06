@@ -154,7 +154,9 @@ float svd_amigos_pilha(float x, float y, float d, const AmigosTitulo *t, int n,
     float fx = x + passo * (float)i;
     gfx_rect((GfxRect){ fx, y, d, d }, 0, GFX_DISCO, 0, 0, 0, 0, anel[0], anel[1], anel[2], a);
     foto((GfxRect){ fx + aro, y + aro, d - 2 * aro, d - 2 * aro }, f->avatar, f->nome, f->id, a);
-    if (selos) {
+    // Quem so me RECOMENDOU (sem ter visto, que se saiba) fica sem selo: o
+    // check diria "viu" sem prova.
+    if (selos && (f->viu || f->gostou)) {
       float sd = d * 0.40f;
       seloAmigo(fx + d - sd * 0.42f, y + d - sd * 0.38f, sd, f->gostou, a);
     }

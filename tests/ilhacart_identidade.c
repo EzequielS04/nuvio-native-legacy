@@ -47,6 +47,8 @@ static void amigoVendo(int i, const char *pessoa, const char *nome, const char *
   snprintf(feed[i].pessoaNome, sizeof feed[i].pessoaNome, "%s", nome);
   snprintf(feed[i].imdb, sizeof feed[i].imdb, "%s", imdb);
   snprintf(feed[i].titulo, sizeof feed[i].titulo, "Titulo %d", i);
+  // So o comeco de uma SERIE avisa (filme comecado nao e noticia).
+  snprintf(feed[i].midia, sizeof feed[i].midia, "series");
 }
 int home_retorno_vale(int idx, double pos, double dur) {
   return idx == 0 && dur > 1 && pos / dur >= .01 && pos / dur < .9;
@@ -171,5 +173,40 @@ int main(void) {
     assert(ilhacart_pediu_atividade(im, sizeof im) && !strcmp(im, "tt04"));
     assert(!ilhacart_pediu_atividade(im, sizeof im)); }
   puts("ok amigo vendo: um aviso agregado, passageiro, uma vez por amigo+titulo");
+  // A Ana TERMINOU e gostou do tt04: e outro fato, avisa uma vez (chave fim:);
+  // um filme comecado pelo Rafa nao avisa.
+  amigoVendo(0, "fixture:ana", "Ana", "tt04"); feed[0].acao = REC_ACAO_FIM;
+  feed[0].temReacFim = 1; feed[0].reacFim = 1;
+  amigoVendo(1, "fixture:rafa", "Rafa", "tt05"); snprintf(feed[1].midia, sizeof feed[1].midia, "movie");
+  nFeed = 2;
+  agora += 10000; ilhacart_atualizar(agora, NULL);
+  assert(nDitas == 5 && avisodisp_tem("fim:fixture:ana:tt04") && !avisodisp_tem("vendo:fixture:rafa:tt05"));
+  agora += 10000; ilhacart_atualizar(agora, NULL);
+  assert(nDitas == 5);
+  puts("ok terminou e gostou avisa uma vez; filme comecado nao avisa");
+  // AVISO DE AMIGO SO DO QUE DIZ ALGO (06/10/2026): terminou / reagiu / nota /
+  // comecou uma SERIE. Filme comecado, saida do player e salvo nao avisam.
+  { RecEvento r; char tx[240]; long long t0 = 2000000000LL;
+    memset(&r, 0, sizeof r);
+    r.grau = 1; r.quando = t0 - 60; snprintf(r.imdb, sizeof r.imdb, "tt1");
+    snprintf(r.pessoaNome, sizeof r.pessoaNome, "Ana"); snprintf(r.titulo, sizeof r.titulo, "X");
+    snprintf(r.midia, sizeof r.midia, "movie");
+    r.acao = REC_ACAO_INICIO; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 0 && !tx[0]);
+    r.acao = REC_ACAO_ABANDONO; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 0);
+    r.acao = REC_ACAO_SALVO; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 0);
+    snprintf(r.midia, sizeof r.midia, "series");
+    r.acao = REC_ACAO_INICIO; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 1);
+    assert(!strcmp(tx, "\x02" "Ana\x02 está vendo \x02X\x02"));
+    r.acao = REC_ACAO_FIM; r.eps = 3; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 2);
+    assert(!strcmp(tx, "\x02" "Ana\x02 viu 3 episódios de \x02X\x02"));
+    r.eps = 0; r.temReacFim = 1; r.reacFim = 1; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 2);
+    assert(strstr(tx, "e gostou"));
+    r.acao = REC_ACAO_REACAO; r.reacao = -1; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 2);
+    assert(strstr(tx, "não gostou de"));
+    r.acao = REC_ACAO_NOTA; r.nota = 80; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 2);
+    assert(strstr(tx, "deu 8/10 para"));
+    r.quando = t0 - 3600; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 0);     // velho
+    r.quando = t0 - 60; r.grau = 2; assert(ilhacart_noticia(&r, t0, tx, sizeof tx) == 0); }
+  puts("ok aviso de amigo so para terminou/reagiu/nota/serie nova");
   puts("ilhacart_identidade: tudo ok"); return 0;
 }

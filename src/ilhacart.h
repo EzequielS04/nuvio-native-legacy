@@ -28,6 +28,7 @@
 #include <SDL2/SDL.h>
 #include <stddef.h>
 #include "ilha.h"
+#include "recomenda.h"
 
 void ilhacart_player_saiu(int indice, double posSeg, double durSeg, int t, int e);
 // A atividade ao vivo pertence a conta/perfil que encerrou o player. So
@@ -56,5 +57,10 @@ void ilhacart_vendo_acao(const char *chave);
 int  ilhacart_pediu_atividade(char *imdb, size_t tam);
 // A chave em disco de "ja avisei este amigo neste titulo" (testes).
 void ilhacart_vendo_chave(char *dst, size_t tam, const char *pessoa, const char *imdb);
+// O aviso de um evento de AMIGO do feed, se e noticia (puro, para o teste):
+// 1 = comecou uma serie ("vendo"), 2 = terminou / reagiu / deu nota, 0 = nada
+// (filme comecado, saiu do player, salvo, grau 2, mais velho que 15 min).
+// `txt` sai com o nome e o titulo em negrito.
+int ilhacart_noticia(const RecEvento *ev, long long agora, char *txt, size_t tam);
 
 #endif

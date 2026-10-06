@@ -120,6 +120,11 @@ void ilhacart_tecla(Uint32 agora) { ultimaTecla = agora; }
 // o mesmo amigo no mesmo titulo nao volta a avisar nesta sessao nem depois de
 // reiniciar — no episodio seguinte da mesma serie tambem nao. Titulo novo,
 // aviso novo. OK no aviso abre a aba Atividade (no titulo, quando e um so).
+//
+// SO O QUE DIZ ALGO (dono, 06/10/2026: "deixar a TV so quando assistiu ou
+// curtiu"): alem do comeco de uma SERIE, o aviso sai para terminou / gostou /
+// nao gostou / nota (ilhacart_noticia), cada um uma vez por amigo + titulo.
+// Filme comecado, saida do player ("parou") e salvo: nada.
 #define AMIGO_AGORA_S   (15 * 60)
 #define AMIGO_SONDA_MS  5000u
 #define AMIGO_ILHA_MS   6000u
@@ -151,42 +156,96 @@ void ilhacart_vendo_chave(char *dst, size_t tam, const char *pessoa, const char 
   snprintf(dst, tam, "vendo:%s:%.20s", p, imdb ? imdb : "");
 }
 
+int ilhacart_noticia(const RecEvento *ev, long long agora, char *txt, size_t tam) {
+  char f1[96], f2[200];
+  const char *nome, *tit;
+  if (tam) txt[0] = 0;
+  if (!ev || !tam || ev->grau > 1 || !ev->imdb[0] || ev->quando <= 0) return 0;
+  if (agora - ev->quando > AMIGO_AGORA_S || agora - ev->quando < -60) return 0;
+  nome = ilha_forte(f1, sizeof f1, ev->pessoaNome[0] ? ev->pessoaNome : "?");
+  tit = ilha_forte(f2, sizeof f2, ev->titulo[0] ? ev->titulo : "?");
+  switch (ev->acao) {
+    case REC_ACAO_INICIO:
+      // O servidor novo so manda o comeco de uma serie; o antigo manda todo
+      // "comecou" — filme comecado nao e noticia.
+      if (strcmp(ev->midia, "series")) return 0;
+      snprintf(txt, tam, i18n("%s está vendo %s"), nome, tit);
+      return 1;
+    case REC_ACAO_FIM: {
+      int r = ev->temReacFim ? ev->reacFim : 2;
+      if (ev->eps > 1)
+        snprintf(txt, tam, i18n("%s viu %d episódios de %s"), nome, ev->eps, tit);
+      else if (r == 1) snprintf(txt, tam, i18n("%s terminou %s e gostou"), nome, tit);
+      else if (r == -1) snprintf(txt, tam, i18n("%s terminou %s e não gostou"), nome, tit);
+      else snprintf(txt, tam, i18n("%s terminou %s"), nome, tit);
+      return 2; }
+    case REC_ACAO_REACAO:
+      if (ev->reacao > 0) snprintf(txt, tam, i18n("%s gostou de %s"), nome, tit);
+      else if (ev->reacao < 0) snprintf(txt, tam, i18n("%s não gostou de %s"), nome, tit);
+      else snprintf(txt, tam, i18n("%s achou %s mais ou menos"), nome, tit);
+      return 2;
+    case REC_ACAO_NOTA:
+      if (ev->nota <= 0) return 0;
+      snprintf(txt, tam, i18n("%s deu %d/10 para %s"), nome, (ev->nota + 5) / 10, tit);
+      return 2;
+    default:
+      return 0;          // abandono (saiu do player), salvo: nao e aviso
+  }
+}
+
+// A chave em disco de uma NOTICIA (terminou/reagiu/nota) do amigo no titulo:
+// a mesma forma de ilhacart_vendo_chave, com outro prefixo por tipo de fato.
+static void noticiaChave(char *dst, size_t tam, int acao, const char *pessoa, const char *imdb) {
+  char v[AVD_CHAVE];
+  const char *pre = acao == REC_ACAO_FIM ? "fim:" : acao == REC_ACAO_REACAO ? "rea:" : "not:";
+  ilhacart_vendo_chave(v, sizeof v, pessoa, imdb);
+  snprintf(dst, tam, "%s%s", pre, v + 6);
+}
+
 static void amigoAtualizar(Uint32 agora) {
   RecEvento ev, novos[AMIGO_MAX_EV];
-  char vistas[AMIGO_MAX_EV][96];
-  int i, j, n, nNovos = 0, nVistas = 0;
+  char vistas[AMIGO_MAX_EV][96], textos[AMIGO_MAX_EV][240];
+  int tipos[AMIGO_MAX_EV];
+  int i, j, n, nNovos = 0, nVistas = 0, soVendo = 1;
   long long t = (long long)time(NULL);
   if (amigoSonda && agora - amigoSonda < AMIGO_SONDA_MS) return;
   amigoSonda = agora ? agora : 1;
   n = recomenda_ativo() ? recomenda_feed_n() : 0;
   for (i = 0; i < n && i < AMIGO_MAX_EV; i++) {
-    char chave[AVD_CHAVE];
-    int dup = 0;
+    char chave[AVD_CHAVE], txt[240];
+    int dup = 0, tipo;
     if (!recomenda_feed_item(i, &ev)) continue;
-    if (ev.acao != REC_ACAO_INICIO || ev.grau > 1 || !ev.imdb[0] || ev.quando <= 0) continue;
-    if (t - ev.quando > AMIGO_AGORA_S || t - ev.quando < -60) continue;
+    tipo = ilhacart_noticia(&ev, t, txt, sizeof txt);
+    if (!tipo) continue;
     // Um aviso por PESSOA nesta volta: o evento mais novo dela (o feed vem do
     // mais novo para o mais velho).
     for (j = 0; j < nVistas; j++) if (!strcmp(vistas[j], ev.pessoa)) dup = 1;
     if (dup) continue;
     snprintf(vistas[nVistas++], sizeof vistas[0], "%s", ev.pessoa);
-    ilhacart_vendo_chave(chave, sizeof chave, ev.pessoa, ev.imdb);
+    if (tipo == 1) ilhacart_vendo_chave(chave, sizeof chave, ev.pessoa, ev.imdb);
+    else noticiaChave(chave, sizeof chave, ev.acao, ev.pessoa, ev.imdb);
     if (avisodisp_tem(chave)) continue;
     avisodisp_por(chave);
+    if (tipo != 1) soVendo = 0;
+    tipos[nNovos] = tipo;
+    snprintf(textos[nNovos], sizeof textos[0], "%s", txt);
     novos[nNovos++] = ev;
   }
   if (!nNovos) return;
-  { char txt[240], f1[96], f2[200], meta[24] = "", chave[32];
+  { char txt[240], f1[96], meta[24] = "", chave[32];
     IlhaAvisoEx e;
     const RecEvento *p = &novos[0];
     const char *nome = p->pessoaNome[0] ? p->pessoaNome : "?";
     memset(&e, 0, sizeof e);
-    if (nNovos == 1) {
-      snprintf(txt, sizeof txt, i18n("%s está vendo %s"), ilha_forte(f1, sizeof f1, nome),
-               ilha_forte(f2, sizeof f2, p->titulo));
-      if (p->temporada > 0 && p->episodio > 0) snprintf(meta, sizeof meta, i18n("T%dE%d"), p->temporada, p->episodio);
-      e.capa = p->poster[0] ? p->poster : "-"; e.meta = meta; e.vivo = 1;
-      snprintf(chave, sizeof chave, "vendo:%.24s", p->imdb);
+    if (nNovos == 1 || !soVendo) {
+      // Um so, ou noticias misturadas: a frase do mais novo ("Ana terminou X e
+      // gostou"); o resto conta no "+N" e esta inteiro na aba Atividade.
+      snprintf(txt, sizeof txt, "%s", textos[0]);
+      if (nNovos > 1) snprintf(meta, sizeof meta, "+%d", nNovos - 1);
+      else if (p->temporada > 0 && p->episodio > 0 && !(p->acao == REC_ACAO_FIM && p->eps > 1))
+        snprintf(meta, sizeof meta, i18n("T%dE%d"), p->temporada, p->episodio);
+      e.capa = p->poster[0] ? p->poster : "-"; e.meta = meta; e.vivo = tipos[0] == 1;
+      snprintf(chave, sizeof chave, "vendo:%.24s", nNovos == 1 ? p->imdb : "");
     } else {
       if (nNovos == 2) snprintf(txt, sizeof txt, i18n("%s e mais 1 estão assistindo"), ilha_forte(f1, sizeof f1, nome));
       else snprintf(txt, sizeof txt, i18n("%s e mais %d estão assistindo"), ilha_forte(f1, sizeof f1, nome), nNovos - 1);
@@ -196,7 +255,7 @@ static void amigoAtualizar(Uint32 agora) {
     e.rosto = p->pessoaAvatar; e.rostoNome = nome;
     e.acao = 1;
     ilha_avisar_ex(&e);
-    printf("[ilha] amigos vendo agora: %d novo(s)\n", nNovos); }
+    printf("[ilha] amigos: %d aviso(s) novo(s)\n", nNovos); }
 }
 
 void ilhacart_dispensar(int qual) {
