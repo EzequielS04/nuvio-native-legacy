@@ -1426,7 +1426,10 @@ static void desenharModal(GfxRect m, float a) {
   const IlhaCartao *c = &modalC;
   if (modalAviso) { if (a >= 0.01f) layoutModalAviso(m, a, 1); return; }
   float ax = m.x + MD_PAD, ay = m.y + MD_PAD;
-  float cx = ax + MD_ARTE_W + 32.0f, cw = m.x + m.w - MD_PAD - cx;
+  // Cartaz em pe (o amigo assistindo traz so o poster) numa moldura 2:3, como
+  // no modal de aviso; antes ia centrado no 16:9 com sobra preta dos lados.
+  float ladoW = arteLadoW(c->arte[0] ? c->arte : c->poster);
+  float cx = ax + ladoW + 32.0f, cw = m.x + m.w - MD_PAD - cx;
   float y = ay, by = ay + MD_ARTE_H + 24.0f, sy, cr, cg, cb;
   int i;
   if (a < 0.01f) return;
@@ -1514,7 +1517,7 @@ static void desenharModal(GfxRect m, float a) {
   }
   // A arte: o still do episodio quando ha, senao o fundo do titulo, senao o cartaz.
   { const char *arte = c->arte[0] ? c->arte : c->poster;
-    GfxRect ra = { ax, ay, MD_ARTE_W, MD_ARTE_H };
+    GfxRect ra = { ax, ay, ladoW, MD_ARTE_H };
     GLuint tex = arte[0] ? tex_obter_larg(arte, MD_ARTE_W) : 0;
     if (tex) {
       gfx_tex_aspect_atual = tex_aspecto(arte);
