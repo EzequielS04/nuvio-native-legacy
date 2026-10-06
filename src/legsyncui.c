@@ -101,7 +101,8 @@ static void textoBase(const LegSyncVisao *v, char *dst, unsigned tam) {
 // R4: UMA linha so, sem menu. A sincronia e automatica (legsync.c); aqui ela
 // aparece como estado ("Sincronizando…", "Sincronizada", "Não deu para
 // sincronizar", ou "…usando <outra>") e, se houver algo corrigido, "Desfazer".
-// So o slot PRINCIPAL e so com legenda EXTERNA ativa; nunca em canal ao vivo.
+// Principal e segunda legenda (2.1: o slot 1 tem so o estado, sem acoes), so
+// com legenda EXTERNA ativa; nunca em canal ao vivo.
 // Onde nao ha como sincronizar nunca (plataforma sem referencia), a linha some.
 void legsync_texto_simples(const LegSyncVisao *v, char *dst, unsigned tam) {
   if (!dst || !tam) return;
@@ -203,8 +204,8 @@ static const char *pEstado(int slot, void *u) {
   static char b[200];
   LegSyncVisao v;
   (void)u;
-  if (slot != 0 || player_id_canal()[0]) return NULL;
-  v = legsync_visao(0);
+  if (slot < 0 || slot > 1 || player_id_canal()[0]) return NULL;
+  v = legsync_visao(slot);
   if (v.fase == LEGSYNC_INDISPONIVEL && v.autoFase == 0) return NULL;
   legsync_texto_simples(&v, b, sizeof b);
   return b[0] ? b : NULL;

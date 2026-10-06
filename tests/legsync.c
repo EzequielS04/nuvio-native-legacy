@@ -3,6 +3,7 @@
 // outra referencia, seek, troca de fonte, troca de dono e teardown.
 //   bash tests/legsync.sh     SANITIZE=1 / SANITIZE=thread
 #include "legsync.h"
+#include "legenda2.h"
 #include "autosync.h"
 #include "rede.h"
 #include <assert.h>
@@ -33,6 +34,13 @@ static char *arquivo(const char *nome, long *n) {
   fseek(f, 0, SEEK_END); t = ftell(f); fseek(f, 0, SEEK_SET);
   b = malloc((size_t)t + 1); if (fread(b, 1, (size_t)t, f) != (size_t)t) { fclose(f); free(b); return NULL; }
   fclose(f); b[t] = 0; if (n) *n = t; return b;
+}
+// Download da SEGUNDA legenda (legenda2.c), o mesmo "ext://0/arquivo".
+static int baixar2(const char *url, long maxBytes, unsigned prazoMs, int (*parar)(void *), void *u,
+                   char **corpo, long *n) {
+  char nome[200]; int ms; (void)maxBytes; (void)prazoMs; (void)parar; (void)u;
+  if (sscanf(url, "ext://%d/%199s", &ms, nome) != 2) return 1;
+  *corpo = arquivo(nome, n); return *corpo == NULL;
 }
 // Download da legenda externa (legenda.c): "ext://atraso_ms/arquivo".
 char *rede_baixar_bin(const char *url, int segundos, long *n) {
@@ -198,7 +206,8 @@ int main(int argc, char **argv) {
   assert(legsync_visao(0).fase == LEGSYNC_INDISPONIVEL);
   assert(legsync_offset_ms(250) == 250);
   legsync_iniciar(MKV);
-  assert(legsync_visao(1).fase == LEGSYNC_DEPOIS);
+  // Slot 1 sem segunda legenda: indisponivel, sem fingir.
+  assert(legsync_visao(1).fase == LEGSYNC_INDISPONIVEL && legsync_visao(1).motivo == LEGSYNC_M_SEM_EXTERNA);
   assert(legsync_visao(0).motivo == LEGSYNC_M_SEM_EXTERNA);
   legsync_primaria_outra(1); assert(legsync_visao(0).motivo == LEGSYNC_M_EMBUTIDA);
   assert(!legsync_acao(LEGSYNC_ACAO_RAPIDA)); casos++;
@@ -513,6 +522,25 @@ int main(int argc, char **argv) {
       legsync_encerrar(); }
     casos++; }
   legsync_teste_auto(0); legsync_definir_trocador(NULL);
+
+  // 13. SEGUNDA LEGENDA (slot 1, 2.1): a mesma engine contra a mesma faixa
+  //     embutida, sozinha, mesmo com a principal embutida. Offset puro vai
+  //     para o offset automatico da legenda2; desligar a segunda zera.
+  { int k;
+    legenda2_definir_baixador(baixar2);
+    legsync_iniciar(MKV); legsync_primaria_outra(1);
+    legenda2_reiniciar(); legenda2_escolher("seg", "ext://0/ext_mais2500.srt", "pt", "Addon");
+    for (k = 0; k < 4000 && legsync_visao(1).fase != LEGSYNC_ACEITA; k++) { passo(MKV, 0); usleep(1000); }
+    passo(MKV, 0);   // o aceito chega a legenda2 no passo seguinte
+    v = legsync_visao(1);
+    assert(v.fase == LEGSYNC_ACEITA && abs(v.offsetAutoMs - 2500) <= 25 && v.autoFase == 2);
+    assert(abs(legenda2_offset_total() - 2500) <= 25);
+    { char t[200]; legsync_texto_simples(&v, t, sizeof t); assert(!strcmp(t, "Sincronizada")); }
+    assert(legsync_visao(0).motivo == LEGSYNC_M_EMBUTIDA);   // a principal nao mudou
+    legenda2_desligar(); passo(MKV, 0);
+    assert(legenda2_offset_total() == 0 && legsync_visao(1).fase == LEGSYNC_INDISPONIVEL);
+    legenda2_encerrar(); legenda2_definir_baixador(NULL);
+    casos++; }
 
   // 10. Fim de sessao e corridas de teardown: leitura presa, download pendente,
   //     analise em curso, 40 sessoes seguidas; depois destruir com tudo no ar.

@@ -3,6 +3,7 @@
 #include "autosync.h"
 #include "audsync.h"
 #include "legenda.h"
+#include "legenda2.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -62,6 +63,11 @@ static struct {
   unsigned autoDesde;             // ultimo PROGRESSO do plano (teto LS_AUTO_TETO_MS sem progresso)
   long long autoMarca;            // assinatura do progresso visto em autoDesde
   int autoLog;                    // ultima fase que foi ao log
+  // Slot 1 (segunda legenda, legenda2.c): a mesma engine contra a mesma
+  // referencia embutida, sozinha. segOrig = o documento publicado por
+  // legenda2 (identidade); segDoc = a copia na geracao desta sessao.
+  LegendaDocumento *segOrig, *segDoc;
+  int segPedido;
 } L = { .querModo = -1 };
 #define LS_AUTO_TETO_MS 45000u
 static LegSyncTrocador trocador;
@@ -97,8 +103,15 @@ static void pararAudio(void) {
 
 // Geracao nova para a MESMA escolha de legenda (troca de fonte no meio da
 // sessao) ou para um titulo novo (manterPrimaria = 0).
+static void soltarSegunda(void) {
+  legenda_documento_liberar(L.segOrig); legenda_documento_liberar(L.segDoc);
+  L.segOrig = L.segDoc = NULL; L.segPedido = 0;
+  legenda2_definir_offset_auto(0);
+}
+
 static void novaSessao(const char *url, int manterPrimaria) {
   L.sessao++;
+  soltarSegunda();
   autosync_iniciar(L.sync, L.sessao);
   legref_cancelar(L.ref);
   L.refPedido = 0; soltarRef();
@@ -122,7 +135,9 @@ void legsync_teste_leitor(LegRefLer ler, void *u) {
   pthread_mutex_lock(&M); L.lerTeste = ler; L.lerTesteU = u; pthread_mutex_unlock(&M);
 }
 
+static double posicaoSegunda(double pos);
 void legsync_iniciar(const char *url) {
+  legenda2_definir_tempo(posicaoSegunda);
   pthread_mutex_lock(&M);
   if (!L.criado) {
     // Um fio da engine e um do coletor, ociosos ate haver pedido. Criar nao
@@ -146,6 +161,7 @@ void legsync_destruir(void) {
   AutoSync *s; LegRef *r; LegendaDocumento *a, *b;
   pthread_mutex_lock(&M);
   s = L.sync; r = L.ref; a = L.primDoc; b = L.refDoc;
+  soltarSegunda();
   L.sync = NULL; L.ref = NULL; L.primDoc = L.refDoc = NULL; L.criado = 0;
   L.primToken++; L.refPedido = 0; L.primTipo = 0;
   pthread_mutex_unlock(&M);
@@ -289,6 +305,18 @@ double legsync_posicao(double pos) {
       legenda_documento_info(L.primDoc)->sessao == L.sessao)
     t = autosync_posicao(L.sync, 0, pos);
   pthread_mutex_unlock(&M);
+  return t;
+}
+
+// Slot 1: o mapa so vale para o documento que a engine julgou; outra escolha
+// de segunda legenda ainda nao vista por segundaPasso fica sem mapa.
+static double posicaoSegunda(double pos) {
+  double t = pos;
+  LegendaDocumento *d = legenda2_documento();
+  pthread_mutex_lock(&M);
+  if (L.criado && L.segDoc && d && d == L.segOrig) t = autosync_posicao(L.sync, 1, pos);
+  pthread_mutex_unlock(&M);
+  legenda_documento_liberar(d);
   return t;
 }
 
@@ -483,6 +511,43 @@ int legsync_acao(int acao) {
   return ok;
 }
 
+// SEGUNDA LEGENDA (slot 1). Um passo por quadro, com M. A segunda e externa
+// por construcao (legenda2.c); corrige-se contra a mesma faixa embutida da
+// principal, lida uma vez por midia. So um ACEITO mexe nela: offset puro vai
+// para legenda2_definir_offset_auto, escala/trechos pelo mapa (posicaoSegunda).
+static void segundaPasso(int sensivel) {
+  LegendaDocumento *d = legenda2_sessao() && legenda2_estado() == LEG2_ATIVA ? legenda2_documento() : NULL;
+  if (d != L.segOrig) {
+    soltarSegunda();
+    L.segOrig = d; d = NULL;
+    if (L.segOrig) {
+      int n = 0; const LegendaCue *v = legenda_documento_dados(L.segOrig, &n);
+      LegendaDocumentoInfo ni = *legenda_documento_info(L.segOrig);
+      ni.sessao = L.sessao;
+      L.segDoc = n > 0 ? legenda_documento_de_cues(v, n, &ni) : NULL;
+      if (!L.segDoc || !autosync_selecionar(L.sync, 1, L.segDoc)) {
+        legenda_documento_liberar(L.segDoc); L.segDoc = NULL;
+      }
+    } else autosync_selecionar(L.sync, 1, NULL);
+  }
+  legenda_documento_liberar(d);
+  if (!L.segDoc) return;
+  if (!L.segPedido) {
+    if (sensivel) return;
+    if (L.refDoc) {
+      if (autosync_referencia_permitida(L.sync, 1, L.refDoc) &&
+          autosync_solicitar(L.sync, 1, L.refDoc, NULL)) L.segPedido = 1;
+      else L.segPedido = 2;   // sem como: fica como esta
+    } else if (!L.refPedido && L.ref && L.refMotivo == LEGREF_OK) iniciarColeta();
+    return;
+  }
+  {
+    AutoSyncResultado e = autosync_estado(L.sync, 1);
+    if (sensivel && e.estado == AUTOSYNC_ANALYSING) { autosync_cancelar(L.sync, 1); L.segPedido = 0; return; }
+    legenda2_definir_offset_auto(e.estado == AUTOSYNC_ACCEPTED && e.tipo == AUTOSYNC_T_OFFSET ? autosync_offset_ms(L.sync, 1) : 0);
+  }
+}
+
 void legsync_passo(const char *url, double pos, double folga, int sensivel, unsigned agora) {
   (void)pos;
   pthread_mutex_lock(&M);
@@ -554,6 +619,7 @@ void legsync_passo(const char *url, double pos, double folga, int sensivel, unsi
   } else L.autoDesde = 0;
   // Competicao: seek/buffer pausa a leitura; buffer de video curto tambem.
   autoPasso();
+  segundaPasso(sensivel);
   if (L.autoFase != L.autoLog) {
     L.autoLog = L.autoFase;
     printf("[legsync] automatico: %s (etapa %d, legenda %s, referencia %s)\n",
@@ -623,6 +689,22 @@ LegSyncVisao legsync_visao(int slot) {
   LegSyncVisao v; AutoSyncResultado e;
   int audOk, base;
   memset(&v, 0, sizeof v);
+  if (slot == 1) {   // segunda legenda: so o estado da engine, sem acoes
+    pthread_mutex_lock(&M);
+    if (L.criado && L.segDoc) {
+      e = autosync_estado(L.sync, 1);
+      if (L.segPedido == 1 && e.estado == AUTOSYNC_ACCEPTED) {
+        v.fase = LEGSYNC_ACEITA; v.autoFase = 2; v.offsetAutoMs = e.offsetMs;
+      } else if (L.segPedido == 1 && e.estado == AUTOSYNC_REJECTED) {
+        v.fase = LEGSYNC_RECUSADA; v.motivo = LEGSYNC_M_CONFIANCA; v.autoFase = 3;
+      } else if (L.segPedido == 2 || (!L.refDoc && !L.refPedido && (!L.ref || L.refMotivo != LEGREF_OK))) {
+        v.fase = LEGSYNC_INDISPONIVEL; v.motivo = L.ref ? motivoRef(L.refMotivo) : LEGSYNC_M_PLATAFORMA;
+      } else { v.fase = L.refPedido ? LEGSYNC_LENDO : LEGSYNC_ANALISANDO; v.autoFase = 1; }
+      v.offsetTotalMs = legenda2_offset_total();
+    } else { v.fase = LEGSYNC_INDISPONIVEL; v.motivo = LEGSYNC_M_SEM_EXTERNA; }
+    pthread_mutex_unlock(&M);
+    return v;
+  }
   if (slot != 0) { v.fase = LEGSYNC_DEPOIS; return v; }
   pthread_mutex_lock(&M);
   if (!L.criado) { v.motivo = LEGSYNC_M_SEM_EXTERNA; goto fim; }
