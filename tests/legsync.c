@@ -3,6 +3,7 @@
 // outra referencia, seek, troca de fonte, troca de dono e teardown.
 //   bash tests/legsync.sh     SANITIZE=1 / SANITIZE=thread
 #include "legsync.h"
+#include "legenda2.h"
 #include "autosync.h"
 #include "rede.h"
 #include <assert.h>
@@ -33,6 +34,13 @@ static char *arquivo(const char *nome, long *n) {
   fseek(f, 0, SEEK_END); t = ftell(f); fseek(f, 0, SEEK_SET);
   b = malloc((size_t)t + 1); if (fread(b, 1, (size_t)t, f) != (size_t)t) { fclose(f); free(b); return NULL; }
   fclose(f); b[t] = 0; if (n) *n = t; return b;
+}
+// Download da SEGUNDA legenda (legenda2.c), o mesmo "ext://0/arquivo".
+static int baixar2(const char *url, long maxBytes, unsigned prazoMs, int (*parar)(void *), void *u,
+                   char **corpo, long *n) {
+  char nome[200]; int ms; (void)maxBytes; (void)prazoMs; (void)parar; (void)u;
+  if (sscanf(url, "ext://%d/%199s", &ms, nome) != 2) return 1;
+  *corpo = arquivo(nome, n); return *corpo == NULL;
 }
 // Download da legenda externa (legenda.c): "ext://atraso_ms/arquivo".
 char *rede_baixar_bin(const char *url, int segundos, long *n) {
@@ -198,7 +206,8 @@ int main(int argc, char **argv) {
   assert(legsync_visao(0).fase == LEGSYNC_INDISPONIVEL);
   assert(legsync_offset_ms(250) == 250);
   legsync_iniciar(MKV);
-  assert(legsync_visao(1).fase == LEGSYNC_DEPOIS);
+  // Slot 1 sem segunda legenda: indisponivel, sem fingir.
+  assert(legsync_visao(1).fase == LEGSYNC_INDISPONIVEL && legsync_visao(1).motivo == LEGSYNC_M_SEM_EXTERNA);
   assert(legsync_visao(0).motivo == LEGSYNC_M_SEM_EXTERNA);
   legsync_primaria_outra(1); assert(legsync_visao(0).motivo == LEGSYNC_M_EMBUTIDA);
   assert(!legsync_acao(LEGSYNC_ACAO_RAPIDA)); casos++;
@@ -444,43 +453,39 @@ int main(int argc, char **argv) {
     v = esperarAuto(MKV, 3); assert(trocas == 0); candIdioma = "pt";
 
     // 12f. REGRESSAO "fala que ta ok e ta fora de sincronia" (dono, 04/10).
-    //      Traducao de verdade: outro corte das falas, bordas com folga de
-    //      quadro, +2,0 s do video. O plano automatico RODA o AutoSync contra a
-    //      embutida (sem a pessoa operar nada), a engine recusa (fail-closed: as
-    //      bordas nao casam todas), e entao: nada muda no que o renderer desenha
-    //      (so o manual) e a pilula diz "nao sincronizada" com o aviso, nunca
-    //      "Legenda aplicada" com o check como antes.
+    //      Traducao de verdade: outro corte das falas (juntadas e partidas),
+    //      bordas com folga de quadro, +2,0 s do video. Ate o 2.0 a engine
+    //      recusava (exigia toda borda casando) e a legenda ficava +2 s. Desde
+    //      o 2.1 (grupos 1:2/2:1 na programacao dinamica) ela SINCRONIZA: o
+    //      offset aceito e o +2,0 s, o renderer desenha no instante t do video
+    //      a fala que o arquivo traz em t + 2,0 s, e a pilula diz sincronizada.
     { int p0; char t[200];
       pthread_mutex_lock(&LM); p0 = pedidosLeitor; pthread_mutex_unlock(&LM);
       legsync_iniciar(MKV); trocas = 0; nCand = 0;
       legsync_primaria_externa("ext://0/ext_traduzida_mais2000.srt", "pt", "OpenSubtitles");
-      v = esperarAuto(MKV, 3);
+      v = esperarAuto(MKV, 2);
       pthread_mutex_lock(&LM); assert(pedidosLeitor > p0); pthread_mutex_unlock(&LM);   // leu a referencia
-      assert(v.fase == LEGSYNC_RECUSADA && v.motivo == LEGSYNC_M_CONFIANCA);          // a engine julgou e recusou
-      assert(legsync_offset_ms(0) == 0 && legsync_offset_ms(300) == 300);              // renderer: so o manual
-      assert(!legsync_pilula_final(&v, "OpenSubtitles", t, sizeof t));
-      assert(!strcmp(t, "Legenda aplicada \xc2\xb7 OpenSubtitles \xc2\xb7 n\xc3\xa3o sincronizada"));
-      // No instante t do video a externa desenhada e a que o arquivo traz em t:
-      // nenhum deslocamento escondido.
+      assert(v.fase == LEGSYNC_ACEITA && abs(v.offsetAutoMs - 2000) <= 150);
+      assert(legsync_offset_ms(0) == v.offsetAutoMs && legsync_offset_ms(300) == v.offsetAutoMs + 300);
+      assert(legsync_posicao(123.0) == 123.0);                                       // offset puro: sem mapa
+      assert(legsync_pilula_final(&v, "OpenSubtitles", t, sizeof t));
       { long n; char *b = arquivo("ext_traduzida_mais2000.srt", &n);
         LegendaDocumentoInfo i = { .flags = LEGENDA_DOC_COMPLETO };
         LegendaDocumento *ext = legenda_documento_bytes(b, n, &i); int vistos = 0;
         free(b);
         for (double x = 30; x < 590; x += 0.41) {
           LegendaCue a, e;
-          int na = legenda_cues(x, legsync_offset_ms(0), &a, 1), ne = legenda_documento_cues(ext, x, 0, &e, 1);
+          int na = legenda_cues(x, legsync_offset_ms(0), &a, 1), ne = legenda_documento_cues(ext, x, v.offsetAutoMs, &e, 1);
           assert(na == ne); if (na) { assert(!strcmp(a.texto, e.texto)); vistos++; }
         }
         assert(vistos > 50); legenda_documento_liberar(ext); }
-      // Recusa com a mesma faixa do arquivo: a pilula final nao vira "sincronizada"
-      // com o tempo nem depois de mais passos.
       for (int k = 0; k < 50; k++) passo(MKV, 0);
-      v = legsync_visao(0); assert(!legsync_pilula_final(&v, "OpenSubtitles", t, sizeof t)); }
+      v = legsync_visao(0); assert(legsync_pilula_final(&v, "OpenSubtitles", t, sizeof t)); }
 
     // 12g. REGRESSAO "em todos os filmes ela fala que ta ok e ta fora de
     //      sincronia" (dono, 04/10). Um longa de 2 h (1332 falas) com a
-    //      externa +2,5 s e a embutida no MKV. A referencia custa UM Range por
-    //      fala (cada fala mora num Cluster) e a TV le no maximo LS_RITMO = 8
+    //      externa +2,5 s e a embutida no MKV. No 2.0 a referencia custava UM
+    //      Range por fala (cada fala mora num Cluster) e a TV le no maximo LS_RITMO = 8
     //      Ranges/s: o relogio do player aqui anda 125 ms por Range, o melhor
     //      caso da TV (sem latencia de rede). Antes, o teto de 45 s do plano
     //      vencia aos ~360 Ranges, cancelava a leitura, deixava a legenda +2,5 s
@@ -507,7 +512,9 @@ int main(int argc, char **argv) {
       atrasoLeitorUs = 0;
       printf("[12g] filme: %d Ranges, relogio do player %u s, autoFase %d, fase %d, offset em vigor %d ms\n",
              ranges, (agora - t0) / 1000u, v.autoFase, v.fase, legsync_offset_ms(0));
-      assert(ranges > 1200 && agora - t0 > 3u * LS_AUTO_TETO_TESTE);  // ~um Range por fala: > 2 min a 8/s
+      // 2.1: SRT com CueDuration sai do proprio indice (cabeca + Cues), sem
+      // um Range por fala: segundos em vez de > 2 min a 8/s.
+      assert(ranges <= 6 && agora - t0 < LS_AUTO_TETO_TESTE);
       assert(v.autoFase == 2 && v.fase == LEGSYNC_ACEITA && abs(v.offsetAutoMs - 2500) <= 25);
       assert(legsync_offset_ms(0) == v.offsetAutoMs);
       conferirFilme(legsync_offset_ms(0));                      // a fala certa no instante certo
@@ -515,6 +522,25 @@ int main(int argc, char **argv) {
       legsync_encerrar(); }
     casos++; }
   legsync_teste_auto(0); legsync_definir_trocador(NULL);
+
+  // 13. SEGUNDA LEGENDA (slot 1, 2.1): a mesma engine contra a mesma faixa
+  //     embutida, sozinha, mesmo com a principal embutida. Offset puro vai
+  //     para o offset automatico da legenda2; desligar a segunda zera.
+  { int k;
+    legenda2_definir_baixador(baixar2);
+    legsync_iniciar(MKV); legsync_primaria_outra(1);
+    legenda2_reiniciar(); legenda2_escolher("seg", "ext://0/ext_mais2500.srt", "pt", "Addon");
+    for (k = 0; k < 4000 && legsync_visao(1).fase != LEGSYNC_ACEITA; k++) { passo(MKV, 0); usleep(1000); }
+    passo(MKV, 0);   // o aceito chega a legenda2 no passo seguinte
+    v = legsync_visao(1);
+    assert(v.fase == LEGSYNC_ACEITA && abs(v.offsetAutoMs - 2500) <= 25 && v.autoFase == 2);
+    assert(abs(legenda2_offset_total() - 2500) <= 25);
+    { char t[200]; legsync_texto_simples(&v, t, sizeof t); assert(!strcmp(t, "Sincronizada")); }
+    assert(legsync_visao(0).motivo == LEGSYNC_M_EMBUTIDA);   // a principal nao mudou
+    legenda2_desligar(); passo(MKV, 0);
+    assert(legenda2_offset_total() == 0 && legsync_visao(1).fase == LEGSYNC_INDISPONIVEL);
+    legenda2_encerrar(); legenda2_definir_baixador(NULL);
+    casos++; }
 
   // 10. Fim de sessao e corridas de teardown: leitura presa, download pendente,
   //     analise em curso, 40 sessoes seguidas; depois destruir com tudo no ar.

@@ -239,9 +239,13 @@ LegendaDocumento *legenda2_documento(void) {
   return d;
 }
 
+static double (*volatile tempoMapa)(double);
+void legenda2_definir_tempo(double (*tempo)(double)) { tempoMapa = tempo; }
 int legenda2_cues(double posSeg, LegendaCue *dst, int max) {
   LegendaDocumento *d = NULL;
   int off = 0, n;
+  double (*f)(double) = tempoMapa;
+  if (f) posSeg = f(posSeg);   // fora da trava: legsync tem a sua
   pthread_mutex_lock(&trava);
   if (doc && estado == LEG2_ATIVA) { d = legenda_documento_reter(doc); off = limitar(offManual + offAuto); }
   pthread_mutex_unlock(&trava);
