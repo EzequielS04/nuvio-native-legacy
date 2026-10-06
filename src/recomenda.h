@@ -370,6 +370,8 @@ void recomenda_apagar_dados_sociais(void);
 // 1 quando o perfil esta publicado neste aparelho.
 int  recomenda_pesquisavel(void);
 
+enum { REC_MOTIVO_NENHUM = 0, REC_MOTIVO_TITULOS, REC_MOTIVO_GENEROS, REC_MOTIVO_ATIVOS };
+
 // UMA PESSOA VISTA POR ESTRANHO: so o que ela escolheu mostrar.
 typedef struct {
   char pub[16];               // handle opaco; NUNCA o id da conta
@@ -379,6 +381,11 @@ typedef struct {
   unsigned generos;
   char relacao[12];           // "" | "amigo" | "enviado" | "recebido"
   int  emComum;               // titulos em comum (so nas sugestoes de gosto)
+  // POR QUE o servidor sugeriu esta pessoa (so em "Gosto parecido"). 0 = servidor
+  // antigo, sem o campo: a linha nao diz nada. `motivoGeneros` = generos que as
+  // duas pessoas escolheram (mascara, como `generos`); `emComum` = n de titulos.
+  int  motivo;                // REC_MOTIVO_*
+  unsigned motivoGeneros;
   // Ultimo dos "vistos recentemente" PUBLICOS (so na lista da comunidade, e so
   // de quem ligou "Mostrar o que assisti recentemente"). Nunca "assistindo
   // agora": isso e so para amigo.

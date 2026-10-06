@@ -27,6 +27,7 @@
 #include "idioma.h"
 #include "ajustes.h"
 #include "progresso.h"
+#include "salvos.h"
 #include "logotitulo.h"
 #include "artemetahub.h"
 #include "perfis.h"
@@ -1079,7 +1080,25 @@ int recomenda_buscar(const char *texto) {
   }
   return socIniciar(SOC_BUSCAR, q);
 }
-int recomenda_sugeridos_gosto(void)   { return socIniciar(SOC_GOSTO, ""); }
+// Os salvos (lista local) entram como sinal de gosto alem do que foi concluido.
+// salvos.c nao e thread-safe e o pedido sai do fio de rede, entao os ids sao
+// copiados AQUI, no fio da interface, antes de enfileirar.
+#define GOSTO_SALVOS_MAX 20
+static char gostoSalvos[GOSTO_SALVOS_MAX][24];
+static int  nGostoSalvos;
+int recomenda_sugeridos_gosto(void) {
+  int i, n = 0, total = salvos_n();
+  for (i = 0; i < total && n < GOSTO_SALVOS_MAX; i++) {
+    const SalvoItem *it = salvos_item(i);
+    if (!it || strncmp(it->id, "tt", 2)) continue;
+    SDL_LockMutex(mtx);
+    snprintf(gostoSalvos[n], sizeof gostoSalvos[n], "%s", it->id);
+    SDL_UnlockMutex(mtx);
+    n++;
+  }
+  SDL_LockMutex(mtx); nGostoSalvos = n; SDL_UnlockMutex(mtx);
+  return socIniciar(SOC_GOSTO, "");
+}
 int recomenda_comunidade(int pagina) {
   char arg[16];
   if (pagina < 0) pagina = 0;
@@ -2109,6 +2128,17 @@ static int lerPessoa(const char *p, const char *f, RecPessoa *x) {
   semTab(x->vendo); semTab(x->nome);
   x->emComum = (int)js_num(p, f, "emComum", 0.0);
   x->generos = mascaraGeneros(p, f);
+  {
+    const char *m = strstr(p, "\"motivo\"");
+    if (m && m < f) {
+      char tp[16];
+      js_texto(m, f, "tipo", tp, sizeof tp);
+      x->motivo = !strcmp(tp, "titulos") ? REC_MOTIVO_TITULOS
+                : !strcmp(tp, "generos") ? REC_MOTIVO_GENEROS
+                : !strcmp(tp, "ativos")  ? REC_MOTIVO_ATIVOS : REC_MOTIVO_NENHUM;
+      x->motivoGeneros = mascaraGeneros(m, f);
+    }
+  }
   semTab(x->apelido); semTab(x->bio); semTab(x->avatar);
   // Handle malformado ou sem nome: nao ha o que mostrar nem como agir.
   return x->pub[0] && (x->apelido[0] || x->nome[0]);
@@ -2271,6 +2301,17 @@ static int corpoGosto(char *corpo, size_t tam) {
     k += (size_t)snprintf(corpo + k, tam - k, "%s\"%s\"", n ? "," : "", vistos[n]);
     n++;
   }
+  // Salvos: so os que ainda nao entraram como concluidos (copiados sob mutex).
+  int nFim = n;
+  SDL_LockMutex(mtx);
+  for (i = 0; i < nGostoSalvos && n < 60 && k + 32 < tam; i++) {
+    int j, dup = 0;
+    for (j = 0; j < nFim; j++) if (!strcmp(vistos[j], gostoSalvos[i])) dup = 1;
+    if (dup) continue;
+    k += (size_t)snprintf(corpo + k, tam - k, "%s\"%s\"", n ? "," : "", gostoSalvos[i]);
+    n++;
+  }
+  SDL_UnlockMutex(mtx);
   snprintf(corpo + k, tam - k, "]}");
   free(reg);
   return n;

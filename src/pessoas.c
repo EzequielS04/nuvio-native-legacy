@@ -247,6 +247,23 @@ static void vazio(const char *icone, const char *titulo, const char *texto) {
 // alguem que nao se conhece pelo nome. A relacao NAO entra aqui — ela e a
 // pilula da direita, e dize-la duas vezes era o que deixava a linha confusa.
 static void contexto(char *dst, size_t tam, const RecPessoa *p) {
+  // "Gosto parecido": o servidor diz POR QUE sugeriu (p->motivo). Servidor
+  // antigo nao manda o campo e cai nas regras de baixo, como sempre.
+  if (p->motivo == REC_MOTIVO_GENEROS && p->motivoGeneros) {
+    char gs[96] = "";
+    int i, k = 0, n = 0;
+    for (i = 0; i < REC_GENEROS_N && n < 3; i++) {
+      if (!(p->motivoGeneros & (1u << i))) continue;
+      k += snprintf(gs + k, sizeof gs - (size_t)k, "%s%s", n ? ", " : "", i18n(rec_genero_rotulo(i)));
+      n++;
+    }
+    snprintf(dst, tam, i18n("Também gosta de %s"), gs);
+    return;
+  }
+  if (p->motivo == REC_MOTIVO_ATIVOS && !p->emComum) {
+    snprintf(dst, tam, "%s", i18n("Perfil ativo na comunidade"));
+    return;
+  }
   if (p->emComum > 0) snprintf(dst, tam, i18n("%d títulos em comum"), p->emComum);
   else if (p->vendo[0]) snprintf(dst, tam, i18n("Assistiu recentemente: %s"), p->vendo);
   else snprintf(dst, tam, "%s", p->bio);
@@ -285,7 +302,7 @@ static void montar(void) {
       navL(A_COMUNIDADE, "aj_users", "Comunidade Nuvio Native",
            pq ? "Todo mundo que ligou o Perfil pesquisável" : "Ligue o Perfil pesquisável para ver");
       navL(A_GOSTO, "aj_sparkles", "Gosto parecido",
-           pq ? "Quem terminou os mesmos títulos que você" : "Ligue o Perfil pesquisável para ver"); }
+           pq ? "Quem assiste e curte o mesmo que você" : "Ligue o Perfil pesquisável para ver"); }
     secao("Você", 0);
     { Linha *l = navL(A_PERFIL, "aj_user-round", "Meu perfil", NULL);
       if (l) {
@@ -313,8 +330,14 @@ static void montar(void) {
               "Quem não aparece não vê os outros. Ligue em Meu perfil.");
         navL(A_PERFIL, "aj_user-round", "Abrir Meu perfil", NULL);
       } else if (listaOrigem == 2) {
-        vazio("aj_sparkles", "Ninguém com gosto parecido por enquanto",
-              "Aparece quem terminou 3 ou mais títulos que você também terminou.");
+        if (!recomenda_pesquisavel()) {
+          vazio("aj_eye-off", "Ligue seu perfil para ver quem tem gosto parecido",
+                "Quem não aparece não vê os outros. Ligue em Meu perfil.");
+        } else {
+          vazio("aj_sparkles", "Ninguém com gosto parecido por enquanto",
+                "Assista e marque títulos, ou escolha gêneros em Meu perfil.");
+        }
+        navL(A_PERFIL, "aj_user-round", "Abrir Meu perfil", NULL);
       } else vazio("aj_users", "Ninguém na comunidade por enquanto", "Volte mais tarde.");
     } else {
       for (i = 0; i < n; i++) { RecPessoa p; if (recomenda_achado(i, &p)) pessoaL(&p); }
@@ -1133,7 +1156,7 @@ static const char *subDe(void) {
   switch (pagina) {
     case PG_MENU:    return "Ache amigos pelo apelido ou pelo código de 6 letras que eles te passarem.";
     case PG_LISTA:   return listaOrigem == 3 ? "Quem ligou o Perfil pesquisável, com atividade mais recente primeiro."
-                          : listaOrigem == 2 ? "Pessoas que também terminaram vários dos seus títulos."
+                          : listaOrigem == 2 ? "Quem tem títulos ou gêneros em comum com você."
                           : "";
     case PG_PEDIDOS: return recomenda_n_pedidos() ? "Só vira amizade se você aceitar. Recusar não avisa a pessoa." : "";
     case PG_PERFIL:  return "Estranhos veem só o apelido e o que você ligar aqui. Desligar apaga do servidor na hora.";
