@@ -51,27 +51,9 @@ static void ajCenaTrocaAtualizar(float dt) {
 // Acompanha o despacho de ajPrevia/ajPreviaCarta: previa nova com cena propria
 // entra aqui, senao ela troca em corte com as vizinhas de submenu.
 static int ajCenaChave(int sec, int op) {
-  if (op < 0) return 2000 + sec * 64 + ajCenaArteN(sec);
-  switch (op) {
-    case AJ_HOME_LAYOUT: case AJ_TEMA: case AJ_COR_LOGO: case AJ_FUNDO:
-    case AJ_TAMANHO_UI: case AJ_TAMANHO_AJUSTES: case AJ_FONTE_UI:
-    case AJ_LOGO_APP: case AJ_ABERTURA: case AJ_ICONE_APP:
-    case AJ_TRAKT: case AJ_SIMKL:
-      return op;
-    case AJ_LARGURA_DP: case AJ_RAIO_DP: return AJ_LARGURA_DP;
-    case AJ_ENVIAR_LOG: case AJ_VER_REGISTRO: case AJ_ENVIO_AUTO: return AJ_ENVIAR_LOG;
-    case AJ_CW_LIGADO: case AJ_CW_OK: case AJ_CW_ESTILO: case AJ_CW_THUMB: case AJ_CW_BLUR_PROX:
-    case AJ_CW_ORDEM: case AJ_CW_NAO_EXIBIDOS: case AJ_CW_FURTHEST:
-      return AJ_CW_LIGADO;
-    case AJ_CW_CONCLUIDO: return op;   // a mesma previa, noutra categoria (outra arte)
-    case AJ_ESPACO: case AJ_TEX_MB: return AJ_ESPACO;
-    default: {
-      // Submenu com cena propria: a chave e a cena (todas as opcoes do bloco
-      // dividem a imagem, so a marca da opcao anda). Senao a da categoria.
-      int c = ajCenaSecao(op);
-      return c >= 0 ? 3000 + c : 2000 + uxSecaoDe(op) * 64 + ajCenaArteOp(op);
-    }
-  }
+  // 2.0.2: cada opcao tem o seu desenho gerado; trocar de opcao e uma troca
+  // de cena (cruzamento de 0,22 s, sem espera: nao ha imagem para ler).
+  return op < 0 ? 2000 + sec : op;
 }
 static float ajCenaTrocaDesenhar(int quadro, AjCenaRef c, float x, float y, float w, float corte) {
   if (quadro == AJ_TROCA_RESUMO) return aj2PreviaCategoria(c.sec, x, y, w, corte);

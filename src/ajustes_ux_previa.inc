@@ -835,6 +835,7 @@ static float ajPreviaApoio(int op, float x, float y, float w) {
 // da categoria (nunca o icone da opcao nem uma cena de outra categoria).
 static float ajPrevia(int op, float x, float y, float w) {
   float h = -1;
+  if (op >= 0) return ajCenaGerada(uxSecaoDe(op), op, x, y, w);   // 2.0.2: sempre o desenho gerado
   switch (op) {
     case AJ_HOME_LAYOUT: h = ajPreviaLayout(x, y, w); break;
     case AJ_LARGURA_DP: case AJ_RAIO_DP: h = ajPreviaCartaz(op, x, y, w); break;
@@ -909,7 +910,9 @@ static float ajOrdemHome(float x, float y, float w) {
     l = ajTxtC(TXT_ILHA_GENERO, fil_titulo(f)[0] ? fil_titulo(f) : fil_chave(f), w - 40 - 62 - 80);
     txt_desenhar_alpha(l, x + 20 + 62, y + (36 - l.h) * 0.5f, sai ? 0.35f : novo ? 1.0f : 0.62f);
     for (k = 0; k < 3; k++)
-      ajImg(ajPosterFileira(f, k), (GfxRect){ x + w - 20 - 3 * 20 - 2 * 6 + k * 26, y + 3, 20, 30 }, 4, (novo ? 1.0f : 0.7f) * (sai ? 0.4f : 1.0f));
+      { float mr, mg, mb;   // 2.0.2: cartaz abstrato (bloco de cor), sem foto
+        ajc_matiz(f * 3 + k, &mr, &mg, &mb);
+        gfx_cor((GfxRect){ x + w - 20 - 3 * 20 - 2 * 6 + k * 26, y + 3, 20, 30 }, 4.0f / 30.0f, mr, mg, mb, (novo ? 1.0f : 0.7f) * (sai ? 0.4f : 1.0f)); }
     y += 36;
   }
   return 30 + h;
@@ -932,7 +935,12 @@ void ajustes_previa_busca(int op, float x, float y, float w, float h, float a) {
   char v[160];
   TxtLinha l;
   if (op < 0 || op >= AJ_N) return;
-  ajImg(ajArte(AJA_FUNDO, 21), (GfxRect){ x, y, w, h }, 14, a);
+  // 2.0.2: a previa gerada da opcao (sem foto), no meio do quadro pedido.
+  { float g = gfx_opacidade_grupo, cw = h * 16.0f / 9.0f;
+    if (cw > w) cw = w;
+    gfx_opacidade_grupo = g * a;
+    ajCenaGerada(uxSecaoDe(op), op, x + (w - cw) * 0.5f, y + (h - cw * 9.0f / 16.0f) * 0.5f, cw);
+    gfx_opacidade_grupo = g; }
   uxValorTexto(op, uxValorAtual(op), v, sizeof v);
   if (!v[0]) return;
   l = txt_linha_corta(TXT_MINI, v, 255, 255, 255, 255, w - 40);

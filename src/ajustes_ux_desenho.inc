@@ -1145,8 +1145,10 @@ static float ajEf(const char *icone, const char *s, float x, float y, float w, f
   ajBloco(TXT_AJ_ESTADO, s, x + 16 + 20 + 12, y + 14, tw, 24.65f, 0.72f * a, 6);
   return h + 28;
 }
+#include "ajcena.inc"              // o kit das previas geradas (2.0.2)
 #include "ajustes_ux_visual.inc"
 #include "ajustes_ux_previa.inc"
+#include "ajustes_ux_cenas.inc"     // qual previa gerada cada opcao mostra
 #include "ajustes_ux_v2.inc"
 #include "ajustes_ux_ilha.inc"
 #include "ajustes_ux_fileiras.inc"

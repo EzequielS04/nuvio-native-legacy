@@ -477,112 +477,12 @@ static float aj2PreviaCategoria(int sec, float x, float y, float w, float h) {
   gfx_sem_recorte();
   return h;
 }
-// A tela de Ajustes da v2 em miniatura no fundo `modo` (cartoes do Fundo e a
-// previa do inspetor): o fundo de verdade e tres ilhas com tracos no lugar do
-// texto. Desenhada em escala, sem FBO.
+// Os cartoes da linha Fundo: a tela de cada modo, gerada (2.0.2, sem foto).
 static void aj2MiniFundo(int modo, float x, float y, float w, float a) {
-  float s = w / 1920.0f, h = w * 9.0f / 16.0f, rr = w > 300.0f ? 16.0f : 12.0f, ar, ag, ab;
-  GfxRect q = { x, y, w, h };
-  int i;
-  static const float BAR[5] = { 340, 260, 300, 220, 280 };
-  ajustes_acento(&ar, &ag, &ab);
-  (void)ar; (void)ag; (void)ab;
-  gfx_recorte(x, y, w, h);
-  fundo_desenhar_modo(modo, q, rr, ajFundoArte(), a);
-  // as tres ilhas (menu recuado, lista com uma linha em foco, inspetor)
-#define FX(v) (x + (v) * s)
-#define FY(v) (y + (v) * s)
-  { float va = ajVid() ? 0.80f : 1.0f;
-    float r0 = ajVid() ? 0.055f : 0.082f, g0 = ajVid() ? 0.059f : 0.086f, b0 = ajVid() ? 0.071f : 0.102f;
-    gfx_cor((GfxRect){ FX(48), FY(112), 640 * s, 928 * s }, 36.0f / 928.0f, r0, g0, b0, va * a);
-    gfx_cor((GfxRect){ FX(172), FY(40), 1000 * s, 1000 * s }, 40.0f / 1000.0f, r0, g0, b0, va * a);
-    gfx_cor((GfxRect){ FX(1196), FY(40), 684 * s, 1000 * s }, 40.0f / 1000.0f, r0, g0, b0, va * a);
-    { TxtEstilo e = ajEstiloPx(52 * s, 1);
-      if ((int)e >= 0) { TxtLinha l = ajTxt(e, "Aparência"); txt_desenhar_alpha(l, FX(222), FY(82) + (52 * s * 1.2f - l.h) * 0.5f, a); } }
-    for (i = 0; i < 5; i++) {
-      float ry = 40 + 42 + 63 + 8 + i * 104;
-      if (i == 1) gfx_cor((GfxRect){ FX(222), FY(ry), 900 * s, 96 * s }, 0.29f, 1, 1, 1, 0.12f * a);
-      gfx_cor((GfxRect){ FX(252), FY(ry + 37), BAR[i] * s, 22 * s }, 0.5f, 0.953f, 0.949f, 0.937f, 0.45f * a);
-    } }
-#undef FX
-#undef FY
-  gfx_sem_recorte();
+  ajcMiniFundo(modo, x, y, w, a);
 }
-// Cor de destaque (acentos-mockup.html, quadro 1): a PREVIA VIVA da cor — o
-// cartao de um titulo com o que a cor pinta (marcas, botao em foco, chip
-// ligado, pagina ativa, a luz do aviso) — e, embaixo do texto de ajuda, as
-// medidas que ela tem de passar (aj2CorMedidas). A cor e a PENDENTE: o
-// inspetor troca valor[AJ_TEMA] enquanto desenha (ajDesenharInspetor).
 static void aj2Cor8(const float c[3], int *r, int *g, int *b) {
   *r = (int)(c[0] * 255.0f + 0.5f); *g = (int)(c[1] * 255.0f + 0.5f); *b = (int)(c[2] * 255.0f + 0.5f);
-}
-static float aj2PreviaCor(float x, float y, float w) {
-  // O cartao do mockup (540x300) na largura do inspetor, a 2:1: a ilha da v2 e
-  // mais baixa que a do mockup das cores, e as medidas tem de caber embaixo.
-  float h = w * 0.5f, s = h / 300.0f, ac[3], mc[3], hd[3], tk;
-  int r8, g8, b8;
-  GfxRect q = { x, y, w, h };
-  const char *arte = ajFundoArte();
-  ajustes_acento(&ac[0], &ac[1], &ac[2]);
-  ajustes_acento_marca(&mc[0], &mc[1], &mc[2]);
-  ajustes_acento_hdr(&hd[0], &hd[1], &hd[2]);
-  tk = ajustes_acento_tinta(NULL, NULL, NULL);
-#define PX(v) (x + (v) * s)
-#define PY(v) (y + (v) * s)
-  gfx_recorte(x, y, w, h);
-  if (!ajImg(arte, q, 22.0f * s, 1)) gfx_cor(q, 22.0f * s / h, 0.10f, 0.105f, 0.12f, 1);
-  // veu: linear-gradient(90deg, rgba(8,8,10,.92), rgba(8,8,10,.35) 75%)
-  gfx_cor(q, 22.0f * s / h, 0.031f, 0.031f, 0.039f, 0.35f);
-  gfx_veu_css((GfxRect){ x, y, w * 0.75f, h }, 2, 0, 1.0f, 0.877f);
-  ajCaps(TXT_AJ_CAPS13, "Filme · 2026 · 119 min", 1.9f, PX(26), PY(20), 0.5f);
-  ajLogo(ajArte(AJA_LOGO, ajArteFundoN), PX(24), PY(44), 250.0f * s, 78.0f * s, 1);
-  { char up[64]; float mx = PX(26);
-    static const char *const M[3] = { "4K", "DOLBY VISION", "DOLBY ATMOS" };
-    int k;
-    for (k = 0; k < 3; k++) {
-      const float *c = k < 2 ? mc : hd;
-      aj2Cor8(c, &r8, &g8, &b8);
-      snprintf(up, sizeof up, "%s", M[k]);
-      mx += txt_tracking(TXT_AJ_CAPS13, up, r8, g8, b8, mx, PY(132), 1, 1.3f) + 12.0f * s;
-    } }
-  // botao em foco
-  { int ti = (int)(tk * 255.0f + 0.5f);
-    TxtLinha l = txt_linha(TXT_G20B, i18n("Reproduzir"), ti, ti, ti, 255);
-    float bh = 46.0f * s, bw = 16.0f * s + 18.0f * s + 8.0f * s + l.w + 20.0f * s;
-    ajPilulaAcento((GfxRect){ PX(26), PY(166), bw, bh }, bh * 0.5f, 1);
-    gfx_icone((GfxRect){ PX(26) + 16.0f * s, PY(166) + (bh - 18.0f * s) * 0.5f, 18.0f * s, 18.0f * s }, "pl_play-f", tk, tk, tk, 1);
-    txt_desenhar(l, PX(26) + 42.0f * s, PY(166) + (bh - l.h) * 0.5f);
-    gfx_cor((GfxRect){ PX(26) + bw + 14.0f * s, PY(166), bh, bh }, 0.5f, 1, 1, 1, 0.12f);
-    gfx_cor((GfxRect){ PX(26) + bw + 14.0f * s + bh + 8.0f * s, PY(166), bh, bh }, 0.5f, 1, 1, 1, 0.12f); }
-  // chip ligado + pagina ativa
-  { TxtLinha l;
-    float ch = 38.0f * s, cw;
-    aj2Cor8(mc, &r8, &g8, &b8);
-    l = txt_linha(TXT_G16B, i18n("Só MP4"), r8, g8, b8, 255);
-    cw = 15.0f * s + 7.0f * s + 8.0f * s + l.w + 15.0f * s;
-    gfx_cor((GfxRect){ PX(26), PY(232), cw, ch }, 0.5f, 0.055f, 0.059f, 0.071f, 0.7f);
-    gfx_cor((GfxRect){ PX(26), PY(232), cw, ch }, 0.5f, ac[0], ac[1], ac[2], 0.22f);
-    gfx_cor((GfxRect){ PX(26) + 15.0f * s, PY(232) + (ch - 7.0f * s) * 0.5f, 7.0f * s, 7.0f * s }, 0.5f, mc[0], mc[1], mc[2], 1);
-    txt_desenhar(l, PX(26) + 30.0f * s, PY(232) + (ch - l.h) * 0.5f);
-    { float dx = PX(26) + cw + 22.0f * s; int k;
-      for (k = 0; k < 4; k++) {
-        float dw = (k == 1 ? 18.0f : 6.0f) * s;
-        if (k == 1) gfx_cor((GfxRect){ dx, PY(248), dw, 6.0f * s }, 0.5f, mc[0], mc[1], mc[2], 1);
-        else gfx_cor((GfxRect){ dx, PY(248), dw, 6.0f * s }, 0.5f, 0.953f, 0.949f, 0.937f, 0.3f);
-        dx += dw + 7.0f * s;
-      } } }
-  // a ilha do aviso, com a luz do acento
-  { TxtLinha l = txt_linha(TXT_G16B, i18n("Começa em 5 min"), 243, 242, 239, 255);
-    float ih = 44.0f * s, iw = 8.0f * s + 30.0f * s + 10.0f * s + l.w + 14.0f * s;
-    GfxRect il = { x + w - 18.0f * s - iw, PY(18), iw, ih };
-    gfx_cor(il, 0.5f, 0.055f, 0.059f, 0.071f, 0.82f);
-    gfx_cor((GfxRect){ il.x + 8.0f * s, il.y + 7.0f * s, 30.0f * s, 30.0f * s }, 0.5f, ac[0], ac[1], ac[2], 0.24f);
-    gfx_icone((GfxRect){ il.x + 15.0f * s, il.y + 14.0f * s, 16.0f * s, 16.0f * s }, "aj_bell", mc[0], mc[1], mc[2], 1);
-    txt_desenhar(l, il.x + 48.0f * s, il.y + (ih - l.h) * 0.5f); }
-#undef PX
-#undef PY
-  gfx_sem_recorte();
-  return h;
 }
 // As MEDIDAS da cor (o "tok" do mockup): pilula, pilula contra a ilha, marca
 // no escuro, chip ligado e "HDR" de grupo, cada uma com a razao de contraste
