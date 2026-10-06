@@ -41,6 +41,9 @@ int  central_tecla_ocupada(void);
 #ifdef CENTRAL_TESTE
 // Capturas: foco num botao (-1 = "Editar atalhos") e modo edicao.
 void central_teste_foco(int foco, int editar);
+// Um "Tocando agora" de mentira (NULL tira) e a lista de atalhos pelo texto do arquivo.
+void central_teste_tocando(const char *tit, const char *meta);
+void central_teste_lista(const char *texto);
 #endif
 
 #endif

@@ -106,35 +106,50 @@ int main(int argc, char **argv) {
   tex_iniciar(64);
 
   quadros(40, 0.0f);                        // texto e icones sobem
-  snprintf(nome, sizeof nome, "%s-1-pilula.bmp", saida);
+  snprintf(nome, sizeof nome, "%s-01-pilula.bmp", saida);
   captura(nome, 30);
   quadros(20, 0.55f);
-  snprintf(nome, sizeof nome, "%s-2-segurando.bmp", saida);
+  snprintf(nome, sizeof nome, "%s-02-segurando.bmp", saida);
   salvar(nome);
 
-  central_teste_foco(1, 0);                  // abre: a pilula estica
-  snprintf(nome, sizeof nome, "%s-3-morfo-a.bmp", saida);
-  captura(nome, 5);
-  snprintf(nome, sizeof nome, "%s-4-morfo-b.bmp", saida);
+  // TRES ATALHOS: o painel curto.
+  central_teste_lista("dolbyVision\nqualidade\ntrailerAuto\n");
+  central_teste_foco(0, 0);                  // abre: a pilula estica
+  snprintf(nome, sizeof nome, "%s-03-morfo-a.bmp", saida);
   captura(nome, 6);
-  snprintf(nome, sizeof nome, "%s-5-morfo-c.bmp", saida);
-  captura(nome, 9);
-  snprintf(nome, sizeof nome, "%s-6-aberta.bmp", saida);
+  snprintf(nome, sizeof nome, "%s-04-morfo-b.bmp", saida);
+  captura(nome, 8);
+  snprintf(nome, sizeof nome, "%s-05-aberta-3.bmp", saida);
   captura(nome, 80);
+
+  // OITO: cresce na mola, sem fechar.
+  central_teste_lista("qualidade\ndolbyVision\ndolbyAtmos\nescolherFonteManual\n"
+                      "trailerAuto\nesmaecerLocal\nvidroLocal\nselosColoridosLocal\n");
+  snprintf(nome, sizeof nome, "%s-06-crescendo.bmp", saida);
+  captura(nome, 8);
+  snprintf(nome, sizeof nome, "%s-07-aberta-8.bmp", saida);
+  captura(nome, 80);
+
+  central_teste_tocando("Severance", "T2 E3 · 2160p · Dolby Vision · Atmos");
+  central_teste_lista(NULL);
+  central_teste_foco(3, 0);
+  snprintf(nome, sizeof nome, "%s-08-tocando.bmp", saida);
+  captura(nome, 80);
+  central_teste_tocando(NULL, NULL);
 
   ajustes_definir_vidro(1);
   central_teste_foco(-1, 0);
-  snprintf(nome, sizeof nome, "%s-7-vidro-editar.bmp", saida);
-  captura(nome, 10);
+  snprintf(nome, sizeof nome, "%s-09-vidro-editar.bmp", saida);
+  captura(nome, 60);
 
   central_teste_foco(-1, 1);
-  snprintf(nome, sizeof nome, "%s-8-edicao.bmp", saida);
-  captura(nome, 10);
+  snprintf(nome, sizeof nome, "%s-10-edicao.bmp", saida);
+  captura(nome, 80);
 
   central_fechar();                          // volta para a pilula
-  snprintf(nome, sizeof nome, "%s-9-fechando.bmp", saida);
+  snprintf(nome, sizeof nome, "%s-11-fechando.bmp", saida);
   captura(nome, 8);
-  snprintf(nome, sizeof nome, "%s-10-fechada.bmp", saida);
+  snprintf(nome, sizeof nome, "%s-12-fechada.bmp", saida);
   captura(nome, 80);
 
   tex_encerrar(); txt_encerrar(); gfx_encerrar();

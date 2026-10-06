@@ -113,6 +113,7 @@ static float modalT, modalV, modalFocoA[ILHA_MODAL_BOTOES];
 // O CORPO PEDIDO (ilha_corpo): vale um quadro; o ultimo fica para a saida.
 static int corpoPed;
 static float corpoW, corpoH, corpoT, corpoV;
+static float corpoWa, corpoHa, corpoVw, corpoVh;   // o tamanho na mola (o pedido muda)
 static IlhaCorpo corpoFn;
 static void *corpoU;
 static Uint32 modalDesde;
@@ -1842,7 +1843,15 @@ static void ilha_desenharCorpo_(Uint32 agora) {
     if (gfx_efeitos_minimos()) { corpoT = alvoC; corpoV = 0.0f; }
     else if (gfx_efeitos_leves()) corpoT = molaIlhaWZ(&corpoV, corpoT, alvoC, dt, MODAL_MOLA_W * 1.5f, 1.0f);
     else corpoT = molaIlhaWZ(&corpoV, corpoT, alvoC, dt, MODAL_MOLA_W, MODAL_MOLA_Z);
-    if (!quer && corpoT < 0.01f) { corpoT = 0.0f; corpoV = 0.0f; } }
+    if (!quer && corpoT < 0.01f) { corpoT = 0.0f; corpoV = 0.0f; }
+    // O TAMANHO PEDIDO MUDA com o painel aberto (botao posto ou tirado, a
+    // edicao): anda na mola da pilula em vez de saltar. Nascendo, ja e o alvo.
+    if (corpoT <= 0.0f || corpoWa <= 0.0f || gfx_efeitos_minimos()) {
+      corpoWa = corpoW; corpoHa = corpoH; corpoVw = corpoVh = 0.0f;
+    } else {
+      corpoWa = molaIlha(&corpoVw, corpoWa, corpoW, dt);
+      corpoHa = molaIlha(&corpoVh, corpoHa, corpoH, dt);
+    } }
   vis = alvo != M_RELOGIO || relogioQuer || (modalAviso && (modalAberto || modalT > 0.01f)) || corpoT > 0.0f;
   // O MEDIDOR so ocupa a ilha LIVRE: com aviso, atividade, modal ou voo ele
   // sai (o pouso e os avisos nunca esperam por ele) e volta depois.
@@ -1963,7 +1972,7 @@ static void ilha_desenharCorpo_(Uint32 agora) {
     else if (corpoT > 0.0f && corpoFn) {
       int soHora = mostra == M_RELOGIO && dsMostra == DS_DESLIGADO;
       float k3 = (corpoT - 0.08f) * 5.0f;
-      GfxRect C = { dir ? x - corpoW : x, y, corpoW, corpoH };
+      GfxRect C = { dir ? x - corpoWa : x, y, corpoWa, corpoHa };
       float t = corpoT > 1.06f ? 1.06f : corpoT, tr = t > 1.0f ? 1.0f : t, rpx;
       R.x = r.x + (C.x - r.x) * t; R.y = r.y + (C.y - r.y) * t;
       R.w = r.w + (C.w - r.w) * t; R.h = r.h + (C.h - r.h) * t;
@@ -2047,7 +2056,7 @@ static void ilha_desenharCorpo_(Uint32 agora) {
     if (aMod > 0.0f && modalT > 0.0f) desenharModal(modalAlvo(r, dir), A * aMod);
     if (corpoT > 0.0f && corpoFn && modalT <= 0.0f) {
       horaNoLugar(x, dir, y, A * aHora);
-      if (aMod > 0.0f) corpoFn((GfxRect){ dir ? x - corpoW : x, y, corpoW, corpoH }, A * aMod, corpoU);
+      if (aMod > 0.0f) corpoFn((GfxRect){ dir ? x - corpoWa : x, y, corpoWa, corpoHa }, A * aMod, corpoU);
     }
     gfx_sem_recorte();
     // Magic Remote: o clique na pilula com um cartao abre o modal.
