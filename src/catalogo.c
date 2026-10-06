@@ -753,7 +753,7 @@ typedef struct {
   // estes dois campos, a primeira abertura depois de trocar de conta ou de
   // perfil mostrava a home da ANTERIOR — watchlist, continuar assistindo e o
   // feed de amigos com nome e avatar — ate a rede substituir. E nao e so
-  // estetico: cada CatFileira leva `base[600]`, campo desse tamanho porque o
+  // estetico: cada CatFileira leva `base` (addonurl.h), campo desse tamanho porque o
   // Xperience embute um JWT no CAMINHO (ver catalogo.h). O arquivo carrega
   // credencial de addon do usuario anterior.
   char usuario[64];   // `sub` do JWT; "" quando deslogado

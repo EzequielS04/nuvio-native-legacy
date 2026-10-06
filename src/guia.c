@@ -204,6 +204,15 @@ typedef struct {
   // o canal de OUTRO addon ate o timeout dele. Medido na C9 em 18/09: com o
   // FrostView desligado, 1,6 s da tecla ate a fonte; ligado, dezenas de
   // segundos e "nao foi possivel abrir a fonte" num canal que ele nem fornece.
+  //
+  // FICA EM 600, e nao em NV_ADDON_URL_MAX (#201). Sao tres vetores de
+  // G_MAX_CANAL (canais, sCanais e o tmp de empacotar): com 2048 o guia
+  // custaria 3,9 MB a mais — CONTA, do tamanho dos simbolos, nao medicao em TV.
+  // A base aqui e so o ATALHO "pergunte a este addon": quando a do addon nao
+  // cabe, o canal fica com ela VAZIA (ver lerPagina), que e o caso "pergunta a
+  // todos" de sempre. Mais lento para esse addon, nunca uma URL cortada. Todo
+  // mundo que recebe a base de um canal (lembrete, fontecache, spotlight,
+  // diagnostico da Live TV) herda este teto, e por isso continua em 600.
   char base[600];
   int  cat;      // indice em cats[]
   int  epg;      // -1 = ainda nao resolvido; -2 = sem grade real
@@ -228,7 +237,7 @@ static char focoPend[80];
 // Catalogos de canal descobertos na home (tipo "channel"/"tv").
 // `nome` e o nome do catalogo no manifesto (ou o titulo da fileira): vira a
 // categoria do canal que nao traz genero nenhum — ver lerPagina.
-typedef struct { char base[600], tipo[16], id[96], nome[96]; } GFonte;
+typedef struct { char base[NV_ADDON_URL_MAX], tipo[16], id[96], nome[96]; } GFonte;
 static GFonte fontes[G_MAX_FONTE]; static int nFontes, fontesOk;
 // Copia de trabalho do fio: as fileiras sao so o caminho rapido. O manifesto
 // de cada addon ativo declara TODOS os catalogos de canal, montados na home
@@ -337,7 +346,7 @@ static void previewGravar(void) {
 // painel de addons dizer "fornece canais" / "sem catalogo de canais" em vez
 // de listar os dezesseis addons da conta sem distinguir nada. -1 = manifesto
 // nao respondeu (nao e "nao fornece": e "nao se sabe").
-typedef struct { char base[600]; int canal; } GSabe;
+typedef struct { char base[NV_ADDON_URL_MAX]; int canal; } GSabe;
 #define G_MAX_SABE 16
 static GSabe sSabe[G_MAX_SABE]; static int sNSabe;   // do fio
 static GSabe sabe[G_MAX_SABE];  static int nSabe;    // publicado
@@ -374,7 +383,7 @@ static int baseLigada(const char *base) {
 // DUAS COLUNAS E NAO i18n(): descricao e texto livre, nao chave de tabela. A
 // tabela de idioma_tab.h e para o que o app diz de si; o que o addon diz de si
 // vive no arquivo curado, nas duas linguas.
-typedef struct { char nome[64]; char url[600]; char desc[200]; char descEn[200]; } GRec;
+typedef struct { char nome[64]; char url[NV_ADDON_URL_MAX]; char desc[200]; char descEn[200]; } GRec;
 static GRec rec[G_MAX_REC]; static int nRec;
 
 // ONDE FICA A PASTA art/. Este modulo nao recebe dirArte (so main.c o tem, e
@@ -404,7 +413,7 @@ static FILE *abrirNaArte(const char *nome) {
 // Relida a cada abertura do painel: o arquivo e pequeno e o dono edita sem
 // reiniciar o app.
 static void recLer(void) {
-  char linha[1000];
+  char linha[NV_ADDON_URL_MAX + 512];   // nome, URL inteira (addonurl.h) e as duas descricoes
   FILE *f = abrirNaArte("addons-recomendados.txt");
   nRec = 0;
   if (!f) return;
@@ -439,7 +448,7 @@ static void baseDaUrl(const char *url, char *dst, size_t tam) {
 }
 
 static int recInstalado(const GRec *r) {
-  char base[600];
+  char base[NV_ADDON_URL_MAX];
   baseDaUrl(r->url, base, sizeof base);
   for (int i = 0; i < addons_n(); i++)
     if (!strcmp(addons_base(i), base)) return 1;
@@ -592,16 +601,18 @@ static int sCanalPorId(const char *id) {
 // quantos entraram de fato — a diferenca e o que separa "acabou" de
 // "catalogo que ignora skip e repete a mesma pagina".
 static int lerPagina(const GFonte *f, int skip, int teto, int *novos) {
-  char url[1200];
+  char url[NV_ADDON_PEDIDO_MAX];
   char *corpo;
   const char *p;
-  int n = 0;
+  int n = 0, w, semBase = 0;
   if (skip > 0)
-    snprintf(url, sizeof url, "%s/catalog/%s/%s/skip=%d.json",
-             f->base, f->tipo, f->id, skip);
+    w = snprintf(url, sizeof url, "%s/catalog/%s/%s/skip=%d.json",
+                 f->base, f->tipo, f->id, skip);
   else
-    snprintf(url, sizeof url, "%s/catalog/%s/%s.json", f->base, f->tipo, f->id);
+    w = snprintf(url, sizeof url, "%s/catalog/%s/%s.json", f->base, f->tipo, f->id);
   *novos = 0;
+  // Pedido cortado nao sai (addonurl.h); o log leva o nome do catalogo.
+  if (!nv_addon_pedido_coube(f->nome, w, sizeof url)) return 0;
   corpo = rede_baixar(url, 15);
   if (!corpo) return 0;
   p = js_array(corpo, NULL, "metas");
@@ -637,12 +648,22 @@ static int lerPagina(const GFonte *f, int skip, int teto, int *novos) {
         if (h) snprintf(gen, sizeof gen, "%s", h);
       }
       c.cat = sCatDe(gen[0] ? gen : f->nome[0] ? f->nome : "Outros");
-      snprintf(c.base, sizeof c.base, "%s", f->base);
+      // Base que nao cabe fica VAZIA, nunca cortada (ver GCanal.base).
+      if (strlen(f->base) < sizeof c.base) snprintf(c.base, sizeof c.base, "%s", f->base);
+      else { c.base[0] = 0; semBase++; }
       if (c.cat >= 0) { sCanais[sNCanais++] = c; (*novos)++; }
     }
     p = js_prox(fim);
   }
   free(corpo);
+  // Dito uma vez por pagina, com o nome do catalogo e o tamanho — nunca a URL.
+  if (semBase) {
+    printf("[guia] %s: base do addon com %lu caracteres nao cabe no canal (maximo %lu): "
+           "%d canal(is) perguntam a fonte a todos os addons\n",
+           f->nome, (unsigned long)strlen(f->base),
+           (unsigned long)sizeof(((GCanal *)0)->base) - 1, semBase);
+    fflush(stdout);
+  }
   return n;
 }
 
@@ -685,7 +706,7 @@ static void sondaManifestos(void) {
   sNSabe = 0;
   for (a = 0; a < addons_n() && sNFontes < G_MAX_FONTE; a++) {
     const char *base;
-    char url[700];
+    char url[NV_ADDON_PEDIDO_MAX];
     char *corpo;
     const char *p, *fim;
     int ativo = addons_ativo(a), temCanal = 0;
@@ -719,8 +740,9 @@ static void sondaManifestos(void) {
     // ADDON DESLIGADO TAMBEM E LIDO, so que nao vira fonte. Custa um GET por
     // addon desligado (medido: 0 a 3 numa conta tipica) e e o que permite ao
     // painel dizer se vale a pena religa-lo para o guia.
-    snprintf(url, sizeof url, "%s/manifest.json", base);
-    corpo = rede_baixar(url, 15);
+    corpo = nv_addon_pedido_coube(addons_nome(a), snprintf(url, sizeof url, "%s/manifest.json", base),
+                                  sizeof url)
+            ? rede_baixar(url, 15) : NULL;
     if (!ativo) {
       if (corpo) {
         fim = corpo + strlen(corpo);

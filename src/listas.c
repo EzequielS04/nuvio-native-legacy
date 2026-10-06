@@ -5,6 +5,7 @@
 #include "nuvem.h"
 #include "descoberta.h"
 #include "colecoes.h"
+#include "addons.h"
 #include "fileiras.h"
 #include "dados.h"
 #include "perfis.h"
@@ -750,7 +751,10 @@ void lst_abrir(const LstLista *l, const char *midia) {
       const ColFolder *f = col_folder(i);
       if (!f || strcmp(f->id, l->colId) || !f->nSources) continue;
       if (f->sources[0].prov[0]) desc_vertudo_fonte(&f->sources[0]);
-      else desc_vertudo_filtro(f->sources[0].base, f->sources[0].type,
+      // Base vazia = nao coube no atalho da fonte (colecoes.c): a inteira esta
+      // na tabela de addons.
+      else desc_vertudo_filtro(f->sources[0].base[0] ? f->sources[0].base
+                               : addons_base_por_id(f->sources[0].addonId), f->sources[0].type,
                                f->sources[0].catId, f->sources[0].genre);
       return;
     } }
