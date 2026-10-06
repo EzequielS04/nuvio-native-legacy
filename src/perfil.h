@@ -8,6 +8,7 @@
 
 #include <SDL2/SDL.h>
 #include <stdint.h>
+#include <stddef.h>
 
 // QUATRO, e nao oito e seis. A tela nao rola mais: cabem quatro cards de
 // destaque e quatro pastilhas de genero, e buscar mais do que se desenha so
@@ -117,5 +118,11 @@ void perfil_desenhar(Uint32 agora);
 // Retorna 1 uma vez apos OK num destaque. `saida`, se nao NULL, recebe copia
 // estavel do item para o app abrir detalhes sem depender do storage interno.
 int perfil_item_selecionado(PerfilDestaque *saida);
+
+// Retorna 1 uma vez apos OK no seletor do duelo ("Voce e Fulano"): `id`
+// recebe o pessoaId de socialvis para o app abrir o perfil do amigo.
+int perfil_pediu_amigo(char *id, size_t tam);
+// Depois de perfil_abrir, na volta do perfil do amigo: reabre o duelo.
+void perfil_voltar_ao_duelo(void);
 
 #endif
