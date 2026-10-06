@@ -3445,8 +3445,10 @@ static void desenhaAtvLinha(int i, float dx, float y, float a, Uint32 agora) {
   linha[0] = 0;
   if (e->acao == SV_AGORA && e->restanteMin > 0)
     snprintf(linha, sizeof linha, i18n("faltam %d min"), e->restanteMin);
-  else if (e->acao == SV_ABANDONO && e->pct >= 0)
-    snprintf(linha, sizeof linha, i18n("Parou aos %d%%"), e->pct);
+  // A NOTA DO TRACKER, quando houve: a linha diz o que a pessoa achou, nao so
+  // que viu. (A saida do player, "parou aos 18%", nao chega mais ao feed.)
+  else if (e->nota > 0)
+    snprintf(linha, sizeof linha, i18n("Nota %d/10"), (e->nota + 5) / 10);
   juntar(linha, sizeof linha, q);
   // OS TRES ANDARES NA ESCALA _L (28 / 22 / 17), centrados na linha de 142.
   { float ty = y + (SPA_H - (34.0f + 5.0f + 27.0f + 5.0f + 21.0f)) * 0.5f;

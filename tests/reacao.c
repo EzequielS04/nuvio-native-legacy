@@ -213,10 +213,11 @@ static void fila(void) {
   CHECA(naFila("\"ev\":\"progresso\",") == 1 && naFila("\"pct\":5,\"seg\":300,") == 1,
         "progresso aos 5 min tocando, com seg do trecho");
   atividade_player_saiu(600, 6000, 0);
-  CHECA(naFila("\"ev\":\"abandono\"") == 1 && naFila("\"pct\":10,\"seg\":0,") == 1,
-        "parada a 10% = abandono");
+  CHECA(naFila("\"ev\":\"abandono\"") == 0, "sair do player nao e mais abandono");
+  CHECA(naFila("\"pct\":10,\"seg\":0,") == 1 && naFila(",\"parou\":1}") == 1,
+        "parada a 10% = progresso com parou=1 (so fecha o agora)");
   atividade_player_saiu(600, 6000, 0);
-  CHECA(naFila("\"ev\":\"abandono\"") == 1, "saida sem trecho nao repete");
+  CHECA(naFila(",\"parou\":1}") == 1, "saida sem trecho nao repete");
 
   // --- fim pelos 90% ou creditos, uma vez so ----------------------------------------
   atividade_definir_permitido(0);   // limpa

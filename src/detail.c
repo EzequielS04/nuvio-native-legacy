@@ -76,6 +76,7 @@
 #include "plrui.h"
 #include "svdesenho.h"
 #include "amigostitulo.h"
+#include "amigostitulo_ui.h"
 static void ponteiroDetalhe(int r, int c);   // ponteiro do Magic Remote (#99)
 static int moverFileira(int dy);
 static void heroReiniciar(void);
@@ -235,6 +236,9 @@ static int  amigosDoTitulo(AmigosTitulo *t) {
   const CatItem *c = cat_item(idx);
   return c && c->imdb[0] && amigostitulo_obter(c->imdb, t);
 }
+// O ULTIMO EPISODIO da serie (a ultima temporada que o extras conhece), para
+// "Rafa terminou a série". 0/0 = nao se sabe ainda: a frase nunca e afirmada.
+static void ultimoEpisodio(int *t, int *e);
 static int  pedReproduzir = 0, pedMarcar = 0, pedFontes = 0;
 // Marcar como ASSISTIDO. Separado de pedMarcar, que e "adicionar a lista".
 static int  pedAssistido = 0;
@@ -1249,6 +1253,7 @@ static void abrirInterno(const HomeItem *it) {
   audAberta = 0; audTempAberta = -1; audTempVista = -1; frasesAberta = 0;
   item = *it;
   aberto = 1; saindo = 0; nivel = 0; botao = 0; focoAmigos = 0;
+  amtui_fechar();
   heroReiniciar();
   t = 0.0f; pg = 0.0f; scrollY = 0.0f; velY = 0.0f; abaInfo = 0; pessoaAberta = 0;
   relFoco = 0; colListaAberta = 0; colListaFoco = 0;
@@ -2131,6 +2136,8 @@ void detail_evento(const SDL_Event *e) {
   // "TROCAR ARTE" COME TUDO enquanto aberta (#142): e a coisa mais recente na
   // tela, e o Voltar dela fecha so ela.
   if (trocaarte_aberto()) { trocaarte_evento(e); return; }
+  // A LISTA DOS AMIGOS (OK na ilha de amigos) e modal enquanto aberta.
+  if (amtui_aberta()) { amtui_evento(e); return; }
   // MODO CINEMA: a primeira tecla so devolve o bloco de texto (o trailer
   // segue); Voltar fecha o trailer e fica na pagina.
   if (trailerCinema.oculta && e->type == SDL_KEYDOWN && !e->key.repeat) {
@@ -2309,7 +2316,14 @@ void detail_evento(const SDL_Event *e) {
     dur = SDL_GetTicks() - okDesceEm;
     okDesceEm = 0;
     if (nivel == 0 && focoAmigos) {
-      pedAmigos = 1;
+      // A lista do que cada amigo achou, AQUI (dono, 06/10/2026), e nao mais a
+      // aba Atividade do painel — que repetia so "viu".
+      AmigosTitulo at;
+      int ut, ue;
+      if (amigosDoTitulo(&at)) {
+        ultimoEpisodio(&ut, &ue);
+        amtui_abrir(&at, ut, ue, tituloDe(idx));
+      }
     } else if (nivel == 0) {
       // Ordem FIXA: primario, adicionar a lista, marcar como visto, fontes.
       //
@@ -4126,14 +4140,17 @@ static void heroWeb(float a, float desloc) {
     float y0 = yAcoes + NV_DETW2_BTN_H + hCaption + NV_DETW_AMIGOS_GAP;
     float d = 52.0f, pad = (NV_DETW_AMIGOS_H - d) * 0.5f;
     int foc = nivel == 0 && focoAmigos;
-    char l1[200];
+    char l1[200], l2[220];
     TxtLinha t1, t2;
     float pw, larg, tintaF = ajustes_acento_tinta(NULL, NULL, NULL);
     int c1 = foc ? (int)(tintaF * 255.0f) : 255, c2 = foc ? (int)(tintaF * 255.0f * 0.85f) : 179;
-    int nr = amg.n < 3 ? amg.n : 3;
-    amigostitulo_linha_ilha(&amg, l1, sizeof l1);
+    int nr = amg.n < 3 ? amg.n : 3, ut, ue;
+    // Informacao UTIL e nao so "viu" (dono, 06/10/2026): quem recomendou, o
+    // que acharam, ate onde foram — e embaixo o que nao coube na manchete.
+    ultimoEpisodio(&ut, &ue);
+    amigostitulo_resumo(&amg, ut, ue, (long long)time(NULL), l1, sizeof l1, l2, sizeof l2);
     t1 = txt_linha_corta(TXT_DET_META2, l1, c1, c1, c1, 255, NV_DETW2_TEXTO_W - 200.0f);
-    t2 = txt_linha(TXT_HERO_META, i18n("Abrir para ver o que acharam"), c2, c2, c2, 255);
+    t2 = txt_linha_corta(TXT_HERO_META, l2, c2, c2, c2, 255, NV_DETW2_TEXTO_W - 200.0f);
     pw = d + d * 0.71f * (float)(nr - 1);
     larg = pad + pw + 18.0f + (t1.w > t2.w ? t1.w : t2.w) + 30.0f;
     { GfxRect ilha = { NV_DETW2_X, y0, larg, NV_DETW_AMIGOS_H };
@@ -6648,7 +6665,7 @@ static void carFundo(void) {
 // inferior direito, so no topo da pagina e sem nada aberto por cima. CIMA na
 // linha de botoes abre o cartao (detail_evento); aberto, ele desenha aqui.
 static void reacaoPendente(float s) {
-  int livre = nivel == 0 && scrollY < 1.0f && !pessoaAberta && !colListaAberta &&
+  int livre = nivel == 0 && scrollY < 1.0f && !pessoaAberta && !colListaAberta && !amtui_aberta() &&
               !episodios_menu_aberto() && trocaarte_visivel() < 0.005f;
   if (!livre && !reacao_aberta()) return;
   reacao_detalhe_dica(cat_item(idx), livre ? s : 0.0f);
@@ -6819,6 +6836,7 @@ void detail_desenhar(Uint32 agora) {
     if (colListaAberta) { ponteiro_camada(); desenhaListaColecao(s); }
     if (episodios_menu_aberto()) ponteiro_camada();
     reacaoPendente(s);
+    if (amtui_aberta()) { ponteiro_camada(); amtui_desenhar(agora); }
     return;
   }
   desenhaEsqueletoEpisodios(a2 > pg ? a2 : pg);
@@ -6837,6 +6855,20 @@ void detail_desenhar(Uint32 agora) {
   if (episodios_menu_aberto()) ponteiro_camada();
   reacaoPendente(s);
   episodios_menu_desenhar();
+  if (amtui_aberta()) { ponteiro_camada(); amtui_desenhar(agora); }
+}
+
+static void ultimoEpisodio(int *t, int *e) {
+  int nt, ti;
+  *t = *e = 0;
+  if (!ehSerie()) return;
+  nt = extras_n_temporadas();
+  for (ti = nt - 1; ti >= 0; ti--) {
+    int num = extras_temporada_numero(ti), ne = extras_n_eps(ti);
+    if (num <= 0 || ne <= 0) continue;     // especiais (T0) nao fecham a serie
+    *t = num; *e = extras_ep_numero(ti, ne - 1);
+    return;
+  }
 }
 
 int detail_indice(void) { return idx; }

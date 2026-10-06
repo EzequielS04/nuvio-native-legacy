@@ -589,6 +589,8 @@ typedef struct {
   int  reacao;          // so REC_ACAO_REACAO
   int  nota;            // so REC_ACAO_NOTA
   long long id;         // id do evento no nosso servidor (0 nas outras fontes)
+  int  eps;             // REC_ACAO_FIM de serie agrupado no servidor: episodios distintos
+  int  temReacFim, reacFim;   // REC_ACAO_FIM: a reacao que veio junto (1/0/-1), se veio
 } RecEvento;
 #define REC_FEED_MAX 50
 

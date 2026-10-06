@@ -106,6 +106,11 @@ typedef struct {
   long long quando;     // epoch s; 0 = nao se sabe
   int  sobreMinhaRec;
   int  nota;            // so SV_AVALIOU: nota do tracker 0..100; 0 = nao se sabe
+  // SV_FIM de serie agrupado: quantos episodios distintos a pessoa terminou
+  // (o servidor ja manda agrupado; o feed do Trakt e agrupado aqui). 0/1 = um.
+  int  eps;
+  // SV_MANDOU: a frase da recomendacao (rec_frase), "" = nenhuma.
+  char texto[72];
 } SvEvento;
 
 typedef struct {
@@ -184,10 +189,28 @@ const SvAmigo *socialvis_amigo(int i);         // NULL fora da faixa
 int  socialvis_amigo_indice(const char *id);   // -1 se nao ha
 int  socialvis_n_ao_vivo(void);
 
-// O feed da aba Atividade: so o que conta (sem SV_ATIVIDADE), mais novo
-// primeiro; "agora" na frente de tudo.
+// O feed da aba Atividade: so o que conta, mais novo primeiro; "agora" na
+// frente de tudo. LIMPO (dono, 06/10/2026: "muito sujo"): sem saida do player
+// (SV_ABANDONO), sem SV_SALVO, sem SV_ATIVIDADE e sem "comecou" de filme ou de
+// episodio — so o comeco de uma serie nova. UMA LINHA POR PESSOA E TITULO: os
+// episodios terminados viram "assistiu 3 episodios" e a reacao vai junto do
+// "terminou" ("terminou e gostou"). Ver socialvis_feed_limpar.
 int  socialvis_n_eventos(void);
 const SvEvento *socialvis_evento(int i);
+// Os eventos CRUS (antes da limpeza), mais novo primeiro, com o que me
+// mandaram (SV_MANDOU). E de onde amigostitulo.c tira progresso e reacoes.
+int  socialvis_n_brutos(void);
+const SvEvento *socialvis_bruto(int i);
+// A limpeza do feed, pura (para o teste). `ev` ja ordenado (agora na frente,
+// mais novo primeiro). Devolve quantos foram para `saida`.
+int  socialvis_feed_limpar(const SvEvento *ev, int n, SvEvento *saida, int max);
+
+// O QUE O AMIGO RESPONDEU a uma recomendacao MINHA deste titulo ("Ja assisti",
+// gostei, "valeu pela dica"), do perfil dele ja carregado. 1 = ha.
+int  socialvis_enviada_titulo(const char *pessoaId, const char *imdb, SvEnviada *saida);
+// "Gosto parecido" com essa pessoa, do perfil ja carregado: o % de reacoes
+// iguais quando ha pares suficientes (SV_CMP_MIN); -1 = nao se sabe.
+int  socialvis_gosto_pct(const char *pessoaId);
 
 // Refresh explicitly on each opening, including reopening the same friend.
 void socialvis_abrir_perfil(const char *id);

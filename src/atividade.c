@@ -95,13 +95,14 @@ size_t atividade_json(const AtivEvento *e, char *dst, size_t tam) {
   n = snprintf(dst, tam,
                "{\"ev\":\"%s\",\"imdb\":\"%s\",\"midia\":\"%s\",\"titulo\":\"%s\","
                "\"poster\":\"%s\",\"temporada\":%d,\"episodio\":%d,\"pct\":%d,"
-               "\"seg\":%d,\"reacao\":%d,\"rec\":%lld}",
+               "\"seg\":%d,\"reacao\":%d,\"rec\":%lld%s}",
                ev, im, md, ti, po,
                e->temporada > 0 ? e->temporada : 0,
                e->episodio > 0 ? e->episodio : 0,
                pct100(e->pct), e->seg > 0 ? e->seg : 0,
                e->reacao > 0 ? 1 : e->reacao < 0 ? -1 : 0,
-               e->rec > 0 ? e->rec : 0LL);
+               e->rec > 0 ? e->rec : 0LL,
+               e->parou ? ",\"parou\":1" : "");
   if (n < 0 || (size_t)n >= tam) { dst[0] = 0; return 0; }
   return (size_t)n;
 }
@@ -315,9 +316,10 @@ static int pctDe(double pos, double dur) {
   return pct100((int)(pos * 100.0 / dur));
 }
 
-static void emitir(const char *ev, int pct) {
+static void emitirP(const char *ev, int pct, int parou) {
   AtivEvento e = trecho.base;
   snprintf(e.ev, sizeof e.ev, "%s", ev);
+  e.parou = parou;
   // TERMINOU O QUE UM AMIGO MANDOU: a rec vai para "Assistidas" NESTE
   // aparelho e no servidor (recresp.h), com ou sem o envio de atividade
   // permitido — e o mesmo "fim" que vale para o resto do app, e a resposta
@@ -329,13 +331,16 @@ static void emitir(const char *ev, int pct) {
   enfileirar(&e);
 }
 
+static void emitir(const char *ev, int pct) { emitirP(ev, pct, 0); }
+
 // Fecha o trecho: a parada. `concluiu` = creditos/fim pela regra do player.
+// SAIR ANTES DO FIM NAO E NOTICIA para os amigos (nem a 5%, nem a 60%): vai um
+// "progresso" com parou=1, que so fecha o "agora" e soma o tempo assistido.
 static void fecharTrecho(double pos, double dur, int concluiu) {
   int pct = pctDe(pos, dur);
   if (trecho.ativo && !trecho.fimEnviado) {
     if (concluiu || pct >= ATIV_FIM_PCT) emitir("fim", concluiu ? 100 : pct);
-    else if (pct < ATIV_ABANDONO_PCT)    emitir("abandono", pct);
-    else                                  emitir("progresso", pct);
+    else                                  emitirP("progresso", pct, 1);
   }
   memset(&trecho, 0, sizeof trecho);
 }

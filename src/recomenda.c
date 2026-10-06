@@ -2785,6 +2785,13 @@ static int lerEvento(const char *p, const char *f, RecEvento *e) {
   e->pct = (int)js_num(p, f, "pct", 0.0);
   e->reacao = (int)js_num(p, f, "reacao", 0.0);
   e->quando = (long long)js_num(p, f, "criado", 0.0);
+  // O servidor agrupado (06/10/2026): episodios contados e a reacao junto do
+  // "terminou". Servidor antigo nao manda: 0 e "nenhuma".
+  e->eps = (int)js_num(p, f, "eps", 0.0);
+  if (e->eps < 0 || e->eps > 9999) e->eps = 0;
+  e->reacFim = (int)js_num(p, f, "reac", -2.0);
+  e->temReacFim = e->reacFim >= -1 && e->reacFim <= 1;
+  if (!e->temReacFim) e->reacFim = 0;
   semTab(nome); semTab(e->titulo); semTab(e->via);
   e->acao = acaoDeEv(ev);
   if (!e->acao || strncmp(e->imdb, "tt", 2) || !e->pessoa[0]) return 0;
