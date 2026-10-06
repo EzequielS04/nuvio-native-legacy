@@ -3465,18 +3465,37 @@ void spainel_fundo(int podeParar, unsigned rev, void (*fundo)(void *), void *ctx
   static unsigned revPronto;
   static Uint32 desde, pintadoEm;
   int parado = podeParar && aberto && entrada >= 0.999f && gfx_snap_ok();
+  const char *motivo = "";
   if (!parado) { pronto = 0; refeitas = 0; faltou = 0; tentativas = 0; }
+  else if (rev != revPronto && pronto) {
+    // OS TEMPOS DE REPINTURA RECOMECAM A CADA REPUBLICACAO (relato do dono,
+    // 05/10, na TCL: a home continuou sumindo com o painel aberto). A home
+    // tem animacoes de ENTRADA presas ao relogio: a arte que chega esvanece
+    // por 220 ms (revela_arte) e a fileira nova sobe com atraso por coluna
+    // (revela_entra, ate ~1 s). A republicacao de um catalogo que ja estava
+    // aberto (Continuar assistindo refeito a cada 10 min, sync) pinta a copia
+    // NO QUADRO EM QUE ISSO COMECA: cartaz em opacidade 0, e `faltou` fica 0
+    // porque a textura existe. As tres repinturas de 0,4/1,5/4 s so valiam
+    // para a PRIMEIRA copia do painel; depois delas a copia ficava com a
+    // fileira apagada ate o painel fechar. Reproduzido em
+    // tests/spainel_fundo_tempo.sh (cartazes em branco no rodape da home
+    // depois de republicar, com faltou=0 na linha [spainel] abaixo).
+    pronto = 0; tentativas = 0; refeitas = 0; motivo = "revisao";
+  }
   else if (rev != revPronto) { pronto = 0; tentativas = 0; }
   else if (pronto && faltou && tentativas < SP_FUNDO_FALTA_MAX &&
            SDL_GetTicks() - pintadoEm >= SP_FUNDO_FALTA_MS) {
     pronto = 0;
     tentativas++;
+    motivo = "arte faltando";
   }
   else if (pronto && refeitas < (int)(sizeof SP_FUNDO_REFAZ_MS / sizeof *SP_FUNDO_REFAZ_MS) &&
            SDL_GetTicks() - desde >= SP_FUNDO_REFAZ_MS[refeitas]) {
     pronto = 0;
     refeitas++;
+    motivo = "tempo";
   }
+  if (parado && !pronto && !motivo[0]) motivo = "abertura";
   veuNoFundo = parado;
   if (parado && pronto) { gfx_snap_desenhar(); return; }
   if (parado) {
@@ -3488,6 +3507,16 @@ void spainel_fundo(int podeParar, unsigned rev, void (*fundo)(void *), void *ctx
   { unsigned faltas0 = tex_n_falta;
     if (fundo) fundo(ctx);
     faltou = tex_n_falta != faltas0; }
+  // UMA LINHA POR REPINTURA (as de "arte faltando" podem ser 80 por
+  // republicacao: saem a primeira e a ultima). E o que diria quando e por que
+  // a copia da home de tras foi refeita e se saiu inteira (faltou=0).
+  if (parado && motivo[0] && (motivo[0] != 'a' || motivo[1] != 'r' || tentativas == 1 ||
+                              tentativas == SP_FUNDO_FALTA_MAX)) {
+    printf("[spainel] fundo repintado: motivo=%s rev=%u faltou=%d por-tempo=%d tentativas=%d%s\n",
+           motivo, rev, faltou, refeitas, tentativas,
+           tentativas == SP_FUNDO_FALTA_MAX && faltou ? " (DESISTIU: arte ainda faltando)" : "");
+    fflush(stdout);
+  }
   if (parado) {
     veuInteiro();
     gfx_sem_recorte();
