@@ -18,7 +18,8 @@
 //   4. legsync_offset_ms(manual) devolve manual + automatico ACEITO, para ser
 //      aplicado UMA vez no overlay principal (positivo adianta, o mesmo sinal
 //      de legenda_cues/assrender_desenhar). Sem documento dono do overlay,
-//      devolve o manual intacto.
+//      devolve o manual intacto. Escala (fps) e trechos (corte) vem por
+//      legsync_posicao, que troca o instante do video pelo da legenda.
 //   5. Seek/buffer: cancela a analise e pausa a leitura; retoma sozinha 2 s
 //      depois de calmo. legsync_encerrar no fim da sessao (sem join);
 //      legsync_destruir no encerramento do app (join).
@@ -77,6 +78,11 @@ void legsync_destruir(void);
 void legsync_passo(const char *urlMidia, double posSeg, double folgaSeg, int sensivel,
                    unsigned agoraMs);
 int  legsync_offset_ms(int manualMs);
+// Posicao na LEGENDA para o instante `posSeg` do video quando o aceito e
+// escala/trechos (offset puro: posSeg). O overlay desenha em
+// legsync_posicao(pos) + legsync_offset_ms(manual). AUTOSYNC_SEM_LEGENDA
+// (muito negativo) = nada desta legenda neste trecho do video.
+double legsync_posicao(double posSeg);
 
 // Escolha da legenda PRINCIPAL (faixas.c). externa: no lugar de
 // legenda_carregar. outra: embutida (1) ou nenhuma (0).

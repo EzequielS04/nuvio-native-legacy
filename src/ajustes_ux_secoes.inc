@@ -171,6 +171,7 @@ enum {
   AJC_CON_PERFIS, AJC_CON_AVISOS, AJC_CON_SOCIAL, AJC_CON_CHAVES, AJC_CON_P2P, AJC_CON_SERVIDORES,
   AJC_DES_TELA, AJC_DES_DIAG,
   AJC_SOB_GUIA, AJC_SOB_APP,
+  AJC_FON_ADDONS,
   AJC_N
 };
 static int ajCenaSecao(int op) {
@@ -189,6 +190,7 @@ static int ajCenaSecao(int op) {
     case AJ_NT_TRAKT: case AJ_NT_TMDB: case AJ_NT_LETTER: case AJ_NT_MAL: case AJ_NT_EBERT: case AJ_NT_SCORE:
     case AJ_MDB_LIGADO: case AJ_MDB_TRAKT: case AJ_MDB_IMDB: case AJ_MDB_TMDB: case AJ_MDB_LETTER:
     case AJ_MDB_TOMATES: case AJ_MDB_AUDIENCIA: case AJ_MDB_META: case AJ_MDB_MAL:
+    case AJ_MDB_CHAVE:   // a chave abre o bloco Notas: e ela que libera as notas do MDBList
       return AJC_TIT_NOTAS;
     case AJ_TMDB_LIGADO: case AJ_TMDB_ARTE: case AJ_TMDB_BASICO: case AJ_TMDB_FICHA: case AJ_TMDB_DATAS:
     case AJ_TMDB_ELENCO: case AJ_TMDB_PROD: case AJ_TMDB_REDES: case AJ_TMDB_EPS: case AJ_TMDB_TRAILERS:
@@ -202,6 +204,7 @@ static int ajCenaSecao(int op) {
     case AJ_HERO_FUNDO: case AJ_HERO_ARTE_DIF: case AJ_POSTER_PROV: case AJ_ADDON_POSTER: case AJ_ADDON_FUNDO:
     case AJ_ADDON_LOGO: case AJ_COL_ARTE_CONTA: case AJ_POSTER_INST: case AJ_POSTER_TOKEN: case AJ_POSTER_EXTRA:
     case AJ_POSTER_CHAVE: case AJ_POSTER_MODELO: case AJ_POSTER_TESTAR:
+    case AJ_FANART_CHAVE:
       return AJC_CAR_ORIGEM;
     case AJ_HERO_TRAILER: case AJ_FOCO_TRAILER: case AJ_DET_TRAILER_AUTO: case AJ_DET_TRAILER: return AJC_TRL_ONDE;
     case AJ_HERO_TRAILER_SOM: case AJ_DET_TRAILER_SOM: case AJ_TRAILER_FONTE: case AJ_HERO_TRAILER_ESPERA:
@@ -210,7 +213,7 @@ static int ajCenaSecao(int op) {
     case AJ_VIDRO: case AJ_VIDRO_CONTORNO: case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO: return AJC_APA_VIDRO;
     case AJ_ANIM: case AJ_RELOGIO: case AJ_RELOGIO_12H: return AJC_APA_MOVIMENTO;
     case AJ_FONTE_MANUAL: case AJ_FONTE_AUTO: case AJ_FONTE_REPOR: case AJ_FONTE_PRIORIDADE: case AJ_FONTE_HDR:
-    case AJ_FONTE_PRAZO: case AJ_FONTE_TEXTO: case AJ_SELOS_CORES: case AJ_SELOS_PACOTE: case AJ_SELOS_PACOTE_ADD:
+    case AJ_FONTE_PRAZO: case AJ_FONTE_TEXTO: case AJ_TAM_MAX: case AJ_TAM_MIN: case AJ_SELOS_CORES: case AJ_SELOS_PACOTE: case AJ_SELOS_PACOTE_ADD:
     case AJ_SELOS_PACOTE_REM:
       return AJC_REP_FONTE;
     case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: case AJ_CACHE_SEEK: return AJC_REP_IMAGEM;
@@ -218,8 +221,8 @@ static int ajCenaSecao(int op) {
     case AJ_SEEKR_LIGADO: case AJ_SEEKR_CHAVE: case AJ_SEEKR_TESTAR: case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE:
       return AJC_REP_SEEKR;
     case AJ_IDIOMA: case AJ_TMDB_IDIOMA: return AJC_IDI_INTERFACE;
-    case AJ_AUD_LINGUA: case AJ_LEG_LINGUA: case AJ_LEG_LINGUA2: case AJ_LEG_SYNC_AUDIO: return AJC_IDI_FAIXAS;
-    case AJ_LEG2_POS: case AJ_LEG2_TAMANHO: case AJ_LEG2_COR: case AJ_LEG2_FUNDO: case AJ_LEG2_BORDA:
+    case AJ_AUD_LINGUA: case AJ_LEG_LINGUA: case AJ_LEG_SYNC_AUDIO: return AJC_IDI_FAIXAS;
+    case AJ_LEG_LINGUA2: case AJ_LEG2_POS: case AJ_LEG2_TAMANHO: case AJ_LEG2_COR: case AJ_LEG2_FUNDO: case AJ_LEG2_BORDA:
       return AJC_IDI_LEGENDA2;
     case AJ_XTREAM_SERVIDOR: case AJ_XTREAM_USUARIO: case AJ_XTREAM_SENHA: case AJ_XTREAM_CONTA:
     case AJ_XTREAM_LIMPAR: case AJ_STALKER_PORTAL: case AJ_STALKER_MAC: case AJ_STALKER_LIMPAR: case AJ_EPG_PAIS:
@@ -227,13 +230,13 @@ static int ajCenaSecao(int op) {
     case AJ_LIVETV_DIAG: case AJ_LIVETV_RES: case AJ_LIVETV_ESPERA: case AJ_LIVETV_FORMATO: case AJ_LIVETV_MODO:
     case AJ_LIVETV_PROXY:
       return AJC_TV_PROBLEMAS;
-    case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_ADDONS: case AJ_PLUGINS: case AJ_ADDONS_PRINCIPAL:
+    case AJ_PERFIL_ATIVO: case AJ_SYNC:
     case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR: case AJ_SAIR:
       return AJC_CON_PERFIS;
+    case AJ_ADDONS: case AJ_PLUGINS: case AJ_ADDONS_PRINCIPAL: return AJC_FON_ADDONS;
     case AJ_ENQUETES: return AJC_CON_AVISOS;
     case AJ_DISCORD: case AJ_SALVOS_DEST: case AJ_CW_FONTE: return AJC_CON_SOCIAL;
     case AJ_DEBRID_RD: case AJ_DEBRID_TB: case AJ_DEBRID_PM: case AJ_DEBRID_AD: case AJ_DEBRID_AD_TESTAR:
-    case AJ_MDB_CHAVE: case AJ_FANART_CHAVE:
       return AJC_CON_CHAVES;
     case AJ_P2P_LIGADO: case AJ_P2P_URL: case AJ_P2P_TESTAR: return AJC_CON_P2P;
     case AJ_JF_LIGADO: case AJ_JF_SERVIDOR: case AJ_JF_ENTRAR: case AJ_JF_SAIR: case AJ_EM_SERVIDOR:
@@ -1017,7 +1020,6 @@ static void ajcTvProblemas(int A) {
 // Conta e perfis: o cartao do perfil ativo e a lista de addons de verdade.
 static void ajcConPerfis(int A) {
   const ContaPerfil *p = perfis_item_ativo();
-  int i, n = addons_n();
   ajCenaArte(ajArte(AJA_FUNDO, A), (GfxRect){ ajc.x, ajc.y, 640 * ajc.s, ajc.h }, 22, 0.62f);
   CVID(28, 24, 270, 312, 24);
   gfx_cor(CR(48, 44, 72, 72), 0.5f, 0.24f, 0.25f, 0.29f, 1);
@@ -1029,18 +1031,66 @@ static void ajcConPerfis(int A) {
   ajcFoco(AJ_PERFIL_EDITAR, 48, 44, 72, 72, 36);
   ajcLinha(AJ_SYNC, "aj_cloud", 38, 140, 250, 40, 1);
   ajcLinha(AJ_PERFIL_PESQ, "aj_globe", 38, 186, 250, 40, 1);
-  ajcLinha(AJ_ADDONS_PRINCIPAL, "aj_link", 38, 232, 250, 40, 1);
+  ajcLinha(AJ_PERFIL_EDITAR, "aj_user-round", 38, 232, 250, 40, 1);
   ajcLinha(AJ_SAIR, "aj_log-out", 38, 278, 250, 40, 0.8f);
+  // A direita, os perfis da conta como na tela "Quem esta assistindo?" (os
+  // addons sairam daqui para Fontes e addons). Sem perfis carregados: o ativo
+  // e o lugar de um novo.
   CVID(314, 24, 298, 312, 24);
-  ajcLinha(AJ_ADDONS, "aj_puzzle", 324, 34, 278, 40, 1);
-  for (i = 0; i < 4; i++) {
-    float by = 86 + i * 44;
-    const char *nm = i < n ? addons_nome(i) : ajTituloN(i + 4);
-    gfx_cor(CR(336, by, 30, 30), 0.3f, 1, 1, 1, 0.1f);
-    ajcTxt(nm, 12, 0, 378, by + 7, 210, i < n ? 0.85f : 0.4f);
+  ajcTxt("Quem está assistindo?", 13, 1, 336, 44, 260, 0.9f);
+  { int np = perfis_n(), k;
+    if (np > 4) np = 4;
+    for (k = 0; k < (np > 0 ? np : 1) + (np < 4 ? 1 : 0); k++) {
+      const ContaPerfil *q = np > 0 && k < np ? perfis_item(k) : (k == 0 ? p : NULL);
+      int novo = np > 0 ? k >= np : k >= 1;
+      float cx = 340 + (k % 2) * 136, cy = 86 + (k / 2) * 118;
+      int ativo = q && q->indice == perfis_ativo();
+      gfx_cor(CR(cx + 24, cy, 72, 72), 0.5f, 0.24f, 0.25f, 0.29f, novo ? 0.5f : 1.0f);
+      if (novo) CICON("aj_plus", cx + 46, cy + 22, 28, 0.6f);
+      else if (q && q->avatarUrl[0]) CIMG(q->avatarUrl, cx + 24, cy, 72, 72, 36, 1);
+      else { char av[1200]; snprintf(av, sizeof av, "%s/icones/mt_perfil.png", uxDirArte); ajLogo(av, CX(cx + 40), CY(cy + 16), 40 * ajc.s, 40 * ajc.s, ativo || np == 0 ? 0.9f : 0.6f); }
+      if (ativo || (np == 0 && k == 0)) gfx_anel_fora(CR(cx + 24, cy, 72, 72), 0.5f, 2.0f * ajc.s, 2.0f * ajc.s, 0.953f, 0.949f, 0.937f, 0.9f);
+      { const char *nm = novo ? "Novo perfil" : q && q->nome[0] ? q->nome : "Perfil";
+        TxtLinha l = txt_linha_corta(ajEstiloPxS(11 * ajc.s, ativo), nm, AJ_TX, 120 * ajc.s);
+        txt_desenhar_alpha(l, CX(cx + 60) - l.w * 0.5f, CY(cy + 82), novo ? 0.5f : 0.85f); }
+    } }
+}
+// Fontes e addons > Addons: a lista dos addons da conta (ligado = interruptor
+// no acento) e, ao lado, plugins e os addons do perfil principal.
+static void ajcFonAddons(int A) {
+  static const char *const AMOSTRA[5] = { "Cinemeta", "Torrentio", "OpenSubtitles v3", "TMDB", "AIOStreams" };
+  int i, n = addons_n();
+  ajCenaArte(ajArte(AJA_FUNDO, A), (GfxRect){ ajc.x, ajc.y, 640 * ajc.s, ajc.h }, 22, 0.62f);
+  CVID(28, 24, 340, 312, 24);
+  ajcLinha(AJ_ADDONS, "aj_puzzle", 38, 34, 320, 40, 1);
+  for (i = 0; i < 5; i++) {
+    float by = 88 + i * 46;
+    int liga = i < n ? addons_ativo(i) : i != 3;
+    const char *nm = i < n ? addons_nome(i) : AMOSTRA[i];
+    gfx_cor(CR(50, by + 4, 28, 28), 0.5f, 1, 1, 1, 0.1f);
+    CICON("aj_puzzle", 56, by + 10, 16, liga ? 0.85f : 0.4f);
+    ajcTxt(nm, 12, 0, 92, by + 9, 190, liga ? 0.9f : 0.45f);
+    gfx_cor(CR(300, by + 7, 40, 22), 0.5f, 1, 1, 1, 0.12f);
+    if (liga) gfx_cor(CR(300, by + 7, 40, 22), 0.5f, ajc.ar, ajc.ag, ajc.ab, 0.85f);
+    gfx_cor(CR(liga ? 321 : 303, by + 10, 16, 16), 0.5f, 1, 1, 1, liga ? 1.0f : 0.55f);
   }
-  ajcLinha(AJ_PLUGINS, "aj_puzzle", 324, 270, 278, 40, 1);
-  if (ajc.op == AJ_ADDONS) ajcFoco(AJ_ADDONS, 330, 82, 266, 176, 12);
+  ajcFoco(AJ_ADDONS, 40, 82, 316, 236, 14);
+  CVID(384, 24, 228, 312, 24);
+  ajcLinha(AJ_PLUGINS, "aj_puzzle", 394, 34, 208, 40, 1);
+  // "Usar os addons do perfil principal" e longo: rotulo inteiro em cima, valor embaixo.
+  { int f = ajc.op == AJ_ADDONS_PRINCIPAL;
+    float al = lig(AJ_ADDONS_PRINCIPAL) ? 1.0f : 0.6f;
+    if (f) gfx_cor(CR(394, 80, 208, 52), 0.25f, 1, 1, 1, 0.12f);
+    CICON("aj_link", 406, 88, 18, 0.8f * al);
+    ajcTxt(rotuloOpcao(AJ_ADDONS_PRINCIPAL), 11, f, 432, 86, 166, (f ? 1.0f : 0.8f) * al);
+    ajcTxt(textoValor(AJ_ADDONS_PRINCIPAL), 10, 0, 432, 106, 166, 0.55f * al);
+    if (f) CACC(384, 103, 6, 6, 1); }
+  for (i = 0; i < 3; i++) {
+    float by = 152 + i * 60;
+    CIMG(ajArte(AJA_POSTER, AJ_POS[(A + i) % 14]), 404, by, 34, 50, 6, 0.9f);
+    ajcTxt(ajTituloN(AJ_POS[(A + i) % 14]), 12, 1, 450, by + 8, 150, 0.85f);
+    ajcTxt(AMOSTRA[1 + i * 2 > 4 ? 4 : 1 + i * 2], 10, 0, 450, by + 28, 150, 0.5f);
+  }
 }
 // Notificacoes: a enquete aberta na ilha do relogio.
 static void ajcConAvisos(int A) {
@@ -1087,13 +1137,14 @@ static void ajcConSocial(int A) {
   ajcTxt(textoValor(AJ_CW_FONTE), 15, 1, 348, 250, 236, 1);
   ajcFoco(AJ_CW_FONTE, 328, 168, 276, 164, 22);
 }
-// Chaves: o cofre, uma linha por servico com o estado da chave.
+// Debrid: o cofre, uma linha por servico com o estado da chave. As chaves do
+// MDBList e do Fanart moram junto do que elas liberam (Notas, De onde vem a arte).
 static void ajcConChaves(int A) {
-  static const int OP[7] = { AJ_DEBRID_RD, AJ_DEBRID_TB, AJ_DEBRID_PM, AJ_DEBRID_AD, AJ_DEBRID_AD_TESTAR, AJ_MDB_CHAVE, AJ_FANART_CHAVE };
+  static const int OP[5] = { AJ_DEBRID_RD, AJ_DEBRID_TB, AJ_DEBRID_PM, AJ_DEBRID_AD, AJ_DEBRID_AD_TESTAR };
   int i;
   ajCenaArte(ajArte(AJA_FUNDO, A), (GfxRect){ ajc.x, ajc.y, 640 * ajc.s, ajc.h }, 22, 0.66f);
-  CVID(36, 22, 568, 316, 24);
-  for (i = 0; i < 7; i++) ajcLinha(OP[i], i == 4 ? "aj_shield-check" : "aj_key-round", 50, 32 + i * 43, 540, 38, 1);
+  CVID(36, 30, 568, 300, 24);
+  for (i = 0; i < 5; i++) ajcLinha(OP[i], i == 4 ? "aj_shield-check" : "aj_key-round", 50, 44 + i * 56, 540, 46, 1);
 }
 // P2P: a TV, o servidor de streaming na rede e os pares.
 static void ajcConP2p(int A) {
@@ -1241,7 +1292,8 @@ static void ajcSobApp(int A) {
 }
 
 static float ajSecaoDesenhar(int cena, int op, float x, float y, float w) {
-  int A = ajCenaArteOp(op);
+  // Sem opcao (a cena no resumo da categoria): a arte da categoria (ajcSecA).
+  int A = op >= 0 || ajcSecA < 0 ? ajCenaArteOp(op) : ajcSecA;
   ajc.x = x; ajc.y = y; ajc.s = w / 640.0f; ajc.h = w * 9.0f / 16.0f; ajc.op = op;
   ajustes_acento(&ajc.ar, &ajc.ag, &ajc.ab);
   gfx_recorte(x, y, w, ajc.h);
@@ -1280,10 +1332,16 @@ static float ajSecaoDesenhar(int cena, int op, float x, float y, float w) {
     case AJC_DES_DIAG: ajcDesDiag(A); break;
     case AJC_SOB_GUIA: ajcSobGuia(A); break;
     case AJC_SOB_APP: ajcSobApp(A); break;
+    case AJC_FON_ADDONS: ajcFonAddons(A); break;
     default: break;
   }
   gfx_sem_recorte();
   return ajc.h;
+}
+static float ajFontesResumo(int A, float x, float y, float w) {
+  float h;
+  ajcSecA = A; h = ajSecaoDesenhar(AJC_FON_ADDONS, -1, x, y, w); ajcSecA = -1;
+  return h;
 }
 #undef CX
 #undef CY

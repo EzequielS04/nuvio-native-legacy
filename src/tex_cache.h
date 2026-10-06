@@ -53,6 +53,12 @@ void tex_qualidade(int nivel);
 // Reduz uma superficie por media de area para lw x lh, em ABGR8888. Publica
 // para tests/reduzir.c; o decode usa a mesma funcao.
 struct SDL_Surface *tex_reduzir(struct SDL_Surface *src, int lw, int lh);
+// Piramide de mipmaps na CPU (Android; NUVIO_TEX_MIP=cpu|gpu): niveis 1..n
+// encadeados em base->userdata, ate 1x1. Devolve quantos niveis criou (0 em
+// falha, sem nada pendurado). Publica para tests/mipcpu.c.
+int tex_piramide_cpu(struct SDL_Surface *base);
+// Libera a base E os niveis encadeados.
+void tex_piramide_liberar(struct SDL_Surface *base);
 
 // Como tex_obter, mas dizendo COM QUE LARGURA a arte vai ser desenhada, em
 // pixels de layout. O teto de decodificacao sai dai, em vez do padrao unico de

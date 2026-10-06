@@ -579,7 +579,12 @@ static int resolverCom(Pedido *p, const char *h, int fileIdx, const char *fontes
       if (p->metaTid[0]) atomic_fetch_add(&descartados, 1u);   // META de outro torrent
       r = esperar(p, P2PM_EV_META, 0, tid, P2P_PRAZO_METADADOS, &ev, &espaco);
       if (r != 1) {
-        if (r == 0) printf("[p2p-motor] %.8s: metadados nao chegaram em %d s\n", h, P2P_PRAZO_METADADOS);
+        if (r == 0) {
+          P2pmStats st;
+          memset(&st, 0, sizeof st);
+          if (p->o->stats) p->o->stats(p->m, &st);
+          printf("[p2p-motor] %.8s: metadados nao chegaram em %d s (%u pares)\n", h, P2P_PRAZO_METADADOS, st.pares);
+        }
         goto falhou;
       }
     }
@@ -633,7 +638,10 @@ static int resolverCom(Pedido *p, const char *h, int fileIdx, const char *fontes
   r = sondaFn(ev.url, cancelado, p);
   if (cancelado(p)) { r = -2; goto falhou; }
   if (r != 1) {
-    printf("[p2p-motor] %.8s: arquivo %d sem bytes\n", h, idx);
+    { P2pmStats st;
+      memset(&st, 0, sizeof st);
+      if (p->o->stats) p->o->stats(p->m, &st);
+      printf("[p2p-motor] %.8s: arquivo %d sem bytes (%u pares)\n", h, idx, st.pares); }
     soltarTorrent(p);
     return r == 0 ? P2P_ERR_SEM_PEERS : P2P_ERR_RECUSOU;
   }

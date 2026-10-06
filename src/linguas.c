@@ -37,8 +37,18 @@ static const struct { const char *cod, *nome; } NOMES[] = {
   { "uk", "Ucraniano" },  { "ukr", "Ucraniano" },
   { "vi", "Vietnamita" }, { "vie", "Vietnamita" },
   { "id", "Indonésio" },  { "ind", "Indonésio" },
+  // #269/#201: os que o Community Subtitles e o MKV de release etiquetam e a
+  // tabela nao nomeava ("HRV", "BUL"...). So as familias de 2 letras: os
+  // codigos de 3 letras e as variantes chegam aqui por familia() (ling_nome).
+  { "hr", "Croata" },     { "bg", "Búlgaro" },   { "sk", "Eslovaco" },
+  { "sr", "Sérvio" },     { "sl", "Esloveno" },  { "et", "Estoniano" },
+  { "lv", "Letão" },      { "lt", "Lituano" },   { "ca", "Catalão" },
+  { "eu", "Basco" },      { "gl", "Galego" },    { "is", "Islandês" },
+  { "fa", "Persa" },      { "ms", "Malaio" },    { "tl", "Filipino" },
 };
 #define NOMES_N ((int)(sizeof NOMES / sizeof *NOMES))
+
+static const char *familia(const char *c, char *buf);
 
 const char *ling_nome(const char *c) {
   int i;
@@ -55,6 +65,13 @@ const char *ling_nome(const char *c) {
   // Tambem afeta qualquer printf com dois idiomas.
   // __atomic_fetch_add: a busca de legendas chama isto de um fio por addon, e
   // um `giro++` simples deixava dois fios com a mesma posicao.
+  // Variante ou sinonimo de um idioma da tabela ("ces", "pt-PT", "es-419",
+  // o "jp"/"cz"/"du" do player da Samsung): o nome da FAMILIA. Antes saia o
+  // codigo em maiusculas ("JP", "CZ") na folha de faixas do .tpk (#269).
+  { char fb[8];
+    const char *f = familia(c, fb);
+    for (i = 0; i < NOMES_N; i++)
+      if (!strcasecmp(f, NOMES[i].cod)) return NOMES[i].nome; }
   { static char cx[4][16]; static int giro;
     char *d = cx[__atomic_fetch_add(&giro, 1, __ATOMIC_RELAXED) & 3];
     size_t k;
@@ -81,6 +98,25 @@ static const char *familia(const char *c, char *buf) {
     { "swe","sv" },{ "nor","no" },{ "dan","da" },{ "fin","fi" },{ "pol","pl" },
     { "tur","tr" },{ "heb","he" },{ "tha","th" },{ "cze","cs" },{ "gre","el" },
     { "hun","hu" },{ "rum","ro" },{ "ron","ro" },{ "ukr","uk" },{ "vie","vi" },{ "ind","id" },
+    // ISO 639-2/T, que o Community Subtitles usa (app/languages.py dele:
+    // "ces", "ell", "nld", "zho", "msa"...). "ces" caia na comparacao crua e
+    // a legenda tcheca de quem pediu "cs" era descartada calada.
+    { "ces","cs" },{ "ell","el" },{ "slk","sk" },{ "slo","sk" },{ "bul","bg" },
+    { "msa","ms" },{ "may","ms" },{ "srp","sr" },{ "scc","sr" },{ "hrv","hr" },
+    { "scr","hr" },{ "slv","sl" },{ "est","et" },{ "lav","lv" },{ "lit","lt" },
+    { "cat","ca" },{ "eus","eu" },{ "baq","eu" },{ "glg","gl" },{ "isl","is" },
+    { "ice","is" },{ "fas","fa" },{ "per","fa" },{ "fil","tl" },{ "tgl","tl" },
+    { "nob","no" },{ "nno","no" },{ "nb","no" },{ "nn","no" },{ "iw","he" },
+    // Chines e espanhol regionais sem tracinho, e os codigos antigos do
+    // OpenSubtitles ("pb" portugues do Brasil, "ea" espanhol latino, "ze"
+    // chines bilingue).
+    { "chs","zh" },{ "cht","zh" },{ "zht","zh" },{ "zhe","zh" },{ "ze","zh" },
+    { "pb","pt" },{ "ptbr","pt" },{ "spn","es" },{ "ea","es" },
+    // O player do .tpk da Samsung (Tizen.Multimedia GetLanguageCode) devolve
+    // estes no lugar do ISO 639-1. MEDIDO no log (p2p-20, MKV com 41
+    // legendas): ja->"jp", cs->"cz", nl->"du", el->"gr", id->"in", ms->"ma".
+    // Nenhum deles e codigo ISO de outro idioma.
+    { "jp","ja" },{ "cz","cs" },{ "du","nl" },{ "gr","el" },{ "in","id" },{ "ma","ms" },
   };
   size_t i;
   for (i = 0; i < sizeof F / sizeof *F; i++)
@@ -143,7 +179,8 @@ const char *ling_selo(const char *cod) {
   size_t k;
   if (!cod || !*cod) { d[0] = '?'; d[1] = 0; return d; }
   if (!strcasecmp(cod, "pob") || !strcasecmp(cod, "pt-br") || !strcasecmp(cod, "pt_br") ||
-      !strcasecmp(cod, "ptb") || !strcasecmp(cod, "br")) return "PT-BR";
+      !strcasecmp(cod, "ptb") || !strcasecmp(cod, "br") || !strcasecmp(cod, "pb") ||
+      !strcasecmp(cod, "ptbr")) return "PT-BR";
   f = familia(cod, fam);
   for (k = 0; f[k] && k < 2; k++) d[k] = (char)(f[k] >= 'a' && f[k] <= 'z' ? f[k] - 32 : f[k]);
   d[k] = 0;
@@ -330,6 +367,18 @@ static const struct { const char *radical, *cod; } NOME_IDIOMA[] = {
   { "russian", "rus" }, { "russo", "rus" }, { "arabic", "ara" },
   { "dutch", "dut" }, { "nederlands", "dut" }, { "holand", "dut" },
   { "polish", "pol" }, { "polski", "pol" }, { "turkish", "tur" }, { "turco", "tur" },
+  // Nomes em ingles que addons mandam no "lang" (o Auto-Subs rotula
+  // "Hebrew (Auto-Subs)"); sem radical aqui, ling_normalizar cortava o nome em
+  // 7 letras e a legenda nao casava com preferencia nenhuma.
+  { "hebrew", "heb" }, { "hindi", "hin" }, { "greek", "gre" }, { "hungarian", "hun" },
+  { "magyar", "hun" }, { "czech", "cze" }, { "romanian", "rum" }, { "ukrainian", "ukr" },
+  { "indonesian", "ind" }, { "swedish", "swe" }, { "svensk", "swe" }, { "danish", "dan" },
+  { "dansk", "dan" }, { "norwegian", "nor" }, { "norsk", "nor" }, { "finnish", "fin" },
+  { "suomi", "fin" }, { "thai", "tha" }, { "vietnamese", "vie" }, { "croatian", "hrv" },
+  { "hrvatski", "hrv" }, { "serbian", "srp" }, { "bulgarian", "bul" }, { "slovak", "slk" },
+  { "slovenian", "slv" }, { "slovene", "slv" }, { "persian", "fas" }, { "farsi", "fas" },
+  { "malay", "msa" }, { "filipino", "fil" }, { "tagalog", "fil" }, { "catalan", "cat" },
+  { "estonian", "est" }, { "latvian", "lav" }, { "lithuanian", "lit" }, { "icelandic", "isl" },
 };
 
 const char *ling_do_nome(const char *nome) {

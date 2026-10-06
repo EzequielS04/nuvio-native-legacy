@@ -1,6 +1,12 @@
 // Bootstrap: janela, contexto GL, loop e telemetria. Toda a UI vive nos modulos.
+#include "app_id.h"
+#ifdef NV_DTS_DEBUG
+#include "dts/dts_engine.h"
+#include "dts/dts_pipeline.h"
+#endif
 #include <SDL2/SDL.h>
 #include "tpkteclas.h"
+#include "central.h"
 #include "sdlcompat.h"
 #include <SDL2/SDL_image.h>
 #include "gl_compat.h"
@@ -13,7 +19,7 @@
 // o alvo Tizen (WASM) precisa pular exatamente os mesmos. Nomear a condicao
 // evita ter de lembrar de dois simbolos em cada ponto - sem isto o primeiro
 // build para o navegador ainda tentava abrir libwayland-client.so.0.
-#if defined(__APPLE__) || defined(__EMSCRIPTEN__) || defined(NV_TPK) || defined(NV_ANDROID)
+#if defined(__APPLE__) || defined(NV_LINUX_DESKTOP) || defined(__EMSCRIPTEN__) || defined(NV_TPK) || defined(NV_ANDROID)
 #define NV_SEM_WEBOS 1
 #endif
 #ifdef NV_ANDROID
@@ -31,6 +37,7 @@
 #include "gfx.h"
 #include "fundo.h"
 #include "gpunivel.h"
+#include "gputempo.h"
 #include "text.h"
 #include "marco.h"
 #include "rede.h"
@@ -174,9 +181,32 @@ static void remapCanal(SDL_Event *e) {
       e->key.keysym.sym = sobe ? SDLK_s : SDLK_F5;
     }
   }
+#elif defined(__EMSCRIPTEN__)
+  // .wgt: tizen-shell.html entrega o CH+ (427) como F7, com keydown e keyup,
+  // para a Central de controle saber quanto ele ficou embaixo. Fora disso ele
+  // e o "s" de sempre (Salvos).
+  if ((e->type == SDL_KEYDOWN || e->type == SDL_KEYUP) && e->key.keysym.sym == SDLK_F7) {
+    e->key.keysym.sym = SDLK_s;
+    e->key.keysym.scancode = SDL_SCANCODE_S;
+  }
 #else
   (void)e;
 #endif
+}
+
+// O CH+ CRU, antes de remapCanal: F7 onde o host o entrega assim (Android,
+// .tpk, .wgt, Mac) e o scancode do LG. Segurado abre a Central de controle
+// (central.h); o toque curto volta por entregarCh.
+static int teclaCh(const SDL_Event *e) {
+  if (e->type != SDL_KEYDOWN && e->type != SDL_KEYUP) return 0;
+#if defined(NV_ANDROID) || defined(NV_TPK) || defined(__APPLE__) || defined(__EMSCRIPTEN__)
+  if (e->key.keysym.sym == SDLK_F7) return 1;
+#endif
+  return e->key.keysym.scancode == (SDL_Scancode)NV_SCANCODE_CH_UP;
+}
+static void entregarCh(SDL_Event *e) {
+  remapCanal(e);
+  app_evento(e);
 }
 
 // Teclas injetadas por arquivo, para conferir a UI sem alguem no sofa com o
@@ -305,6 +335,10 @@ static void teclasInjetadas(void (*entregar)(const SDL_Event *)) {
   if (!pedidoNovo("/tmp/nuvio-key", &bloqueadoKey)) return;
   FILE *f = fopen("/tmp/nuvio-key", "r");
   if (!f) return;
+  // A tecla injetada tambem conta como gente no controle: sem isto a tela de
+  // descanso entrava 2 min depois da ultima tecla DE VERDADE, no meio de uma
+  // medida feita so por este arquivo. Nao engole a tecla (consumivel = 0).
+  esmaecer_entrada(SDL_GetTicks(), 0);
   char linha[32];
   while (fgets(linha, sizeof linha, f)) {
     char *fim = linha + strlen(linha);
@@ -634,8 +668,13 @@ int main(int argc, char **argv) {
   // o compositor NAO exibe a janela — o app roda a 60fps desenhando para
   // ninguem. Medido: "Invalid appId specified OR Unsupported Application Type".
 #ifndef NV_SEM_WEBOS
-  setenv("APPID", "space.nuvio.native.legacy", 0);
-  setenv("LS2_APPID", "space.nuvio.native.legacy", 0);
+#ifdef NV_DTS_DEBUG
+  setenv("APPID", NV_APP_ID, 1);
+  setenv("LS2_APPID", NV_APP_ID, 1);
+#else
+  setenv("APPID", NV_APP_ID, 0);
+  setenv("LS2_APPID", NV_APP_ID, 0);
+#endif
   setenv("SDL_VIDEODRIVER", "wayland", 0);
 #endif
   // Lancado pelo SAM, stdout e stderr vao para /dev/null — toda a telemetria
@@ -666,10 +705,20 @@ int main(int argc, char **argv) {
 #if defined(NV_TPK) || defined(NV_ANDROID)
     if (log) { rename(log, getenv("NUVIO_LOG_ANTERIOR"));
 #else
-    if (log) { rename(log, "/tmp/nuvio-anterior.log");
+    if (log) { rename(log,
+#ifdef NV_DTS_DEBUG
+        "/tmp/" NV_APP_ID "-anterior.log"
+#else
+        "/tmp/nuvio-anterior.log"
+#endif
+      );
 #endif
                if (freopen(log, "w", stdout)) { fflush(stderr); dup2(fileno(stdout), fileno(stderr)); } } }
   setvbuf(stdout, NULL, _IOLBF, 0);
+#ifdef NV_DTS_DEBUG
+  printf("[dts-debug] appId=%s engine=%d nativeAdapter=%d; diagnostic build, TV validation pending\n",
+         NV_APP_ID, dts_engine_available(), dts_pipeline_available(0));
+#endif
 #ifdef NV_ANDROID
   android_iniciar();   // [tv] no log + espelho no logcat (android.c)
 #endif
@@ -726,6 +775,9 @@ int main(int argc, char **argv) {
 #else
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+#ifdef NV_LINUX_DESKTOP
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#endif
   // Canal alpha no framebuffer. Sem ele a superficie nao tem como ficar
   // transparente, e o plano de video do aparelho — que fica ATRAS da janela e
   // so aparece pelo alpha — nunca poderia ser revelado.
@@ -737,7 +789,8 @@ int main(int argc, char **argv) {
   SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
   SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
   SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
-#ifdef __EMSCRIPTEN__
+#if defined(__EMSCRIPTEN__) || defined(NV_LINUX_DESKTOP)
+  // Desktop preview is windowed; browser fullscreen requires a user gesture.
   // O navegador da TV ja entrega a pagina em tela cheia; pedir FULLSCREEN
   // aqui exigiria um gesto do usuario e falharia em silencio.
   Uint32 flags = SDL_WINDOW_OPENGL;
@@ -841,7 +894,11 @@ int main(int argc, char **argv) {
   // SDL_CreateWindow nao muda nada. Ver android_pedir_superficie.
   if (pedeW > (int)NV_TELA_W) android_pedir_superficie(pedeW, pedeH);
 #endif
-  win = SDL_CreateWindow("Nuvio", SDL_WINDOWPOS_CENTERED,
+  const char *windowTitle = "Nuvio";
+#ifdef NV_LINUX_DESKTOP
+  windowTitle = "Nuvio - Linux UI preview";
+#endif
+  win = SDL_CreateWindow(windowTitle, SDL_WINDOWPOS_CENTERED,
                                      SDL_WINDOWPOS_CENTERED,
                                      pedeW, pedeH, flags);
   if (!win) { printf("janela: %s\n", SDL_GetError()); return 1; }
@@ -895,6 +952,12 @@ int main(int argc, char **argv) {
   }
 #endif
   SDL_GLContext ctx = SDL_GL_CreateContext(win);
+#ifdef NV_LINUX_DESKTOP
+  if (!ctx) {
+    printf("[linux] sem contexto GLES2: %s\n", SDL_GetError());
+    SDL_DestroyWindow(win); SDL_Quit(); return 2;
+  }
+#endif
 #ifdef NV_TPK
   // Sem GL (Tizen 4/5 sem superficie) nao ha o que desenhar; sai e o host
   // mostra o motivo (nv_tpk_erro).
@@ -982,7 +1045,7 @@ int main(int argc, char **argv) {
   // Discord alone uses the bundled Mozilla roots on native TV builds.
   char discordCa[4096];
   snprintf(discordCa, sizeof discordCa, "%s/discord-ca.pem", dirArte);
-#if defined(__APPLE__) && !defined(NV_ANDROID) && !defined(NV_TPK)
+#if (defined(__APPLE__) || defined(NV_LINUX_DESKTOP)) && !defined(NV_ANDROID) && !defined(NV_TPK)
   FILE *discordRoots = fopen(discordCa, "rb");
   if (discordRoots) fclose(discordRoots);
   else discordCa[0] = 0; // Desktop development can use system trust.
@@ -992,6 +1055,7 @@ int main(int argc, char **argv) {
   // NIVEL DE GPU (gpunivel.h): le GL_*, marca a GPU fraca no perfil e decide
   // o nivel de partida ANTES de tex_iniciar, que tira o perfil do aparelho.
   gpun_iniciar(dw, dh);
+  gputempo_iniciar();   // GPU clock per frame (Android, where the extension exists)
   int gpuPref = ajustes_gpu_efeitos();
   if (gpuPref) gpun_preferencia(gpuPref);
   if (ajustes_720p()) gpun_forcar_720();
@@ -1146,6 +1210,8 @@ int main(int argc, char **argv) {
   Uint32 ultRelato = SDL_GetTicks();
   double txtMsQuadro = 0, piorTxtMs = 0;
   static int rastroQuadros;
+  static double gpuFillSoma, gpuFillPico;   // [gpu-modos] fill: media e pico da janela
+  static int gpuFillN;
   double fPrep = 0, fGlClr = 0;
   int    txtNQuadro = 0, piorTxtN = 0;
   int quadros = 0, janks = 0; double pior = 0;
@@ -1163,6 +1229,7 @@ int main(int argc, char **argv) {
   double fEv=0, fBomb=0, fUpd=0, fDes=0, fSwap=0, fAux=0, fClr=0;
   int fUplN=0, pUplN=0; long fUplB=0, pUplB=0;
   double pEv=0, pBomb=0, pUpd=0, pDes=0, pSwap=0, pAux=0, pClr=0;
+  double pPrep=0, pGlClr=0;
   // Dentro de `des`: quanto e travessia de GL e quanto e busca no cache.
   double fFill=0, pFill=0; int fNCheio=0, pNCheio=0;
   double fGfxMs=0, fTexMs=0, fOutMs=0; int fNRect=0, fNProg=0, fNBind=0, fNBusca=0, fNOut=0;
@@ -1254,7 +1321,7 @@ int main(int argc, char **argv) {
       // com KEYDOWN e KEYUP quase juntos — so o KEYDOWN conta. Isto ja tinha
       // sido resolvido uma vez e voltou a quebrar quando limpei os remendos
       // antigos: o tratamento saiu junto.
-#ifdef __EMSCRIPTEN__
+#if defined(__EMSCRIPTEN__) || defined(NV_LINUX_DESKTOP)
       // TIZEN: o Return do controle Samsung e o keyCode 10009 (XF86Back), que
       // nao existe na tabela do SDL. tizen-shell.html o traduz em Escape, e
       // AQUI o Escape vira AC_BACK — o mesmo codigo que o webOS entrega.
@@ -1267,7 +1334,14 @@ int main(int argc, char **argv) {
       // conversao nao tira nada de ninguem.
       if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE)
         e.key.keysym.sym = SDLK_AC_BACK;
+#ifdef NV_LINUX_DESKTOP
+      if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_BACKSPACE)
+        e.key.keysym.sym = SDLK_AC_BACK;
 #endif
+#endif
+      // CH+ segurado x tocado (central.h). Com canal na tela (zap) ele segue
+      // direto, sem atraso.
+      if (teclaCh(&e) && central_tecla(&e, !app_zap_ativo() && app_central_pode())) continue;
       remapCanal(&e);
       // TECLA DESCONHECIDA, UMA LINHA CADA, UMA VEZ SO.
       //
@@ -1302,6 +1376,7 @@ int main(int argc, char **argv) {
       }
       app_evento(&e);
     }
+    central_tecla_quadro(SDL_GetTicks(), entregarCh);
     teclasInjetadas(app_evento);
     texto_sistema_quadro();
     fEv = NV_DT(tEv);
@@ -1343,7 +1418,7 @@ int main(int argc, char **argv) {
     // com FPS de 0,1 a janela inteira tem 1 quadro, e o pior saia 0.0.
     if (quadros > 20 || dtms > 1000.0) {
       if (dtms > pior) { pior = dtms; piorTxtMs = txtMsQuadro; piorTxtN = txtNQuadro;
-                         pEv=fEv; pBomb=fBomb; pUpd=fUpd; pDes=fDes; pSwap=fSwap; pAux=fAux; pClr=fClr;
+                         pEv=fEv; pBomb=fBomb; pUpd=fUpd; pDes=fDes; pSwap=fSwap; pAux=fAux; pClr=fClr; pPrep=fPrep; pGlClr=fGlClr;
                          pUplN=fUplN; pUplB=fUplB;
                          pGfxMs=fGfxMs; pTexMs=fTexMs; pNRect=fNRect; pNProg=fNProg;
                          pNBind=fNBind; pNBusca=fNBusca; pOutMs=fOutMs; pNOut=fNOut; pFill=fFill; pNCheio=fNCheio; }
@@ -1356,8 +1431,8 @@ int main(int argc, char **argv) {
     // todos, na ordem, ao lado das teclas.
     if (rastroQuadros && dtms > 25.0)
       printf("[qd] %.1fms ev=%.1f bomb=%.1f(%d tex %.1fMB) upd=%.1f clr=%.1f des=%.1f aux=%.1f swap=%.1f"
-             " [prep=%.1f glclear=%.1f] txt=%.1fms/%d rects=%d fill=%.2f assados=%d %s\n", dtms, fEv, fBomb, fUplN, fUplB / 1048576.0,
-             fUpd, fClr, fDes, fAux, fSwap, fPrep, fGlClr, txtMsQuadro, txtNQuadro, fNRect, fFill, gfx_n_assados, home_rastro_foco());
+             " [prep=%.1f glclear=%.1f] txt=%.1fms/%d rects=%d fill=%.2f assados=%d gpu~=%.1f %s\n", dtms, fEv, fBomb, fUplN, fUplB / 1048576.0,
+             fUpd, fClr, fDes, fAux, fSwap, fPrep, fGlClr, txtMsQuadro, txtNQuadro, fNRect, fFill, gfx_n_assados, gputempo_ultimo(), home_rastro_foco());
     if (rastroQuadros && dtms > 25.0) {
       int k; printf("[qd-fill]");
       for (k = 0; k < GFX_NMODOS; k++) if (gfx_fill_modo[k] > 0.02) printf(" %d=%.2f", k, gfx_fill_modo[k]);
@@ -1391,6 +1466,7 @@ int main(int argc, char **argv) {
     // pedacos.
     Uint64 t0 = NV_T0();
     tex_upl_n = 0; tex_upl_bytes = 0;
+    gputempo_quadro_inicio();   // the GPU clock brackets uploads + draw
     tex_bombear(3);
     fBomb = NV_DT(t0);
     fUplN = tex_upl_n; fUplB = tex_upl_bytes;
@@ -1485,10 +1561,14 @@ int main(int argc, char **argv) {
     fNRect = gfx_n_rect; fNProg = gfx_n_prog; fNBind = gfx_n_bind; fNBusca = tex_n_busca;
     fOutMs = gfx_ms_outros; fNOut = gfx_n_outros;
     fFill = gfx_fill; fNCheio = gfx_n_cheio;
+    // Media e pico do preenchimento real na janela de 3 s ([gpu-modos] fill).
+    gpuFillSoma += gfx_fill_gpu; gpuFillN++;
+    if (gfx_fill_gpu > gpuFillPico) gpuFillPico = gfx_fill_gpu;
     t0 = NV_T0();
     videoSeSolicitado();
     capturaSeSolicitado();
     fAux = NV_DT(t0);
+    gputempo_quadro_fim();
     t0 = NV_T0();
     SDL_GL_SwapWindow(win);
 #ifdef __EMSCRIPTEN__
@@ -1627,11 +1707,23 @@ int main(int argc, char **argv) {
       // `bomb` e a subida de textura para a GPU; `upl` diz se foi UMA arte
       // grande ou muitas pequenas, que e a diferenca entre partir o upload e
       // reduzir o orcamento.
+      // GPU time of the window, by the GPU's own clock (gputempo.h). Only where
+      // the extension exists; the line is what tells a 17 ms frame from a 30 ms
+      // one when both show as "33" to the CPU.
+      { double gMed, gPior, gUlt; int gN = gputempo_colher(&gMed, &gPior, &gUlt);
+        if (gN > 0) printf("[gpu-tempo] med=%.1fms pior=%.1fms ult=%.1fms n=%d\n", gMed, gPior, gUlt, gN); }
       if (pior > 33.0) {
         printf("[quadro] pior=%.1fms | ev=%.1f bomb=%.1f(%d tex, %.1fMB)"
                " upd=%.1f clr=%.1f des=%.1f aux=%.1f swap=%.1f\n",
                pior, pEv, pBomb, pUplN, pUplB / 1048576.0,
                pUpd, pClr, pDes, pAux, pSwap);
+        // 2.0.1: `clr` de 6 e 14 s no Android ao abrir video (Expressluck, TCL
+        // A14) e o numero junta seis passos. Aberto em partes so quando pesa:
+        // prep = luz ambiente + vidro fosco, gl = o glClear (primeira chamada
+        // GL depois do swap: e onde o driver espera o buffer da janela).
+        if (pClr > 100.0)
+          printf("[quadro-clr] clr=%.1f prep=%.1f gl=%.1f resto=%.1f\n",
+                 pClr, pPrep, pGlClr, pClr - pPrep - pGlClr);
         // O `des` DO PIOR QUADRO REPARTIDO, NO LOG. Ate aqui so ia para
         // /tmp/nuvio-fps.txt, que no Android nao existe: a TCL do dono
         // (04/10/2026) mostrava `des=30..45 ms` com texto 0 e upload 0, e nada
@@ -1660,6 +1752,22 @@ int main(int argc, char **argv) {
           } }
 #endif
         if (m != gfx_modos_desligados) { printf("[gpu-modos] desligados=%llx\n", m); gfx_modos_desligados = m; }
+        // Field instruments on Android, where there is no /tmp (all read once per
+        // 3 s report, all no-ops when the property is unset or "0"):
+        //   debug.nuvio.quadros 1  -> per-frame trace, same as /tmp/nuvio-quadros
+        //   debug.nuvio.fill 1     -> the "[gpu-modos] fill" line every report
+        //   debug.nuvio.gpunivel N -> force GPU level N (0-3) for A/B measurement
+        int forcaFill = 0;
+#ifdef NV_ANDROID
+        { char pv[PROP_VALUE_MAX] = "";
+          if (__system_property_get("debug.nuvio.quadros", pv) > 0 && pv[0] && pv[0] != '0') rastroQuadros = 1;
+          pv[0] = 0;
+          forcaFill = __system_property_get("debug.nuvio.fill", pv) > 0 && pv[0] && pv[0] != '0';
+          pv[0] = 0;
+          if (__system_property_get("debug.nuvio.gpunivel", pv) > 0 && pv[0] >= '0' && pv[0] <= '3' &&
+              pv[0] - '0' != gpun_nivel())
+            gpun_definir_nivel(pv[0] - '0'); }
+#endif
         // NO CAMPO, SEM ARQUIVO: interface lenta (FPS < 50 com mais de 9
         // texturas na tela) solta a mesma linha, no maximo uma vez a cada 30 s,
         // com layout, tema e vidro. Registros 10063-10235 (LG webOS 5): 60 fps
@@ -1684,11 +1792,14 @@ int main(int argc, char **argv) {
           printf("[gpu-modos] lento: fps=%.1f layout=%d cor-viva=%d vidro=%d tela=%s\n",
                  fpsAgora, ajustes_home_layout(), ajustes_cor_viva(), ajustes_vidro(),
                  app_tela_nome()); }
-        if (fo || lenta || getenv("NUVIO_FILL_MODOS")) {
+        if (fo || lenta || forcaFill || getenv("NUVIO_FILL_MODOS")) {
           int k; printf("[gpu-modos] fill: forca=%.2f |", nv_ambiente_forca);
           for (k = 0; k < GFX_NMODOS; k++) if (gfx_fill_modo_ult[k] > 0.02) printf(" %d=%.2f", k, gfx_fill_modo_ult[k]);
-          printf("\n");
-        } }
+          // gpu = o que a GPU pinta de fato (gfx.h, gfx_fill_gpu); mist = a parte com mistura
+          printf(" | gpu=%.2f mist=%.2f med=%.2f pico=%.2f\n", gfx_fill_gpu_ult, gfx_fill_gpu_mist_ult,
+                 gpuFillN ? gpuFillSoma / gpuFillN : 0.0, gpuFillPico);
+        }
+        gpuFillSoma = 0.0; gpuFillPico = 0.0; gpuFillN = 0; }
 #ifdef NV_TPK
       // Quanto de tela o pior quadro pintou (gfx_fill, em telas 1920x1080) e
       // em que nivel de GPU (gpunivel.h): e o que separa "a GPU nao da conta

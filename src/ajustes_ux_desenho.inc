@@ -273,8 +273,14 @@ static const char *ajFundoArte(void) {
   return (cat_n() > 0 && home_item_focado(&hi) && hi.indice >= 0)
            ? ajArte(AJA_FUNDO, hi.indice) : ajArte(AJA_FUNDO, ajArteFundoN);
 }
+// 2.0.2 (dono, na TCL): "o fundo do ajustes tem que ser sempre frost que fica
+// melhor de ler". Os Ajustes desenham SEMPRE o Frost, qualquer que seja a
+// Aparencia › Fundo escolhida (o valor salvo nao muda; a escolha continua
+// valendo no resto do app e aparece nos cartoes da propria opcao). E o mesmo
+// caminho do Frost do app (fundo_desenhar_modo): a luz assada no canal, sem
+// fosco a mais, e as mesmas quedas nos niveis de GPU menores.
 static void ajFundo(void) {
-  fundo_desenhar((GfxRect){ 0, 0, NV_VTELA_W, NV_VTELA_H }, ajFundoArte(), 1.0f);
+  fundo_desenhar_modo(FUNDO_FROST, (GfxRect){ 0, 0, NV_VTELA_W, NV_VTELA_H }, 0.0f, ajFundoArte(), 1.0f);
 }
 
 // --- GEOMETRIA ------------------------------------------------------------------
@@ -338,11 +344,8 @@ static float aj2X0(void) { return (48.0f + ajustes_rail_largura_fixa()) / AJ2_S;
 static float aj2N1;
 static GfxRect aj2MenuR(void) {
   float n = aj2N1 < 0 ? 0 : aj2N1 > 1 ? 1 : aj2N1;
-  return (GfxRect){ aj2X0(), AJ2_TOPO, AJ2_MENU_W - (AJ2_MENU_W - AJ2_RAIL_W) * n, NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM };
-}
-static GfxRect aj2ResumoR(void) {
-  float x = aj2X0() + AJ2_MENU_W + 24.0f;
-  return (GfxRect){ x, AJ2_TOPO, NV_VTELA_W - AJ2_MARGEM - x, NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM };
+  (void)n;   // 2.0.2: o indice e a grade; o menu so aparece como trilho
+  return (GfxRect){ aj2X0(), AJ2_TOPO, AJ2_RAIL_W, NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM };
 }
 static int aj2TemInsp(void) { return ajustes_tamanho_ajustes() < 1.19f; }
 // A LARGURA DA LISTA DA V2 (1000 em 80-100%). Nao desenha mais nada: e a regua
@@ -358,19 +361,20 @@ static float aj2ListaWRef(void) {
 // opcao em foco fica a esquerda, grande, com kicker, titulo e descricao
 // embaixo (sem ilha); a LISTA compacta numa ilha a direita. A coluna da arte
 // comeca depois da ilha do menu recolhida; arte 44% do que sobra, 36 de vao.
-static float aj2ArteX(void) { return aj2X0() + AJ2_RAIL_W + 28.0f; }
+#define AJ2_CORPO (AJ2_TOPO + AJ_CAB_PAGINA)   // 2.0.2: abaixo do cabecalho da pagina
+static float aj2ArteX(void) { return aj2X0(); }
 static float aj2ArteW(void) { return (NV_VTELA_W - AJ2_MARGEM - aj2ArteX()) * 0.44f; }
 static GfxRect aj2ListaR(void) {
   float x = aj2ArteX() + aj2ArteW() + 36.0f;
-  return (GfxRect){ x, AJ2_TOPO, NV_VTELA_W - AJ2_MARGEM - x, NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM };
+  return (GfxRect){ x, AJ2_CORPO, NV_VTELA_W - AJ2_MARGEM - x, NV_VTELA_H - AJ2_CORPO - AJ2_MARGEM };
 }
 // O "inspetor" da A3 e a coluna da arte (sem ilha).
 static GfxRect aj2InspR(void) {
-  return (GfxRect){ aj2ArteX(), AJ2_TOPO, aj2ArteW(), NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM };
+  return (GfxRect){ aj2ArteX(), AJ2_CORPO, aj2ArteW(), NV_VTELA_H - AJ2_CORPO - AJ2_MARGEM };
 }
 static GfxRect aj2EditorR(void) {
   float x = aj2X0() + AJ2_EDITOR_DX;
-  return (GfxRect){ x, AJ2_TOPO, NV_VTELA_W - AJ2_MARGEM - x, NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM };
+  return (GfxRect){ x, AJ2_CORPO, NV_VTELA_W - AJ2_MARGEM - x, NV_VTELA_H - AJ2_CORPO - AJ2_MARGEM };
 }
 // Onde a lista comeca (o fim do cabecalho: 42 + kicker 21,8 + 4 + titulo 62,9
 // + 8 + sub 29 + 18) e onde termina (a margem; os ultimos 90 px esvanecem).
@@ -573,7 +577,9 @@ static float ajLinhaH(int i) {
   int op = TELA[i].op;
   float h = AJ2_LN_H, baixo = 0;
   GfxRect fr = aj2ListaR();
-  if ((inativa(op) && uxRequisito(op) >= 0) || op == AJ_GUIA) h = AJ2_LN_SUB;
+  // "Depende de: ..." so na linha em foco (2.0.2): nas Notas eram oito linhas
+  // repetindo a mesma frase; apagada, a linha ja diz que esta presa.
+  if ((inativa(op) && uxRequisito(op) >= 0 && aj2FocoNaLista(i)) || op == AJ_GUIA) h = AJ2_LN_SUB;
   // A regua de cores abre NA LINHA, com e sem inspetor: o inspetor mostra a
   // previa viva e as medidas da cor (aj2PreviaCor).
   if (op == AJ_TEMA && ajEditandoLinha(op) && aj2FocoNaLista(i)) baixo += AJ_REGUA_H;
@@ -759,6 +765,13 @@ static const char *ajEstadoAcao(int op) {
     return b;
   }
   if (op == AJ_GUIA) { snprintf(b, sizeof b, i18n("%d recursos"), guiaTotal()); return b; }
+  if (op == AJ_APOIAR) {
+    int i, u = 0;
+    b[0] = 0;
+    for (i = 0; i < apoio_n() && u < (int)sizeof b; i++)
+      u += snprintf(b + u, sizeof b - (size_t)u, "%s%s", i ? " · " : "", apoio_nome(apoio_qual(i)));
+    return b;
+  }
   return textoLeitura(op);
 }
 
@@ -795,17 +808,20 @@ static void ajMovAtualizar(float dt) {
     else ajMovValor[op] += (alvo-ajMovValor[op])*k;
   }
 }
-// A3: o interruptor da linha compacta (64 x 34, botao de 26) e o estado em 22.
+// A3: o interruptor da linha compacta (64 x 34, botao de 26).
+// 2.0.2: sem o "Ligado"/"Desligado" escrito ao lado. O interruptor ja diz o
+// estado e o texto repetido em toda linha era o ruido da lista; ligado, o
+// trilho fica cheio no acento e o botao na tinta dele (claro ou escuro), para
+// ler de longe sem depender do texto.
 static float aj2ChipLiga(int op, float xDir, float yc, int ligado, float a) {
-  TxtLinha t = ajTxt(TXT_V2_24, ligado ? "Ligado" : "Desligado");
-  float ar,ag,ab, on = 1.0f-ajMov(op, valor[op]);
-  float w = t.w+14+64;
+  float ar,ag,ab, on = 1.0f-ajMov(op, valor[op]), k = ajTinta() / 255.0f;
+  float kr = 1.0f + (k - 1.0f) * on;
+  (void)ligado;
   ajustes_acento(&ar,&ag,&ab);
-  ajNeutro((GfxRect){xDir-64,yc-17,64,34},17,0.10f,AJ_CHIP_SOL,a);
-  gfx_cor((GfxRect){xDir-64,yc-17,64,34},0.5f,ar,ag,ab,0.32f*on*a);
-  gfx_cor((GfxRect){xDir-60+30*on,yc-13,26,26},0.5f,1,1,1,(0.55f+0.45f*on)*a);
-  txt_desenhar_alpha(t,xDir-w,yc-t.h*0.5f,(ligado ? 0.85f : 0.55f)*a);
-  return w;
+  ajNeutro((GfxRect){xDir-64,yc-17,64,34},17,0.12f,AJ_CHIP_SOL,a);
+  gfx_cor((GfxRect){xDir-64,yc-17,64,34},0.5f,ar,ag,ab,0.92f*on*a);
+  gfx_cor((GfxRect){xDir-60+30*on,yc-13,26,26},0.5f,kr,kr,kr,(0.6f+0.4f*on)*a);
+  return 64.0f;
 }
 static float aj2SegLargura(int op, int n) {
   float w = 10.0f;
@@ -878,7 +894,7 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
   GfxRect fr = aj2ListaR();
   GfxRect ln = { fr.x + 18.0f, y, fr.w - 36.0f, h };
   int desligada = inativa(op), emFoco = f > 0.5f, ed = ajEditandoLinha(op);
-  int sub = (desligada && uxRequisito(op) >= 0) || op == AJ_GUIA;
+  int sub = (desligada && uxRequisito(op) >= 0 && aj2FocoNaLista(item)) || op == AJ_GUIA;
   int abre = h > 102.0f;
   float aT = a * (desligada ? 0.45f : 1.0f), aTx = a * aj2TextoLista;
   float xDir = ln.x + ln.w - 22.0f, yc = abre ? y + AJ2_LN_LINHA1 * 0.5f : y + h * 0.5f;
@@ -1030,24 +1046,19 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
 // fio, nao a 10 — o grupo leva 2 e a linha os seus 4.
 // A3: margem 20 e 8 embaixo (era 26 e 12); o nome continua 26/800 a 100%.
 #define AJ2_GRUPO_H (20.0f + 31.2f + 8.0f + 2.0f + 2.0f)
-static int ajContaGrupo(int item) {
-  int i, n = 0;
-  for (i = item + 1; i < secFim(secDoItem[item]) && TELA[i].tipo == IT_OPC; i++)
-    if (visivel(i)) n++;
-  return n;
-}
+// 2.0.2: sem a contagem a direita (so a nota de um ROTS, "para quem faz o app").
 static void ajDesenharGrupo(int item, float y, float a) {
   GfxRect fr = aj2ListaR();
   float x = fr.x + 18.0f, w = fr.w - 36.0f, yc = y + 20.0f + 15.6f;
-  char q[16];
-  TxtLinha t, c;
+  TxtLinha t;
   a *= aj2TextoLista;
   if (a <= 0.004f) return;
-  snprintf(q, sizeof q, "%d", ajContaGrupo(item));
   t = ajTxt(TXT_V2_GRUPO, TELA[item].titulo);
-  c = ajTxt(TXT_V2_24, TELA[item].sub ? TELA[item].sub : q);
   txt_desenhar_alpha(t, x + 22, yc - t.h * 0.5f, a);
-  txt_desenhar_alpha(c, x + w - 22 - c.w, yc - c.h * 0.5f + 1.0f, 0.60f * a);
+  if (TELA[item].sub && TELA[item].sub[0]) {
+    TxtLinha c = ajTxtC(TXT_V2_24, TELA[item].sub, w - 44.0f - t.w - 24.0f);
+    txt_desenhar_alpha(c, x + w - 22 - c.w, yc - c.h * 0.5f + 1.0f, 0.60f * a);
+  }
   gfx_cor((GfxRect){ x, y + 20.0f + 31.2f + 8.0f, w, 2 }, 0, 1, 1, 1, 0.18f * a);
 }
 

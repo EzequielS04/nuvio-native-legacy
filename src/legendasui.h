@@ -32,6 +32,8 @@
 void  legendasui_abrir(void);
 // 1 = the person is in "Mais opções".
 int   legendasui_mais(void);
+// 1 while the versions list of one language row is open (#202).
+int   legendasui_versoes(void);
 enum { LEGUI_NADA = 0, LEGUI_TRATADO, LEGUI_FECHAR, LEGUI_ESTILO };
 int   legendasui_evento(const SDL_Event *e);
 float legendasui_altura(void);

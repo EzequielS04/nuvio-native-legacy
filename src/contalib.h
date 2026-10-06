@@ -142,6 +142,11 @@ void contalib_reconciliar(void);
 // o historico daqui responde "esta obra esta marcada como vista?", e um
 // episodio nao responde isso por uma serie de oito temporadas.
 int contalib_aplicar_vistos(void);
+// Filtros do jornal da conta (contapend.h), ligados por app.c: 1 = a linha
+// remota fica de fora porque a pessoa tirou/desmarcou o item nesta TV depois
+// dela. NULL desliga (os testes deste modulo nao ligam).
+void contalib_filtros(int (*lista)(const char *id, long long ms),
+                      int (*visto)(const char *id, int t, int e, long long ms));
 
 void contalib_esquecer(void);
 

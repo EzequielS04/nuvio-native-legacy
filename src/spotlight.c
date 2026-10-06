@@ -615,6 +615,60 @@ static void montarAjustes(const char *consultaLocal) {
       if (!dup) resultados[n++] = sugestao[0];
     }
   }
+  // NADA COM TODAS AS PALAVRAS (2.0.2): antes a busca so dizia "Nenhum ajuste
+  // encontrado." Agora tenta, nesta ordem, cada palavra sozinha ("legenda
+  // grande" acha as legendas) e a consulta encurtada pelo fim (o erro de
+  // digitacao no fim da palavra, "legendz"). Se ainda nao ha nada, o aviso
+  // vem com os termos mais buscados embaixo.
+  if (modoAjustes && consultaLocal && consultaLocal[0] && n == 0) {
+    // Rotulos exatos (em portugues: a busca indexa o rotulo pt em qualquer
+    // idioma), para cair na linha certa e nao num vizinho que contem a palavra.
+    static const char *const termos[] = {"Idioma da legenda", "Idioma do áudio", "Trailer no destaque",
+                                         "Qualidade máxima", "Addons"};
+    char q[128], *w, *ctx = NULL;
+    size_t len;
+    int t, k;
+    snprintf(q, sizeof q, "%s", consultaLocal);
+    for (w = strtok_r(q, " ", &ctx); w && n < 6; w = strtok_r(NULL, " ", &ctx)) {
+      AjusteBuscaResultado r[3];
+      int m, j, a2;
+      if (strlen(w) < 3 || !strcmp(w, consultaLocal)) continue;
+      m = ajustes_buscar(w, r, 3);
+      for (j = 0; j < m && n < 6; j++) {
+        int dup = 0;
+        for (a2 = 0; a2 < n; a2++) if (resultados[a2].op == r[j].op) dup = 1;
+        if (!dup) resultados[n++] = r[j];
+      }
+    }
+    len = strlen(consultaLocal);
+    for (k = (int)len - 1; !n && k >= 3; k--) {
+      if (((unsigned char)consultaLocal[k] & 0xC0) == 0x80) continue;   // nao corta no meio de um caractere
+      snprintf(q, sizeof q, "%.*s", k, consultaLocal);
+      n = ajustes_buscar(q, resultados, 6);
+    }
+    if (n) cabecalho(i18n("Talvez seja um destes"));
+    else {
+      Linha *l = nova(L_AVISO);
+      if (l) {
+        snprintf(l->t1, sizeof l->t1, "%s", i18n("Nenhum ajuste encontrado."));
+        snprintf(l->chave, sizeof l->chave, "aj-vazio");
+      }
+      cabecalho(i18n("Experimente"));
+      for (t = 0; t < (int)(sizeof termos / sizeof termos[0]) && n < 5; t++)
+        if (ajustes_buscar(termos[t], resultados + n, 1) == 1) n++;
+    }
+    for (i = 0; i < n; i++) {
+      Linha *l = nova(L_AJUSTE);
+      if (!l) return;
+      l->ref = resultados[i].op;
+      snprintf(l->t1, sizeof l->t1, "%s", resultados[i].titulo);
+      snprintf(l->t2, sizeof l->t2, "%s%s%s", resultados[i].caminho,
+               resultados[i].valor[0] ? "  ·  " : "", resultados[i].valor);
+      snprintf(l->icone, sizeof l->icone, "%s", resultados[i].icone[0] ? resultados[i].icone : "menu_settings");
+      snprintf(l->chave, sizeof l->chave, "aj|%d", resultados[i].op);
+    }
+    return;
+  }
   // No modo dedicado, o rotulo explicita o escopo e consultas vazias podem
   // trazer sugestoes locais do proprio backend de preferencias. Na busca
   // comum o grupo so aparece quando ha um ajuste relevante.

@@ -196,6 +196,13 @@ TxtFamilia txt_fonte_interface(void);
 // as formas de apresentacao (bidi.c). Devolve como bidi_visual_utf8.
 int txt_bidi_legenda(TxtFamilia familia, TxtEstilo estilo, const char *in, char *out, size_t tam);
 const char *txt_fonte_da_linha(TxtFamilia familia, TxtEstilo estilo, const char *s);
+// O texto VISUAL que a linha desenharia (arabe/hebraico moldado e em ordem da
+// direita para a esquerda; latim igual a `s`), em quantas corridas de fonte
+// (a reserva arabe nao tem latim: o resto sai da fonte da interface) e, no
+// retorno, quantos caracteres ficam sem glifo (o quadradinho). -1 sem fonte.
+// Para o teste e o diagnostico.
+int txt_visual_da_linha(TxtFamilia familia, TxtEstilo estilo, const char *s,
+                        char *out, size_t tam, int *nCorridas);
 
 // Instrumentacao: quantas linhas foram RASTERIZADAS (nao vieram do cache) no
 // quadro e quanto tempo isso custou. Rasterizar texto e a operacao mais cara

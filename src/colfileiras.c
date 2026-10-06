@@ -72,10 +72,19 @@ int colfileiras_receber(const char *json) {
 
 void colfileiras_sincronizar(void) {
   colfileiras_contexto();
-  char ids[COL_MAX][FIL_CHAVE];
-  const char *chaves[COL_MAX], *titulos[COL_MAX];
-  int ocultas[COL_MAX], n = 0;
-  for (int i = 0; i < col_n() && n < COL_MAX; i++) {
+  // NA PILHA ERAM COL_MAX x 192 bytes (48 KB com 256 pastas; 384 KB com o teto
+  // de 2048 do #255). Grupos sao poucos, mas o pior caso e um grupo por pasta.
+  int max = col_n() > 0 ? col_n() : 1, n = 0;
+  char (*ids)[FIL_CHAVE] = malloc((size_t)max * FIL_CHAVE);
+  const char **chaves = malloc(sizeof *chaves * (size_t)max);
+  const char **titulos = malloc(sizeof *titulos * (size_t)max);
+  int *ocultas = malloc(sizeof *ocultas * (size_t)max);
+  if (!ids || !chaves || !titulos || !ocultas) {
+    printf("[collections] row sync deferred: allocation failed\n");
+    free(ids); free(chaves); free(titulos); free(ocultas);
+    return;
+  }
+  for (int i = 0; i < col_n() && n < max; i++) {
     const ColFolder *f = col_folder(i);
     if (!f || !f->group[0]) continue;
     for (int j = 0; j < f->nSources; j++) {
@@ -92,6 +101,7 @@ void colfileiras_sincronizar(void) {
     n++;
   }
   fil_colecoes_reconciliar(chaves, titulos, ocultas, n, col_tem_conta());
+  free(ids); free(chaves); free(titulos); free(ocultas);
   // Use a locked registry snapshot: discovery may be registering catalogues
   // on its worker while the account pull is applied on the drawing thread.
   static char todas[FIL_MAX][FIL_CHAVE];

@@ -110,6 +110,12 @@ static IlhaCartao modalC;
 static IlhaModal modalM;
 static char modalChave[80];
 static float modalT, modalV, modalFocoA[ILHA_MODAL_BOTOES];
+// O CORPO PEDIDO (ilha_corpo): vale um quadro; o ultimo fica para a saida.
+static int corpoPed;
+static float corpoW, corpoH, corpoT, corpoV;
+static float corpoWa, corpoHa, corpoVw, corpoVh;   // o tamanho na mola (o pedido muda)
+static IlhaCorpo corpoFn;
+static void *corpoU;
 static Uint32 modalDesde;
 static int pedido, pedidoQual;
 static IlhaCartao pedidoC;
@@ -412,20 +418,21 @@ int ilha_rect(float *x, float *y, float *w, float *h) {
 }
 
 // --- o modal ---------------------------------------------------------------------
-// ESTREIA: Assistir · Depois (mockup aprovado em 02/10, "Episodio novo:
-// Assistir / Depois"). Antes eram Assistir · Detalhes · Marcar como visto; o
-// dono escolheu o par curto: "Depois" recolhe SEM marcar e o cartao fica na
-// pilula (abrir a pagina do titulo continua contando como visto, ilhacart.c).
+// ESTREIA: Assistir · Depois · Dispensar. O par aprovado em 02/10 era
+// Assistir / Depois, com "Depois" recolhendo SEM marcar e o cartao ficando na
+// pilula — e ficava ate a pessoa abrir a serie (dono, 06/10: "o lembrete de
+// serie so sai se eu entrar na serie"). Agora "Depois" tira o cartao ate o app
+// fechar e "Dispensar" tira de vez aquele episodio (ver ILHA_PEDIU_* em ilha.h).
 // AMIGO: Ver tambem · Detalhes · Fechar, o A5 de oportunidades.md.
 static int nBotoes(void) {
   if (modalAtividade) return 1;
   if (modalAviso) return modalM.nBotoes < 1 ? 1 : modalM.nBotoes > ILHA_MODAL_BOTOES ? ILHA_MODAL_BOTOES : modalM.nBotoes;
-  return modalQual == ILHA_ESTREIA ? 2 : 3;
+  return 3;
 }
 static const char *rotuloBotao(int i) {
   if (modalAtividade) return i18n("Fechar");
   if (modalAviso) return modalM.botao[i];
-  if (modalQual == ILHA_ESTREIA) return i == 0 ? i18n("Assistir") : i18n("Depois");
+  if (modalQual == ILHA_ESTREIA) return i == 0 ? i18n("Assistir") : i == 1 ? i18n("Depois") : i18n("Dispensar");
   if (i == 0) return modalQual == ILHA_AMIGO ? i18n("Ver também") : i18n("Retomar");
   if (i == 1) return i18n("Detalhes");
   return i18n("Dispensar");   // a mesma palavra do menu do cartao "Retomar agora"
@@ -433,7 +440,7 @@ static const char *rotuloBotao(int i) {
 static const char *iconeBotao(int i) {
   if (modalAviso) return modalM.botaoIcone[i][0] ? modalM.botaoIcone[i] : NULL;
   if (i == 0) return "play";
-  if (modalQual == ILHA_ESTREIA) return "aj_clock";
+  if (modalQual == ILHA_ESTREIA) return i == 1 ? "aj_clock" : "aj_x";
   if (i == 1) return "aj_info";
   return NULL;
 }
@@ -522,7 +529,12 @@ static void acionar(int i) {
     return;
   }
   if (i == 0) { pedir(ILHA_PEDIU_TOCAR); ilha_modal_fechar(0); }
-  else if (modalQual == ILHA_ESTREIA) ilha_modal_fechar(0);   // "Depois": o cartao fica
+  else if (modalQual == ILHA_ESTREIA && i == 1) {
+    // "Depois": o cartao sai da pilula ate a proxima sessao (ilhacart_adiar).
+    pedir(ILHA_PEDIU_DEPOIS);
+    temCartao[modalQual] = 0;
+    ilha_modal_fechar(0);
+  }
   else if (i == 1) { pedir(ILHA_PEDIU_DETALHES); ilha_modal_fechar(0); }
   else {
     // "Fechar" tira o cartao: o modal recolhe para uma pilula que ja nao o tem.
@@ -1769,6 +1781,22 @@ static void salvarVoo(Uint32 agora, float x, float y, int dir) {
 
 static void ilha_desenharCorpo_(Uint32 agora);
 // Camada ampliada (escala.h): o corpo desenha na tela virtual.
+void ilha_corpo(float w, float h, IlhaCorpo corpo, void *u) {
+  corpoPed = 1; corpoW = w; corpoH = h; corpoFn = corpo; corpoU = u;
+  if (modalAberto) ilha_modal_fechar(1);
+}
+float ilha_corpo_t(void) { return corpoT; }
+
+// A hora da pilula em repouso, no lugar exato dela: com o corpo aberto e a
+// pilula mostrando outra coisa (aviso, cartao), e ela que fica no cabecalho.
+static void horaNoLugar(float x, int dir, float y, float a) {
+  TxtLinha t1, t2;
+  float w = PAD_E + PAD_D + larguraConteudo(M_RELOGIO, &t1, &t2);
+  GfxRect r = { dir ? x - w : x, y, w, NV_ILHA_H };
+  if (a < 0.01f) return;
+  txt_desenhar_alpha(t1, r.x + (r.w - (w - PAD_E - PAD_D)) * 0.5f, r.y + (r.h - (float)t1.h) * 0.5f, a);
+}
+
 void ilha_desenhar(Uint32 agora) {
   ESCALA_INI();
   ilha_desenharCorpo_(agora);
@@ -1813,7 +1841,24 @@ static void ilha_desenharCorpo_(Uint32 agora) {
   }
   alvo = temCur ? M_AVISO : atividadeViva(agora) ? M_ATIVIDADE
        : (relogioQuer && cartaoVez >= 0) ? M_CARTAO : M_RELOGIO;
-  vis = alvo != M_RELOGIO || relogioQuer || (modalAviso && (modalAberto || modalT > 0.01f));
+  // O CORPO (ilha_corpo): a mola do modal; efeitos leves sem repique e mais
+  // curta, minimos direto ao alvo.
+  { int quer = corpoPed;
+    float alvoC = quer ? 1.0f : 0.0f;
+    corpoPed = 0;
+    if (gfx_efeitos_minimos()) { corpoT = alvoC; corpoV = 0.0f; }
+    else if (gfx_efeitos_leves()) corpoT = molaIlhaWZ(&corpoV, corpoT, alvoC, dt, MODAL_MOLA_W * 1.5f, 1.0f);
+    else corpoT = molaIlhaWZ(&corpoV, corpoT, alvoC, dt, MODAL_MOLA_W, MODAL_MOLA_Z);
+    if (!quer && corpoT < 0.01f) { corpoT = 0.0f; corpoV = 0.0f; }
+    // O TAMANHO PEDIDO MUDA com o painel aberto (botao posto ou tirado, a
+    // edicao): anda na mola da pilula em vez de saltar. Nascendo, ja e o alvo.
+    if (corpoT <= 0.0f || corpoWa <= 0.0f || gfx_efeitos_minimos()) {
+      corpoWa = corpoW; corpoHa = corpoH; corpoVw = corpoVh = 0.0f;
+    } else {
+      corpoWa = molaIlha(&corpoVw, corpoWa, corpoW, dt);
+      corpoHa = molaIlha(&corpoVh, corpoHa, corpoH, dt);
+    } }
+  vis = alvo != M_RELOGIO || relogioQuer || (modalAviso && (modalAberto || modalT > 0.01f)) || corpoT > 0.0f;
   // O MEDIDOR so ocupa a ilha LIVRE: com aviso, atividade, modal ou voo ele
   // sai (o pouso e os avisos nunca esperam por ele) e volta depois.
   { int ds = desempenho_forma(), livre = !modalAberto && modalT <= 0.0f && !voo;
@@ -1903,7 +1948,7 @@ static void ilha_desenharCorpo_(Uint32 agora) {
   ancDef = 0;
   { float w = W < H ? H : W, h = H < 8.0f ? 8.0f : H;
     GfxRect r = { dir ? x - w : x, y, w, h }, R = r;
-    float raio = 0.5f, cr, cg, cb, fundo = 0.80f, solido = 0.86f, aPil = 1.0f, aMod = 0.0f;
+    float raio = 0.5f, cr, cg, cb, fundo = 0.80f, solido = 0.86f, aPil = 1.0f, aMod = 0.0f, aHora = 0.0f;
     // Crescida pelo medidor (Menor/Grande), o raio para em 32 px: a pilula
     // vira um cartao de cantos redondos, nao uma capsula.
     if (h > NV_ILHA_H_ABERTA) raio = 32.0f / h;
@@ -1926,6 +1971,33 @@ static void ilha_desenharCorpo_(Uint32 agora) {
       aMod = (modalT - 0.55f) / 0.40f; aMod = aMod < 0.0f ? 0.0f : aMod > 1.0f ? 1.0f : aMod;
       if (anim_politica_reduzida || ajustes_animacoes_reduzidas()) { aPil = modalAberto ? 0.0f : 1.0f; aMod = modalAberto ? 1.0f : 0.0f; }
     }
+    // O CORPO E A MESMA PILULA ESTICADA, como o modal: um retangulo so, da
+    // pilula ao painel ancorado no canto dela. A hora (relogio sozinho) nao
+    // apaga: fica onde esta e vira o cabecalho; o resto da pilula sai no
+    // comeco e o corpo entra quando a forma ja esta perto do fim.
+    else if (corpoT > 0.0f && corpoFn) {
+      int soHora = mostra == M_RELOGIO && dsMostra == DS_DESLIGADO;
+      float k3 = (corpoT - 0.08f) * 5.0f;
+      GfxRect C = { dir ? x - corpoWa : x, y, corpoWa, corpoHa };
+      float t = corpoT > 1.06f ? 1.06f : corpoT, tr = t > 1.0f ? 1.0f : t, rpx;
+      R.x = r.x + (C.x - r.x) * t; R.y = r.y + (C.y - r.y) * t;
+      R.w = r.w + (C.w - r.w) * t; R.h = r.h + (C.h - r.h) * t;
+      rpx = r.h * 0.5f + (MD_RAIO - r.h * 0.5f) * tr;
+      raio = rpx / (R.h > 1.0f ? R.h : 1.0f);
+      fundo = 0.80f + 0.08f * tr;
+      solido = 0.86f + 0.08f * tr;
+      // A hora passa a ser desenhada por horaNoLugar (no mesmo ponto): a da
+      // pilula sai, a outra fica com o alfa que ela tinha, sem piscar.
+      k3 = k3 < 0.0f ? 0.0f : k3 > 1.0f ? 1.0f : k3;
+      aPil = soHora ? 0.0f : 1.0f - corpoT * 10.0f;
+      if (aPil < 0.0f) aPil = 0.0f;
+      aHora = soHora && conteudoA > k3 ? conteudoA : k3;
+      // O painel e muito maior que o modal: o conteudo so entra com a forma
+      // quase assentada, senao ele aparece cortado pela borda que ainda cresce.
+      aMod = (corpoT - 0.78f) / 0.20f; aMod = aMod < 0.0f ? 0.0f : aMod > 1.0f ? 1.0f : aMod;
+      if (anim_politica_reduzida || ajustes_animacoes_reduzidas() || gfx_efeitos_minimos())
+        aMod = corpoT >= 0.5f ? 1.0f : 0.0f;
+    }
     // A PILULA RECEBE O QUADRO: depois do pouso ela cresce ~6% e assenta
     // (ilha_voo_pulso), em volta do proprio centro. So o vidro; o conteudo
     // fica onde estava, para o texto nao tremer.
@@ -1940,13 +2012,15 @@ static void ilha_desenharCorpo_(Uint32 agora) {
     if (coberta) { coberta = 0; return; }
     // O MODAL ESCURECE A TELA DE TRAS (veu do mockup, 40% / solido 42%): a
     // ilha crescida e a coisa na frente, a home fica atras.
-    if (modalT > 0.0f) {
-      float k = modalT > 1.0f ? 1.0f : modalT;
+    if (modalT > 0.0f || corpoT > 0.0f) {
+      float k = modalT > corpoT ? modalT : corpoT;
+      if (k > 1.0f) k = 1.0f;
       gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, (ajustes_vidro() ? 0.40f : 0.42f) * k * A);
     }
     // Sombra caida, curta: separa a pilula de arte clara sem virar halo. No
     // modal ela cresce junto (e o tamanho dele + folga, nunca a tela).
-    { float k = modalT > 0.0f ? (modalT > 1.0f ? 1.0f : modalT) : 0.0f;
+    { float k = modalT > corpoT ? modalT : corpoT;
+      k = k > 1.0f ? 1.0f : k < 0.0f ? 0.0f : k;
       gfx_rect((GfxRect){ R.x - 16.0f - 24.0f * k, R.y - 6.0f - 10.0f * k,
                           R.w + 32.0f + 48.0f * k, R.h + 34.0f + 50.0f * k }, 0, GFX_SOMBRA,
                1.0f, 0, 0, 0.5f, 0, 0, 0, (0.34f + 0.16f * k) * A); }
@@ -1957,7 +2031,8 @@ static void ilha_desenharCorpo_(Uint32 agora) {
       // e ao escurecido da arte (perfil do amigo, pagina do titulo na TV do
       // dono: "o relogio nao tem pilula aqui"): fica no cinza dos cartoes
       // (~0,12) mais um fio claro, e volta ao escuro do modal ao crescer.
-      float em = modalT > 0.0f ? 1.0f - (modalT > 1.0f ? 1.0f : modalT) : 1.0f;
+      float mk = modalT > corpoT ? modalT : corpoT;
+      float em = mk > 0.0f ? 1.0f - (mk > 1.0f ? 1.0f : mk) : 1.0f;
       float c0 = 0.055f + 0.065f * em, c1 = 0.058f + 0.066f * em, c2 = 0.068f + 0.075f * em;
       gfx_cor(R, raio, c0, c1, c2, (solido + 0.06f * em) * A);
       if (em > 0.01f) gfx_anel(R, raio, 1.5f, 1.0f, 1.0f, 1.0f, 0.085f * em * A);
@@ -1984,13 +2059,17 @@ static void ilha_desenharCorpo_(Uint32 agora) {
       if (mostra == M_CARTAO) desenharCartao(&mostraC, mostraQual, r, A * conteudoA * aPil);
       else desenharConteudo(mostra, r, A * conteudoA * aPil, agora);
     }
-    if (aMod > 0.0f) desenharModal(modalAlvo(r, dir), A * aMod);
+    if (aMod > 0.0f && modalT > 0.0f) desenharModal(modalAlvo(r, dir), A * aMod);
+    if (corpoT > 0.0f && corpoFn && modalT <= 0.0f) {
+      horaNoLugar(x, dir, y, A * aHora);
+      if (aMod > 0.0f) corpoFn((GfxRect){ dir ? x - corpoWa : x, y, corpoWa, corpoHa }, A * aMod, corpoU);
+    }
     gfx_sem_recorte();
     // Magic Remote: o clique na pilula com um cartao abre o modal.
-    if (modalT <= 0.0f && (mostra == M_CARTAO || (mostra == M_ATIVIDADE && ilha_atividade_expansivel())) && A > 0.5f) ponteiro_alvo(r.x, r.y, r.w, r.h, NULL, pontPilula, 0, 0);
-    if (modalT <= 0.0f && mostra == M_RELOGIO && relogioQuer && A > 0.5f) ponteiro_alvo(r.x, r.y, r.w, r.h, NULL, pontRelogio, 0, 0);
+    if (modalT <= 0.0f && corpoT <= 0.0f && (mostra == M_CARTAO || (mostra == M_ATIVIDADE && ilha_atividade_expansivel())) && A > 0.5f) ponteiro_alvo(r.x, r.y, r.w, r.h, NULL, pontPilula, 0, 0);
+    if (modalT <= 0.0f && corpoT <= 0.0f && mostra == M_RELOGIO && relogioQuer && A > 0.5f) ponteiro_alvo(r.x, r.y, r.w, r.h, NULL, pontRelogio, 0, 0);
     // E num aviso com modal (ou que abre um cartao), o mesmo clique abre o dele.
-    if (modalT <= 0.0f && mostra == M_AVISO && temCur && (cur.temModal || cur.cartao || cur.acao) && A > 0.5f)
+    if (modalT <= 0.0f && corpoT <= 0.0f && mostra == M_AVISO && temCur && (cur.temModal || cur.cartao || cur.acao) && A > 0.5f)
       ponteiro_alvo(r.x, r.y, r.w, r.h, NULL, pontAviso, 0, 0);
     if (voo) desenharVoo(vooPf, 1);
     salvarVoo(agora, x, y, dir); }

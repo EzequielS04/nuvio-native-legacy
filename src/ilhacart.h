@@ -12,9 +12,10 @@
 //
 // ESTREIA. O episodio novo de serie com lembrete (AV_AGENDA em avisos.c) ainda
 // nao lido: o mais recente fica na pilula ate ser lido — a aba Avisos aberta,
-// "Marcar como visto" no modal, ou a pagina do titulo aberta (com o relogio
-// ligado; desligado nada aqui marca coisa alguma). Desde 02/10 o modal da
-// estreia e Assistir / Depois (mockup aprovado): "Depois" recolhe sem marcar.
+// "Depois" ou "Dispensar" no modal, ou a pagina do titulo aberta (com o relogio
+// ligado; desligado nada aqui marca coisa alguma). Desde 06/10 o modal da
+// estreia e Assistir / Depois / Dispensar: "Depois" tira o cartao ate o app
+// fechar, "Dispensar" tira aquele episodio de vez (ver ilha.h, ILHA_PEDIU_*).
 //
 // AMIGO VENDO AGORA (02/10). O evento de inicio mais novo do feed de um amigo,
 // com menos de 15 min: um aviso uma vez por evento ("Ana está vendo
@@ -43,7 +44,10 @@ unsigned ilhacart_vivo_seq(void);
 const char *ilhacart_vivo_imdb(void);
 // Por quadro. `imdbAberto` = o titulo com a pagina aberta agora, ou NULL.
 void ilhacart_atualizar(Uint32 agora, const char *imdbAberto);
-// O modal pediu para tirar o cartao (Fechar / Marcar como visto).
+// O modal pediu para tirar o cartao (Fechar / Dispensar). Na estreia,
+// Dispensar grava (avisos_dispensar): aquele episodio nao volta.
 void ilhacart_dispensar(int qual);
+// "Depois" no modal da estreia: sai da pilula so ate o app fechar.
+void ilhacart_adiar(int qual);
 
 #endif

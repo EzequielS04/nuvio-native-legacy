@@ -13,6 +13,7 @@
 #include "text.h"
 #include "relogiofim.h"
 #include "desempenho.h"
+#include "velocidade.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
 #include "escala.h"
 #include <math.h>
@@ -38,6 +39,9 @@ static char pedTexto[200], pedDir[80], pedIcone[32];
 static char ultTexto[200], ultDir[80], ultIcone[32];
 static float relA;                  // opacidade do OSD neste quadro
 static double falta = -1.0;
+// #202: a velocidade da reproducao (centesimos); fora de 1x vai na pilula,
+// depois do "termina as", no acento.
+static int velCent = VEL_NORMAL;
 static float W, vW, H, vH, A, corpoA, textoA = 1.0f;
 static GfxRect ultRect;
 static int ultOk;
@@ -110,6 +114,8 @@ void plrilha_relogio(float a, double f) {
   falta = f;
 }
 
+void plrilha_velocidade(int cent) { velCent = cent > 0 ? cent : VEL_NORMAL; }
+
 void plrilha_esconder(void) { escondida = 1; }
 
 int plrilha_direita(void) {
@@ -121,10 +127,10 @@ float plrilha_corpo_alfa(void) { return temUlt ? corpoA : 0.0f; }
 
 // --- a linha da pilula ------------------------------------------------------------
 typedef struct {
-  TxtLinha txt, hora, fim, dir;
+  TxtLinha txt, hora, fim, dir, vel;
   float w;                 // largura do conteudo (sem o recuo)
   float ds;                // o trecho do medidor no fim da linha (0 = nada)
-  int temIcone, temTxt, temFim;
+  int temIcone, temTxt, temFim, temVel;
 } Linha;
 
 static void horaAgora(char *h, size_t n, char *fim, size_t nf) {
@@ -160,6 +166,16 @@ static float montar(const PlrIlhaPedido *p, Linha *L) {
   if (L->temFim) {
     L->fim = txt_linha(TXT_G19M, fim, 243, 242, 239, 153);
     w += 12.0f + 1.0f + 12.0f + (float)L->fim.w;
+  }
+  if (velCent != VEL_NORMAL) {
+    char v[16];
+    float ar, ag, ab;
+    vel_rotulo(v, sizeof v, velCent);
+    plrui_decimal(v);
+    ajustes_acento(&ar, &ag, &ab);
+    L->vel = txt_linha(TXT_G19M, v, (int)(ar * 255.0f), (int)(ag * 255.0f), (int)(ab * 255.0f), 255);
+    L->temVel = 1;
+    w += 12.0f + 1.0f + 12.0f + (float)L->vel.w;
   }
   if (p && p->direita) L->dir = txt_linha(TXT_G19M, p->direita, 243, 242, 239, 140);
   L->ds = dsP ? desempenho_linha_w(dsP) : 0.0f;
@@ -207,6 +223,13 @@ static void desenharLinha(const PlrIlhaPedido *p, const Linha *L, float x, float
     x += 1.0f + 12.0f;
     txt_desenhar_alpha(L->fim, x, yc - (float)L->fim.h * 0.5f + 1.0f, a);
     x += (float)L->fim.w;
+  }
+  if (L->temVel) {
+    x += 12.0f;
+    plrui_sep(x, yc, a);
+    x += 1.0f + 12.0f;
+    txt_desenhar_alpha(L->vel, x, yc - (float)L->vel.h * 0.5f + 1.0f, a);
+    x += (float)L->vel.w;
   }
   if (L->ds > 0.0f) desempenho_linha(dsP, x, yc, a);
 }

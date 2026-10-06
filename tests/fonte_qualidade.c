@@ -37,6 +37,15 @@ static void cfg(int prio, int hdr, int dv) {
   ajustes_dir(dirAj);
   assert(ajustes_fonte_prioridade() == prio && ajustes_fonte_hdr() == hdr && ajustes_dolby_vision() == !dv);
 }
+// Faixa de tamanho: indices de V_TAMANHO_GB (0 Sem limite, 1=1 GB, 2=2, 3=4, 4=8, 5=15, 6=30).
+static void cfgTam(int max, int min) {
+  char c[300]; FILE *f;
+  snprintf(c, sizeof c, "%s/ajustes.txt", dirAj);
+  f = fopen(c, "w"); assert(f);
+  fprintf(f, "fontePrioridadeLocal 0\nfonteHdrLocal 0\ndolbyVision 0\ntamanhoMaxLocal %d\ntamanhoMinLocal %d\n", max, min);
+  fclose(f);
+  ajustes_dir(dirAj);
+}
 // Fonte de debrid em cache com o selo vindo do proprio rotulo, como o parser faz.
 static void deb(Stream *s, const char *rot, int altura, int mp4, int dolbyVision) {
   fonte(s, "Torrentio", rot, altura, mp4, 0, 0, "td.invalid");
@@ -198,6 +207,46 @@ int main(void) {
     cfg(0, 0, 0); assert(!strcmp(vence(m, 3), "Torrentio 4k DV HDR"));
     // tamanho desconhecido (0) nao custa nada: sem medida o 4K nao perde por "peso"
     m[0].tamanhoBytes = 0; cfg(2, 0, 0); assert(!strcmp(vence(m, 3), "Torrentio 4k DV HDR"));
+  }
+
+  // FAIXA DE TAMANHO (1 GB = 1024^3 bytes). Fora dela vai para o fim da fila, nunca sai.
+  { const unsigned long long G = 1ULL << 30;
+    Stream m[3];
+    deb(&m[0], "Torrentio 4k", 2160, 0, 0); m[0].tamanhoBytes = 40 * G;   // melhor por qualidade
+    deb(&m[1], "Torrentio 1080p", 1080, 0, 0); m[1].tamanhoBytes = 6 * G;
+    deb(&m[2], "Torrentio 720p", 720, 0, 0); m[2].tamanhoBytes = G / 2;
+    streamfit_limpar();
+    // sem limites: ordem de sempre
+    cfgTam(0, 0); assert(!strcmp(vence(m, 3), "Torrentio 4k"));
+    // maximo 8 GB: o 4K de 40 GB sai da frente, ganha o 1080p de 6 GB
+    cfgTam(4, 0); assert(!strcmp(vence(m, 3), "Torrentio 1080p"));
+    assert(stream_pontos(&m[0]) < stream_pontos(&m[2]) && !stream_cabe_no_teto(&m[0]) && stream_cabe_no_teto(&m[1]));
+    // maximo 4 GB: sobra so o 720p de 512 MB
+    cfgTam(3, 0); assert(!strcmp(vence(m, 3), "Torrentio 720p"));
+    // minimo 1 GB: o 720p de 512 MB fica para tras; o 4K ganha (sem maximo)
+    cfgTam(0, 1); assert(!strcmp(vence(m, 3), "Torrentio 4k") && !stream_cabe_no_teto(&m[2]));
+    // faixa 1..8 GB: so o 1080p esta dentro
+    cfgTam(4, 1); assert(!strcmp(vence(m, 3), "Torrentio 1080p"));
+    assert(!stream_cabe_no_teto(&m[0]) && !stream_cabe_no_teto(&m[2]));
+    // limites inclusivos: exatamente 8 GB cabe no maximo de 8 GB e no minimo de 8 GB
+    m[1].tamanhoBytes = 8 * G; cfgTam(4, 4); assert(stream_cabe_no_teto(&m[1]));
+    m[1].tamanhoBytes = 6 * G;
+    // minimo MAIOR que o maximo: o minimo e ignorado (vale so o maximo de 2 GB)
+    cfgTam(2, 4); assert(!strcmp(vence(m, 3), "Torrentio 720p"));
+    assert(stream_cabe_no_teto(&m[2]) && !stream_cabe_no_teto(&m[1]));
+    // tamanho DESCONHECIDO continua elegivel: o 4K sem tamanho ganha mesmo com faixa estreita
+    m[0].tamanhoBytes = 0; m[0].tamanhoMB = 0;
+    cfgTam(2, 0); assert(!strcmp(vence(m, 3), "Torrentio 4k") && stream_cabe_no_teto(&m[0]));
+    // sem bytes exatos vale o tamanhoMB do texto
+    m[0].tamanhoMB = 40 * 1024; cfgTam(4, 0); assert(!stream_cabe_no_teto(&m[0]));
+    m[0].tamanhoMB = 0;
+    // TUDO fora da faixa: a melhor ainda toca (o teto e preferencia, nao filtro)
+    m[0].tamanhoBytes = 40 * G;
+    cfgTam(1, 0);   // maximo 1 GB: so o 720p (512 MB) cabe
+    assert(!strcmp(vence(m, 3), "Torrentio 720p"));
+    m[2].tamanhoBytes = 3 * G;   // agora nenhuma cabe em 1 GB
+    assert(!strcmp(vence(m, 3), "Torrentio 4k"));
+    cfgTam(0, 0);
   }
 
   streamfit_limpar();

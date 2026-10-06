@@ -82,6 +82,11 @@ typedef struct {
   char nome[64];
   char avatar[256];    // vazio = desenhar a inicial; ver RecItem.deAvatar
   char origem[8];      // "trakt" | "nuvio"
+  // O APELIDO que o amigo escolheu ("" = nunca escolheu, ou servidor antigo) e
+  // o SELO que o servidor deu a ele ("criador" | ""). O selo nunca e deduzido
+  // aqui: qualquer um pode escolher o apelido de quem fez o app.
+  char apelido[32];
+  char selo[12];
   // IDENTIDADES LIGADAS (F08, servidor com migracao 008): "trakt:<slug>" que
   // este amigo provou ser dele e deixou os amigos verem. E por elas que o feed
   // do Trakt dele se junta ao nosso. Servidor antigo: nIds = 0.
@@ -108,6 +113,7 @@ typedef struct {
   char avatar[256];
   char origem[8];      // "trakt" | "amigo"
   char viaNome[64];    // nome do contato em comum; so em "amigo"
+  char selo[12];       // ver RecContato.selo
 } RecSugestao;
 
 // 0 quando o pacote saiu SEM NUVIO_REC_URL. Nesse caso nada mais aqui faz
@@ -276,6 +282,22 @@ void rec_avatar(GfxRect a, const char *url, const char *nome, const char *id,
 void rec_avatar_estilo(GfxRect a, const char *url, const char *nome, const char *id,
                        float alfa, int estilo);
 
+// "Amigo #12" e a RESERVA de quem nao tem nome (o servidor e rec_nome_exibicao
+// a criam), nao um nome nem um apelido: quem desenha a pessoa pela identidade
+// trata como vazio. 1 quando `s` e essa reserva (em qualquer idioma: so olha o
+// "#<numero>" no fim).
+int  rec_nome_reserva(const char *s);
+// AS DUAS LINHAS DE QUEM E A PESSOA: o nome em cima e "@apelido" embaixo. Sem
+// um dos dois sobe o outro sozinho (sem buraco); sem nenhum, "Sem nome". `l2`
+// sai "" quando nao ha segunda linha.
+void rec_identidade(const char *nome, const char *apelido, char *l1, size_t n1,
+                    char *l2, size_t n2);
+// O SELO DE QUEM FEZ O APP ("Criador"), ao lado do nome: pilula de BADGE_H no
+// acento a 18 %, o icone de verificado e o texto no tom do acento. Desenha so
+// com `selo` == "criador" (o servidor decide); devolve a largura, 0 sem selo.
+float rec_selo_pessoa_largura(const char *selo);
+float rec_selo_pessoa(float x, float y, const char *selo, float alfa);
+
 // Altura unica dos dois selos, e o vao entre eles. Ficam aqui porque quem
 // desenha a linha precisa deles para centrar o texto ao lado.
 // DESDE 21/09/2026 SAO OS DA TABELA UNICA (badges.h): 28 px, e nao 30 — o
@@ -361,6 +383,11 @@ typedef struct {
   // de quem ligou "Mostrar o que assisti recentemente"). Nunca "assistindo
   // agora": isso e so para amigo.
   char vendo[80];
+  // O NOME so vem de quem ja e AMIGO (servidor: amigos.js, cartao); para
+  // estranho ele chega vazio e a linha mostra so o apelido. Servidor antigo:
+  // vazio sempre. `selo` = "criador" ou "" (ver RecContato.selo).
+  char nome[64];
+  char selo[12];
 } RecPessoa;
 
 #define REC_BUSCA_MAX    10

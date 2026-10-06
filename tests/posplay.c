@@ -300,6 +300,16 @@ int main(void) {
       { "marcador recusado, fim do episodio",  2900.0, 3000.0, 1000.0, 1 },
       // Duracao invalida: nao decide nada.
       { "sem duracao",                            0.0,    0.0,    0.0, 0 },
+      // 2.0.1, casos tirados de log. TCL: "2 min finais: pos 0s de 30s".
+      { "30 s informados, segundo zero",          0.0,   30.0,    0.0, 0 },
+      { "30 s informados, fim",                  29.0,   30.0,    0.0, 0 },
+      // webOS: fonte MP4 com "duration":536033 e creditos em 1335 s.
+      { "536 s falsos, marcador adiante",       416.0,  536.0, 1335.0, 0 },
+      { "536 s falsos, chegou no marcador",    1335.0,  536.0, 1335.0, 1 },
+      // Uma hora com creditos a 369 s do fim: sobra mais que a janela, quem
+      // decide sao os 2 min finais.
+      { "1 h, marcador fora da janela",        3231.0, 3600.0, 3231.0, 0 },
+      { "1 h, 2 min finais",                   3480.0, 3600.0, 3231.0, 1 },
     };
     for (size_t k3 = 0; k3 < sizeof cs / sizeof *cs; k3++) {
       int r = player_regra_proximo(cs[k3].pos, cs[k3].dur, cs[k3].cred);
@@ -310,6 +320,17 @@ int main(void) {
       }
     } }
   puts("ok  o cartao de proximo episodio obedece ao marcador de creditos");
+
+  // 2.0.1: a duracao falsa tambem nao pode dar o episodio por visto.
+  assert(!player_regra_concluiu(476.0, 536.0, 1335.0));
+  assert( player_regra_concluiu(1335.0, 536.0, 1335.0));
+  assert(!player_regra_concluiu(0.0, 30.0, 0.0));
+  assert( player_regra_concluiu(1300.0, 1350.0, 0.0));
+  assert( player_duracao_suspeita(536.0, 38.0 * 60.0));
+  assert(!player_duracao_suspeita(1290.0, 38.0 * 60.0));   // catalogo arredondado
+  assert(!player_duracao_suspeita(536.0, 0.0));            // sem minutagem
+  assert(!player_duracao_suspeita(200.0, 10.0 * 60.0));    // catalogo curto demais
+  puts("ok  duracao falsa nao abre o cartao nem conclui o episodio");
 
   // #177: o still do proximo episodio segue "desfocar nao assistidos".
   ajustes_aplicar_blob("{\"features\":{\"layout_settings\":{"

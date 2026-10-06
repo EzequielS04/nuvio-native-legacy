@@ -22,6 +22,7 @@
 #include "recomenda.h"
 #include "atividade.h"
 #include "avisos.h"
+#include "agenda.h"
 #include "recenviar.h"
 #include "pessoas.h"
 #include "catalogo.h"
@@ -900,7 +901,7 @@ static int nVisiveis(void) {
   // de amigos so seria alcancavel pelo menu de um cartaz — ou seja, para
   // adicionar alguem era preciso escolher um filme primeiro.
   if (aba == SP_ABA_SOCIAL) return nSocial;
-  if (aba == SP_ABA_AVISOS) return avisos_lista_n();
+  if (aba == SP_ABA_AVISOS) return avisos_lista_linhas();   // + "Dispensar todos"
   if (aba == SP_ABA_ATIVIDADE) return nAtv;
   return nLinhas;
 }
@@ -1570,10 +1571,46 @@ static int linhaSocialSeguravel(void) {
 
 // O QUE AS EXTRAS DO MENU SOCIAL FAZEM. O menu (ctxmenu.c) so devolve o
 // indice; a acao e a linha ficam guardadas aqui ate ele responder.
-enum { SPX_ASSISTI = 1, SPX_RESPONDER, SPX_PERFIL, SPX_REMOVER };
+enum { SPX_ASSISTI = 1, SPX_RESPONDER, SPX_PERFIL, SPX_REMOVER,
+       SPX_AV_DISPENSAR, SPX_AV_LEMBRETE, SPX_AV_TODOS };
 static int      menuSxAcao[CTX_EXTRAS_MAX];
 static RecItem  menuSxRec;
 static char     menuSxPessoa[96], menuSxNome[64];
+static char     menuAvId[72], menuAvImdb[24];
+
+// SEGURAR OK NUMA LINHA DA ABA AVISOS (06/10, "muito alerta sem dispensar"):
+// o mesmo menu das outras abas, so com as acoes do aviso — Dispensar, Remover
+// lembrete (estreia com o lembrete ligado) e Dispensar todos. O toque curto
+// continua abrindo o alvo, agora decidido na soltura. Dispensar tira a linha e
+// grava a chave por perfil (avisodisp.h); o lembrete da serie so sai com
+// "Remover lembrete", que tambem dispensa o aviso daquele episodio.
+// Depois de dispensar: o foco fica na linha que tomou o lugar, na ultima, ou
+// sobe para as abas quando a lista esvaziou.
+static void focoAvisosValido(void) {
+  int k = avisos_lista_linhas();
+  if (foco < 0) return;
+  if (k <= 0) foco = temAbas() ? SP_FOCO_ABAS : 0;
+  else if (foco >= k) foco = k - 1;
+}
+static int linhaAvisoSeguravel(void) {
+  return aba == SP_ABA_AVISOS && foco >= 0 && foco < avisos_lista_n();
+}
+static void abrirMenuAvisos(void) {
+  CatItem c;
+  CtxExtra ex[CTX_EXTRAS_MAX];
+  int n = 0;
+  static const CtxExtra DISP = { "Dispensar", "aj_x", 0, NULL, NULL, NULL };
+  static const CtxExtra LEMB = { "Remover lembrete", "aj_bell", 0, NULL, NULL, NULL };
+  static const CtxExtra TODOS = { "Dispensar todos", "aj_x", 0, NULL, NULL, NULL };
+  if (!linhaAvisoSeguravel()) return;
+  memset(&c, 0, sizeof c);
+  if (!avisos_lista_item(foco, menuAvId, sizeof menuAvId, c.titulo, sizeof c.titulo,
+                         menuAvImdb, sizeof menuAvImdb)) return;
+  menuSxAcao[n] = SPX_AV_DISPENSAR; ex[n++] = DISP;
+  if (menuAvImdb[0]) { menuSxAcao[n] = SPX_AV_LEMBRETE; ex[n++] = LEMB; }
+  menuSxAcao[n] = SPX_AV_TODOS; ex[n++] = TODOS;
+  ctx_abrir_social(&c, ex, n);
+}
 
 static void abrirMenuSocial(void) {
   CatItem c;
@@ -1653,6 +1690,19 @@ static void extraSocial(int k) {
       if (menuSxPessoa[0]) { recomenda_remover_contato(menuSxPessoa); reconstruirSocial(); }
       if (foco >= nSocial) foco = nSocial > 0 ? nSocial - 1 : 0;
       break;
+    case SPX_AV_LEMBRETE:
+      // Desliga o lembrete (so se ainda ligado: alternar religaria) e cai no
+      // dispensar: o aviso daquele episodio tambem sai.
+      if (menuAvImdb[0] && agenda_lembrete(menuAvImdb) == 1) agenda_alternar_lembrete(menuAvImdb);
+      /* fall through */
+    case SPX_AV_DISPENSAR:
+      if (menuAvId[0]) avisos_dispensar(menuAvId);
+      focoAvisosValido();
+      break;
+    case SPX_AV_TODOS:
+      avisos_dispensar_todos();
+      focoAvisosValido();
+      break;
     default: break;
   }
 }
@@ -1664,6 +1714,7 @@ static void abrirMenu(void) {
   CatItem c;
   const SPLinha *l;
   if (aba == SP_ABA_ATIVIDADE || aba == SP_ABA_SOCIAL) { abrirMenuSocial(); return; }
+  if (aba == SP_ABA_AVISOS) { abrirMenuAvisos(); return; }
   if (!linhaSeguravel()) return;
   l = &linhas[foco];
   memset(&c, 0, sizeof c);
@@ -1690,6 +1741,7 @@ static void abrirMenu(void) {
 static void okSocial(void);
 static void abrirLinha(void) {
   if (aba == SP_ABA_ATIVIDADE || aba == SP_ABA_SOCIAL) { okSocial(); return; }
+  if (aba == SP_ABA_AVISOS) { if (avisos_lista_ok(foco)) spainel_fechar(); return; }
   if (foco >= 0 && foco < nLinhas) {
     snprintf(pedido, sizeof pedido, "%s", linhas[foco].id);
     temPedido = 1;
@@ -1966,7 +2018,14 @@ void spainel_evento(const SDL_Event *e) {
       return;
     }
     if (aba == SP_ABA_AVISOS) {
-      if (avisos_lista_ok(foco)) spainel_fechar();
+      // Linha de aviso: curto abre, longo abre o menu (soltura/limiar). A
+      // ultima, "Dispensar todos", age ja: nao ha o que segurar.
+      if (linhaAvisoSeguravel()) {
+        if (!e->key.repeat && !okDesde) { okDesde = SDL_GetTicks(); if (!okDesde) okDesde = 1; }
+        return;
+      }
+      if (!e->key.repeat && avisos_lista_ok(foco)) spainel_fechar();
+      focoAvisosValido();
       return;
     }
     // ATIVIDADE E AMIGOS: titulo e amigo tem menu (OK longo); o resto decide
@@ -1995,7 +2054,8 @@ void spainel_atualizar(float dt, Uint32 agora) {
   float alvo, topo, base;
   // A barra de "Segure OK" do menu do cartaz, centrada no painel enquanto ele e
   // dono do D-pad; fora dele, no centro da tela como sempre.
-  ctx_centro_dica(aberto && (aba == SP_ABA_SALVOS || aba == SP_ABA_ATIVIDADE || aba == SP_ABA_SOCIAL)
+  ctx_centro_dica(aberto && (aba == SP_ABA_SALVOS || aba == SP_ABA_ATIVIDADE || aba == SP_ABA_SOCIAL ||
+                             aba == SP_ABA_AVISOS)
                   ? SP_X + SP_W * 0.5f : -1.0f);
   reacao_painel_atualizar(dt, agora);
   if (!aberto && reacao_painel_aberta()) reacao_fechar();
@@ -3337,6 +3397,14 @@ static void desenhaAmigoLinha(int i, int idx, float dx, float y, float a, Uint32
     }
   }
   andaresIlha(tx, y, alt, larg, v, a, c->nome, NULL, linha2, linha3);
+  // O SELO DE CRIADOR depois do nome, na mesma conta de andaresIlha (o nome
+  // ocupa ate 60 % da largura; o bloco e centrado na altura da linha).
+  if (rec_selo_pessoa_largura(c->selo) > 0.0f) {
+    float bloco = 29.0f + (linha2[0] ? 27.0f : 0.0f) + (linha3[0] ? 22.0f : 0.0f);
+    float nw = (float)txtIlha(TXT_ILHA_NOME, c->nome, larg * 0.6f).w;
+    if (tx + nw + 12.0f + rec_selo_pessoa_largura(c->selo) <= tx + larg)
+      rec_selo_pessoa(tx + nw + 12.0f, y + (alt - bloco) * 0.5f + (29.0f - BADGE_H) * 0.5f + 1.0f, c->selo, a);
+  }
 }
 
 // A ATIVIDADE VAZIA: diz o que vai aparecer e de onde, sem prometer dado que

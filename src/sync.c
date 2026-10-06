@@ -29,6 +29,7 @@ void servidores_esquecer_todos(void);   // servidores.c: wipe every profile's to
 #include "perfilcont.h"
 #include "psparede.h"
 #include "syncprog.h"
+#include "contapend.h"
 #include "ajustes.h"
 #include "catordem.h"
 #include "catordemcache.h"
@@ -50,6 +51,9 @@ void servidores_esquecer_todos(void);   // servidores.c: wipe every profile's to
 #include <sys/stat.h>
 
 #define SY_ADD_MAX   32   // o mesmo teto de ADD_MAX (addons.c)
+// URL lida da conta ANTES de caber em AddonRemoto: maior que o limite de
+// proposito, para o log dizer o tamanho de verdade em vez de "nao coube".
+#define SY_URL_LEITURA (NV_ADDON_URL_MAX * 4)
 
 static pthread_t fio;
 static int fioVivo, fioPronto;
@@ -175,8 +179,13 @@ static int addonsLer(AddonsPendencia *p, const char *texto) {
     if (*a != '{' || n == SY_ADD_MAX) return 0;
     f = js_fim(a);
     if (f <= a || f > fim || f[-1] != '}') return 0;
-    if (!js_texto_raiz_em(a, f, "url", p->lista[n].url, sizeof p->lista[n].url) ||
-        !p->lista[n].url[0] ||
+    // Mesma regra de lerAddons: URL que nao cabe invalida a edicao inteira em
+    // vez de entrar cortada — esta lista e a que vai ser EMPURRADA para a conta.
+    { static char url[SY_URL_LEITURA];   // sob addonsTrava (addonsRestaurar)
+      if (!js_texto_raiz_em(a, f, "url", url, sizeof url) ||
+          !nv_addon_url_cabe("edicao local", strlen(url))) return 0;
+      snprintf(p->lista[n].url, sizeof p->lista[n].url, "%s", url); }
+    if (!p->lista[n].url[0] ||
         !js_bruto(a, f, "enabled", habilitado, sizeof habilitado) ||
         (strcmp(habilitado, "true") && strcmp(habilitado, "false"))) return 0;
     // O servidor aceita addon sem nome. O texto vazio nao invalida sua URL
@@ -194,7 +203,9 @@ static int addonsLer(AddonsPendencia *p, const char *texto) {
 // Reentrar na mesma identidade nao relê nem refaz descoberta.
 static void addonsRestaurar(void) {
   AddonsPendencia *p;
-  AddonRemoto lista[SY_ADD_MAX];
+  // static: 32 x ~2 KB (NV_ADDON_URL_MAX) nao pertence a pilha. So o fio
+  // principal entra aqui.
+  static AddonRemoto lista[SY_ADD_MAX];
   char nome[220], *texto;
   const char *dono = sessao_usuario();
   int perfil = perfis_ativo_addons(), n = 0, leituraFalhou = 0;
@@ -256,6 +267,12 @@ static int addonsPendentes(void) {
 // de addons no meio de um quadro que ja estava lendo dela.
 static AddonRemoto addonsRem[SY_ADD_MAX];
 static int nAddonsRem, temAddonsRem;
+// QUANTOS ADDONS DA ULTIMA LEITURA DA CONTA FICARAM DE FORA por terem URL maior
+// que NV_ADDON_URL_MAX (addonurl.h). Com isto acima de zero a lista desta TV e
+// MENOR que a da conta, e o push manda a lista INTEIRA: empurrar apagaria da
+// conta, em todos os aparelhos, justamente o addon que nao coube aqui. Ver
+// sync_sujar_addons.
+static volatile int addonsDeFora;
 // Addons prontos ANTES do fim do ciclo. Ver a publicacao antecipada em
 // sync_passo. `volatile` porque quem escreve e o fio de sync e quem le e o fio
 // principal, e a barreira aqui e a mesma que `fioPronto` sempre foi: o valor so
@@ -429,6 +446,7 @@ static void addonsEsquecer(void) {
   while ((p = addonsFila) != NULL) { addonsFila = p->prox; free(p); }
   addonsContexto[0] = 0; addonsContextoPerfil = 0;
   addonsLeituraDono[0] = 0; addonsLeituraPerfil = 0;
+  addonsDeFora = 0;
   pthread_mutex_unlock(&addonsTrava);
 }
 
@@ -460,20 +478,28 @@ static int ok2xx(const char *r, int st) { return r && st >= 200 && st < 300; }
 
 // Le a resposta da tabela `addons` (ou a copia dela) para addonsRem.
 static int lerAddons(const char *r) {
+  // static: so o fio do sync le a conta, e 8 KB nao pertencem a pilha dele.
+  static char url[SY_URL_LEITURA];
   const char *p;
-  int k = 0;
+  int k = 0, fora = 0;
   for (p = js_raiz_array(r); p && k < SY_ADD_MAX; p = js_prox(js_fim(p))) {
     const char *f = js_fim(p);
     char b[16];
     memset(&addonsRem[k], 0, sizeof addonsRem[k]);
-    if (!js_texto(p, f, "url", addonsRem[k].url, sizeof addonsRem[k].url)) continue;
+    if (!js_texto(p, f, "url", url, sizeof url)) continue;
     js_texto(p, f, "name", addonsRem[k].nome, sizeof addonsRem[k].nome);
+    // A URL QUE NAO CABE NAO ENTRA CORTADA (#201). js_texto corta em silencio
+    // no tamanho do destino, e era aqui que a URL do Comet (870) virava 599: o
+    // addon recebia meia configuracao e respondia como se ela fosse valida.
+    if (!nv_addon_url_cabe(addonsRem[k].nome, strlen(url))) { fora++; continue; }
+    snprintf(addonsRem[k].url, sizeof addonsRem[k].url, "%s", url);
     // Ausente conta como LIGADO: e assim que o web le, e um addon que some por
     // causa de um campo que o servidor nao mandou e pior que um a mais.
     addonsRem[k].ativo = js_bruto(p, f, "enabled", b, sizeof b)
                          ? (strcmp(b, "false") != 0) : 1;
     k++;
   }
+  addonsDeFora = fora;
   return k;
 }
 
@@ -1175,8 +1201,13 @@ static void soLeituraDaCopia(int st) {
 
 // ---------------------------------------------------------------- ciclo
 
+// Inicio do ciclo no relogio de parede: o que o jornal da conta confirmou
+// ANTES disto ja esta refletido no pull deste ciclo (contapend_podar).
+static long long cicloInicioMs;
+
 static void *rodar(void *u) {
   (void)u;
+  cicloInicioMs = contapend_agora_ms();
   foraCiclo = 0;
   copiaCiclo = 0;
   addonsCiclo = 0;
@@ -1286,12 +1317,19 @@ static void *rodar(void *u) {
   // Sempre, nao so quando `sujoProgresso`: linhas migradas do formato antigo
   // nascem pendentes sem ninguem ter marcado nada.
   if (syncprog_empurrar() >= 0) sujoProgresso = 0;
+  // O JORNAL DA CONTA (vistos e Salvos marcados nesta TV): DEPOIS do pull,
+  // como o resto. E a repeticao de quem falhou offline — cada ciclo tenta de
+  // novo o que ainda nao teve 2xx.
+  contapend_enviar();
 
+  { int pend = contapend_pendentes();
+    char sufixo[48] = "";
+    if (pend > 0) snprintf(sufixo, sizeof sufixo, " · %d pendentes", pend);
   snprintf(resumo, sizeof resumo,
-           "%d addons · %d progressos · %d vistos · %d na lista · %d coleções%s",
+           "%d addons · %d progressos · %d vistos · %d na lista · %d coleções%s%s",
            nAddonsRem, syncprog_puxadas(), cVistos < 0 ? 0 : cVistos,
            cBiblio < 0 ? 0 : cBiblio, cColecoes < 0 ? 0 : cColecoes,
-           temTraktRem ? " · Trakt" : "");
+           temTraktRem ? " · Trakt" : "", sufixo); }
   estado = SYNC_PRONTO;
   fioPronto = 1;
   return NULL;
@@ -1557,14 +1595,10 @@ void sync_passo(unsigned agoraMs) {
   // remontagem aqui custaria o ciclo de rede inteiro por nada, a cada cinco
   // minutos — foi o erro que a ordem de catalogos ja cometeu neste arquivo.
   //
-  // O QUE ISTO AINDA NAO FAZ, escrito para nao virar surpresa: tirar um titulo
-  // pelo "+" do detalhe fala com o TRAKT (app.c), nao com a conta. A linha
-  // continua em `sync_pull_library` e volta no ciclo seguinte. Fechar isso
-  // exige `sync_push_library`, que este app nao tem — e nao pode ganhar de
-  // qualquer jeito: um push da lista LOCAL antes de o primeiro pull chegar
-  // mandaria lista curta e apagaria itens nos outros aparelhos da pessoa
-  // (secao 1.6, regra 2). O caminho certo e um push de DELECAO por chave, como
-  // o `sync_delete_watched_items` faz com os vistos.
+  // O "+" E O TIRAR CHEGAM NA CONTA pelo jornal (contapend.c): ler a lista
+  // inteira, aplicar so o gesto e subir com sync_push_library — nunca a lista
+  // LOCAL (secao 1.6, regra 2). O que a pessoa tirou e ainda nao saiu da conta
+  // fica fora daqui pelo filtro de contalib_aplicar_catalogo.
   if (temBibBlob && bibBlob) {
     if (contalib_ler_biblioteca(bibBlob) > 0) contalib_aplicar_catalogo();
     free(bibBlob); bibBlob = NULL; temBibBlob = 0;
@@ -1593,6 +1627,28 @@ void sync_passo(unsigned agoraMs) {
     if (rev != contalib_vistos_revisao() && !trakt_ativo() && !simkl_ativo())
       desc_refazer_continuar();
   }
+  // O JORNAL DA CONTA POR CIMA do que veio: o que a pessoa marcou/desmarcou
+  // aqui e ainda nao esta (ou acabou de entrar) na conta continua valendo na
+  // tela, inclusive depois de reabrir o app sem rede. E o que ja foi
+  // confirmado antes deste ciclo sai do jornal: o pull acima ja o reflete.
+  contapend_podar(cicloInicioMs);
+  contapend_aplicar_local();
+  // A LISTA ANTIGA DESTA TV (salvos.txt de antes da lista por perfil) sobe UMA
+  // vez para o perfil que a recebeu, item a item pelo jornal — que le a lista
+  // da conta e so ACRESCENTA. Espera esse perfil estar ativo.
+  { int p = 0;
+    if (sessao_logada() && salvos_migracao_conta(&p) && p == perfis_ativo() &&
+        salvos_perfil_atual() == p) {
+      int i, k = 0;
+      for (i = 0; i < salvos_n(); i++) {
+        const SalvoItem *it = salvos_item(i);
+        if (it) k += contapend_lista(it->id, it->tipo, it->titulo, it->poster, 1);
+      }
+      salvos_migracao_conta_feita();
+      printf("[sync] lista antiga do perfil %d: %d titulos entregues a conta\n", p, k);
+      fflush(stdout);
+      if (k) contapend_chutar();
+    } }
   spMarcar(SP_VISTOS);
   // Rede so quando muda o que buscar. Quando as duas coisas mudam no mesmo
   // ciclo, o ciclo de rede ja remonta as fileiras no fim — nao ha o que somar.
@@ -1663,6 +1719,15 @@ void        sync_sujar_addons(void) {
   const char *dono = sessao_usuario();
   int perfil = perfis_ativo_addons();
   if (!sessao_logada() || !addonsNome(nome, sizeof nome, dono, perfil)) return;
+  // A LISTA DESTA TV ESTA INCOMPLETA (ver addonsDeFora): o push substitui a
+  // lista da conta pela daqui, e a daqui nao tem o addon que nao coube. A
+  // mudanca vale nesta TV ate o proximo pull; para a conta ela nao sobe.
+  if (addonsDeFora > 0) {
+    printf("[sync] edicao de addons nao enviada: %d addon(s) da conta nao cabem nesta TV\n",
+           addonsDeFora);
+    fflush(stdout);
+    return;
+  }
   pthread_mutex_lock(&addonsTrava);
   p = addonsEdicao(dono, perfil);
   if (!p) p = addonsNova(dono, perfil);
@@ -1882,6 +1947,9 @@ void sync_esquecer_usuario(void) {
   desc_loc_apagar();
   // O mapa de episodios vistos e da conta que saiu, como todo o resto.
   vistoep_esquecer();
+  // O jornal da conta sai da MEMORIA; o arquivo (por usuario, so ids) fica
+  // para quando ESTA pessoa voltar — e o que ainda nao subiu nao se perde.
+  contapend_esquecer();
   free(catHomeBlob);
   catHomeBlob = NULL;
   temCatHomeBlob = 0;

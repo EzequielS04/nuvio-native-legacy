@@ -34,6 +34,9 @@ const CatEp *player_proximo_episodio(void);
 // comecam (0 quando nenhuma das duas fontes tem marcador). Devolve 1 quando o
 // cartao deve estar no ar.
 int player_regra_proximo(double posSeg, double durSeg, double cred);
+// A duracao do pipeline e menos de um terco da minutagem do catalogo (>= 15
+// min): ela nao descreve este episodio e a estimativa de fim nao pode usa-la.
+int player_duracao_suspeita(double durSeg, double catSeg);
 
 // O EPISODIO CONTA COMO ASSISTIDO AO SAIR? — issue #100.
 //
@@ -272,5 +275,9 @@ void player_shot_video(int sim);
 void player_shot_favorito(int f);   // 1 = botao Favorito na fileira, 2 = e o canal nos favoritos
 void player_shot_canal(const AoVivoEpg *e, int numero, int atrasS, int botaoFoco, int info);   // comVideo sem furo: a arte faz de video
 #endif
+
+// #202: a velocidade (centesimos) que o pipeline esta MEDIDO tocando; 100
+// ate a pedida se confirmar pela posicao contra o relogio (velocidade.h).
+int player_velocidade_efetiva(void);
 
 #endif

@@ -26,6 +26,8 @@
 #include "episodios.h"
 #include "fontepref.h"
 #include "idioma.h"
+#include "ctxmenu.h"
+#include "ilha.h"
 #include "idiomacod.h"
 #include "badges.h"
 #include "marco.h"
@@ -2426,9 +2428,12 @@ void detail_evento(const SDL_Event *e) {
       // vertudo_colecao guarda o PONTEIRO da pasta, nao uma copia — por isso a
       // struct e estatica e nao local.
       static ColFolder pasta;
+      static ColSource pastaFontes[COL_SOURCE_MAX];   // a pasta so aponta (#255)
       long tmdbId = extras_estudio_tmdb(foco.coluna);
       if (tmdbId > 0) {
         memset(&pasta, 0, sizeof pasta);
+        memset(pastaFontes, 0, sizeof pastaFontes);
+        pasta.sources = pastaFontes;
         snprintf(pasta.title, sizeof pasta.title, "%s",
                  extras_estudio_nome(foco.coluna));
         snprintf(pasta.sources[0].prov, sizeof pasta.sources[0].prov, "tmdb");
@@ -3167,6 +3172,23 @@ void detail_atualizar(float dt, Uint32 agora) {
       }
     }
     aberto = 0; saindo = 0; t = 0.0f; carro = 0; trailer_fechar(); return;
+  }
+
+  // SEGURAR OK SEM RESPOSTA NA TELA (dono, 06/10): na home o cartao ganha a
+  // barra "Segure para opcoes"; aqui o menu do episodio, o da temporada e as
+  // fontes do botao principal so abriam ao soltar, sem nada mostrando que o
+  // gesto estava contando. A barra mora na ilha do relogio (ilha_atividade):
+  // a pagina nao tem um retangulo de foco unico, e a ilha e o lugar do 2.0
+  // para estado em andamento. Os primeiros 150 ms nao contam: e um toque.
+  if (okDesceEm && !ctx_aberto()) {
+    Uint32 dur = agora - okDesceEm;
+    int alvoHold = (nivel >= 1 && (foco.fileira == SEC_EPISODIOS || foco.fileira == SEC_TEMPORADAS)) ||
+                   (nivel == 0 && !focoAmigos && acaoEm(botao) == ACAO_PRIMARIO);
+    if (alvoHold && dur >= 150u) {
+      float p = (float)(dur - 150u) / (float)(NV_HOLD_MS - 150);
+      if (p > 1.0f) p = 1.0f;
+      ilha_atividade(i18n(p >= 1.0f ? "Solte para abrir opções" : "Segure para opções"), p);
+    }
   }
 
   for (int r = 0; r < N_SECOES; r++)
@@ -6704,8 +6726,14 @@ static void detalheFundo(float s) {
     float salva = nv_ambiente_forca;
     nv_ambiente_forca = 1.0f;
     gfx_tex_aspect_atual = tex_aspecto(arte);
-    gfx_rect(alvo, tex, GFX_DETALHE, 1.0f, 0, 0, 0.0f, 0, 0, 0,
-             fminf(aEntrada * (1.0f - pg), 0.998f));
+    // ALFA 1 NO TOPO PARADO: com o fundo (a luz imersiva, ou o Frost adiado,
+    // gfx_luz_canal_adiar) ainda intacto embaixo, o GFX_DETALHE le o fundo pelo
+    // uAmb e sai OPACO numa passada so — o fundo deixa de ser uma tela pintada
+    // e a arte, uma tela misturada por cima (TCL, 2.0.1: topo da pagina a
+    // ~30 fps, clr 22 ms + swap 21 ms). O teto de 0,998 que havia aqui
+    // obrigava o caminho misturado; sem fundo intacto o caminho continua o
+    // misturado (o "vazar"), com alfa 1 em vez de 0,998.
+    gfx_rect(alvo, tex, GFX_DETALHE, 1.0f, 0, 0, 0.0f, 0, 0, 0, aEntrada * (1.0f - pg));
     gfx_tex_aspect_atual = 0.0f;
     nv_ambiente_forca = salva;
   }

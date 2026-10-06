@@ -13,6 +13,14 @@
 // deste conserto; o lugar certo dela e catalogo.h, e isso esta no relatorio.
 extern void cat_historico_definir_id(const char *imdb, const char *tipo, int visto);
 
+static int (*listaOculta)(const char *id, long long ms);
+static int (*vistoOculto)(const char *id, int t, int e, long long ms);
+void contalib_filtros(int (*lista)(const char *id, long long ms),
+                      int (*visto)(const char *id, int t, int e, long long ms)) {
+  listaOculta = lista;
+  vistoOculto = visto;
+}
+
 static ContaLibItem *itens;
 static int nItens;
 static ContaVisto *vistos;
@@ -333,7 +341,11 @@ int contalib_aplicar_catalogo(void) {
 
   memset(faltam, 0, sizeof faltam);
   for (i = 0; i < nItens && i < CONTALIB_MAX; i++) {
-    int k = cat_indice_por_imdb(itens[i].id);
+    int k;
+    // TIRADO NESTA TV e ainda nao refletido na conta (contapend.h): a linha
+    // remota nao re-marca. Sem isto o titulo voltava no ciclo seguinte.
+    if (listaOculta && listaOculta(itens[i].id, itens[i].addedMs)) continue;
+    k = cat_indice_por_imdb(itens[i].id);
     if (k >= 0) { cat_definir_na_lista(k, 1); marcados++; ultimo = k; }
     else { faltam[i] = 1; nFaltam++; }
   }
@@ -387,6 +399,9 @@ int contalib_aplicar_vistos(void) {
   int i, k = 0, ke = 0;
   for (i = 0; i < nVistos; i++) {
     if (!vistos[i].id[0]) continue;
+    // DESMARCADO NESTA TV depois desta linha: ela nao re-marca (contapend.h).
+    if (vistoOculto && vistoOculto(vistos[i].id, vistos[i].temporada,
+                                   vistos[i].episodio, vistos[i].vistoMs)) continue;
     // LINHA DE EPISODIO VAI PARA O MAPA DE EPISODIOS, e nao para o historico
     // de titulo. `season` e `episode` sempre vieram nesta resposta
     // (PLANO-CONTA-SYNC.md secao 1.5) e eram lidos e descartados aqui: o

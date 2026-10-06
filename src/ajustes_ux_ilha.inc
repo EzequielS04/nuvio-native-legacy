@@ -230,9 +230,9 @@ static float aj2Cabecalho(GfxRect fr, const char *kick, const char *titulo, cons
 // A3: o cabecalho compacto da ilha da lista (o nome da categoria em 26/800 e,
 // a direita, o chip Avancados, que continua focavel com ↑ da primeira linha).
 // O kicker grande e a descricao da categoria moram agora na coluna da arte.
+// 2.0.2: o titulo foi para o cabecalho da pagina (aj2DesenharPagina).
 static void aj2CabecalhoA3(GfxRect fr, const char *titulo, float reservaDir, float a) {
-  TxtLinha t = ajTxtC(TXT_V2_GRUPO, titulo, fr.w - 80.0f - reservaDir);
-  txt_desenhar_alpha(t, fr.x + 40.0f, fr.y + 22.0f + (60.0f - t.h) * 0.5f, a);
+  (void)fr; (void)titulo; (void)reservaDir; (void)a;
 }
 // RODAPE DA LISTA (A3): as dicas a esquerda e o aviso ("Ajuste salvo nesta
 // TV.") a direita, na mesma faixa abaixo da lista. Antes o aviso era desenhado
@@ -454,7 +454,7 @@ static void desenhaVinculo(const char *servico, const char *codigo,
   ajCentraModal(&m);
   ajIlha(m, 36, 1, 1);
   x = m.x + 56 + 356 + 56; y = m.y + 50;
-  ajKicker("Contas e serviços", x, y, 1);
+  ajKicker("Fontes e addons", x, y, 1);
   y += 22 + 4;
   snprintf(t, sizeof t, i18n("Conectar %s"), servico);
   { TxtLinha l = ajTxtC(TXT_ILHA_TITULO, t, m.x + m.w - 56 - x); txt_desenhar(l, x, y); y += 48; }
@@ -838,7 +838,8 @@ static void ajDesenharTela(void) {
   if (modal) gfx_opacidade_grupo = 0.16f;
   g0 = gfx_opacidade_grupo;
   aj2DesenharMenu(&p);
-  if (p.rA > 0.003f) aj2DesenharResumo(p.rA);
+  if (p.rA > 0.003f) aj2DesenharGrade(p.rA);
+  if (p.rA < 0.997f && uxIndice >= 1) aj2DesenharPagina(1.0f - p.rA);
   // O inspetor antes da lista: na transicao a lista desliza por cima dele.
   if (p.iA > 0.003f && uxIndice >= 1) {
     GfxRect ir = aj2InspR();
@@ -849,9 +850,8 @@ static void ajDesenharTela(void) {
   }
   // A LISTA nasce da linha da categoria: escala em torno dela.
   if (p.lA > 0.003f && uxIndice >= 1) {
-    GfxRect fr = aj2ListaR(), mr = aj2MenuR();
-    float oy = p.lOy > 0 ? p.lOy
-             : mr.y + AJ2_MENU_PAD + aj2MenuY(uxIndice) - aj2MRol + AJ2_MENU_LN * 0.5f;
+    GfxRect fr = aj2ListaR();
+    float oy = p.lOy > 0 ? p.lOy : aj2GradeOrigemY(uxIndice);
     gfx_opacidade_grupo = g0 * p.lA;
     gfx_transformar(fr.x, oy, p.lS, p.lDx, 0);
     aj2TextoLista = p.lTxt;
@@ -928,7 +928,7 @@ static void ajDesenharAddons(int foco) {
   fr = ajFolhaR(); ir = ajInspR();
   ajIlha(fr, 36, 1, 0);
   snprintf(sub, sizeof sub, i18n("%d de %d ligados nesta TV"), lig, n);
-  topo = ajCabecalhoFolha(fr, "Contas e serviços", "Addons", n ? sub : "Nenhum addon nesta conta.", 0, 1);
+  topo = ajCabecalhoFolha(fr, "Fontes e addons", "Addons", n ? sub : "Nenhum addon nesta conta.", 0, 1);
   if (foco >= n) foco = n - 1;
   alvo = foco * 84.0f - (base - topo - 80.0f) * 0.5f;
   if (alvo > n * 84.0f - (base - topo)) alvo = n * 80.0f - (base - topo);
@@ -1048,7 +1048,7 @@ static void ajDesenharPlugins(const AjPluginsVista *v) {
     int lig, tot = plugins_repo_scrapers(v->repo, &lig);
     snprintf(sub, sizeof sub, i18n("%d scrapers · %d ligados"), tot, lig);
   }
-  topo = ajCabecalhoFolha(fr, v->nivel == 1 ? "Plugins" : "Contas e serviços",
+  topo = ajCabecalhoFolha(fr, v->nivel == 1 ? "Plugins" : "Fontes e addons",
                           v->nivel == 1 ? (rp.nome[0] ? rp.nome : rp.url) : "Plugins", sub, 0, 1);
   n = !disp ? 1 : v->nivel == 0 ? 2 + nr : 1 + plugins_repo_scrapers(v->repo, NULL);
   if (foco >= n) foco = n - 1;

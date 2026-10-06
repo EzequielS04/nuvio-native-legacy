@@ -66,8 +66,8 @@ for t, v in itens + [("SEC", "<fim>")]:
             abertos[tipo][1] += 1
 
 n_sec = sum(1 for t, _ in itens if t == "SEC")
-if n_sec != 11:
-    falhas.append("esperadas 11 categorias, encontradas %d" % n_sec)
+if n_sec != 12:
+    falhas.append("esperadas 12 categorias, encontradas %d" % n_sec)
 
 ajuda = re.search(r"static const char \*SECAO_AJUDA\[\] = \{(.*?)\n\};", catalogo, re.S)
 if not ajuda:

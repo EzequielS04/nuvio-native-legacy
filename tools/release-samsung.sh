@@ -97,7 +97,10 @@ if [ "$SO_TPK" = 0 ]; then
   mv "NuvioTV-$VER-tizen.wgt" "$OUT/"
 fi
 
-( cd "$OUT" && shasum -a 256 * > SHA256SUMS-samsung )
+( cd "$OUT" &&
+  checksum_files=(*) &&
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "${checksum_files[@]}"
+  else sha256sum "${checksum_files[@]}"; fi > SHA256SUMS-samsung )
 git status --porcelain | grep -q . && { echo "release-samsung: o build sujou a arvore:" >&2; git status --short >&2; }
 echo
 echo "== pronto, sem publicar. Conteudo de $OUT:"

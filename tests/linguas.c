@@ -39,12 +39,58 @@ int main(void) {
   // Codigo desconhecido pelos dois lados: comparacao crua, sem inventar.
   ok("glg casa com glg",  ling_casa("glg", "glg"));
   ok("glg nao casa cat",  !ling_casa("glg", "cat"));
+  ok("xyz casa com xyz",  ling_casa("xyz", "xyz"));
+  ok("xyz nao casa xyw",  !ling_casa("xyz", "xyw"));
+
+  // #201/#269: ISO 639-2/T do Community Subtitles e as variantes que addons
+  // mandam. Antes "ces" nao casava "cs" e a legenda tcheca sumia calada.
+  ok("cs casa ces",        ling_casa("ces", "cs"));
+  ok("el casa ell",        ling_casa("ell", "el"));
+  ok("no casa nob",        ling_casa("nob", "no"));
+  ok("no casa nb",         ling_casa("nb", "no"));
+  ok("zh casa zh-Hant",    ling_casa("zh-Hant", "zh"));
+  ok("zh casa zho",        ling_casa("zho", "zh"));
+  ok("es casa es-419",     ling_casa("es-419", "es"));
+  ok("pt casa pt-PT",      ling_casa("pt-PT", "pt"));
+  ok("pt casa pb",         ling_casa("pb", "pt"));
+  ok("hr casa hrv",        ling_casa("hrv", "hr"));
+  ok("hrv NAO casa sr",    !ling_casa("hrv", "sr"));
+  ok("ces NAO casa sk",    !ling_casa("ces", "sk"));
+  // O player da Samsung (#269): "jp", "cz", "du", "gr", "in", "ma".
+  ok("ja casa jp (Samsung)", ling_casa("jp", "ja"));
+  ok("cs casa cz (Samsung)", ling_casa("cz", "cs"));
+  ok("nl casa du (Samsung)", ling_casa("du", "nl"));
+  ok("el casa gr (Samsung)", ling_casa("gr", "el"));
+  ok("id casa in (Samsung)", ling_casa("in", "id"));
+  ok("ms casa ma (Samsung)", ling_casa("ma", "ms"));
+  ok("nome de jp",  !strcmp(ling_nome("jp"), "Japonês"));
+  ok("nome de cz",  !strcmp(ling_nome("cz"), "Tcheco"));
+  ok("nome de du",  !strcmp(ling_nome("du"), "Holandês"));
+  ok("nome de ces", !strcmp(ling_nome("ces"), "Tcheco"));
+  ok("nome de es-419", !strcmp(ling_nome("es-419"), "Espanhol"));
+  ok("nome de zh-Hans", !strcmp(ling_nome("zh-Hans"), "Chinês"));
+  ok("nome de hrv", !strcmp(ling_nome("hrv"), "Croata"));
+  ok("selo de pb", !strcmp(ling_selo("pb"), "PT-BR"));
+  // O "lang" com nome por extenso (Auto-Subs: "Hebrew (Auto-Subs)").
+  { char c[16];
+    ling_normalizar("Hebrew (Auto-Subs)", c, sizeof c);
+    ok("Hebrew (Auto-Subs) vira heb", !strcmp(c, "heb") && ling_casa(c, "he"));
+    ling_normalizar("Spanish (Auto-Subs)", c, sizeof c);
+    ok("Spanish (Auto-Subs) vira spa", ling_casa(c, "es"));
+    ling_normalizar("Czech", c, sizeof c);
+    ok("Czech casa cs", ling_casa(c, "cs"));
+    ling_normalizar("ces", c, sizeof c);
+    ok("ces fica ces e casa cs", !strcmp(c, "ces") && ling_casa(c, "cs"));
+    ling_normalizar("pt-BR", c, sizeof c);
+    ok("pt-BR normalizado casa pt", ling_casa(c, "pt") && !strcmp(ling_selo(c), "PT-BR"));
+  }
 
   // Nomes para a tela.
   ok("nome de pob", !strcmp(ling_nome("pob"), "Português (BR)"));
   ok("nome de spa", !strcmp(ling_nome("spa"), "Espanhol"));
   // Sem nome na tabela, o CODIGO em maiusculas — diz mais que "Legenda 3".
-  ok("nome de glg", !strcmp(ling_nome("glg"), "GLG"));
+  ok("nome de glg", !strcmp(ling_nome("glg"), "Galego"));
+  ok("nome de xyz", !strcmp(ling_nome("xyz"), "XYZ"));
 
   // As sentinelas do app web viram "sem filtro", nunca um idioma inventado.
   ling_conta_audio("DEVICE");   ok("DEVICE = sem filtro",  !ling_audio()[0]);

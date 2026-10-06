@@ -1585,11 +1585,17 @@ static void lerContatos(const char **cab) {
     js_texto(p, f, "nome",   novos[n].nome,   sizeof novos[n].nome);
     js_texto(p, f, "avatar", novos[n].avatar, sizeof novos[n].avatar);
     js_texto(p, f, "origem", novos[n].origem, sizeof novos[n].origem);
+    js_texto(p, f, "apelido", novos[n].apelido, sizeof novos[n].apelido);
+    js_texto(p, f, "selo",   novos[n].selo,   sizeof novos[n].selo);
     rec_contato_ids(p, f, &novos[n]);
-    semTab(novos[n].nome);
+    semTab(novos[n].nome); semTab(novos[n].apelido);
     // Contato sem nome nao e contato quebrado: no Trakt vira o slug, e o slug
     // e o que o dono reconhece; na conta Nuvio vira "Amigo #n" — o resto do id
     // e um UUID, e foi assim que um amigo por codigo aparecia na tela.
+    // "Amigo #n" do servidor tambem nao e nome: com apelido escolhido, ele e o
+    // que a linha mostra (o amigo escolheu ser chamado assim).
+    if ((!novos[n].nome[0] || rec_nome_reserva(novos[n].nome)) && novos[n].apelido[0])
+      snprintf(novos[n].nome, sizeof novos[n].nome, "%s", novos[n].apelido);
     if (!novos[n].nome[0] && novos[n].id[0])
       rec_nome_exibicao(novos[n].nome, sizeof novos[n].nome, "", novos[n].id);
     if (novos[n].id[0]) n++;
@@ -1659,6 +1665,7 @@ static void lerSugestoes(const char **cab) {
     js_texto(p, f, "avatar",  novos[n].avatar,  sizeof novos[n].avatar);
     js_texto(p, f, "origem",  novos[n].origem,  sizeof novos[n].origem);
     js_texto(p, f, "viaNome", novos[n].viaNome, sizeof novos[n].viaNome);
+    js_texto(p, f, "selo",    novos[n].selo,    sizeof novos[n].selo);
     semTab(novos[n].nome);
     semTab(novos[n].viaNome);
     // Sem nome, o slug. Mesma regra de lerContatos: quem nunca preencheu o
@@ -2080,12 +2087,14 @@ static int lerPessoa(const char *p, const char *f, RecPessoa *x) {
   js_texto(p, f, "bio",     x->bio,     sizeof x->bio);
   js_texto(p, f, "relacao", x->relacao, sizeof x->relacao);
   js_texto(p, f, "vendo",   x->vendo,   sizeof x->vendo);
-  semTab(x->vendo);
+  js_texto(p, f, "nome",    x->nome,    sizeof x->nome);
+  js_texto(p, f, "selo",    x->selo,    sizeof x->selo);
+  semTab(x->vendo); semTab(x->nome);
   x->emComum = (int)js_num(p, f, "emComum", 0.0);
   x->generos = mascaraGeneros(p, f);
   semTab(x->apelido); semTab(x->bio); semTab(x->avatar);
   // Handle malformado ou sem nome: nao ha o que mostrar nem como agir.
-  return x->pub[0] && x->apelido[0];
+  return x->pub[0] && (x->apelido[0] || x->nome[0]);
 }
 
 // POST /v1/perfil, /despublicar, /apagar e /atividade — o que o aparelho decidiu
@@ -2491,7 +2500,7 @@ static void tratarSocial(const char **cab) {
         p = js_prox(f);
       }
       nBloq = n;
-    } else if (op == SOC_ACEITAR || op == SOC_RECUSAR) {
+    } else if (op == SOC_RECUSAR) {
       int i, k = 0;   // o pedido tratado sai da caixa na hora
       for (i = 0; i < nPedidos; i++)
         if (strcmp(pedidosRec[i].pub, arg)) pedidosRec[k++] = pedidosRec[i];
@@ -2506,6 +2515,17 @@ static void tratarSocial(const char **cab) {
       else if (op == SOC_ACEITAR) snprintf(est, sizeof est, "%s", "amigo");
       for (i = 0; i < nAchados; i++)
         if (!strcmp(achados[i].pub, arg)) snprintf(achados[i].relacao, sizeof achados[i].relacao, "%s", est);
+      // ACEITAR TAMBEM TIRA DA CAIXA. Este ramo e o de cima eram um if/else e
+      // o aceite caia so no de cima: a pessoa saia dos pedidos, mas a lista de
+      // onde ela foi aceita (busca, comunidade) continuava oferecendo "Aceitar".
+      if (op == SOC_ACEITAR) {
+        int k = 0;
+        for (i = 0; i < nPedidos; i++)
+          if (strcmp(pedidosRec[i].pub, arg)) pedidosRec[k++] = pedidosRec[i];
+        nPedidos = k;
+      }
+      if (temCartao && !strcmp(cartaoP.pub, arg) && est[0])
+        snprintf(cartaoP.relacao, sizeof cartaoP.relacao, "%s", est);
     } else if (op == SOC_BLOQUEAR) {
       // A amizade (se havia) caiu no servidor: a lista de contatos e relida.
       contatosMs = SDL_GetTicks() - 1;
@@ -3736,6 +3756,59 @@ static void recCorDoId(const char *id, float *r, float *g, float *b) {
   for (; *p; p++) { h ^= (unsigned char)*p; h *= 16777619u; }
   h %= 6u;
   *r = PALETA[h][0]; *g = PALETA[h][1]; *b = PALETA[h][2];
+}
+
+int rec_nome_reserva(const char *s) {
+  const char *h;
+  if (!s || !s[0]) return 0;
+  h = strrchr(s, '#');
+  if (!h || !h[1] || h == s || h[-1] != ' ') return 0;
+  for (h++; *h; h++) if (*h < '0' || *h > '9') return 0;
+  return 1;
+}
+
+void rec_identidade(const char *nome, const char *apelido, char *l1, size_t n1,
+                    char *l2, size_t n2) {
+  const char *n = (nome && nome[0] && !rec_nome_reserva(nome)) ? nome : "";
+  const char *ap = (apelido && apelido[0] && !rec_nome_reserva(apelido)) ? apelido : "";
+  // O APELIDO E O MESMO TEXTO DO NOME em quem escolheu o proprio nome como
+  // apelido ("fabi" e "@fabi"): a segunda linha so repetiria a primeira.
+  if (n[0] && ap[0] && !SDL_strcasecmp(n, ap)) ap = "";
+  if (l2 && n2) l2[0] = 0;
+  if (n[0]) {
+    snprintf(l1, n1, "%s", n);
+    if (ap[0] && l2 && n2) snprintf(l2, n2, "@%s", ap);
+  } else if (ap[0]) snprintf(l1, n1, "%s", ap);
+  else snprintf(l1, n1, "%s", i18n("Sem nome"));
+}
+
+// O SELO DE CRIADOR. E um selo da tabela unica (badges.h: BADGE_H, raio
+// pilula, TXT_CAPTION2, BADGE_PADX), no estilo BADGE_REALCE — o acento a 18 %
+// por baixo —, com duas diferencas que o fazem ler como MARCA e nao como
+// estado: o icone de verificado na frente e o texto no tom do acento (o acento
+// clareado, para ler sobre o escuro mesmo nos acentos fechados).
+#define REC_SELO_ICONE 18.0f
+static void tomDoSelo(float *r, float *g, float *b) {
+  ajustes_acento(r, g, b);
+  *r = *r + (1.0f - *r) * 0.35f; *g = *g + (1.0f - *g) * 0.35f; *b = *b + (1.0f - *b) * 0.35f;
+}
+float rec_selo_pessoa_largura(const char *selo) {
+  if (!selo || strcmp(selo, "criador")) return 0.0f;
+  return BADGE_PADX - 2.0f + REC_SELO_ICONE + 6.0f + (float)txt_largura(TXT_CAPTION2, "Criador") + BADGE_PADX;
+}
+float rec_selo_pessoa(float x, float y, const char *selo, float alfa) {
+  float w = rec_selo_pessoa_largura(selo), ar, ag, ab, tr, tg, tb;
+  if (w <= 0.0f) return 0.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  tomDoSelo(&tr, &tg, &tb);
+  gfx_cor((GfxRect){ x, y, w, BADGE_H }, 0.5f, ar, ag, ab, 0.20f * alfa);
+  gfx_icone((GfxRect){ x + BADGE_PADX - 2.0f, y + (BADGE_H - REC_SELO_ICONE) * 0.5f,
+                       REC_SELO_ICONE, REC_SELO_ICONE }, "aj_badge-check", tr, tg, tb, alfa);
+  { TxtLinha l = txt_linha(TXT_CAPTION2, "Criador", (int)(tr * 255.0f), (int)(tg * 255.0f),
+                           (int)(tb * 255.0f), 255);
+    txt_desenhar_alpha(l, x + BADGE_PADX - 2.0f + REC_SELO_ICONE + 6.0f,
+                       y + (BADGE_H - (float)l.h) * 0.5f, alfa); }
+  return w;
 }
 
 void rec_avatar(GfxRect a, const char *url, const char *nome, const char *id,

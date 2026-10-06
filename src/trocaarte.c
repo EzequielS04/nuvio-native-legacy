@@ -10,6 +10,7 @@
 #include "idioma.h"
 #include "js.h"
 #include "layout.h"
+#include "linguas.h"
 #include "detail.h"
 #include "ponteiro.h"
 #include "rede.h"
@@ -23,14 +24,20 @@
 // Teto por aba. O TMDB tem titulo com 68 backdrops (Um Sonho de Liberdade,
 // medido em 23/09); 36 sao sete linhas e meia de grade, mais do que alguem
 // percorre no controle — e cada uma e uma textura de 300 px no cache.
-#define TA_MAX 36
-#define TA_TMDB_FUNDOS 28
-#define TA_TMDB_LOGOS  16
+// O FILTRO DE IDIOMA (relato arabe, .tpk 4/5: "so aparecem opcoes em ingles")
+// pede ao TMDB TODOS os idiomas e deixa a pessoa filtrar; o teto sobe para que
+// as artes de um idioma menos votado ainda entrem na lista.
+#define TA_MAX 96
+#define TA_TMDB_FUNDOS 72
+#define TA_TMDB_LOGOS  56
+#define TA_LER_FUNDOS 160
+#define TA_LER_LOGOS  96
 
 typedef struct {
   char url[ARTEESC_URL];   // o que vai para o disco (vazio = Automatico)
   char mostra[512];        // o que a miniatura pede (Automatico: a regra)
   char rotulo[40];
+  char iso[8];             // idioma do TMDB: "" nao e do TMDB, "-" sem texto
 } TaCand;
 
 static TaCand cand[2][TA_MAX];
@@ -43,6 +50,8 @@ static int aberto;
 static float mola;           // 0..1, entrada e saida
 static int aba;              // 0 fundos, 1 logos
 static int naAba;            // foco na linha das abas (e nao na grade)
+static int naFiltro;         // ...e, nela, no chip de idioma
+static char filtro[8];       // idioma mostrado nas duas abas ("" = todos, "-" = sem texto)
 static int foco[2];          // indice em cand[aba], nao na lista visivel
 static int topo[2];          // primeira linha visivel da grade
 static int okDesceu;
@@ -91,7 +100,8 @@ static int jaTem(int a, const char *url) {
 
 // Chamar com a trava. `url` e o que se grava; `mostra` o que a miniatura pede
 // (NULL = a propria url).
-static void por(int a, const char *url, const char *mostra, const char *rotulo) {
+static void porIso(int a, const char *url, const char *mostra, const char *rotulo,
+                   const char *iso) {
   TaCand *c;
   if (nCand[a] >= TA_MAX) return;
   if (!mostra) mostra = url;
@@ -101,6 +111,10 @@ static void por(int a, const char *url, const char *mostra, const char *rotulo) 
   snprintf(c->url, sizeof c->url, "%s", url ? url : "");
   snprintf(c->mostra, sizeof c->mostra, "%s", mostra);
   snprintf(c->rotulo, sizeof c->rotulo, "%s", rotulo ? rotulo : "");
+  snprintf(c->iso, sizeof c->iso, "%s", iso ? iso : "");
+}
+static void por(int a, const char *url, const char *mostra, const char *rotulo) {
+  porIso(a, url, mostra, rotulo, "");
 }
 
 // --- o fio do TMDB ----------------------------------------------------------
@@ -114,27 +128,35 @@ typedef struct {
 
 typedef struct { char fp[96]; char iso[8]; double nota; } TaImg;
 
-// Sem idioma primeiro (e a foto sem letreiro, a que combina com o nosso
-// logo), depois a mais votada.
-static int cmpFundo(const void *a, const void *b) {
-  const TaImg *x = (const TaImg *)a, *y = (const TaImg *)b;
-  int sx = x->iso[0] != 0, sy = y->iso[0] != 0;
-  if (sx != sy) return sx - sy;
-  return x->nota < y->nota ? 1 : x->nota > y->nota ? -1 : 0;
-}
-
 static const char *linguaAlvo;
-// Logo: o do idioma da interface, depois o sem idioma, depois o ingles.
-static int pesoLogo(const TaImg *x) {
-  if (linguaAlvo && !strcmp(x->iso, linguaAlvo)) return 0;
+// Fundo: o do idioma dos metadados, o sem idioma (a foto sem letreiro, a que
+// combina com o nosso logo), o ingles, os outros; dentro de cada um, a mais
+// votada. A mesma ordem da escolha automatica (af_tmdb_fundo_padrao).
+static int pesoFundo(const TaImg *x) {
+  if (linguaAlvo && linguaAlvo[0] && !strcmp(x->iso, linguaAlvo)) return 0;
   if (!x->iso[0]) return 1;
   if (!strcmp(x->iso, "en")) return 2;
+  return 3;
+}
+static int cmpFundo(const void *a, const void *b) {
+  const TaImg *x = (const TaImg *)a, *y = (const TaImg *)b;
+  int px = pesoFundo(x), py = pesoFundo(y);
+  if (px != py) return px - py;
+  if (px == 3) { int c = strcmp(x->iso, y->iso); if (c) return c; }   // outros agrupados
+  return x->nota < y->nota ? 1 : x->nota > y->nota ? -1 : 0;
+}
+// Logo: o do idioma, o ingles, o sem idioma, os outros (af_tmdb_logo).
+static int pesoLogo(const TaImg *x) {
+  if (linguaAlvo && linguaAlvo[0] && !strcmp(x->iso, linguaAlvo)) return 0;
+  if (!strcmp(x->iso, "en")) return 1;
+  if (!x->iso[0]) return 2;
   return 3;
 }
 static int cmpLogo(const void *a, const void *b) {
   const TaImg *x = (const TaImg *)a, *y = (const TaImg *)b;
   int px = pesoLogo(x), py = pesoLogo(y);
   if (px != py) return px - py;
+  if (px == 3) { int c = strcmp(x->iso, y->iso); if (c) return c; }
   return x->nota < y->nota ? 1 : x->nota > y->nota ? -1 : 0;
 }
 
@@ -155,6 +177,49 @@ static int lerImagens(const char *corpo, const char *campo, TaImg *v, int max) {
     p = js_prox(f);
   }
   return n;
+}
+
+// Le backdrops/logos de uma resposta do /images, ordena (ver pesoFundo e
+// pesoLogo) e publica na grade se a abertura `ger` ainda e a vigente.
+static void publicarTmdb(const char *resp, const char *lingua, int ger) {
+  // NO HEAP, e nao estatico: fechar e reabrir depressa deixa DOIS fios no ar
+  // (o velho so descarta o resultado no fim), e os dois escreveriam na mesma
+  // tabela. ~28 KB por abertura.
+  TaImg *fundos = (TaImg *)malloc(TA_LER_FUNDOS * sizeof *fundos);
+  TaImg *logos = (TaImg *)malloc(TA_LER_LOGOS * sizeof *logos);
+  int nf, nl, i;
+  if (!fundos || !logos) { free(fundos); free(logos); return; }
+  nf = lerImagens(resp, "backdrops", fundos, TA_LER_FUNDOS);
+  nl = lerImagens(resp, "logos", logos, TA_LER_LOGOS);
+  // qsort nao passa contexto: o idioma vai por estatico, sob a trava para
+  // dois fios nao trocarem o idioma um do outro no meio da ordenacao.
+  pthread_mutex_lock(&trava);
+  linguaAlvo = lingua;
+  qsort(fundos, (size_t)nf, sizeof *fundos, cmpFundo);
+  qsort(logos, (size_t)nl, sizeof *logos, cmpLogo);
+  linguaAlvo = NULL;
+  if (ger == geracao) {
+    char url[256], rot[40];
+    for (i = 0; i < nf && i < TA_TMDB_FUNDOS; i++) {
+      // w1280 e o tamanho do CARD; a tela cheia sobe pela qualidade
+      // (artehero_url_escolha_grande) e a miniatura desce para w300.
+      snprintf(url, sizeof url, "https://image.tmdb.org/t/p/w1280%s", fundos[i].fp);
+      if (fundos[i].iso[0]) snprintf(rot, sizeof rot, "TMDB · %.2s", fundos[i].iso);
+      else snprintf(rot, sizeof rot, "TMDB");
+      { char *c; for (c = rot; *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32; }
+      porIso(0, url, NULL, rot, fundos[i].iso[0] ? fundos[i].iso : "-");
+    }
+    for (i = 0; i < nl && i < TA_TMDB_LOGOS; i++) {
+      snprintf(url, sizeof url, "https://image.tmdb.org/t/p/w500%s", logos[i].fp);
+      if (logos[i].iso[0]) snprintf(rot, sizeof rot, "TMDB · %.2s", logos[i].iso);
+      else snprintf(rot, sizeof rot, "TMDB");
+      { char *c; for (c = rot; *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32; }
+      porIso(1, url, NULL, rot, logos[i].iso[0] ? logos[i].iso : "-");
+    }
+  }
+  pthread_mutex_unlock(&trava);
+  free(fundos);
+  free(logos);
 }
 
 static void *fioTmdb(void *arg) {
@@ -178,61 +243,16 @@ static void *fioTmdb(void *arg) {
     free(resp);
   }
   if (id <= 0) goto fim;
-  // include_image_language vale para as duas listas: o backdrop sem idioma
-  // (null) e o que queremos primeiro; o logo no idioma da interface. O
-  // ingles fica de reserva nos dois.
-  snprintf(api, sizeof api,
-           "https://api.themoviedb.org/3/%s/%ld/images?include_image_language=%s%snull,en&api_key=%s",
-           serie ? "tv" : "movie", id, q->lingua,
-           q->lingua[0] && strcmp(q->lingua, "en") ? "," : "", chaveApi);
-  if (!q->lingua[0] || !strcmp(q->lingua, "en"))
-    snprintf(api, sizeof api,
-             "https://api.themoviedb.org/3/%s/%ld/images?include_image_language=null,en&api_key=%s",
-             serie ? "tv" : "movie", id, chaveApi);
+  // TODOS OS IDIOMAS (sem include_image_language): a lista vinha so com o
+  // idioma dos metadados, o sem texto e o ingles, e quem queria um logo arabe
+  // com os metadados em ingles nao tinha como. A ordem (publicarTmdb) poe o
+  // idioma dos metadados primeiro, e o chip de idioma filtra.
+  snprintf(api, sizeof api, "https://api.themoviedb.org/3/%s/%ld/images?api_key=%s",
+           serie ? "tv" : "movie", id, chaveApi);
   resp = rede_baixar(api, 8);
   if (!resp) goto fim;
-  // NO HEAP, e nao estatico: fechar e reabrir depressa deixa DOIS fios no ar
-  // (o velho so descarta o resultado no fim), e os dois escreveriam na mesma
-  // tabela. ~11 KB por abertura.
-  { TaImg *fundos = (TaImg *)malloc(64 * sizeof *fundos);
-    TaImg *logos = (TaImg *)malloc(40 * sizeof *logos);
-    int nf, nl, i;
-    if (!fundos || !logos) { free(fundos); free(logos); free(resp); goto fim; }
-    nf = lerImagens(resp, "backdrops", fundos, 64);
-    nl = lerImagens(resp, "logos", logos, 40);
-    free(resp);
-    qsort(fundos, (size_t)nf, sizeof *fundos, cmpFundo);
-    // qsort nao passa contexto: o idioma vai por estatico, sob a trava para
-    // dois fios nao trocarem o idioma um do outro no meio da ordenacao.
-    pthread_mutex_lock(&trava);
-    linguaAlvo = q->lingua;
-    qsort(logos, (size_t)nl, sizeof *logos, cmpLogo);
-    linguaAlvo = NULL;
-    pthread_mutex_unlock(&trava);
-    pthread_mutex_lock(&trava);
-    if (q->ger == geracao) {
-      char url[256], rot[40];
-      for (i = 0; i < nf && i < TA_TMDB_FUNDOS; i++) {
-        // w1280 e o tamanho do CARD; a tela cheia sobe pela qualidade
-        // (artehero_url_escolha_grande) e a miniatura desce para w300.
-        snprintf(url, sizeof url, "https://image.tmdb.org/t/p/w1280%s", fundos[i].fp);
-        if (fundos[i].iso[0]) snprintf(rot, sizeof rot, "TMDB · %.2s", fundos[i].iso);
-        else snprintf(rot, sizeof rot, "TMDB");
-        { char *c; for (c = rot; *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32; }
-        por(0, url, NULL, rot);
-      }
-      for (i = 0; i < nl && i < TA_TMDB_LOGOS; i++) {
-        snprintf(url, sizeof url, "https://image.tmdb.org/t/p/w500%s", logos[i].fp);
-        if (logos[i].iso[0]) snprintf(rot, sizeof rot, "TMDB · %.2s", logos[i].iso);
-        else snprintf(rot, sizeof rot, "TMDB");
-        { char *c; for (c = rot; *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32; }
-        por(1, url, NULL, rot);
-      }
-    }
-    pthread_mutex_unlock(&trava);
-    free(fundos);
-    free(logos);
-  }
+  publicarTmdb(resp, q->lingua, q->ger);
+  free(resp);
 fim:
   pthread_mutex_lock(&trava);
   if (q->ger == geracao) buscando = 0;
@@ -251,7 +271,8 @@ void trocaarte_abrir(const CatItem *it) {
   item = *it;
   artehero_id_escolha(&item, chave, sizeof chave);
   if (!chave[0]) return;
-  aberto = 1; aba = 0; naAba = 0; okDesceu = 0; mudou = 0;
+  aberto = 1; aba = 0; naAba = 0; naFiltro = 0; okDesceu = 0; mudou = 0;
+  filtro[0] = 0;
   foco[0] = foco[1] = 0; topo[0] = topo[1] = 0;
   previa[0] = previaLogo[0] = 0; previaLogoTem = 0;
   focoDesde = SDL_GetTicks();
@@ -361,9 +382,56 @@ static int visiveis(int a, int *v) {
   int i, n = 0;
   for (i = 0; i < nCand[a]; i++) {
     if (i > 0 && tex_falhou(cand[a][i].mostra)) continue;
+    // Com filtro de idioma, so o TMDB daquele idioma (e o Automatico).
+    if (i > 0 && filtro[0] && strcmp(cand[a][i].iso, filtro)) continue;
     v[n++] = i;
   }
   return n;
+}
+
+// --- filtro de idioma ----------------------------------------------------------
+// Os idiomas do TMDB presentes nas duas abas, na ordem da lista (a do idioma
+// dos metadados primeiro). UM filtro para as duas abas: o chip fica a direita
+// de "Logos", e um filtro so dos fundos nao teria como ser alcancado sem sair
+// da aba. Chamar com a trava. Devolve quantos (sem o "todos").
+#define TA_FILTROS 24
+static int idiomasDaAba(int aba_, char out[][8]) {
+  int a, i, k, n = 0;
+  (void)aba_;
+  for (a = 0; a < 2; a++)
+    for (i = 1; i < nCand[a] && n < TA_FILTROS; i++) {
+      const char *iso = cand[a][i].iso;
+      if (!iso[0] || tex_falhou(cand[a][i].mostra)) continue;
+      for (k = 0; k < n && strcmp(out[k], iso); k++) {}
+      if (k == n) snprintf(out[n++], 8, "%s", iso);
+    }
+  return n;
+}
+
+// Proximo filtro: todos -> cada idioma -> todos. Chamar com a trava.
+static void filtroProximo(int a) {
+  char l[TA_FILTROS][8];
+  int n = idiomasDaAba(a, l), k;
+  if (n < 2) { filtro[0] = 0; return; }
+  if (!filtro[0]) { snprintf(filtro, sizeof filtro, "%s", l[0]); }
+  else {
+    for (k = 0; k < n && strcmp(l[k], filtro); k++) {}
+    if (k + 1 < n) snprintf(filtro, sizeof filtro, "%s", l[k + 1]);
+    else filtro[0] = 0;
+  }
+  topo[0] = topo[1] = 0;
+  previa[0] = 0;
+  focoDesde = SDL_GetTicks();
+  printf("[arte] trocar arte: filtro de idioma %s\n", filtro[0] ? filtro : "todos");
+  fflush(stdout);
+}
+
+// Rotulo do chip: "Idioma: Todos", "Idioma: Árabe", "Idioma: Sem texto".
+static void rotuloFiltro(int a, char *dst, size_t n) {
+  const char *f = filtro;
+  (void)a;
+  snprintf(dst, n, "%s: %s", i18n("Idioma"),
+           !f[0] ? i18n("Todos") : !strcmp(f, "-") ? i18n("Sem texto") : i18n(ling_nome(f)));
 }
 static int posDe(const int *v, int n, int c) {
   int i, melhor = 0;
@@ -433,9 +501,15 @@ static void mover(int dx, int dy) {
   n = visiveis(aba, v);
   p = posDe(v, n, foco[aba]);
   if (naAba) {
-    if (dx) {
+    char l[TA_FILTROS][8];
+    int temFiltro = idiomasDaAba(aba, l) >= 2;
+    if (naFiltro) {
+      if (dx < 0 || !temFiltro) naFiltro = 0;
+      else if (dy > 0) { naFiltro = 0; naAba = 0; }
+    } else if (dx) {
       int nova = aba + dx;
       if (nova >= 0 && nova <= 1) { aba = nova; previa[0] = 0; focoDesde = SDL_GetTicks(); }
+      else if (nova == 2 && temFiltro) naFiltro = 1;
     } else if (dy > 0) naAba = 0;
     pthread_mutex_unlock(&trava);
     return;
@@ -481,6 +555,12 @@ void trocaarte_evento(const SDL_Event *e) {
                                e->key.keysym.sym == SDLK_KP_ENTER)) {
     if (!okDesceu) return;
     okDesceu = 0;
+    if (naAba && naFiltro) {
+      pthread_mutex_lock(&trava);
+      filtroProximo(aba);
+      pthread_mutex_unlock(&trava);
+      return;
+    }
     if (naAba) { naAba = 0; return; }
     escolher();
   }
@@ -488,8 +568,9 @@ void trocaarte_evento(const SDL_Event *e) {
 
 // --- ponteiro ----------------------------------------------------------------
 static void ponteiroFoco(int a, int b) {
-  if (a < 0) { naAba = 1; if (b != aba) { aba = b; previa[0] = 0; } focoDesde = SDL_GetTicks(); return; }
-  naAba = 0;
+  if (a == -2) { naAba = 1; naFiltro = 1; return; }
+  if (a < 0) { naAba = 1; naFiltro = 0; if (b != aba) { aba = b; previa[0] = 0; } focoDesde = SDL_GetTicks(); return; }
+  naAba = 0; naFiltro = 0;
   if (b >= 0 && b < nCand[aba] && foco[aba] != b) { foco[aba] = b; focoDesde = SDL_GetTicks(); }
 }
 
@@ -559,9 +640,23 @@ void trocaarte_desenhar(const char *logoPagina) {
       for (k = 0; k < 2; k++) {
         TxtLinha l = txt_linha(TXT_DET_META2, rot[k], 255, 255, 255, 255);
         GfxRect r = { x, y, l.w + 56.0f, 52.0f };
-        desenhaAba(r, rot[k], aba == k, naAba && aba == k, a);
+        desenhaAba(r, rot[k], aba == k, naAba && !naFiltro && aba == k, a);
         if (a > 0.3f) ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroFoco, NULL, -1, k);
         x += r.w + 14.0f;
+      }
+      // CHIP DE IDIOMA: so quando o TMDB trouxe mais de um idioma nesta aba.
+      // OK troca (todos -> cada idioma -> todos); um degrau a direita de Logos.
+      { char l[TA_FILTROS][8];
+        if (idiomasDaAba(aba, l) >= 2) {
+          char rf[80];
+          TxtLinha lf;
+          GfxRect r;
+          rotuloFiltro(aba, rf, sizeof rf);
+          lf = txt_linha(TXT_DET_META2, rf, 255, 255, 255, 255);
+          r = (GfxRect){ x + 22.0f, y, lf.w + 56.0f, 52.0f };
+          desenhaAba(r, rf, filtro[0] != 0, naAba && naFiltro, a);
+          if (a > 0.3f) ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroFoco, NULL, -2, 0);
+        } else if (naFiltro) naFiltro = 0;
       } }
     { const char *dica = buscando ? i18n("Buscando mais artes…")
                                   : i18n("OK escolhe  ·  Voltar cancela");
@@ -640,3 +735,55 @@ void trocaarte_teste_foco(int a, int pos) {
 }
 
 int trocaarte_n(int a) { return a >= 0 && a <= 1 ? nCand[a] : 0; }
+
+void trocaarte_teste_tmdb(const char *json, const char *lingua) {
+  publicarTmdb(json, lingua, geracao);
+}
+
+const char *trocaarte_teste_iso(int a, int pos) {
+  static char iso[8];
+  int v[TA_MAX], n;
+  iso[0] = 0;
+  if (a < 0 || a > 1) return iso;
+  pthread_mutex_lock(&trava);
+  n = visiveis(a, v);
+  if (pos >= 0 && pos < n) snprintf(iso, sizeof iso, "%s", cand[a][v[pos]].iso);
+  pthread_mutex_unlock(&trava);
+  return iso;
+}
+
+int trocaarte_teste_visiveis(int a) {
+  int v[TA_MAX], n;
+  if (a < 0 || a > 1) return 0;
+  pthread_mutex_lock(&trava);
+  n = visiveis(a, v);
+  pthread_mutex_unlock(&trava);
+  return n;
+}
+
+const char *trocaarte_teste_filtro(int a) {
+  if (a < 0 || a > 1) return "";
+  pthread_mutex_lock(&trava);
+  filtroProximo(a);
+  pthread_mutex_unlock(&trava);
+  return filtro;
+}
+
+void trocaarte_teste_limpar(void) {
+  pthread_mutex_lock(&trava);
+  geracao++;
+  buscando = 0;
+  if (nCand[0] > 1) nCand[0] = 1;
+  if (nCand[1] > 1) nCand[1] = 1;
+  filtro[0] = 0;
+  pthread_mutex_unlock(&trava);
+}
+
+void trocaarte_teste_candidato_iso(int a, const char *url, const char *rotulo, const char *iso) {
+  if (a < 0 || a > 1) return;
+  pthread_mutex_lock(&trava);
+  geracao++;
+  buscando = 0;
+  porIso(a, url, a == 1 ? url : NULL, rotulo, iso);
+  pthread_mutex_unlock(&trava);
+}

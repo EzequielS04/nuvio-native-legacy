@@ -234,6 +234,10 @@ static int uplIdx = -1;
 static GLuint uplTex;
 static SDL_Surface *uplSup;
 static int uplY;
+// 1 = os niveis da piramide da CPU ja tiveram o passo deles (ver tex_bombear).
+static int uplNiveis;
+// Libera a superficie de um item com os niveis da piramide da CPU (abaixo).
+static void liberarSup(SDL_Surface *s);
 // Bytes baixados que ainda nao foram consumidos pelo decode (LG e Tizen).
 static void soltarBruto(Item *it) {
   free(it->bruto); it->bruto = NULL; it->nBruto = 0; it->urlCache[0] = 0;
@@ -586,7 +590,7 @@ void tex_novo_quadro(void) {
   // de a fila o retirar.
   for (int i = 0; i < nMax; i++) {
     if (itens[i].estado == DECODIFICADO && pedidoObsoleto(&itens[i])) {
-      SDL_FreeSurface(itens[i].sup);
+      liberarSup(itens[i].sup);
       itens[i].sup = NULL;
       // Promocao decodificada e nunca desenhada: fica a textura pequena, nao
       // um slot VAZIO com textura orfa (ver desistir).
@@ -2277,6 +2281,93 @@ SDL_Surface *tex_reduzir(SDL_Surface *src, int lw, int lh) {
   return dst;
 }
 
+// PIRAMIDE NA CPU (#201, 06/10/2026). Relato: TCL 55P6K, Android 12 (acho que
+// Mali-G57, nao confirmado): foto de elenco, logo de estudio, o logo do IMDb e
+// os cartazes empilhados da colecao saem com blocos de lixo; cartaz grande,
+// desenhado perto do tamanho decodificado, sai perfeito. O que quebra e so o
+// que aparece MENOR que a textura, ou seja o que amostra nivel > 0 da piramide
+// feita por glGenerateMipmap. Mac, C9 (Mali-G71) e a TCL do dono (Mali-G52)
+// nao mostram nada. A suspeita (NAO provada) e o driver gerar lixo no
+// glGenerateMipmap de textura NPOT; o envio do nivel 0 foi conferido e nao
+// tem defeito aparente (RGBA/RGBA, pitch = w*4, alinhamento irrelevante em 4
+// bytes por pixel, um contexto so, fio principal).
+//
+// Em vez de depender do driver, o fio de decode monta a piramide inteira com
+// tex_reduzir (2x por nivel, ate 1x1, no tamanho que o GL espera:
+// max(1, floor(n/2))) e o envio sobe cada nivel com glTexImage2D. Os niveis
+// ficam encadeados em `userdata` da superficie base — o SDL nao usa esse campo
+// e nao o libera, entao TODA liberacao de superficie do item passa por
+// liberarSup.
+//
+// Padrao: CPU no Android (NV_ANDROID), GPU no resto (LG/Tizen/Mac como
+// sempre). NUVIO_TEX_MIP=cpu|gpu troca em qualquer alvo, para diagnostico.
+static int mipCpu = -1;
+
+static int mipCpuAtivo(void) {
+  if (mipCpu < 0) {
+    const char *e = getenv("NUVIO_TEX_MIP");
+    if (e && !strcmp(e, "cpu")) mipCpu = 1;
+    else if (e && !strcmp(e, "gpu")) mipCpu = 0;
+    else {
+#ifdef NV_ANDROID
+      mipCpu = 1;
+#else
+      mipCpu = 0;
+#endif
+    }
+  }
+  return mipCpu;
+}
+
+static void liberarSup(SDL_Surface *s) {
+  while (s) {
+    SDL_Surface *prox = (SDL_Surface *)s->userdata;
+    s->userdata = NULL;
+    SDL_FreeSurface(s);
+    s = prox;
+  }
+}
+
+// Monta os niveis 1..n sob `base` (ABGR8888). Devolve quantos niveis criou; 0
+// se nao precisava (1x1) ou se faltou memoria — nesse caso nada fica
+// pendurado e o envio cai no glGenerateMipmap de sempre.
+int tex_piramide_cpu(SDL_Surface *base) {
+  SDL_Surface *ant = base;
+  int n = 0;
+  if (!base || base->userdata || base->format->format != SDL_PIXELFORMAT_ABGR8888)
+    return 0;
+  while (ant->w > 1 || ant->h > 1) {
+    int lw = ant->w > 1 ? ant->w / 2 : 1, lh = ant->h > 1 ? ant->h / 2 : 1;
+    SDL_Surface *nv = tex_reduzir(ant, lw, lh);
+    if (!nv || nv->w != lw || nv->h != lh || nv->pitch != lw * 4) {
+      if (nv) SDL_FreeSurface(nv);
+      liberarSup((SDL_Surface *)base->userdata);
+      base->userdata = NULL;
+      return 0;
+    }
+    ant->userdata = nv;
+    ant = nv;
+    n++;
+  }
+  return n;
+}
+
+void tex_piramide_liberar(SDL_Surface *base) { liberarSup(base); }
+
+// Sobe os niveis 1..n encadeados em `base` na textura ligada. Devolve quantos
+// bytes subiu (para tex_upl_bytes).
+static long subirNiveis(SDL_Surface *base) {
+  long bytes = 0;
+  int nivel = 1;
+  SDL_Surface *s;
+  for (s = (SDL_Surface *)base->userdata; s; s = (SDL_Surface *)s->userdata, nivel++) {
+    glTexImage2D(GL_TEXTURE_2D, nivel, GL_RGBA, s->w, s->h, 0, GL_RGBA,
+                 GL_UNSIGNED_BYTE, s->pixels);
+    bytes += (long)s->w * s->h * 4;
+  }
+  return bytes;
+}
+
 #ifndef __EMSCRIPTEN__
 // Algumas SDL_image do webOS nao incluem GIF. A foto usa o decoder C ja
 // embarcado: um quadro, limitado, sem iniciar animacao nem fio adicional.
@@ -2662,6 +2753,12 @@ static int threadDecode(void *arg) {
     // um laco silencioso: o desenho pede todo quadro, o fio tenta todo quadro,
     // e o unico sintoma e "esse card nao tem arte". Foi assim que o WEBP do
     // metahub passou despercebido.
+    // PIRAMIDE NA CPU, aqui e nao no envio: este fio e de prioridade baixa e
+    // ja tem os pixels. Mesma decisao (temPiramide) da contabilidade de bytes.
+    // Ver tex_piramide_cpu.
+    if (conv && mipCpuAtivo() && temPiramide(conv->w, conv->h))
+      tex_piramide_cpu(conv);
+
     int falhou = 0;
     SDL_LockMutex(mtx);
     // O SLOT AINDA E DESTE PEDIDO? (23/09/2026, cards com a arte de OUTRO
@@ -2672,7 +2769,7 @@ static int threadDecode(void *arg) {
     // textura ficava no cache com o nome errado. Mesma guarda do download
     // (mesmoPedido): nao sendo o mesmo caminho, a superficie vai para o lixo.
     if (strcmp(itens[idx].caminho, urlOrig)) {
-      if (conv) SDL_FreeSurface(conv);
+      if (conv) liberarSup(conv);
       { char lb[160]; printf("[tex] decode descartado: o slot virou outro pedido (%s)\n", urlLog(urlOrig, lb, sizeof lb)); }
       fflush(stdout);
       SDL_UnlockMutex(mtx);
@@ -2732,7 +2829,7 @@ static int threadDecode(void *arg) {
         falhou = 1;
       }
     } else if (conv) {
-      SDL_FreeSurface(conv);  // slot foi reaproveitado no meio do caminho
+      liberarSup(conv);  // slot foi reaproveitado no meio do caminho
     }
     // So agora o item pode ser reenfileirado por um pedido de quadro seguinte.
     itens[idx].naFilaDec = 0;
@@ -3118,6 +3215,7 @@ static int estadoPoster(const char *url) {
 
 int tex_iniciar(int max_itens) {
   int mb = orcamentoMB();
+  mipCpuAtivo();  // decide antes dos fios de decode (NUVIO_TEX_MIP)
   posterprov_hook_estado(estadoPoster);
   int fiosDecode = NV_TEX_FIOS, fiosRede = NV_TEX_FIOS_REDE;
   // Os outros dois padroes do aparelho (fios ativos e teto do heroi) saem da
@@ -3207,10 +3305,10 @@ void tex_encerrar(void) {
   pthread_mutex_lock(&vidaMtx);
 #endif
   if (uplTex) glDeleteTextures(1, &uplTex);
-  uplTex = 0; uplIdx = -1; uplSup = NULL; uplY = 0;
+  uplTex = 0; uplIdx = -1; uplSup = NULL; uplY = 0; uplNiveis = 0;
   for (int i = 0; i < nMax; i++) {
     if (itens[i].tex) glDeleteTextures(1, &itens[i].tex);
-    if (itens[i].sup) SDL_FreeSurface(itens[i].sup);
+    if (itens[i].sup) liberarSup(itens[i].sup);
     soltarBruto(&itens[i]);
   }
   memset(itens, 0, sizeof itens);
@@ -3824,7 +3922,9 @@ static void publicarEnvio(int alvo, GLuint t, SDL_Surface *sup, Uint32 uploadEm,
 #endif
   Uint32 mipEm = SDL_GetTicks();
   glBindTexture(GL_TEXTURE_2D, t);
-  if (comMip) glGenerateMipmap(GL_TEXTURE_2D);
+  // Niveis montados na CPU (tex_piramide_cpu) ja subiram em tex_bombear: o
+  // driver nao gera nada. Sem eles, o glGenerateMipmap de sempre.
+  if (comMip && !sup->userdata) glGenerateMipmap(GL_TEXTURE_2D);
   // MIPMAP_NEAREST e nao _LINEAR: o trilinear le DOIS niveis da piramide por
   // amostra, e nesta GPU isso e o dobro do custo de textura em cada pixel de
   // cada card. A diferenca visual e um degrau na transicao entre niveis, que
@@ -3862,7 +3962,7 @@ static void publicarEnvio(int alvo, GLuint t, SDL_Surface *sup, Uint32 uploadEm,
   SDL_UnlockMutex(mtx);
   { long uploadBytes = (long)sup->w * sup->h * 4;
     Uint32 uploadMs = SDL_GetTicks() - uploadEm;
-    SDL_FreeSurface(sup);
+    liberarSup(sup);
     if (uploadMs >= NV_TEX_TRACE_UPLOAD_MS || glMs >= NV_TEX_TRACE_UPLOAD_MS)
       printf("[tex-trace] upload-total hash=%08lx total_ms=%u gl_ms=%u bytes=%ld mip=%d queue=%u\n",
              hashCaminho(uploadPath), (unsigned)uploadMs, (unsigned)glMs,
@@ -3871,11 +3971,22 @@ static void publicarEnvio(int alvo, GLuint t, SDL_Surface *sup, Uint32 uploadEm,
 
 static void uplAbortar(void) {
   if (uplTex) glDeleteTextures(1, &uplTex);
-  uplTex = 0; uplIdx = -1; uplSup = NULL; uplY = 0;
+  uplTex = 0; uplIdx = -1; uplSup = NULL; uplY = 0; uplNiveis = 0;
 }
 
 int tex_bombear(int max_por_quadro) {
   int subiu = 0, trabalhou = 0;
+  // UMA LINHA POR SESSAO com o caminho da piramide e a GPU: e o que separa,
+  // num log de usuario, "lixo com mip=gpu" de "lixo com mip=cpu".
+  { static int logado;
+    if (!logado) {
+      const char *r = (const char *)glGetString(GL_RENDERER);
+      const char *v = (const char *)glGetString(GL_VERSION);
+      logado = 1;
+      printf("[tex] mip=%s GL_RENDERER=%s GL_VERSION=%s\n",
+             mipCpuAtivo() ? "cpu" : "gpu", r ? r : "?", v ? v : "?");
+      fflush(stdout);
+    } }
   Uint64 inicio = SDL_GetPerformanceCounter();
   double freq = (double)SDL_GetPerformanceFrequency();
   for (int passo = 0; passo < max_por_quadro + 16; passo++) {
@@ -3897,22 +4008,30 @@ int tex_bombear(int max_por_quadro) {
         int linhas = (int)(NV_TEX_FAIXA_BYTES / ((long)sup->w * 4));
         Uint32 em = SDL_GetTicks();
         if (linhas < 16) linhas = 16;
-        if (uplY + linhas > sup->h) linhas = sup->h - uplY;
         glBindTexture(GL_TEXTURE_2D, uplTex);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, uplY, sup->w, linhas, GL_RGBA, GL_UNSIGNED_BYTE,
-                        (const unsigned char *)sup->pixels + (size_t)uplY * sup->pitch);
+        if (uplY < sup->h) {
+          if (uplY + linhas > sup->h) linhas = sup->h - uplY;
+          glTexSubImage2D(GL_TEXTURE_2D, 0, 0, uplY, sup->w, linhas, GL_RGBA, GL_UNSIGNED_BYTE,
+                          (const unsigned char *)sup->pixels + (size_t)uplY * sup->pitch);
+          tex_upl_bytes += (long)sup->w * linhas * 4;
+          uplY += linhas;
+        } else {
+          // Niveis da piramide da CPU: um passo proprio depois da ultima
+          // faixa, para entrar no mesmo orcamento por quadro (somados, um
+          // terco do nivel 0).
+          tex_upl_bytes += subirNiveis(sup);
+        }
         gfx_tex_esquecer(0);
-        tex_upl_bytes += (long)sup->w * linhas * 4;
-        uplY += linhas;
         uplGlMs += SDL_GetTicks() - em;
         trabalhou = 1;
         if (uplY < sup->h) continue;
+        if (sup->userdata && !uplNiveis) { uplNiveis = 1; continue; }
         // Ultima faixa: a textura esta inteira, publica.
         { GLuint t = uplTex;
           SDL_LockMutex(mtx);
           itens[alvo].sup = NULL;
           SDL_UnlockMutex(mtx);
-          uplTex = 0; uplIdx = -1; uplSup = NULL; uplY = 0;
+          uplTex = 0; uplIdx = -1; uplSup = NULL; uplY = 0; uplNiveis = 0;
           tex_upl_n++;
           publicarEnvio(alvo, t, sup, uplEm, uplGlMs, uplFila, uplPath);
           subiu++; }
@@ -3956,7 +4075,7 @@ int tex_bombear(int max_por_quadro) {
       // orcamento, ou dos seguintes).
       glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, sup->w, sup->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
       gfx_tex_esquecer(0);
-      uplIdx = alvo; uplTex = t; uplSup = sup; uplY = 0;
+      uplIdx = alvo; uplTex = t; uplSup = sup; uplY = 0; uplNiveis = 0;
       uplEm = uploadEm; uplGlMs = SDL_GetTicks() - uploadEm; uplFila = filaWait;
       snprintf(uplPath, sizeof uplPath, "%s", uploadPath);
       continue;
@@ -3964,6 +4083,7 @@ int tex_bombear(int max_por_quadro) {
     tex_upl_n++;
     tex_upl_bytes += (long)sup->w * sup->h * 4;
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, sup->w, sup->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, sup->pixels);
+    if (sup->userdata) tex_upl_bytes += subirNiveis(sup);
     trabalhou = 1;
     publicarEnvio(alvo, t, sup, uploadEm, SDL_GetTicks() - uploadEm, filaWait, uploadPath);
     subiu++;

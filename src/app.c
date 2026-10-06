@@ -12,6 +12,8 @@
 //   3. menu    — camada sobre a tela corrente
 //   4. a tela corrente (home, busca, biblioteca ou ajustes)
 #include "celbotao.h"
+#include "central.h"
+#include "teclado.h"
 #include "ponteiro.h"
 #include "app.h"
 #include "descanso.h"
@@ -59,6 +61,8 @@
 #include "agendaviso.h"
 #include "perfil.h"
 #include "salvos.h"
+#include "contapend.h"
+#include "contalib.h"
 #include "recomenda.h"
 #include "atividade.h"
 #include "recenviar.h"
@@ -80,6 +84,8 @@
 #include "novidades170.h"
 #include "novidades180.h"
 #include "novidades20.h"
+#include "novidades201.h"
+#include "apoio.h"
 #include "telemetria.h"
 #include "avisos.h"
 #include "ilha.h"
@@ -448,6 +454,9 @@ static int pedirFonteJob(int tipo, unsigned geracao, const char *id, int renovan
 #include <stdio.h>
 
 static Tela tela = TELA_HOME;
+#ifdef NV_LINUX_DESKTOP
+static int uiPreview;
+#endif
 static int sair = 0;
 
 // Nome curto da tela em cena, para o log de campo ("[gpu-modos] lento: ...
@@ -1519,7 +1528,31 @@ static void guiaComCanalNoAr(void) {
 // antes mesmo da tela de login.
 static int homePronta;
 
+static void trocarSalvosDePerfil(void) {
+  int i, n = salvos_n();
+  char (*antes)[24] = n > 0 ? malloc(sizeof *antes * (size_t)n) : NULL;
+  for (i = 0; antes && i < n; i++)
+    snprintf(antes[i], sizeof antes[i], "%s", salvos_item(i)->id);
+  salvos_perfil(perfis_ativo());
+  for (i = 0; antes && i < n; i++)
+    if (!salvos_tem(antes[i])) cat_definir_na_lista_imdb(antes[i], 0);
+  free(antes);
+  salvos_aplicar_catalogo();
+}
+
+// Cada "+"/tirar (salvos_definir, de qualquer tela) entra no jornal da conta e
+// sai num fio. Sem conta, contapend nao registra nada.
+static void salvoParaConta(const CatItem *ci, int salvo) {
+  if (!ci || !sessao_logada()) return;
+  if (contapend_lista(ci->imdb, ci->tipo, ci->titulo, ci->poster, salvo))
+    contapend_chutar();
+}
+
 int app_iniciar(const char *dirArte) {
+#ifdef NV_LINUX_DESKTOP
+  const char *preview = getenv("NUVIO_UI_PREVIEW");
+  uiPreview = preview && !strcmp(preview, "1");
+#endif
   ajustes_recursos(dirArte);
   login_recursos(dirArte);
   diagnostico_recuperar_checkpoint();
@@ -1529,6 +1562,8 @@ int app_iniciar(const char *dirArte) {
   novidades170_dir(dirArte);
   novidades180_dir(dirArte);
   novidades20_dir(dirArte);
+  novidades201_dir(dirArte);
+  apoio_dir(dirArte);
   if (!homePronta)
     printf("[app] sem arte no pacote: a home so aparece depois do primeiro sync\n");
   menu_iniciar();
@@ -1536,7 +1571,13 @@ int app_iniciar(const char *dirArte) {
   // ANTES do primeiro sync e da primeira descoberta: salvos_aplicar_catalogo
   // marca `naLista` no catalogo do cache, entao o painel e a Biblioteca ja
   // abrem certos no primeiro quadro. Ler depois faria a lista local piscar.
+  // A LISTA E DO PERFIL (salvos-p<N>.txt); perfis_carregar_ativo ja rodou.
+  salvos_perfil(perfis_ativo());
   salvos_iniciar();
+  // O JORNAL DA CONTA (contapend.h): todo "+"/tirar vira entrada por perfil, e
+  // o pull da biblioteca e dos vistos respeita o que a pessoa mudou aqui.
+  salvos_ao_definir(salvoParaConta);
+  contalib_filtros(contapend_lista_oculta, contapend_visto_oculto);
   // AS LISTAS FIXADAS, PELO MESMO MOTIVO E ANTES DA PRIMEIRA HOME. Uma lista do
   // Trakt que a Biblioteca levou para a Home so vira fileira quando lst_iniciar
   // reinjeta a pasta dela em colecoes.c; chamando isto so ao ABRIR a Biblioteca,
@@ -1563,6 +1604,12 @@ int app_iniciar(const char *dirArte) {
   recomenda_ao_mudar_alcance(atividade_definir_permitido);
   // Sem conta, o app abre no login. Com sessao gravada ele nem passa por ela —
   // pedir o codigo de novo a cada arranque seria o mesmo que nao ter gravado.
+#ifdef NV_LINUX_DESKTOP
+  if (uiPreview) {
+    tela = TELA_HOME;
+    printf("[linux] UI preview: no account sync or video playback\n");
+  } else
+#endif
   if (sessao_logada()) {
     tela = TELA_HOME;
     // Com sessao gravada o ciclo comeca no arranque: e ele que traz os addons
@@ -1585,6 +1632,16 @@ int app_iniciar(const char *dirArte) {
       tela = TELA_ESCOLHA_PERFIL;
       perfilAntes = perfis_ativo();
       perfilsel_iniciar();
+    } else {
+      // NO CHOOSER = THE CHOICE IS ALREADY MADE (#228). A restored session
+      // with one profile never passed through perfilsel, so its `concluido`
+      // stayed 0 for the whole session, and home_trailer_passo (which requires
+      // perfilsel_concluido) logged "autoplay gate=top-overlay" forever: the
+      // hero and focused-poster trailers never started, while the title page
+      // (no such guard) played. Registros 23154 (Q80A) and 41271 (S90C): one
+      // profile, gate stuck on top-overlay. If the sync later finds a second
+      // profile, the chooser opens via perfilsel_iniciar, which resets this.
+      perfilsel_continuar_ativo();
     }
   } else {
     tela = TELA_LOGIN;
@@ -1794,6 +1851,9 @@ void app_evento(const SDL_Event *e) {
   // O painel de envio do registro (Ajustes > Enviar registro, ou o "Enviar
   // agora" do painel): modal, come o teclado enquanto aberto.
   if (registro_envio_evento(e)) return;
+  // A CENTRAL DE CONTROLE (central.h, CH+ segurado) e uma camada: aberta, come
+  // o teclado todo, por cima do player, das folhas e das ilhas.
+  if (central_aberta()) { central_evento(e); return; }
   // O MODAL DA ILHA (ilha.h) e uma camada: aberto, come o teclado todo.
   if (ilha_evento(e)) return;
   // A CENTRAL DE AVISOS vem logo depois do painel de log: com o toast na tela
@@ -1809,6 +1869,13 @@ void app_evento(const SDL_Event *e) {
   // O GUIA DA 2.0 (novidades20.h) e tela inteira e come o teclado todo,
   // inclusive a AZUL (pula para o resumo). "Abrir o Guia de uso" leva a
   // Ajustes › Sobre e ajuda › Guia de uso.
+  // O CARTAO DA 2.0.1 (novidades201.h): come o teclado todo; "Abrir a
+  // Central" fecha o cartao e abre a Central de controle no lugar.
+  if (novidades201_aberto()) {
+    novidades201_evento(e);
+    if (novidades201_pedido() == N201_PEDIU_CENTRAL && app_central_pode()) central_abrir();
+    return;
+  }
   if (novidades20_aberto()) {
     novidades20_evento(e);
     if (novidades20_pedido() == N20_PEDIU_GUIA) {
@@ -2187,6 +2254,61 @@ static void trocaDeTituloSeSolicitada(void) {
     } }
 }
 
+// EXTRAS DE LEGENDA DA FONTE QUE TOCA (#201). Quando o video de uma fonte de
+// addon de fato comeca, a busca de legendas do titulo e refeita com o nome, o
+// tamanho e o hash do arquivo (addons_legendas_fonte). Um ponto so, olhando o
+// que toca, em vez de um aviso em cada caminho que escolhe fonte (automatica,
+// manual, guardada, torrent resolvido): esquecer um deles seria o mesmo
+// defeito de antes so naquele caminho. Esperar o video (player_com_video)
+// tambem poupa a busca das candidatas que o automatico testa e descarta.
+static void legendasDaFonte(void) {
+  static char ultimo[4096 + 64];
+  char chave[sizeof ultimo], alvo[64];
+  const Stream *s;
+  const CatItem *c;
+  if (!player_aberto() || player_id_canal()[0] || !player_com_video()) return;
+  s = stream_item(stream_atual());
+  c = cat_item(player_indice());
+  if (!s || !c || !c->imdb[0]) return;
+  alvoPlayer(alvo, sizeof alvo);
+  if (!alvo[0]) return;
+  snprintf(chave, sizeof chave, "%s|%s", alvo, s->url[0] ? s->url : s->infoHash);
+  if (!strcmp(chave, ultimo)) return;
+  snprintf(ultimo, sizeof ultimo, "%s", chave);
+  addons_legendas_fonte(alvo, c->tipo, s->arquivo, (unsigned long long)s->tamanhoBytes,
+                        s->videoHash, s->url, s->cabecalhos[0] != 0);
+}
+
+// TRAILER NO DESTAQUE: so com a home na frente de tudo. A lista e a mesma
+// ordem de app_evento — o que come tecla antes da home tambem esta na frente
+// dela na tela. Devolve NULL com a home no topo, ou o NOME do primeiro
+// bloqueio: o registro dizia so "top-overlay" e escondeu por semanas que era a
+// escolha de perfil que nunca concluia (#228).
+static const char *homeTrailerBloqueio(void) {
+  if (tela != TELA_HOME) return "screen";
+  if (!homePronta) return "home-not-ready";
+  if (!login_concluido()) return "login";
+  if (!perfilsel_concluido()) return "profile-choice";
+  if (player_aberto() || player_retido() || player_mini_ativo()) return "player";
+  if (detail_aberto()) return "detail";
+  if (spainel_aberto()) return "saved-panel";
+  if (menu_aberto() || ctx_aberto()) return "menu";
+  if (vertudo_aberta()) return "see-all";
+  if (avisos_aberto() || avisos_cartao_aberto()) return "notices";
+  if (sintro_aberto() || pipintro_aberto() || recintro_aberto() || telemetria_aberto()) return "intro";
+  if (novidades_aberto() || novidades11_aberto() || novidades12_aberto() ||
+      novidades13_aberto() || novidades131_aberto() || novidades132_aberto() ||
+      novidades133_aberto() || novidades134_aberto() || novidades139_aberto() || novidades1312_aberto() ||
+      novidades142_aberto() || novidades148_aberto() || novidades170_aberto() || novidades180_aberto() ||
+      novidades20_aberto()) return "whats-new";
+  if (atualizacao_aberta() || agendaviso_aberto()) return "update-notice";
+  if (recomenda_aberta() || recenviar_aberto() || pessoas_aberto()) return "recommend";
+  if (faixas_aberta() || episodios_aberto() || stream_folha_aberta()) return "sheet";
+  if (guia_overlay_aberta()) return "guide";
+  if (registro_aberto()) return "log";
+  return NULL;
+}
+
 void app_atualizar(float dt, Uint32 agora) {
   if (player_aberto() || player_mini_ativo()) diagnostico_cancelar_vazao();
   // Login e escolha de perfil retornam cedo; a atividade da conta anterior
@@ -2195,6 +2317,7 @@ void app_atualizar(float dt, Uint32 agora) {
   // Animacoes reduzidas valem para TODA mola e rampa do app (anim.h), nao so
   // para as telas que lembravam de perguntar. Uma leitura por quadro.
   anim_politica_reduzida = ajustes_animacoes_reduzidas();
+  central_atualizar(dt, agora);
   // OK na vitrine da tela de descanso (descanso.h): abre o titulo, so com a
   // Home na frente. Em outra tela o OK so acordou.
   { int k = descanso_pedido_abrir();
@@ -2252,7 +2375,11 @@ void app_atualizar(float dt, Uint32 agora) {
   // Sessao perdida no meio do uso (renovacao recusada): voltar ao login e a
   // unica saida honesta. Continuar na home mostraria o catalogo de exemplo do
   // pacote como se fosse o da pessoa.
-  if (!sessao_logada()) {
+  if (!sessao_logada()
+#ifdef NV_LINUX_DESKTOP
+      && !uiPreview
+#endif
+     ) {
     invalidarPerfil();
     tela = TELA_LOGIN;
     login_iniciar();
@@ -2356,6 +2483,9 @@ void app_atualizar(float dt, Uint32 agora) {
         // quando a conta manda linhas, entao um perfil sem colecoes ficava
         // com as do anterior para sempre.
         col_esquecer_perfil();
+        // OS SALVOS SAO DO PERFIL: a lista do anterior sai da tela (so os
+        // titulos que o novo nao tem) e entra a deste.
+        trocarSalvosDePerfil();
         // E A FILEIRA DE CONTINUAR, que invalidarPerfil() nao alcanca.
         //
         // invalidarPerfil() so zera a tela de Perfil/Stats. Quem refaz o
@@ -2466,9 +2596,13 @@ void app_atualizar(float dt, Uint32 agora) {
   // ele prepara a fila antiga, grava a marca da 1.8.0 e abre uma vez, para
   // quem atualiza e para quem instala do zero. novidades180_primeira_vez nao
   // e mais chamada: o cartao da 1.8.0 so vive como cena do Guia de uso.
-  if (tela == TELA_HOME && homePronta && !player_aberto() && !detail_aberto())
+  // A 2.0.1 decide ANTES do guia da 2.0, no mesmo quadro: ela olha se o guia
+  // ja foi visto antes de ele gravar a marca (novidades201.h).
+  if (tela == TELA_HOME && homePronta && !player_aberto() && !detail_aberto()) {
+    novidades201_primeira_vez();
     novidades20_primeira_vez();
-  if (tela == TELA_HOME && homePronta && !player_aberto() && !detail_aberto() && !novidades170_aberto() && !novidades180_aberto() && !novidades20_aberto()) {
+  }
+  if (tela == TELA_HOME && homePronta && !player_aberto() && !detail_aberto() && !novidades170_aberto() && !novidades180_aberto() && !novidades20_aberto() && !novidades201_aberto()) {
     // Esta e a primeira explicacao da versao: aparece antes dos demais
     // cartoes de onboarding. Depois de OK, o bloco abaixo continua a fila
     // antiga no quadro seguinte.
@@ -2719,7 +2853,7 @@ void app_atualizar(float dt, Uint32 agora) {
     } else if (o == ILHA_PEDIU_DISPENSAR) {
       if (qual == ILHA_VIVO) player_descartar_retido();
       ilhacart_dispensar(qual);
-    }
+    } else if (o == ILHA_PEDIU_DEPOIS) ilhacart_adiar(qual);
   }
   // Da pagina do titulo, um titulo escolhido no painel de Salvos/avisos TROCA a
   // pagina (a de baixo fecha seca). So esse pedido: os demais seguem de fora.
@@ -3053,6 +3187,8 @@ void app_atualizar(float dt, Uint32 agora) {
       }
     }
   }
+
+  legendasDaFonte();
 
   // Botoes do detalhe: quem sabe que existe player e biblioteca e o roteador,
   // nao a tela de detalhe.
@@ -3865,18 +4001,9 @@ void app_atualizar(float dt, Uint32 agora) {
   // TRAILER NO DESTAQUE: so com a home na frente de tudo. A lista e a mesma
   // ordem de app_evento — o que come tecla antes da home tambem esta na
   // frente dela na tela.
-  home_trailer_passo(tela == TELA_HOME && homePronta && login_concluido() && perfilsel_concluido() &&
-                     !player_aberto() && !player_retido() && !player_mini_ativo() && !detail_aberto() && !spainel_aberto() &&
-                     !menu_aberto() && !ctx_aberto() && !vertudo_aberta() && !avisos_aberto() &&
-                     !avisos_cartao_aberto() && !sintro_aberto() && !pipintro_aberto() &&
-                     !novidades_aberto() && !novidades11_aberto() && !novidades12_aberto() &&
-                     !novidades13_aberto() && !novidades131_aberto() && !novidades132_aberto() &&
-                     !novidades133_aberto() && !novidades134_aberto() && !novidades139_aberto() && !novidades1312_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades170_aberto() && !novidades180_aberto() && !novidades20_aberto() && !telemetria_aberto() &&
-                     !recintro_aberto() && !atualizacao_aberta() && !agendaviso_aberto() &&
-                     !recomenda_aberta() && !recenviar_aberto() && !pessoas_aberto() && !faixas_aberta() &&
-                     !episodios_aberto() && !stream_folha_aberta() && !guia_overlay_aberta() &&
-                     !registro_aberto(),
-                     dt, agora);
+  { const char *porque = homeTrailerBloqueio();
+    home_trailer_topo_motivo(porque);
+    home_trailer_passo(porque == NULL, dt, agora); }
   trailer_atualizar(agora);
   perfil_atualizar(dt, agora);
   spainel_atualizar(dt, agora);
@@ -3899,6 +4026,7 @@ void app_atualizar(float dt, Uint32 agora) {
   novidades170_atualizar(dt, agora);
   novidades180_atualizar(dt, agora);
   novidades20_atualizar(dt, agora);
+  novidades201_atualizar(dt, agora);
   telemetria_atualizar(dt, agora);
   recintro_atualizar(dt, agora);
   atualizacao_atualizar(dt, agora);
@@ -4092,7 +4220,7 @@ static void desenharTelas(Uint32 agora) {
   // camadas dele: a pilula da hora, os avisos e o que nasce dela (Audio,
   // Legendas, estilo, carregando, erro) — e a folha de Fontes, que cresce
   // dela (streams.c) e por isso nao a esconde mais.
-  if (player_aberto()) plrilha_desenhar(agora);
+  if (player_aberto()) { central_desenhar(agora); plrilha_desenhar(agora); }
   gfx_osd_mult = 1.0f;
 }
 
@@ -4126,7 +4254,7 @@ static int relogioCabe(void) {
       novidades13_aberto() || novidades131_aberto() || novidades132_aberto() ||
       novidades133_aberto() || novidades134_aberto() || novidades139_aberto() ||
       novidades1312_aberto() || novidades142_aberto() || novidades148_aberto() ||
-      novidades170_aberto() || novidades180_aberto() || novidades20_aberto() || telemetria_aberto() || recintro_aberto() ||
+      novidades170_aberto() || novidades180_aberto() || novidades20_aberto() || novidades201_aberto() || telemetria_aberto() || recintro_aberto() ||
       atualizacao_aberta() || agendaviso_aberto() || avisos_cartao_aberto() ||
       glem_cartao_aberto() || recenviar_aberto() || pessoas_aberto() ||
       recomenda_aberta() || pipintro_aberto() || diagnostico_intro_aberto())
@@ -4143,6 +4271,17 @@ void app_desenhar(Uint32 agora) {
             NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
     ponteiro_camada();
     novidades20_desenhar(agora);
+    return;
+  }
+  // O CARTAO DA 2.0.1 cobre quase a tela inteira: o app por baixo nao e
+  // pintado (uma camada de tela cheia a menos na Mali). O esmaecer de saida
+  // vem pelo caminho de baixo, por cima do app que ja voltou.
+  if (novidades201_aberto() && !registro_aberto() && !player_aberto()) {
+    gfx_sem_recorte();
+    gfx_cor((GfxRect){0, 0, NV_TELA_W, NV_TELA_H}, 0,
+            NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
+    ponteiro_camada();
+    novidades201_desenhar(agora);
     return;
   }
   // The highlights modal owns input and covers almost the whole screen.
@@ -4255,6 +4394,7 @@ void app_desenhar(Uint32 agora) {
   if (!registro_aberto()) novidades180_desenhar(agora);
   // O esmaecer de saida do guia da 2.0, por cima do app que ja voltou.
   if (!registro_aberto() && novidades20_visivel()) novidades20_desenhar(agora);
+  if (!registro_aberto()) novidades201_desenhar(agora);   // so o esmaecer de saida
   CAMADA_SE(telemetria_aberto());
   if (!registro_aberto()) telemetria_desenhar(agora);
   CAMADA_SE(recintro_aberto());
@@ -4355,6 +4495,13 @@ int app_quer_sair(void) { return sair; }
 int app_zap_ativo(void) {
   if (tela == TELA_GUIA) return 1;
   return (tela == TELA_PLAYER || player_mini_ativo()) && player_id_canal()[0];
+}
+int app_central_pode(void) {
+  if (central_aberta()) return 1;   // o CH+ que fecha passa pelo mesmo caminho
+  return tela != TELA_LOGIN && tela != TELA_ESCOLHA_PERFIL && login_concluido() &&
+         perfilsel_concluido() && !registro_aberto() && !spot_aberto() &&
+         !teclado_aberto() && !diagnostico_intro_aberto() && !novidades20_aberto() &&
+         !novidades201_aberto();
 }
 
 void app_encerrar(void) {

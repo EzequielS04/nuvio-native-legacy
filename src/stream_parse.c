@@ -195,6 +195,27 @@ static void lerFontesP2P(const char *ini, const char *fim, char *dst, unsigned t
   }
 }
 
+// SEMEADORES no texto do addon. Nao ha campo para isso no protocolo: cada
+// addon escreve do seu jeito, sempre marcador + numero. Torrentio e
+// MediaFusion usam "👤 12", Comet/Jackettio "👥 12", outros "Seeders: 12".
+// Devolve 1 e preenche *qtd; limite de 9 digitos para nao estourar o int.
+static int lerSemeadores(const char *t, int *qtd) {
+  static const char *const marcas[] = { "\xF0\x9F\x91\xA4", "\xF0\x9F\x91\xA5", "\xF0\x9F\x8C\xB1",
+                                        "Seeders", "seeders", "Seeds", "seeds" };
+  for (size_t k = 0; k < sizeof marcas / sizeof *marcas; k++) {
+    const char *p = strstr(t, marcas[k]);
+    if (!p) continue;
+    p += strlen(marcas[k]);
+    while (*p == ' ' || *p == ':' || *p == '\t') p++;
+    if (!isdigit((unsigned char)*p)) continue;
+    long v = 0; int d = 0;
+    while (isdigit((unsigned char)*p) && d < 9) { v = v * 10 + (*p++ - '0'); d++; }
+    *qtd = (int)v;
+    return 1;
+  }
+  return 0;
+}
+
 int stream_extrair(const char *json, const char *provedor, Stream **saida) {
   const char *p, *fim;
   int n = 0, cap = 0;
@@ -249,6 +270,7 @@ int stream_extrair(const char *json, const char *provedor, Stream **saida) {
       { const char *bh = strstr(p, "\"behaviorHints\"");
         if (bh && bh < fim) {
           js_texto_raiz_em(bh, fim, "bingeGroup", s.bingeGroup, sizeof s.bingeGroup);
+          js_texto_raiz_em(bh, fim, "videoHash", s.videoHash, sizeof s.videoHash);
           lerProxyHeaders(bh, fim, s.cabecalhos, sizeof s.cabecalhos);
         } }
       if (!s.descricao[0]) snprintf(s.descricao, sizeof s.descricao, "%s", titulo);
@@ -264,6 +286,7 @@ int stream_extrair(const char *json, const char *provedor, Stream **saida) {
       s.badges = badges_detectar(texto);
       s.mp4 = token(texto, "mp4") || contem(s.url, ".mp4");
       s.foraCache = stream_texto_fora_de_cache(texto);
+      if (s.infoHash[0]) s.temSemeadores = lerSemeadores(texto, &s.semeadores);
       s.tamanhoBytes = bytesExatos(p, fim);
       double bytes = js_num(p, fim, "videoSize", 0);
       if (s.tamanhoBytes) s.tamanhoMB = tamanhoMB((double)s.tamanhoBytes / 1048576.0);

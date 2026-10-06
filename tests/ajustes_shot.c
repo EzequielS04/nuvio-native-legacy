@@ -262,6 +262,24 @@ int main(int argc, char **argv) {
       { char *arroba = strchr(id, '@');
         quadrosCaptura = 60;
         if (arroba) { *arroba = 0; quadrosCaptura = atoi(arroba + 1) > 0 ? atoi(arroba + 1) : 60; } }
+      // "busca:<texto>": a busca de Ajustes (Spotlight no modo Ajustes) com o
+      // texto digitado, por cima do indice. '_' vira espaco.
+      if (!strncmp(id, "busca:", 6)) {
+        char q[128]; int k;
+        SDL_Event e = { 0 };
+        snprintf(q, sizeof q, "%s", id + 6);
+        for (k = 0; q[k]; k++) if (q[k] == '_') q[k] = ' ';
+        ajustes_teste_quadro("v2-menu");
+        spot_abrir_ajustes(0);
+        spot_texto_externo(q);
+        e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_DOWN;
+        for (k = 0; k < 4 && spot_linha_focada() < 0; k++) spot_evento(&e);
+        for (k = 0; id[k]; k++) if (id[k] == ':') id[k] = '-';
+        snprintf(nome, sizeof nome, "%s-%s.png", saida, id);
+        captura(nome, w);
+        if (spot_aberto()) spot_fechar();
+        continue;
+      }
       if (!ajustes_teste_quadro(id)) { printf("quadro desconhecido: %s\n", id); continue; }
       // NUVIO_SHOT_FONTE=3 (TXT_FAMILIA_*): the interface font the TV uses
       // (Montserrat on the owner's Android TV), so truncation shows like there.

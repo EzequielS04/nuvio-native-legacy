@@ -218,6 +218,9 @@ void  ajustes_textura_quadro(void);
 // "Automática", "4K", "1080p" ou "720p" — o rotulo exibido, para quem seleciona
 // a fonte de video mostrar exatamente o que o usuario escolheu.
 const char *ajustes_qualidade(void);
+// Faixa de tamanho da escolha automatica, em GB (0 = sem limite).
+int ajustes_tamanho_max_gb(void);
+int ajustes_tamanho_min_gb(void);
 // LIVE TV. Resolucao principal: 0 Automatica, 1 4K, 2 1080p, 3 720p, 4 SD
 // (livetv_regras.h converte em altura). Formato do Xtream: 0 Automatico,
 // 1 HLS, 2 TS. Espera: 0 = a automatica de cada caminho, senao o prazo em ms.
@@ -561,6 +564,18 @@ int ajustes_mesclar_blob(const char *base, char **saida);
 // #187: uma linha "[tmdb] idioma dos metadados: ..." com o que a TV pede ao
 // TMDB, de onde vem (ajuste desta TV) e o tmdb_language cru da conta.
 void ajustes_tmdb_idioma_relatar(const char *blob);
+
+// CENTRAL DE CONTROLE (central.h): uma opcao de escolha curta pela chave do
+// ajustes.txt ("dolbyVision"). _op: -1 se a chave nao existe, nao e escolha de
+// 2 a 6 valores ou nao esta na tela deste build. _rotulo/_valor: texto cru em
+// portugues (text.c traduz ao desenhar). _ligado: 1/0 num interruptor, -1 nos
+// outros. _passo: proximo (dir 1) ou anterior (-1) valor, gravado e com os
+// mesmos efeitos do OK na tela de Ajustes; 0 se nao gravou.
+int         ajustes_rapido_op(const char *chave);
+const char *ajustes_rapido_rotulo(int op);
+const char *ajustes_rapido_valor(int op);
+int         ajustes_rapido_ligado(int op);
+int         ajustes_rapido_passo(int op, int dir);
 
 #ifdef NV_SHOT_HOOKS
 int ajustes_shot_valor(const char *chave, int v);   // capturas: opcao pela chave

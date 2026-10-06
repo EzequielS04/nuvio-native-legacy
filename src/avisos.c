@@ -1,4 +1,5 @@
 #include "avisos.h"
+#include "queda.h"
 #include "ilha.h"
 #include "ilhasalvar.h"
 #define AV_ILHA_CHAVE "avisos"   // o "N avisos novos" da central na ilha (ilha.c junta)
@@ -26,6 +27,7 @@
 #include "sessao.h"
 #include "trakt.h"
 #include "marco.h"
+#include "avisodisp.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
 #include "escala.h"
 #include <pthread.h>
@@ -93,6 +95,8 @@ static int  nVistos, vistosLidos;
 
 // Painel e toast.
 static int   aberto, foco;
+static Uint32 okDesde;              // OK afundado numa linha da central (soltarOk)
+static void soltarOk(int longo);
 static float entrada, rol;
 static int   toastN;
 static long long recAnunciada = -1;   // id da ultima recomendacao dita na ilha
@@ -210,6 +214,9 @@ static void vistosGravar(void) {
 // se e NOVO (para o toast).
 static int por(const char *id, int tipo, const char *titulo, const char *texto, const char *alvo) {
   int i;
+  // DISPENSADO NAO VOLTA (avisodisp.h): nem na lista, nem na ilha, nem depois
+  // de reiniciar. A chave e o evento; um evento novo tem outra chave.
+  if (avisodisp_tem(id)) return 0;
   for (i = 0; i < n; i++) if (!strcmp(itens[i].id, id)) {
     snprintf(itens[i].titulo, sizeof itens[i].titulo, "%s", titulo);
     snprintf(itens[i].texto, sizeof itens[i].texto, "%s", texto);
@@ -391,6 +398,8 @@ int avisos_enviar_diagnostico(const char *execucao_id, const char *relatorio,
            "tizen-tpk",
 #elif defined(NV_ANDROID)
            "android",
+#elif defined(NV_LINUX_DESKTOP)
+           "linux-desktop",
 #elif defined(__APPLE__)
            "mac",
 #else
@@ -487,6 +496,8 @@ static void *enviarRegistro(void *u) {
              "tizen-tpk",
 #elif defined(NV_ANDROID)
              "android",
+#elif defined(NV_LINUX_DESKTOP)
+           "linux-desktop",
 #elif defined(__APPLE__)
              "mac",
 #else
@@ -627,8 +638,51 @@ static void *fioCanalFn(void *u) {
 }
 
 // --- ciclo ---------------------------------------------------------------------------
+#ifdef NV_WEBOS
+// "chave":"valor" de um JSON raso do nyx, sem depender de js.c: 1 se achou.
+static int nyxCampo(const char *txt, const char *chave, char *out, size_t cap) {
+  char alvo[64];
+  const char *p, *f;
+  snprintf(alvo, sizeof alvo, "\"%s\"", chave);
+  out[0] = 0;
+  if (!txt || !(p = strstr(txt, alvo))) return 0;
+  p = strchr(p + strlen(alvo), '"');
+  if (!p || !(f = strchr(++p, '"')) || (size_t)(f - p) >= cap) return 0;
+  memcpy(out, p, (size_t)(f - p)); out[f - p] = 0;
+  return 1;
+}
+// A LINHA [tv] DO webOS. Android e .tpk ja mandam modelo e sistema; a LG nao
+// mandava nada, e a issue #265 (50NANO80ASA, travas e quedas na 2.0.0) nao
+// tinha como ser casada com log nenhum. Os dois arquivos sao do nyx; se a
+// jaula do app nao deixar ler, a linha diz isso em vez de sumir.
+static void tvWebos(void) {
+  static const char *const arqs[] = { "/var/run/nyx/device_info.json", "/var/run/nyx/os_info.json" };
+  char buf[2][4096] = { "", "" }, modelo[64], placa[64], versao[48], build[64];
+  for (int i = 0; i < 2; i++) {
+    FILE *f = fopen(arqs[i], "rb");
+    if (!f) continue;
+    buf[i][fread(buf[i], 1, sizeof buf[i] - 1, f)] = 0;
+    fclose(f);
+  }
+  if (!buf[0][0] && !buf[1][0]) { printf("[tv] webos: /var/run/nyx ilegivel\n"); return; }
+  if (!nyxCampo(buf[0], "product_id", modelo, sizeof modelo)) nyxCampo(buf[0], "device_name", modelo, sizeof modelo);
+  nyxCampo(buf[0], "hardware_id", placa, sizeof placa);
+  nyxCampo(buf[1], "webos_release", versao, sizeof versao);
+  nyxCampo(buf[1], "webos_manufacturing_version", build, sizeof build);
+  printf("[tv] modelo=%s host=webos-%s placa=%s fw=%s app=%s\n", modelo[0] ? modelo : "?",
+         versao[0] ? versao : "?", placa[0] ? placa : "?", build[0] ? build : "?", NV_VERSAO);
+}
+#endif
+
 void avisos_iniciar(void) {
   char *m;
+#ifdef NV_WEBOS
+  tvWebos();
+  // Antes de tudo: o relato da queda anterior entra no log desta sessao (e
+  // o que o envio automatico leva) e o registrador volta a ficar armado.
+  { char qd[700];
+    if (dados_caminho(qd, sizeof qd, "queda.txt")) { queda_relatar(qd); queda_armar(qd); } }
+#endif
   vistosLer();
   m = dados_ler(AV_MARCA_ARQ);
   // MARCA PRESENTE NAO E CRASH quando a sessao anterior se despediu por fora
@@ -857,6 +911,9 @@ void avisos_atualizar(float dt, Uint32 agora) {
     else canalVivo = 0;
   }
 
+  // O limiar do OK longo na central, com o dedo ainda no botao.
+  if (aberto && okDesde && SDL_GetTicks() - okDesde >= NV_HOLD_MS) soltarOk(1);
+  if (!aberto) okDesde = 0;
   if (vistosSujos && !aberto) vistosGravar();
   avisos_envio_auto_passo(agora);
 }
@@ -879,10 +936,30 @@ static void fechar(void) {
   aberto = 0;
 }
 
+// SEGURAR OK NUMA LINHA DA CENTRAL DISPENSA (06/10). O painel proprio fica por
+// cima de tudo e nao hospeda o menu do cartaz (ctxmenu.c so se desenha sobre o
+// painel de Salvos): aqui o gesto longo e a acao direta, e a dica na linha em
+// foco diz isso. O toque curto continua sendo o OK de sempre, decidido na
+// soltura. NV_HOLD_MS e a mesma medida da home e de Salvos.
+static void soltarOk(int longo) {
+  okDesde = 0;
+  if (longo) {
+    avisos_lista_dispensar(foco);
+    if (foco >= avisos_lista_linhas()) foco = avisos_lista_linhas() > 0 ? avisos_lista_linhas() - 1 : 0;
+  } else if (avisos_lista_ok(foco)) fechar();
+  else if (foco >= avisos_lista_linhas()) foco = 0;
+}
+
 int avisos_evento(const SDL_Event *e) {
   SDL_Keycode k;
   int sc;
   if (cartao) return cartaoEvento(e);
+  if (e->type == SDL_KEYUP && aberto && okDesde) {
+    k = e->key.keysym.sym;
+    if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE)
+      soltarOk(SDL_GetTicks() - okDesde >= NV_HOLD_MS);
+    return 1;
+  }
   if (e->type != SDL_KEYDOWN) return aberto;
   k = e->key.keysym.sym; sc = e->key.keysym.scancode;
   if (!aberto) {
@@ -898,12 +975,16 @@ int avisos_evento(const SDL_Event *e) {
     return 0;
   }
   if (e->key.repeat && k != SDLK_UP && k != SDLK_DOWN) return 1;
+  if (k != SDLK_RETURN && k != SDLK_KP_ENTER && k != SDLK_SPACE) okDesde = 0;
   if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE || sc == NV_SCANCODE_BACK ||
       k == SDLK_s || sc == NV_SCANCODE_BLUE) { fechar(); return 1; }
   if (k == SDLK_UP)   { if (foco > 0) foco--; return 1; }
-  if (k == SDLK_DOWN) { if (foco + 1 < n) foco++; return 1; }
+  if (k == SDLK_DOWN) { if (foco + 1 < avisos_lista_linhas()) foco++; return 1; }
   if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) {
-    if (avisos_lista_ok(foco)) fechar();
+    // Linha de aviso: decide na soltura (curto abre, longo dispensa). A
+    // ultima, "Dispensar todos", nao tem o que segurar.
+    if (foco < avisos_lista_n()) { okDesde = SDL_GetTicks(); if (!okDesde) okDesde = 1; }
+    else soltarOk(0);
     return 1;
   }
   return 1;
@@ -936,7 +1017,9 @@ static const char *icone(int tipo) {
 //
 // Os que tem para onde ir levam o MODAL da ilha (a pilula cresce, AZUL/CH+):
 // recomendacao (Ver / Salvar / Dispensar), versao nova (Atualizar / Depois),
-// queda (Enviar registro / Agora não) e o aviso do dono (o texto inteiro). O
+// queda (Enviar registro / Agora não / Dispensar) e o aviso do dono (o texto
+// inteiro; Fechar / Dispensar). Voltar recolhe sem mudar nada; "Dispensar"
+// tira o item da lista de vez (avisos_dispensar, avisodisp.h). O
 // episodio novo abre o modal do cartao de estreia (ilhacart.c), quando ele
 // esta na pilula. Quem executa o botao e avisos_ilha_acao.
 static RecItem recDaIlha;              // a recomendacao que o modal mostra
@@ -1027,6 +1110,9 @@ static void anunciarItem(const Aviso *it) {
       snprintf(m.kicker, sizeof m.kicker, "%s", i18n("Aviso"));
       m.cabecalho = 1;
       snprintf(m.botao[1], sizeof m.botao[1], "%s", i18n("Agora não"));
+      m.nBotoes = 3;
+      snprintf(m.botao[2], sizeof m.botao[2], "%s", i18n("Dispensar"));
+      snprintf(m.botaoIcone[2], sizeof m.botaoIcone[2], "aj_x");
       e.modal = &m;
       break;
     default:
@@ -1039,8 +1125,11 @@ static void anunciarItem(const Aviso *it) {
         snprintf(m.titulo, sizeof m.titulo, "%s", it->titulo);
         snprintf(m.texto, sizeof m.texto, "%s", it->texto);
         snprintf(m.icone, sizeof m.icone, "aj_megaphone");
-        m.nBotoes = 1;
+        // Fechar = lido (a linha fica); Dispensar = some e nao volta (avisodisp.h).
+        m.nBotoes = 2;
         snprintf(m.botao[0], sizeof m.botao[0], "%s", i18n("Fechar"));
+        snprintf(m.botao[1], sizeof m.botao[1], "%s", i18n("Dispensar"));
+        snprintf(m.botaoIcone[1], sizeof m.botaoIcone[1], "aj_x");
         e.modal = &m;
       }
       break;
@@ -1050,11 +1139,25 @@ static void anunciarItem(const Aviso *it) {
 
 // Os itens com `anunciar` vao para a ilha, cada um uma vez. Sem nenhum
 // marcado e com contagem (o toast(N) dos testes), o "N avisos novos" de antes.
+//
+// LIMITE DE RUIDO (06/10): UMA VEZ POR SESSAO POR CHAVE. Um item que sai e
+// volta a lista (o "rec" quando a contagem zera e sobe, a versao nova depois de
+// uma lista cheia) entrava de novo com `anunciar` e passava outra vez pela
+// pilula. Ja dito nesta sessao (avisodisp_sessao_*) nao passa de novo; um
+// evento novo e outra chave e passa. A recomendacao nova e a excecao: o item e
+// um so ("rec") e cada recomendacao e um assunto novo (recAnunciada).
 static void anunciarNaIlha(void) {
   static Aviso copia[AV_MAX];
   int i, k = 0;
   pthread_mutex_lock(&trava);
-  for (i = 0; i < n; i++) if (itens[i].anunciar) { itens[i].anunciar = 0; copia[k++] = itens[i]; }
+  for (i = 0; i < n; i++) if (itens[i].anunciar) {
+    char ch[96];
+    itens[i].anunciar = 0;
+    snprintf(ch, sizeof ch, "av:%s", itens[i].id);
+    if (strcmp(itens[i].id, "rec") && avisodisp_sessao_tem(ch)) continue;
+    avisodisp_sessao_por(ch);
+    copia[k++] = itens[i];
+  }
   pthread_mutex_unlock(&trava);
   for (i = 0; i < k; i++) anunciarItem(&copia[i]);
   if (!k && toastN > 0) {
@@ -1099,10 +1202,16 @@ void avisos_ilha_acao(const char *chave, int botao) {
     }
     // As tres respondem a recomendacao: o selo apaga (o mesmo que abrir Salvos).
     recomenda_marcar_vistas();
+    if (botao == 3) { avisos_dispensar(id); return; }
   } else if (!strncmp(id, "update:", 7)) {
     if (botao == 1) pediuCodigo = AVISOS_ABRIR_ATUALIZACAO;
   } else if (!strncmp(id, "crash:", 6)) {
     if (botao == 1) enviarAgora();
+    else if (botao == 3) { avisos_dispensar(id); return; }
+  } else if (botao == 2) {
+    // O aviso do dono (e idioma, modo seguro): Fechar | Dispensar.
+    avisos_dispensar(id);
+    return;
   }
   avisos_marcar_visto(id);
 }
@@ -1137,19 +1246,26 @@ static float larguraTextoAviso = 610.0f;
 static int temAcaoAviso(const Aviso *av) {
   return av->tipo == AV_REC || av->tipo == AV_AGENDA || av->tipo == AV_UPDATE || av->tipo == AV_CRASH;
 }
-static float alturaAviso(int i) {
+// A LINHA EM FOCO SEMPRE TEM A LINHA DE ACAO (06/10): e onde mora "Segure OK
+// para dispensar". Fora do foco so quem tem acao a desenha.
+static float alturaAvisoF(int i, int focado) {
   const Aviso *av = &itens[i];
   float h = 18.0f + 29.0f + 18.0f;
   if (av->texto[0])
     h += 4.0f + ((float)txt_largura(TXT_ILHA_SUB, av->texto) > larguraTextoAviso ? 50.0f : 25.0f);
-  if (temAcaoAviso(av)) h += 4.0f + 18.0f;
+  if (temAcaoAviso(av) || focado) h += 4.0f + 18.0f;
   return h < 92.0f ? 92.0f : h;
 }
+static float alturaAviso(int i) { return alturaAvisoF(i, 0); }
+// "DISPENSAR TODOS": a ultima linha da lista, so quando ha o que dispensar.
+#define AVL_TODOS_H 84.0f
+int avisos_lista_linhas(void) { int k; pthread_mutex_lock(&trava); k = n ? n + 1 : 0; pthread_mutex_unlock(&trava); return k; }
 float avisos_lista_altura_linha(int linha, int focoLinha) {
   float h = AVL_ROW;
   pthread_mutex_lock(&trava);
   if (linha == focoLinha && ehCanalExpansivel(linha)) h = alturaCanalFoco;
-  else if (linha >= 0 && linha < n) h = alturaAviso(linha);
+  else if (linha >= 0 && linha < n) h = alturaAvisoF(linha, linha == focoLinha);
+  else if (linha == n && n > 0) h = AVL_TODOS_H;
   pthread_mutex_unlock(&trava);
   return h;
 }
@@ -1165,6 +1281,7 @@ float avisos_lista_altura(void) {
     int i;
     for (i = 0; i < n; i++) h += alturaAviso(i);
     if (n == 0) h = 60.0f;
+    else h += AVL_TODOS_H;
     pthread_mutex_unlock(&trava); return h; }
 }
 int avisos_lista_n(void) { int k; pthread_mutex_lock(&trava); k = n; pthread_mutex_unlock(&trava); return k; }
@@ -1187,7 +1304,7 @@ void avisos_lista_desenhar(float x, float y0, float w, float a, int focoLinha) {
     float tx = x + AVL_PADX + 52.0f + 18.0f, tw = w - (tx - x) - AVL_PADX;
     float rowH;
     larguraTextoAviso = tw;
-    rowH = expande ? alturaCanalFoco : alturaAviso(i);
+    rowH = expande ? alturaCanalFoco : alturaAvisoF(i, f);
     GfxRect row = { x, y, w, rowH };
     const char *acao = NULL;
     if (f) {
@@ -1214,7 +1331,7 @@ void avisos_lista_desenhar(float x, float y0, float w, float a, int focoLinha) {
     if (expande) {
       float h = txt_bloco(TXT_ILHA_SUB, av->texto, 243, 242, 239, tx, y + 51.0f, tw, 25.0f, a * 0.62f,
                           AVL_LINHAS_CANAL);
-      float nova = 51.0f + h + (temAcaoAviso(av) ? 4.0f + 18.0f : 0.0f) + 18.0f;
+      float nova = 51.0f + h + 4.0f + 18.0f + 18.0f;   // em foco: sempre a linha de acao
       if (nova < alturaAviso(i)) nova = alturaAviso(i);
       alturaCanalFoco = nova;
     }
@@ -1227,11 +1344,33 @@ void avisos_lista_desenhar(float x, float y0, float w, float a, int focoLinha) {
                            : envioEstado == 3 ? i18n("Não foi possível enviar. OK tenta de novo.") : i18n("OK envia o registro"); break;
       default: break;
     }
-    if (acao) {
-      TxtLinha t = txt_linha_corta(TXT_ILHA_HORA, acao, 243, 242, 239, 255, tw);
-      txt_desenhar_alpha(t, tx, y + rowH - 18.0f - 18.0f, a * (f ? 0.62f : 0.38f));
-    }
+    // Em foco, a acao ganha o segundo gesto: segurar OK dispensa (o menu na
+    // aba Avisos de Salvos, direto no painel proprio da central).
+    { char linhaAcao[200];
+      if (f) snprintf(linhaAcao, sizeof linhaAcao, acao ? "%s  ·  %s" : "%s%s",
+                      acao ? acao : "", i18n("Segure OK para dispensar"));
+      else snprintf(linhaAcao, sizeof linhaAcao, "%s", acao ? acao : "");
+      if (linhaAcao[0]) {
+        TxtLinha t = txt_linha_corta(TXT_ILHA_HORA, linhaAcao, 243, 242, 239, 255, tw);
+        txt_desenhar_alpha(t, tx, y + rowH - 18.0f - 18.0f, a * (f ? 0.62f : 0.38f));
+      } }
     y += rowH;
+  }
+  // DISPENSAR TODOS: a mesma linha da ilha, mais baixa, com o X no disco.
+  if (n > 0) {
+    int f = focoLinha == n;
+    GfxRect row = { x, y, w, AVL_TODOS_H };
+    if (f) {
+      if (ajustes_vidro()) gfx_cor(row, 22.0f / row.h, 1, 1, 1, .12f * a);
+      else gfx_cor(row, 22.0f / row.h, .169f, .176f, .204f, a);
+    }
+    if (ajustes_vidro()) gfx_cor((GfxRect){ x + AVL_PADX, y + 16.0f, 52.0f, 52.0f }, 0.5f, 1, 1, 1, .08f * a);
+    else gfx_cor((GfxRect){ x + AVL_PADX, y + 16.0f, 52.0f, 52.0f }, 0.5f, .141f, .149f, .173f, a);
+    gfx_icone((GfxRect){ x + AVL_PADX + 13.0f, y + 29.0f, 26.0f, 26.0f }, "aj_x",
+              fr * .85f, fg * .85f, fb * .85f, a);
+    { TxtLinha t = txt_linha_corta(TXT_ILHA_NOME, i18n("Dispensar todos"), 243, 242, 239, 255,
+                                   w - 2.0f * AVL_PADX - 70.0f);
+      txt_desenhar_alpha(t, x + AVL_PADX + 70.0f, y + (AVL_TODOS_H - (float)t.h) * 0.5f, a * (f ? 1.0f : 0.72f)); }
   } }
   pthread_mutex_unlock(&trava);
 }
@@ -1245,7 +1384,11 @@ int avisos_lista_ok(int linha) {
   pthread_mutex_lock(&trava);
   if (linha >= 0 && linha < n) { a = itens[linha]; ha = 1; }
   pthread_mutex_unlock(&trava);
-  if (!ha) return 0;
+  if (!ha) {
+    // A ultima linha: "Dispensar todos". A lista fica (vazia) no hospedeiro.
+    if (linha == avisos_lista_n() && linha > 0) avisos_dispensar_todos();
+    return 0;
+  }
   switch (a.tipo) {
     case AV_REC:    pediuCodigo = AVISOS_ABRIR_SALVOS; return 1;
     case AV_UPDATE: pediuCodigo = AVISOS_ABRIR_ATUALIZACAO; return 1;
@@ -1268,7 +1411,8 @@ int avisos_estreia_pendente(char *id, size_t tamId, char *imdb, size_t tamImdb) 
   int i, achou = 0;
   pthread_mutex_lock(&trava);
   for (i = n - 1; i >= 0; i--)
-    if (itens[i].tipo == AV_AGENDA && !itens[i].visto && itens[i].alvo[0]) {
+    if (itens[i].tipo == AV_AGENDA && !itens[i].visto && itens[i].alvo[0] &&
+        !avisodisp_sessao_tem(itens[i].id)) {   // "Depois" no modal: so na proxima sessao
       snprintf(id, tamId, "%s", itens[i].id);
       snprintf(imdb, tamImdb, "%s", itens[i].alvo);
       achou = 1;
@@ -1293,6 +1437,78 @@ void avisos_marcar_lidos(void) {
   pthread_mutex_lock(&trava);
   for (i = 0; i < n; i++) { itens[i].visto = 1; marcarVisto(itens[i].id); }
   pthread_mutex_unlock(&trava);
+}
+
+// --- dispensar (06/10) ---------------------------------------------------------------
+// Ver avisodisp.h. A recomendacao e a excecao: o item "rec" e a CONTAGEM das
+// novas, e gravar "rec" calaria toda recomendacao futura. Dispensar responde a
+// recomendacao (o mesmo que o "Dispensar" do modal sempre fez): a contagem zera
+// e o item sai sozinho na proxima colheita; uma recomendacao nova o traz de
+// volta. A estreia tambem marca o lembrete daquele episodio como avisado
+// (agenda.c), para o cartao "Estreou hoje" nao abrir por ela — o lembrete
+// continua ligado e o proximo episodio avisa.
+void avisos_dispensar(const char *id) {
+  char ch[96], imdb[24] = "";
+  int i, tipo = -1;
+  if (!id || !id[0]) return;
+  snprintf(ch, sizeof ch, "%s", id);   // id pode apontar para dentro de itens[]
+  pthread_mutex_lock(&trava);
+  for (i = 0; i < n; i++) if (!strcmp(itens[i].id, ch)) {
+    tipo = itens[i].tipo;
+    snprintf(imdb, sizeof imdb, "%s", itens[i].alvo);
+    break;
+  }
+  pthread_mutex_unlock(&trava);
+  if (!strcmp(ch, "rec")) recomenda_marcar_vistas();
+  else avisodisp_por(ch);
+  if ((tipo == AV_AGENDA || (tipo < 0 && !strncmp(ch, "agenda:", 7))) && imdb[0]) agenda_marcar_avisado(imdb);
+  pthread_mutex_lock(&trava);
+  marcarVisto(ch);
+  tirar(ch);
+  pthread_mutex_unlock(&trava);
+  { char chIlha[100];
+    snprintf(chIlha, sizeof chIlha, "av:%s", ch);
+    ilha_retirar(chIlha); }
+  printf("[avisos] dispensado: %s\n", ch);
+}
+
+void avisos_dispensar_todos(void) {
+  char ids[AV_MAX][72];
+  int i, k;
+  pthread_mutex_lock(&trava);
+  for (k = 0; k < n; k++) snprintf(ids[k], sizeof ids[k], "%s", itens[k].id);
+  pthread_mutex_unlock(&trava);
+  for (i = 0; i < k; i++) avisos_dispensar(ids[i]);
+  ilha_retirar(AV_ILHA_CHAVE);
+}
+
+int avisos_lista_dispensar(int linha) {
+  char id[72] = "";
+  pthread_mutex_lock(&trava);
+  if (linha >= 0 && linha < n) snprintf(id, sizeof id, "%s", itens[linha].id);
+  pthread_mutex_unlock(&trava);
+  if (!id[0]) return 0;
+  avisos_dispensar(id);
+  return 1;
+}
+
+int avisos_lista_item(int linha, char *id, size_t tamId, char *titulo, size_t tamTit,
+                      char *imdbLembrete, size_t tamImdb) {
+  int ok = 0;
+  if (imdbLembrete && tamImdb) imdbLembrete[0] = 0;
+  pthread_mutex_lock(&trava);
+  if (linha >= 0 && linha < n) {
+    const Aviso *a = &itens[linha];
+    if (id && tamId) snprintf(id, tamId, "%s", a->id);
+    if (titulo && tamTit) snprintf(titulo, tamTit, "%s", a->tipo == AV_AGENDA && a->texto[0] ? a->texto : a->titulo);
+    if (imdbLembrete && tamImdb && a->tipo == AV_AGENDA && a->alvo[0])
+      snprintf(imdbLembrete, tamImdb, "%s", a->alvo);
+    ok = 1;
+  }
+  pthread_mutex_unlock(&trava);
+  // So oferece "Remover lembrete" quando ele ainda esta ligado.
+  if (ok && imdbLembrete && imdbLembrete[0] && agenda_lembrete(imdbLembrete) != 1) imdbLembrete[0] = 0;
+  return ok;
 }
 
 static void avisos_desenharCorpo_(Uint32 agora);

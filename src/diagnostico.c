@@ -440,15 +440,6 @@ static DiagResultado classificar(int status, const char *corpo) {
   return DR_OK;
 }
 
-static void urlJoin(char *dst, size_t cap, const char *base, const char *path) {
-  size_t n;
-  if (!dst || !cap) return;
-  snprintf(dst, cap, "%s", base ? base : "");
-  n = strlen(dst);
-  while (n && dst[n - 1] == '/') dst[--n] = 0;
-  snprintf(dst + n, cap - n, "/%s", path ? path : "");
-}
-
 // Id do titulo da amostra `ordem`. Le a COPIA feita no fio de desenho: o
 // catalogo pode recarregar enquanto o fio do diagnostico roda.
 static const char *amostraTitulo(int ordem) {
@@ -461,8 +452,13 @@ static const char *amostraTitulo(int ordem) {
 // corpo fora); o teste de velocidade ainda tira dele as candidatas a medir.
 static char *baixarFontesAddon(int i, const char *id, const RedeControle *controle,
                                RedeMedida *medida) {
-  char url[800];
-  snprintf(url, sizeof url, "%s/stream/movie/%s.json", addons_base(i), id);
+  char url[NV_ADDON_PEDIDO_MAX];
+  // Pedido cortado nao sai (addonurl.h): mediria outra URL como se fosse o addon.
+  if (!nv_addon_pedido_coube(addons_nome(i), nv_addon_url(url, sizeof url, addons_base(i),
+                                                      "/stream/movie/%s.json", id), sizeof url)) {
+    if (medida) memset(medida, 0, sizeof *medida);
+    return NULL;
+  }
   return rede_baixar_medido_controle(url, DIAG_TIMEOUT_S, NULL, controle, medida);
 }
 
@@ -1233,7 +1229,7 @@ static int diagnosticoWorker(void *arg) {
   for (i = 0; i < d.nAddon; i++) {
     DiagAddon *a = &d.addon[i];
     const char *base = addons_base(i);
-    char url[760], safe[200], *corpo;
+    char url[NV_ADDON_PEDIDO_MAX], safe[200], *corpo;
     int status = 0;
     RedeMedida medida;
     memset(a, 0, sizeof *a);
@@ -1247,7 +1243,7 @@ static int diagnosticoWorker(void *arg) {
       atomic_fetch_add(&d.feitos, 1);
       continue;
     }
-    urlJoin(url, sizeof url, base, "manifest.json");
+    nv_addon_url(url, sizeof url, base, "/manifest.json");
     corpo = rede_baixar_medido_controle(url, DIAG_TIMEOUT_S, NULL, &controle, &medida);
     a->manifest_ms = (int)medida.ms;
     d.manifestMs += a->manifest_ms;
@@ -1274,12 +1270,15 @@ static int diagnosticoWorker(void *arg) {
     }
     if (corpo && jsonValido(corpo) && corpo[0] == '{') {
       if (a->catalogo && catalogTestados < 6 && !sessaoExpirada()) {
-        char catalogUrl[800];
+        char catalogUrl[NV_ADDON_PEDIDO_MAX];
         char *catalogo;
-        snprintf(catalogUrl, sizeof catalogUrl, "%s/catalog/movie/%s.json", base,
-                 amostraTitulo(catalogTestados));
+        int coube = nv_addon_pedido_coube(addons_nome(i),
+                      nv_addon_url(catalogUrl, sizeof catalogUrl, base, "/catalog/movie/%s.json",
+                                   amostraTitulo(catalogTestados)), sizeof catalogUrl);
         controle = controleDiagnostico(2L * 1024L * 1024L);
-        catalogo = rede_baixar_medido_controle(catalogUrl, DIAG_TIMEOUT_S, NULL, &controle, &medida);
+        if (!coube) memset(&medida, 0, sizeof medida);
+        catalogo = coube ? rede_baixar_medido_controle(catalogUrl, DIAG_TIMEOUT_S, NULL, &controle, &medida)
+                         : NULL;
         a->catalog_http = medida.status;
         a->catalog_ms = (int)medida.ms;
         a->catalog_ok = catalogo && !medida.limitado && jsonValido(catalogo);

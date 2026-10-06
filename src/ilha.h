@@ -245,8 +245,19 @@ int  ilha_modal_visivel(void);
 int  ilha_evento(const SDL_Event *e);
 // Acao pedida no modal, entregue uma vez (o contrato de avisos_pediu). `c`
 // recebe o cartao em que ela foi pedida.
+//
+// OS TRES GESTOS DE SAIDA (06/10, "muito alerta sem dispensar"), iguais em
+// todo modal de cartao e de aviso:
+//   - VOLTAR recolhe o modal para a pilula e NAO muda nada: o cartao fica, o
+//     aviso continua na lista como estava;
+//   - "Depois" / "Agora nao" ADIA: o cartao da estreia sai da pilula ate o app
+//     fechar (ILHA_PEDIU_DEPOIS; avisodisp_sessao_*), o item fica na lista;
+//   - "Dispensar" (ou "Fechar" no cartao ao vivo e no do amigo, que nao
+//     guardam nada) DISPENSA: some da pilula e da lista e a mesma chave nao
+//     volta, nem depois de reiniciar (ILHA_PEDIU_DISPENSAR; avisodisp.h).
+// Estreia: Assistir · Depois · Dispensar.
 enum { ILHA_PEDIU_NADA = 0, ILHA_PEDIU_TOCAR, ILHA_PEDIU_DETALHES,
-       ILHA_PEDIU_DISPENSAR, ILHA_PEDIU_SALVOS };
+       ILHA_PEDIU_DISPENSAR, ILHA_PEDIU_SALVOS, ILHA_PEDIU_DEPOIS };
 int  ilha_pediu(IlhaCartao *c, int *qual);
 
 // MINIMIZAR NA ILHA: o player saiu no meio e a sessao virou o cartao
@@ -269,5 +280,18 @@ int  ilha_rect(float *x, float *y, float *w, float *h);
 // 1 = outra superficie nasceu da pilula e esta no lugar dela (o painel de
 // Salvos): a ilha continua medindo, mas nao se desenha. Vale um quadro.
 void ilha_coberta(int coberta);
+
+// A PILULA VIRA UM PAINEL (a Central de controle, central.h). Pedido POR
+// QUADRO, antes de ilha_desenhar: a propria ilha estica da pilula ate um
+// retangulo w x h ancorado no canto dela, na mesma mola e no mesmo material do
+// modal, com a hora parada no lugar de sempre (vira o cabecalho). `corpo`
+// desenha o conteudo no retangulo inteiro (a faixa de cima, NV_ILHA_H, e da
+// hora) com o alfa que a ilha da: entra quando a forma assenta e sai antes
+// dela encolher. Sem pedido a ilha volta a pilula, chamando o ultimo corpo
+// com o alfa caindo. Efeitos leves: mola sem repique; minimos: sem animacao.
+typedef void (*IlhaCorpo)(GfxRect r, float a, void *u);
+void  ilha_corpo(float w, float h, IlhaCorpo corpo, void *u);
+// 0 = pilula, 1 = painel assentado (passa um pouco de 1 no repique).
+float ilha_corpo_t(void);
 
 #endif

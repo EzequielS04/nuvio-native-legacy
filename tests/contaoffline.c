@@ -139,12 +139,33 @@ void nuvem_url_escapar(const char *v, char *d, unsigned t) { snprintf(d, t, "%s"
 
 static int nAplicados, ativosAplicados;
 static char primeiraUrl[600];
+// #201 (sessao "longa"): a conta manda um addon de URL com 1500 caracteres e
+// outro acima de NV_ADDON_URL_MAX. O primeiro tem de chegar INTEIRO ao app; o
+// segundo nao pode chegar, nem cortado.
+static char urlLonga[1501], urlGrande[2601], contaLonga[5000];
+static int longaIntacta, grandeChegou;
+static void montarLonga(void) {
+  size_t k, i;
+  k = (size_t)snprintf(urlLonga, sizeof urlLonga, "https://longo.exemplo/SEGREDO");
+  for (i = 0; k < 1500 - 14; i++) urlLonga[k++] = (char)('a' + (int)((i * 7) % 26));
+  snprintf(urlLonga + k, 15, "/manifest.json");
+  k = (size_t)snprintf(urlGrande, sizeof urlGrande, "https://grande.exemplo/SEGREDO");
+  for (i = 0; k < 2600 - 14; i++) urlGrande[k++] = (char)('a' + (int)((i * 5) % 26));
+  snprintf(urlGrande + k, 15, "/manifest.json");
+  snprintf(contaLonga, sizeof contaLonga,
+           "[{\"url\":\"%s\",\"name\":\"Longo\",\"enabled\":true},"
+           "{\"url\":\"%s\",\"name\":\"Grande\",\"enabled\":true},"
+           "{\"url\":\"https://b.exemplo/manifest.json\",\"name\":\"B\",\"enabled\":false}]",
+           urlLonga, urlGrande);
+}
 int addons_definir_lista(const AddonRemoto *l, int n) {
   int i;
   nAplicados = n;
   ativosAplicados = 0;
   for (i = 0; i < n; i++) ativosAplicados += l[i].ativo;
   snprintf(primeiraUrl, sizeof primeiraUrl, "%s", n > 0 ? l[0].url : "");
+  longaIntacta = n > 0 && !strcmp(l[0].url, urlLonga);
+  for (i = 0; i < n; i++) if (strstr(l[i].url, "grande.exemplo")) grandeChegou = 1;
   return 1;
 }
 static int colConta, bibConta, vistoConta;
@@ -205,6 +226,7 @@ void homeestado_esquecer(void) {}
 void mapa_esquecer(void) {}
 void prog_esquecer_tudo(void) {}
 void perfilcont_esquecer(void) {}
+void psparede_esquecer(void) {}   // sync.c 2.0 chama no logout; faltava aqui e o teste nao ligava
 void recomenda_esquecer(void) {}
 void salvos_esquecer(void) {}
 void stalker_esquecer(void) {}
@@ -254,6 +276,7 @@ int main(int argc, char **argv) {
   setvbuf(stdout, NULL, _IOLBF, 0);
   modo = argc > 1 ? atoi(argv[1]) : 200;
   if (argc > 1 && !strcmp(argv[1], "parcial")) { modo = 200; rpcModo = 429; }
+  if (argc > 1 && !strcmp(argv[1], "longa")) { modo = 200; montarLonga(); ADDONS = contaLonga; }
   if (argc > 2 && strcmp(argv[2], "-")) usuario = argv[2];
   printf("-- sessao: servidor %d, conta %s%s%s\n", modo, usuario, *extra ? ", " : "", extra);
   copia = existe("conta-addons-p1.json");
@@ -293,6 +316,15 @@ int main(int argc, char **argv) {
     }
   }
 
+  if (ADDONS == contaLonga) {
+    confere("#201: a URL de 1500 caracteres chegou inteira ao app", longaIntacta);
+    confere("#201: a URL acima do limite nao chegou, nem cortada", nAplicados == 2 && !grandeChegou);
+    // A lista desta TV ficou menor que a da conta: uma edicao daqui NAO sobe
+    // (o push substituiria a lista da conta e apagaria o addon que nao coube).
+    sync_sujar_addons();
+    confere("#201: edicao com a lista incompleta nao vira pendencia em disco",
+            !existe("conta-addons-pend-636f6e74612d61-p1.txt"));
+  }
   if (!strcmp(extra, "volta")) {
     int r;
     modo = 200;

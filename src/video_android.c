@@ -34,6 +34,7 @@
 #include "streamfitpassiva.h"
 #include "audsync.h"
 #include "cacheboost.h"
+#include "velocidade.h"
 #include <SDL2/SDL.h>
 #include <jni.h>
 #include <stdio.h>
@@ -51,6 +52,9 @@ static jmethodID mAbrirPosicao;
 // F07 (optional, like abrirPosicao): cache(mb) and ganho(pct). A shell without
 // them simply has no seek cache and no boost.
 static jmethodID mCache, mGanho;
+// #202 (opcional, como os de cima): velocidade(centesimos). Casca sem ele =
+// sem a linha da velocidade.
+static jmethodID mVelocidade;
 
 static int resolverMetodos(JNIEnv *env) {
   mAbrir    = (*env)->GetStaticMethodID(env, gCls, "abrir", "(Ljava/lang/String;Ljava/lang/String;)V");
@@ -69,6 +73,8 @@ static int resolverMetodos(JNIEnv *env) {
   if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); mCache = NULL; }
   mGanho = (*env)->GetStaticMethodID(env, gCls, "ganho", "(I)V");
   if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); mGanho = NULL; }
+  mVelocidade = (*env)->GetStaticMethodID(env, gCls, "velocidade", "(I)V");
+  if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); mVelocidade = NULL; }
   return mAbrir && mParar && mPausar && mBuscar && mVolume && mJanela && mEscolher;
 }
 
@@ -238,6 +244,12 @@ static volatile int conflito, semDecoderAudio;
 // 02/10); um evento 2 (tocando) no meio desfaz a confirmacao.
 static volatile int pausaPedida, pausaVista;
 static volatile int durMs, bufferando, posMs;
+// VELOCIDADE (#202, video.h): o ExoPlayer novo de cada abertura nasce em 1x
+// (velEnviada = 100 no abrirSessao) e o video_bombear reaplica o pedido assim
+// que ele esta pronto. setPlaybackSpeed aceita qualquer valor positivo; com o
+// audio em PASSTHROUGH (bitstream ao receptor) eu acho que o sink nao consegue
+// mudar o tempo e o Media3 segue em 1x, sem erro — nao provado em TV.
+static volatile int velPedida = 100, velEnviada = 100, velRecusada;
 static volatile Uint32 bufferDesde, tocandoDesde;
 static volatile const char *hdrAtual = "none";
 static volatile int dvAtual, atmosAtual;
@@ -460,6 +472,7 @@ int  video_registro_negado(void) { return 0; }
 static int abrirSessao(int inicioMs) {
   JNIEnv *env;
   ativo = 1; prontoLoad = primeiroQuadro = falhou = terminou = tocando = 0;
+  velEnviada = 100;
   largura = altura = durMs = posMs = 0; bufferando = 1; bufferDesde = SDL_GetTicks();
   tocandoDesde = 0; semDecoderAudio = 0; erroTxt[0] = 0;
   pausaPedida = pausaVista = 0;
@@ -539,6 +552,13 @@ int  video_reconectando(void) {
 
 void video_bombear(void) {
   double pos = video_pos();
+  if (mVelocidade && ativo && prontoLoad && velEnviada != velPedida) {
+    velEnviada = velPedida;
+    kInt(mVelocidade, velEnviada);
+    // So "enviado": o setPlaybackSpeed nao recusa nada, e quem prova que andou
+    // e o medidor do player (VelMedidor), pela posicao contra o relogio.
+    vel_log(velEnviada, "enviado ao ExoPlayer");
+  }
   if (prontoLoad && pos > 0.5) reconIniciou = 1;
   if (prontoLoad && reconBuscarMs < 0) nv_recon_progresso(&recon, pos);
   // O seek do recarregar sai com o player ja tocando.
@@ -739,6 +759,16 @@ const char *video_hdr(void) { return (const char *)hdrAtual; }
 int  video_largura(void) { return largura; }
 int  video_altura(void) { return altura; }
 int  video_pode_forcar_sdr(void) { return 0; }
+int  video_velocidade_suportada(void) { return mVelocidade != NULL && !velRecusada; }
+void video_velocidade(int c) { if (!velRecusada) velPedida = (c <= 0 || c > 400) ? 100 : c; }
+int  video_velocidade_atual(void) { return velRecusada ? 100 : velPedida; }
+void video_velocidade_recusada(void) { velRecusada = 1; velPedida = 100; }   // o bombear manda o 100
+// PASSTHROUGH (medido na TCL, 06/10: EAC3 ao receptor, 1,5x pedido, video a
+// 1x). Trocar o audio para PCM decodificado enquanto a velocidade != 1 exigiria
+// reabrir o player com outra cadeia de audio no meio do filme (e o receptor
+// perderia o Atmos/5.1 por isso): nao e uma mudanca contida. A linha fica
+// esmaecida com o motivo.
+int  video_velocidade_bloqueada(void) { return cacheboost_ganho_estado() == CB_GANHO_PASSTHROUGH; }
 void video_forcar_sdr(void) {}
 void video_encerrar(void) { video_parar(); }
 #endif

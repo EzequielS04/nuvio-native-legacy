@@ -81,6 +81,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "relogiofim.h"
 #include "aovivo.h"
 #include "botoes.h"
+#include "velocidade.h"
 #include "recomenda.h"
 #include "home.h"
 #include "descoberta.h"
@@ -314,6 +315,10 @@ static float posSeg = 0.0f;
 // C9 chega a cada ~200 ms. A legenda desenhada com ele andava aos degraus e em
 // media 100 ms atras; relogio.c interpola entre as amostras.
 static Relogio relLeg;
+// #202: a velocidade que o PIPELINE esta tocando, medida (velocidade.h). E
+// ela, e nao o pedido, que move a legenda, o "termina as" e o proximo episodio.
+static VelMedidor velMed = { 100, 100, 0, 0, 0, 0, 0, 0 };
+int player_velocidade_efetiva(void) { return velMed.efetiva; }
 static double monoSeg(void) {
   struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
   return (double)ts.tv_sec + ts.tv_nsec / 1e9;
@@ -416,6 +421,20 @@ static int idxAtual(void) {
   return idx;
 }
 static int ehCanal(void) { return canalSessao; }
+// A MARCA DO DTS da faixa que esta tocando (DTS, DTS-HD, DTS:X), ou -1. Aparece
+// em todo estado do DTS — a TV tocando sozinha, o app convertendo, a conversao
+// desligada ou falha (dono, 06/10: "a badge do DTS ... quando for ativado ou
+// quando nao for"). O DTS e da FONTE; o estado so diz como ele chega, e isso
+// vai na ilha e nas Informacoes.
+static int marcaDtsAtual(void) {
+  int e = video_dts_estado();
+  if (e == VIDEO_DTS_NENHUM) return -1;
+  switch (video_faixa_dts(video_audio(video_audio_atual()))) {
+    case 3: return FMT_DTSX;
+    case 2: return FMT_DTSHD;
+    default: return FMT_DTS;   // convertendo, a faixa vem do FFmpeg como "dts"
+  }
+}
 const char *player_id_canal(void) { return canalSessao ? itemCanal.imdb : ""; }
 
 // Programa do canal no ar: a XMLTV (epgIdx) ou, num canal Xtream que nao
@@ -485,7 +504,15 @@ static int epgIdx = -1;
 // PRIMEIRA reproducao da sessao e ficaria mudo em todas as outras — que e
 // justamente quando o relato acontece.
 static int credAvisado, credFimAvisado, semProxAvisado;
-static double credAvisadoEm;
+static double credAvisadoEm, credAvisadoDur;
+// 2.0.1, "o Proximo apareceu no meio do episodio". Zerados a cada ABERTURA, e
+// nao a cada episodio: a mesma copia reaberta por outra fonte e outra duracao.
+//   duracaoReal    o pipeline ja disse a duracao DESTE video. Ate la duracaoSeg
+//                  e a minutagem do catalogo ou os 114 min de reserva, e decidir
+//                  com ela e decidir com numero inventado.
+//   durCurtaAvisado/durPassouAvisado   uma linha de log cada, por reproducao.
+static int duracaoReal, durCurtaAvisado, durPassouAvisado;
+static int concluiuAgora(double cred);
 static int introIdx=-1, introT=-1, introE=-1;
 static int retomadaAplicada, retomarPct;
 #ifdef NV_ANDROID
@@ -633,7 +660,7 @@ void player_definir_episodio(int t, int e) {
     if (idx != introIdx || introT || introE) {
       introIdx = idx; introT = introE = 0;
       intro_pedir(c->imdb, 0, 0);
-      credAvisado = credFimAvisado = semProxAvisado = 0; credAvisadoEm = 0;
+      credAvisado = credFimAvisado = semProxAvisado = 0; credAvisadoEm = credAvisadoDur = 0;
     }
     return;
   }
@@ -684,7 +711,7 @@ void player_definir_episodio(int t, int e) {
         else if(ep->episodio==epE+1)dP=duracaoTexto(ep->duracao);
       }
       intro_pedir_vizinhos(c->imdb,epT,epE,dA,dP); }
-    credAvisado=credFimAvisado=semProxAvisado=0;credAvisadoEm=0;
+    credAvisado=credFimAvisado=semProxAvisado=0;credAvisadoEm=credAvisadoDur=0;
   }
 }
 
@@ -1220,7 +1247,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
 #endif
   botao = PLR_PLAY;
   memset(focoB, 0, sizeof focoB);
-  posSeg = 0.0f; relogio_zerar(&relLeg);
+  posSeg = 0.0f; relogio_zerar(&relLeg); velmed_zerar(&velMed);
   ultimoInput = SDL_GetTicks();
   esperandoFonte = (url == NULL);
   // Legenda externa e da sessao que acabou, nao desta.
@@ -1248,6 +1275,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
   const CatItem *c = item();
   float d = c ? duracaoDeMeta(c->meta) : 0.0f;
   duracaoSeg = d > 1.0f ? d : PLR_DUR_PADRAO;
+  duracaoReal = durCurtaAvisado = durPassouAvisado = 0;
 
   // Identidade do episodio e independente do foco no painel de navegacao.
   //
@@ -1462,7 +1490,7 @@ static void lembrarFonte(void) {
   if (erroFonte || video_falhou()) { fontevolta_esquecer("sessao falhou"); return; }
   if (!video_pronto() || duracaoSeg < 120.0f) return;
   cred = credEfetivo();
-  if (player_regra_concluiu(posSeg, duracaoSeg, cred)) { fontevolta_esquecer("titulo concluido"); return; }
+  if (concluiuAgora(cred)) { fontevolta_esquecer("titulo concluido"); return; }
   // A lista pode ter sido trocada por baixo (a busca de fundo do Retomar que
   // abriu pela fonte guardada): quem toca e a entrada que ja existe.
   if (!s || strcmp(s->url, url)) return;
@@ -1472,6 +1500,9 @@ static void lembrarFonte(void) {
 
 static void fecharSessao(int manter) {
   int jaRetido = retido;
+  // #202: a velocidade e desta reproducao; o trailer da home e o proximo
+  // titulo comecam em 1x.
+  video_velocidade(VEL_NORMAL);
   legsync_encerrar();   // F05: cancela leitura/analise da sessao; join so no fim do app
   if (!jaRetido) lembrarFonte();
   // PERSONAL-SERVER END OF SESSION (Jellyfin/Emby/Plex): stop check-in (and
@@ -1521,7 +1552,7 @@ static void fecharSessao(int manter) {
     // do Matroska descreve ESTA copia, o TheIntroDB descreve o lancamento.
     double cred = credEfetivo();
     int concluiu;
-    concluiu = player_regra_concluiu(posSeg, duracaoSeg, cred);
+    concluiu = concluiuAgora(cred);
     float pos = concluiu ? duracaoSeg : posSeg;
     // Pelo indice CORRENTE do titulo, nao pelo guardado: depois de uma
     // republicacao o guardado grava o progresso no titulo errado.
@@ -1654,8 +1685,7 @@ static int podeReter(void) {
          video_pronto() && video_ativo() && !video_falhou() && !video_terminou() &&
          !video_conflito_recurso() && !video_reconectando() && video_url_atual()[0] &&
          duracaoSeg >= 120.0f && home_retorno_vale(idxAtual(), posSeg, duracaoSeg) &&
-         !player_regra_concluiu(posSeg, duracaoSeg,
-                               credEfetivo());
+         !concluiuAgora(credEfetivo());
 }
 
 void player_preparar_retencao(void) {
@@ -1983,7 +2013,23 @@ int player_regra_proximo(double posSeg, double durSeg, double cred) {
   if (durSeg <= 1.0) return 0;
   if (cred > 1.0 && durSeg - cred <= credJanelaDe(durSeg))
     return posSeg >= cred;   // marcador aceito: ele manda, e so ele
+  // PISO DA ESTIMATIVA. Log da TCL na 2.0.0: "2 min finais: pos 0s de 30s" — o
+  // pipeline informou 30 s e os "2 minutos finais" eram o video inteiro, do
+  // segundo zero. Abaixo de duas janelas nao ha "fim" para estimar.
+  if (durSeg < 2.0 * PLR_CRED_PISO_S) return 0;
   return durSeg - posSeg <= PLR_CRED_PISO_S;
+}
+
+// A DURACAO INFORMADA NAO E A DO EPISODIO. Log de webOS na 2.0.0: uma fonte MP4
+// informou "duration":536033 num episodio cujo marcador de creditos fica em
+// 1335 s. Com 536 s a estimativa sobe o cartao aos 416 s — o meio do episodio.
+// O catalogo traz a minutagem do episodio ("38 min"); quando o pipeline diz
+// MENOS DE UM TERCO dela, o numero dele nao descreve este episodio. Um terco e
+// largo de proposito: minutagem de catalogo e arredondada, as vezes a media da
+// serie, e episodio duplo existe.
+#define PLR_CAT_MIN_S 900.0
+int player_duracao_suspeita(double durSeg, double catSeg) {
+  return catSeg >= PLR_CAT_MIN_S && durSeg > 1.0 && durSeg * 3.0 < catSeg;
 }
 
 // Ver a nota longa em player.h. Aqui so a conta: a mesma regra do cartao, mais
@@ -1992,11 +2038,48 @@ int player_regra_proximo(double posSeg, double durSeg, double cred) {
 // valerem alguma coisa.
 int player_regra_concluiu(double posSeg, double durSeg, double cred) {
   if (durSeg <= 1.0) return 0;
-  if (posSeg >= durSeg - 60.0) return 1;
+  // MARCADOR MUITO DEPOIS DO "FIM": a duracao e que esta errada (536 s contra
+  // creditos em 1335 s). Sem isto os 60 s de folga abaixo davam o episodio por
+  // visto aos 476 s.
+  if (cred > 1.0 && cred - durSeg > credJanelaDe(durSeg)) return posSeg >= cred;
+  // A folga nunca vale antes da metade: com 30 s informados ela concluia o
+  // titulo no segundo zero.
+  if (posSeg >= durSeg - 60.0 && posSeg >= durSeg * 0.5) return 1;
   return player_regra_proximo(posSeg, durSeg, cred);
 }
 
+// Minutagem do episodio corrente no catalogo, em segundos (0 = nao ha). Lida na
+// hora: a lista de episodios pode chegar depois da abertura (#151).
+static double duracaoCatalogo(void) {
+  if (epT <= 0) return 0.0;
+  for (int ix = idxAtual(), i = 0; i < cat_n_episodios(ix); i++) {
+    const CatEp *ep = cat_episodio(ix, i);
+    if (ep && ep->temporada == epT && ep->episodio == epE) return duracaoTexto(ep->duracao);
+  }
+  return 0.0;
+}
+
+// player_regra_concluiu com o estado do player: e o que as saidas chamam.
+// Duracao suspeita e sem marcador, quem mede o fim e a minutagem do catalogo.
+static int concluiuAgora(double cred) {
+  double cat = duracaoCatalogo();
+  if (!(cred > 1.0) && player_duracao_suspeita(duracaoSeg, cat))
+    return posSeg >= cat * 0.9;
+  return player_regra_concluiu(posSeg, duracaoSeg, cred);
+}
+
 static int ofertaProximo(void) {
+  // SEM A DURACAO DO VIDEO NAO SE DECIDE NADA. Log da 2.0.0: "creditos
+  // RECUSADO: comecam em 1335s de 6840s" impresso ANTES de "abrir: url ao
+  // pipeline" — a conta rodou com os 114 min de reserva e ainda gastou a linha
+  // unica de diagnostico daquele marcador.
+  if (comVideo && !duracaoReal) return 0;
+  if (!durPassouAvisado && duracaoReal && posSeg > duracaoSeg + 5.0f) {
+    durPassouAvisado = 1;
+    printf("[posplay] duracao informada errada: posicao %.0fs ja passou dos %.0fs\n",
+           (double)posSeg, (double)duracaoSeg);
+    fflush(stdout);
+  }
   const CatEp *p=player_proximo_episodio();
   // #151: "o Proximo as vezes nao aparece". Sem proximo episodio na lista o
   // cartao nao existe, e isso nao deixava rastro: uma linha por episodio, nos
@@ -2026,8 +2109,8 @@ static int ofertaProximo(void) {
     // antes do final" nao tinha como ser medido — nao dava para saber se quem
     // abriu o cartao foi o marcador aceito ou a regra dos 2 minutos com uma
     // duracao errada.
-    if (!credAvisado || credAvisadoEm != cred) {
-      credAvisado = 1; credAvisadoEm = cred;
+    if (!credAvisado || credAvisadoEm != cred || credAvisadoDur != (double)duracaoSeg) {
+      credAvisado = 1; credAvisadoEm = cred; credAvisadoDur = (double)duracaoSeg;
       printf("[posplay] creditos %s: comecam em %.0fs de %.0fs (sobram %.0fs, janela %.0fs)\n",
              aceito ? "aceito" : "RECUSADO", cred, (double)duracaoSeg,
              resta, janela);
@@ -2048,7 +2131,17 @@ static int ofertaProximo(void) {
   }
   // FALLBACK sem dado de ninguem. Se a duracao estiver errada, e ELE quem abre
   // o cartao cedo — por isso a linha abaixo diz de onde veio.
-  if (duracaoSeg - posSeg <= PLR_CRED_PISO_S) {
+  { double cat = duracaoCatalogo();
+    if (player_duracao_suspeita(duracaoSeg, cat)) {
+      if (!durCurtaAvisado) {
+        durCurtaAvisado = 1;
+        printf("[posplay] duracao suspeita: pipeline diz %.0fs, catalogo diz %.0fs; sem marcador o cartao nao sobe\n",
+               (double)duracaoSeg, cat);
+        fflush(stdout);
+      }
+      return 0;
+    } }
+  if (player_regra_proximo(posSeg, duracaoSeg, 0.0)) {
     if (!credFimAvisado) {
       credFimAvisado = 1;
       printf("[posplay] 2 min finais: pos %.0fs de %.0fs\n",
@@ -2264,6 +2357,15 @@ static void avMontarOsd(AoVivoOsd *o) {
     else snprintf(o->info[k++], sizeof o->info[0], "%s", i18n("Resolução: ainda não informada"));
     if (strcasecmp(video_hdr(), "none") && video_hdr()[0])
       snprintf(o->info[k++], sizeof o->info[0], i18n("Imagem: %s"), video_tem_dolby_vision() ? "Dolby Vision" : video_hdr());
+    { const char *d = NULL;
+      switch (video_dts_estado()) {
+        case VIDEO_DTS_NATIVO:     d = "Áudio: DTS, decodificado pela TV"; break;
+        case VIDEO_DTS_PREPARANDO: d = "Áudio: DTS, preparando a conversão"; break;
+        case VIDEO_DTS_CONVERTIDO: d = "Áudio: DTS convertido para AAC estéreo nesta TV"; break;
+        case VIDEO_DTS_FALHOU:     d = "Áudio: DTS, a conversão falhou (sem som)"; break;
+        case VIDEO_DTS_SEM_SOM:    d = "Áudio: DTS, esta TV não toca (sem som)"; break;
+      }
+      if (d) snprintf(o->info[k++], sizeof o->info[0], "%s", i18n(d)); }
     if (video_tem_atmos()) snprintf(o->info[k++], sizeof o->info[0], "%s", i18n("Áudio: Dolby Atmos"));
     if (comVideo && video_bufferando_ms() > 0)
       snprintf(o->info[k++], sizeof o->info[0], i18n("Buffer: carregando há %u s"), video_bufferando_ms() / 1000u);
@@ -2276,7 +2378,9 @@ static void avMontarOsd(AoVivoOsd *o) {
       if (fm >= 0) o->marcas[o->nMarcas++] = fm;
       if (video_tem_dolby_vision()) o->marcas[o->nMarcas++] = FMT_DV;
       else if (!strcasecmp(video_hdr(), "HDR10")) o->marcas[o->nMarcas++] = FMT_HDR10;
-      if (video_tem_atmos()) o->marcas[o->nMarcas++] = FMT_ATMOS; }
+      if (video_tem_atmos()) o->marcas[o->nMarcas++] = FMT_ATMOS;
+      if (marcaDtsAtual() >= 0 && o->nMarcas < (int)(sizeof o->marcas / sizeof o->marcas[0]))
+        o->marcas[o->nMarcas++] = marcaDtsAtual(); }
   }
 }
 
@@ -2734,7 +2838,7 @@ void player_atualizar(float dt, Uint32 agora) {
       legsync_audio_habilitar(ajustes_legenda_sync_audio());
       legsync_passo(video_url_atual(), posSeg, bf > 0.5 ? bf - (double)posSeg : -1.0,
                     scrubbing || video_bufferando_ms() > 0, agora); }
-    if (d > 1.0) duracaoSeg = (float)d;
+    if (d > 1.0) { duracaoSeg = (float)d; duracaoReal = 1; }
     // MINIATURAS DO SEEKR: so com a duracao REAL (o servico escolhe a versao
     // da folha por ela) e uma vez por titulo — seekr_pedir ignora o repetido.
     if (d > 60.0 && video_pronto() && !ehCanal() && ajustes_seekr_ligado()) {
@@ -2788,9 +2892,26 @@ void player_atualizar(float dt, Uint32 agora) {
       if (ci && ci->imdb[0] && video_pronto() && duracaoSeg >= 120.0f) {
         double cr = credEfetivo();
         atividade_player_passo(ci, epT, epE, posSeg, duracaoSeg, tocando && !scrubbing,
-                               player_regra_concluiu(posSeg, duracaoSeg, cr), dt);
+                               concluiuAgora(cr), dt);
       }
     }
+    // #202: confere que o pipeline anda na velocidade pedida antes de usa-la.
+    // So com o video tocando de verdade: pausa, busca e buffering fecham a
+    // janela de medida. "ok" da plataforma com o video a 1x (passthrough na
+    // TCL) desfaz o pedido e a folha avisa (faixas_atualizar).
+    { int r;
+      velmed_pedir(&velMed, video_velocidade_atual());
+      r = velmed_passo(&velMed, monoSeg(), video_pos(),
+                       comVideo && video_pronto() && tocando && !scrubbing &&
+                       !video_bufferando_ms() && !ehCanal());
+      if (r == VELMED_CONFIRMOU) vel_log(velMed.efetiva, "confirmada pelo relogio do pipeline");
+      else if (r == VELMED_NAO_ANDOU) {
+        vel_log(velMed.pedida, "pipeline seguiu a 1x: volta a 1x");
+        video_velocidade_recusada();
+        velmed_pedir(&velMed, VEL_NORMAL);
+      } }
+    // A legenda interpola na velocidade MEDIDA (relogio.h).
+    relogio_taxa(&relLeg, velMed.efetiva / 100.0);
     relogio_amostra(&relLeg, video_pos(), monoSeg(), tocando && !scrubbing);
     // A cada 10 s: o numero cru do pipeline e o do relogio da legenda, no
     // mesmo instante. A diferenca e o que a interpolacao acrescenta (0..~250).
@@ -3351,6 +3472,11 @@ static void desenharLegendaExternaCorpo(void) {
 }
 
 static void desenharLegendaPrincipal(float *topoPilha){
+  PlrRect bitmapArea = areaVideoLegenda();
+  float bitmapAlpha = (legEstilo.opacidade==3?.25f:legEstilo.opacidade==2?.5f:
+                      legEstilo.opacidade==1?.75f:1.f) * entrada;
+  if (video_dts_legenda_desenhar(posLegenda(), legEstilo.atrasoMs,
+        bitmapArea.x, bitmapArea.y, bitmapArea.w, bitmapArea.h, bitmapAlpha)) return;
   /* ASS completo: libass devolve uma lista de bitmaps por camada, preservando
    * karaoke, movimento, desenho vetorial, fontes e todas as tags do arquivo.
    * Da folha, so chegam ao ASS o que nao desmonta o estilo do autor: tamanho
@@ -3362,6 +3488,9 @@ static void desenharLegendaPrincipal(float *topoPilha){
   // F05: manual + automatico aceito, UMA vez, so para o documento dono do
   // overlay (sem ele, o manual intacto). Positivo adianta, como sempre.
   int atraso = legsync_offset_ms(legEstilo.atrasoMs);
+  // Escala/trechos aceitos: o instante na legenda, nao no video (o mesmo
+  // para libass e para o desenho do app).
+  double posLeg = legsync_posicao(posLegenda());
   assrender_aplicar_invalidacao();
   assrender_definir_cor(0, 0, 0, 0);
   if (assrender_ativo()) {
@@ -3370,7 +3499,7 @@ static void desenharLegendaPrincipal(float *topoPilha){
                    legEstilo.opacidade==1?.75f:1.f) * entrada;
     assrender_definir_layout(area.x, area.y, area.w, area.h,
                              video_largura(), video_altura(), escalaFonteAss());
-    assrender_desenhar(posLegenda(), atraso, alpha,
+    assrender_desenhar(posLeg, atraso, alpha,
                         0, 0, NV_TELA_W, NV_TELA_H);
     // R4: libass nao informa onde pintou. Estima duas linhas no tamanho da
     // folha acima da base, para a segunda legenda empilhada nao cobri-las.
@@ -3378,7 +3507,7 @@ static void desenharLegendaPrincipal(float *topoPilha){
     return;
   }
   LegendaCue cues[LEGENDA_SIMULTANEAS];
-  int n = legenda_cues(posLegenda(), atraso, cues, LEGENDA_SIMULTANEAS), i;
+  int n = legenda_cues(posLeg, atraso, cues, LEGENDA_SIMULTANEAS), i;
   // Sem legenda externa, a EMBUTIDA que o player nativo nao desenha (#122):
   // o mesmo overlay, com a mesma folha de estilo da pessoa.
   if (n <= 0 && comVideo && player_texto_legenda_nativa(cues[0].texto, sizeof cues[0].texto)) {
@@ -3579,6 +3708,11 @@ static int linhasAbrindo(const Stream *st, AbrLinha *L) {
     if (st->tamanhoMB >= 1024) snprintf(L[n].val, sizeof L[n].val, "%.1f GB", st->tamanhoMB / 1024.0);
     else snprintf(L[n].val, sizeof L[n].val, "%ld MB", st->tamanhoMB);
     plrui_decimal(L[n].val);
+    n++;
+  }
+  if (!st->url[0] && st->infoHash[0] && st->temSemeadores && n < ABR_MAX) {
+    snprintf(L[n].rot, sizeof L[n].rot, "Seeds");
+    snprintf(L[n].val, sizeof L[n].val, "%d", st->semeadores);
     n++;
   }
   if (abrFitIdx != stream_atual()) {   // a medida e relida so quando a fonte muda
@@ -3937,6 +4071,33 @@ void player_desenhar(Uint32 agora) {
     if (!abrindoViva) { abrindoDesde = agora; abrindoExp = 0; abrindoT = 0.0f; abrFitIdx = -2; }
     abrindoViva = 1;
   } else abrindoViva = 0;
+  // O DTS NA ILHA: como o audio DTS desta faixa chega — direto da TV,
+  // convertido pelo app (PR #259), ou sem som. Uma vez por estado, depois de
+  // ele ficar 1,5 s parado (o erro 200 da TV chega logo depois do load e
+  // trocaria "nativo" por "sem som" num piscar). "Preparando" nao entra: o
+  // cartao de abertura ja esta na tela.
+  { static int dtsVisto;
+    static Uint32 dtsDesde;
+    int e = player_carregando() || ehCanal() ? VIDEO_DTS_NENHUM : video_dts_estado();
+    if (e != dtsVisto) { dtsVisto = e; dtsDesde = agora; }
+    // A guia parental (tambem na ilha, de prioridade baixa) vem primeiro: o
+    // aviso do DTS espera ela fechar, em vez de derruba-la.
+    if (pgDesde && (float)(agora - pgDesde) / 1000.0f < PG_SEG_TOTAL) dtsDesde = agora;
+    if (e != VIDEO_DTS_NENHUM && e != VIDEO_DTS_PREPARANDO && agora - dtsDesde >= 1500u) {
+      Uint32 dur = e == VIDEO_DTS_FALHOU || e == VIDEO_DTS_SEM_SOM ? 10000u : 5000u;
+      if (agora - dtsDesde < 1500u + dur) {
+        PlrIlhaPedido pd;
+        memset(&pd, 0, sizeof pd);
+        pd.icone = "dts";
+        pd.corIcone = e == VIDEO_DTS_FALHOU || e == VIDEO_DTS_SEM_SOM ? 1 : 0;
+        pd.texto = e == VIDEO_DTS_NATIVO ? i18n("Áudio DTS nativo")
+                 : e == VIDEO_DTS_CONVERTIDO ? i18n("Áudio DTS convertido nesta TV")
+                 : e == VIDEO_DTS_FALHOU ? i18n("Não deu para converter o áudio DTS")
+                 : i18n("Esta TV não toca áudio DTS");
+        pd.semFim = 1; pd.aberta = 1;
+        plrilha_pedir(&pd);
+      }
+    } }
   if (player_carregando() && ehCanal()) {
     // CANAL SINTONIZANDO: a versao COMPACTA, uma linha na propria ilha do
     // relogio (dono, 03/10: "no player do live tv vamos usar a versao compacta
@@ -4150,7 +4311,10 @@ void player_desenhar(Uint32 agora) {
 
   // O "termina as" da pilula vale tambem sem o OSD (a ilha crescida das
   // faixas, os avisos): o tempo que falta e dado a ilha a cada quadro.
-  plrilha_relogio(0.0f, ehCanal() ? -1.0 : (double)(duracaoSeg - posSeg));
+  // #202: "termina as" em tempo de RELOGIO: a 1,5x o resto do arquivo passa
+  // em 2/3 do tempo. A ilha tambem mostra a velocidade quando nao e 1x.
+  plrilha_relogio(0.0f, ehCanal() ? -1.0 : vel_tempo_real((double)(duracaoSeg - posSeg), velMed.efetiva));
+  plrilha_velocidade(ehCanal() ? VEL_NORMAL : velMed.efetiva);
   float a = anim * entrada;
   // FOLHA ABERTA, OSD APAGADO. A folha de Fontes e a de Legendas sao vidro
   // translucido: o relogio, os selos 4K/HDR e o tempo do player apareciam
@@ -4428,7 +4592,7 @@ static void desenharOsdCorpo(Uint32 agora, float a, float ac, const CatItem *c) 
 
   // A PILULA DA ILHA (plrilha.h): a hora e "termina as" moram nela agora, no
   // canto da Posicao do relogio. O canal nao tem fim.
-  plrilha_relogio(ac, ehCanal() ? -1.0 : (double)(duracaoSeg - posSeg));
+  plrilha_relogio(ac, ehCanal() ? -1.0 : vel_tempo_real((double)(duracaoSeg - posSeg), velMed.efetiva));
 
   // Selos de formato no alto, no canto OPOSTO ao da ilha. Vem do FLUXO, nao
   // de constante: selo que mente e pior que selo ausente, porque e nele que o
@@ -4437,7 +4601,7 @@ static void desenharOsdCorpo(Uint32 agora, float a, float ac, const CatItem *c) 
     // A classe sai da LARGURA primeiro: filme 2.39:1 em 1080p chega como
     // 1920x800. A faixa do 1440p (2560) fica SEM selo: ausente e mais honesto
     // que errado.
-    FormatoMarca selos[3];
+    FormatoMarca selos[4];
     int nSelos = 0;
     { int w = video_largura(), h = video_altura();
       if (w >= 3200 || h >= 1800)       selos[nSelos++] = FMT_4K;
@@ -4459,8 +4623,9 @@ static void desenharOsdCorpo(Uint32 agora, float a, float ac, const CatItem *c) 
     }
 #endif
     if (video_tem_atmos())        selos[nSelos++] = FMT_ATMOS;
+    if (marcaDtsAtual() >= 0)     selos[nSelos++] = (FormatoMarca)marcaDtsAtual();
     { const float mh = 34.0f;
-      float w[3], tot = 0.0f, x;
+      float w[4], tot = 0.0f, x;
       int i, esq = plrilha_direita();
       // ENTRADA ESCALONADA: o rasterizador faz poucas linhas por quadro e os
       // selos ja chegariam um a um; a curva assume a cadencia (90 ms, 10 px).
@@ -4502,7 +4667,7 @@ void player_shot_favorito(int f) { shotFav = f; }
 void player_shot_estado(Uint32 agora, float pos, float dur, int toca, int bt,
                         int barra, int so) {
   posSeg = posVis = pos; posVisSolto = 0;
-  if (dur > 0.0f) duracaoSeg = dur;
+  if (dur > 0.0f) { duracaoSeg = dur; duracaoReal = 1; }
   tocando = toca; botao = bt; barraFoco = barra; soBarra = so;
   cheio = so ? 0.0f : 1.0f;
   fileira = barra ? 0.0f : 1.0f;

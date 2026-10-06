@@ -67,6 +67,7 @@
 #include "iconeapp.h"
 #include "logoapp.h"
 #include "abertura.h"
+#include "apoio.h"
 
 // Settings has its own canvas and scale, independent of the global UI zoom.
 // Layout, text measurement, drawing and pointer targets share this factor.
@@ -144,9 +145,12 @@ static int focoEscuro(void) { return tintaFoco() < 128; }   // superficie do foc
 // A3 (04/10): o cabecalho compacto da lista (titulo da categoria + chip
 // Avancados, 96) e o rodape proprio (dicas e o aviso "Ajuste salvo", 72) que o
 // aviso nao cubra mais a ultima linha.
-#define AJ_TOPO        (112.0f / ajustes_tamanho_ajustes() + AJ_A3_CAB)
+#define AJ_TOPO        (112.0f / ajustes_tamanho_ajustes() + AJ_CAB_PAGINA + AJ_A3_CAB)
+// 2.0.2: o cabecalho da pagina da categoria (o cartao da grade crescido), acima
+// da arte e da lista; o titulo saiu de dentro da ilha da lista.
+#define AJ_CAB_PAGINA  136.0f
 #define AJ_BASE        (NV_VTELA_H - 40.0f / ajustes_tamanho_ajustes() - AJ_A3_RODAPE)
-#define AJ_A3_CAB       96.0f
+#define AJ_A3_CAB       28.0f
 #define AJ_A3_RODAPE    72.0f
 // Raio da linha em fracao do menor lado (o SDF do shader e normalizado):
 // 12px sobre 88 de altura.
@@ -410,6 +414,13 @@ typedef enum {
   // Formato do relogio (2.0, pedido de usuario Samsung): 24 h ou 12 h com
   // AM/PM, em toda hora DE TELA (relogio.h). LOCAL. No fim: posicional.
   AJ_RELOGIO_12H,
+  // Faixa de tamanho da escolha automatica (pedido de quem tem franquia de
+  // dados limitada): tamanho maximo e minimo do arquivo, em GB. LOCAIS (o web
+  // nao tem estas chaves). No fim: valor[]/CHAVE[] posicionais.
+  AJ_TAM_MAX, AJ_TAM_MIN,
+  // APOIAR O PROJETO (Sobre e ajuda, apoio.h): a previa mostra os QRs do
+  // Patreon e do Ko-fi. Acao, sem valor. No fim: valor[]/CHAVE[] posicionais.
+  AJ_APOIAR,
   AJ_N
 } OpcaoId;
 
@@ -441,6 +452,9 @@ static const char *V_FONTE_HDR[] = { "Preferir", "Indiferente", "Evitar" };
 // ajuste nunca saiu numa versao publicada, entao os indices antigos nao migram.
 static const char *V_ESMAECER[] = { "Desligado", "30 s", "1 min", "2 min", "5 min", "10 min" };
 static const char *V_DESCANSO_ESTILO[] = { "Vitrine", "Relógio", "Só escurecer" };
+// Faixa de tamanho: o INDICE e o gravado; ajustes_tamanho_*_gb() devolve os GB.
+static const char *V_TAMANHO_GB[] = { "Sem limite", "1 GB", "2 GB", "4 GB", "8 GB", "15 GB", "30 GB" };
+static const int   TAMANHO_GB[]   = { 0, 1, 2, 4, 8, 15, 30 };
 static const char *V_RELOGIO_12H[] = { "24 horas", "12 horas (AM/PM)" };
 static const char *V_DESCANSO_FONTE[]  = { "Catálogo", "Minha lista e Continuar" };
 static const char *V_BRILHO_PLAYER[] = { "100%", "80%", "65%", "50%" };
@@ -658,10 +672,14 @@ static const char *V_TMDB_LING[] = {
   // primeiros nao muda). "中文" acima e o simplificado; o tradicional vem no fim.
   "Nederlands", "Polski", "Türkçe", "Svenska", "Dansk", "Norsk", "Čeština",
   "Slovenčina", "Slovenščina", "Magyar", "Lietuvių", "Bosanski", "Srpski",
-  "Български", "Ελληνικά", "Bahasa Indonesia", "Tiếng Việt", "繁體中文"
+  "Български", "Ελληνικά", "Bahasa Indonesia", "Tiếng Việt", "繁體中文",
+  // Arabe (relato do .tpk 4/5): sem ele o TMDB nunca era pedido em arabe e a
+  // arte localizada (logo/fundo "ar") nunca chegava. A interface nao tem arabe;
+  // e so o idioma dos metadados.
+  "العربية"
 };
-_Static_assert(sizeof V_TMDB_LING / sizeof *V_TMDB_LING == 32,
-               "V_TMDB_LING casa com ESC(..., 32), W_TMDB_LING e L[] de ajustes_tmdb_idioma");
+_Static_assert(sizeof V_TMDB_LING / sizeof *V_TMDB_LING == 33,
+               "V_TMDB_LING casa com ESC(..., 33), W_TMDB_LING e L[] de ajustes_tmdb_idioma");
 _Static_assert(sizeof V_IDIOMA / sizeof *V_IDIOMA == IDIOMA_N + 1,
                "V_IDIOMA: \"Automático\" e um rotulo por IDIOMA_* de idiomacod.h");
 // Preenchido em rotulosDeIdioma(), no arranque: os nomes saem de linguas.c em
@@ -953,7 +971,7 @@ static const Opcao OPCOES[AJ_N] = {
   NUM("Arredondamento",             0, 40, 1, " dp"),   // posterCardCornerRadiusDp
   ESC("Qualidade da imagem",        V_QUALIMG, 3),
 
-  ESC("Idioma",                     V_IDIOMA, IDIOMA_N + 1),
+  ESC("Idioma do app",              V_IDIOMA, IDIOMA_N + 1),
   ESC("Animações",                  V_ANIM, 2),
   ESC("Resolução da interface",     V_RESOLUCAO, 3),
   ESC("Cor de destaque",            V_TEMA, AJ_N_TEMAS_OPC),  // selected_theme (+4 locais)
@@ -1001,7 +1019,7 @@ static const Opcao OPCOES[AJ_N] = {
   // nativo sempre enriqueceu por ele — nascer desligado apagaria elenco com
   // foto, ficha e trailers de quem ja usa o app sem nunca ter visto o ajuste.
   ESC("TMDB",                       V_LIGA, 2),   // tmdb_enabled
-  ESC("Idioma dos metadados",       V_TMDB_LING, 32), // tmdb_language
+  ESC("Idioma dos metadados",       V_TMDB_LING, 33), // tmdb_language
   ESC("Arte localizada",            V_LIGA, 2),   // tmdb_use_artwork
   ESC("Título e sinopse",           V_LIGA, 2),   // tmdb_use_basic_info
   ESC("Ficha técnica",              V_LIGA, 2),   // tmdb_use_details
@@ -1162,6 +1180,9 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Estilo do descanso",              V_DESCANSO_ESTILO, 3),  // local: descansoEstiloLocal
   ESC("Títulos da vitrine",              V_DESCANSO_FONTE, 2),   // local: descansoFonteLocal
   ESC("Formato do relógio",              V_RELOGIO_12H, 2),      // local: relogio12hLocal
+  ESC("Tamanho máximo",                  V_TAMANHO_GB, 7),       // local: tamanhoMaxLocal
+  ESC("Tamanho mínimo",                  V_TAMANHO_GB, 7),       // local: tamanhoMinLocal
+  ACAO("Apoiar o projeto"),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1358,6 +1379,8 @@ static const char *CHAVE[] = {
   "manterVideoLocal",
   "descansoEstiloLocal", "descansoFonteLocal",
   "relogio12hLocal",
+  "tamanhoMaxLocal", "tamanhoMinLocal",
+  "-apoiar",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1755,6 +1778,9 @@ void ajustes_teste_vidro_env(void) {
 int ajustes_relogio_ligado(void) { return lig(AJ_RELOGIO); }
 int ajustes_relogio_pos(void) { return valor[AJ_RELOGIO_POS]; }
 int ajustes_relogio_12h(void) { return valor[AJ_RELOGIO_12H] == 1; }
+// GB da faixa de tamanho da escolha automatica; 0 = "Sem limite".
+int ajustes_tamanho_max_gb(void) { int v = valor[AJ_TAM_MAX]; return v < 0 || v >= (int)(sizeof TAMANHO_GB / sizeof *TAMANHO_GB) ? 0 : TAMANHO_GB[v]; }
+int ajustes_tamanho_min_gb(void) { int v = valor[AJ_TAM_MIN]; return v < 0 || v >= (int)(sizeof TAMANHO_GB / sizeof *TAMANHO_GB) ? 0 : TAMANHO_GB[v]; }
 float ajustes_tamanho_ui(void) {
   static const float F[] = { 1.0f, 1.2f, 1.3f, 1.5f };
   int v = valor[AJ_TAMANHO_UI];
@@ -2132,7 +2158,7 @@ const char *ajustes_tmdb_idioma(void) {
     "ja-JP", "ko-KR", "zh-CN", "ro-RO", "uk-UA", "ru-RU",
     "nl-NL", "pl-PL", "tr-TR", "sv-SE", "da-DK", "nb-NO", "cs-CZ", "sk-SK",
     "sl-SI", "hu-HU", "lt-LT", "bs-BA", "sr-RS", "bg-BG", "el-GR", "id-ID",
-    "vi-VN", "zh-TW"
+    "vi-VN", "zh-TW", "ar-SA"
   };
   int v = valor[AJ_TMDB_IDIOMA];
   if (v < 0 || v >= (int)(sizeof L / sizeof *L)) v = 0;
@@ -2249,7 +2275,7 @@ static const char *W_TMDB_LING[] = {
   "interface", "pt", "en", "es", "fr", "de", "it", "pt-pt", "ja", "ko", "zh",
   "ro", "uk", "ru",
   "nl", "pl", "tr", "sv", "da", "no", "cs", "sk", "sl", "hu", "lt", "bs", "sr",
-  "bg", "el", "id", "vi", "zh-tw", NULL
+  "bg", "el", "id", "vi", "zh-tw", "ar", NULL
 };
 
 // `heroSectionEnabled` -> `hero_section_enabled`. Uma sequencia de maiusculas
@@ -3624,6 +3650,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_ENQUETES:       /* o web nao tem a ilha; a conta guarda o opt-out por outro caminho (enquete.c) */
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER: /* o web nao tem a ilha */
     case AJ_RELOGIO_12H:    /* formato da hora: desta TV */
+    case AJ_TAM_MAX: case AJ_TAM_MIN: /* o web nao tem a faixa de tamanho */
     case AJ_FONTE_PRAZO:    /* o web nao tem: a rede e os addons sao desta casa */
     case AJ_MEDIDOR:        /* o medidor e da GPU desta TV; o web nao tem */
     case AJ_TAMANHO_UI:     /* o tamanho e desta tela, e o web nao tem */
@@ -4844,6 +4871,8 @@ static const char *ajudaOpcao(int op) {
     case AJ_ENQUETES: return "Ligado, o Nuvio pode convidar você a votar numa enquete curta na ilha do relógio. Desligado, nenhuma aparece. A escolha fica na sua conta.";
     case AJ_RELOGIO: return "Desligado, a pílula do relógio não fica na tela em repouso. Os avisos continuam saindo dela: ela aparece só para o aviso e some depois.";
     case AJ_SAIDA_PLAYER: return "Ao sair de um filme ou episódio no meio. Home: o vídeo encolhe até a pílula do relógio, que fica com o título para você retomar (CH+ ou AZUL). Página do título: volta para onde você estava. Só vale com o relógio na tela; terminar o título segue para o próximo episódio como sempre.";
+    case AJ_TAM_MAX: return "Na escolha automática, fontes maiores que este tamanho ficam para o fim da fila. Serve para quem tem franquia de internet limitada. Só vale para arquivos com tamanho conhecido; se só houver fontes fora da faixa, a melhor delas ainda toca.";
+    case AJ_TAM_MIN: return "Na escolha automática, fontes menores que este tamanho ficam para o fim da fila. Se for maior que o tamanho máximo, o mínimo é ignorado. Só vale para arquivos com tamanho conhecido; se só houver fontes fora da faixa, a melhor delas ainda toca.";
     case AJ_RELOGIO_12H: return "Como a hora aparece no relógio, na tela de descanso, no fim do filme e no guia de TV: 18:30 ou 6:30 PM.";
     case AJ_RELOGIO_POS: return "Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.";
     case AJ_AVANCADAS: return "Mostra, em todas as categorias, as opções técnicas marcadas como Avançado. Vale só para esta TV.";
@@ -4871,6 +4900,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_MEDIDOR: return "Mostra quadros por segundo, o pior quadro e a memória dentro da ilha do relógio, atualizados a cada 3 s. Mínimo fica na linha da hora, Menor ganha uma segunda linha e Grande abre o painel completo. Quando a ilha mostra um aviso, o medidor se recolhe e volta depois.";
     case AJ_GUIA: return "O que o Nuvio faz, em 12 capítulos. Cada recurso diz onde fica e tem um atalho para ele.";
     case AJ_NOVIDADES20: return "O tour do que mudou na 2.0, capítulo por capítulo, com o que vale neste aparelho. Abre do começo.";
+    case AJ_APOIAR: return "Se o Nuvio te ajuda e você quiser apoiar quem faz o app, aponte a câmera do celular para um dos códigos. É opcional: nada muda no app.";
     case AJ_ENVIAR_LOG: return "Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.";
     case AJ_ENVIO_AUTO: return "Ligado, o app manda o registro sozinho: o da sessão anterior ao abrir e o desta a cada minuto. Sem senhas nem chaves; serve para achar o que trava a Samsung. Desligue quando quiser.";
     case AJ_DIAGNOSTICO: return "Testa manifestos, fontes e artes dos addons, mede os tempos e aplica um perfil seguro de Qualidade ou Desempenho. O teste não marca títulos como assistidos.";
@@ -5688,6 +5718,7 @@ static void eventoTela(const SDL_Event *e) {
     if (focoOp == AJ_VER_REGISTRO) { registro_abrir(); return; }
     if (focoOp == AJ_GUIA) { guiaAbrir(0); return; }
     if (focoOp == AJ_NOVIDADES20) { pediuNovidades20 = 1; return; }
+    if (focoOp == AJ_APOIAR) { uxNotificar("Aponte a câmera do celular para um dos códigos."); return; }
     if (focoOp == AJ_ADDONS) { pediuAddons = 1; return; }
     if (focoOp == AJ_PLUGINS) { pediuPlugins = 1; return; }
     if (focoOp == AJ_DIAGNOSTICO) { pediuDiagnostico = 1; return; }
@@ -6402,7 +6433,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_FONTE_PRIORIDADE: case AJ_FONTE_HDR:
     case AJ_SELOS_PACOTE:
     case AJ_REACAO_CREDITOS:
-    case AJ_FONTE_PRAZO:
+    case AJ_FONTE_PRAZO: case AJ_TAM_MAX: case AJ_TAM_MIN:
       return AJPV_REPRO;
     case AJ_HOME_LAYOUT:
     case AJ_LANDSCAPE: case AJ_HERO_CHEIO: case AJ_HERO_FUNDO:
@@ -6447,7 +6478,7 @@ static AjPreview familiaPreviaOpcao(int op) {
       return AJPV_CONTA;
     case AJ_SALVOS_DEST: case AJ_TRAKT: case AJ_SIMKL: case AJ_DISCORD:
       return AJPV_RASTREIO;
-    case AJ_VERSAO_I: case AJ_ATUALIZAR: case AJ_ENVIAR_LOG: case AJ_GUIA: case AJ_NOVIDADES20:
+    case AJ_VERSAO_I: case AJ_ATUALIZAR: case AJ_ENVIAR_LOG: case AJ_GUIA: case AJ_NOVIDADES20: case AJ_APOIAR:
     case AJ_ENVIO_AUTO: case AJ_VER_REGISTRO:
       return AJPV_ABOUT;
     case AJ_TMDB_LIGADO: case AJ_TMDB_IDIOMA: case AJ_TMDB_ARTE:
@@ -6676,6 +6707,11 @@ int ajustes_teste_quadro(const char *id) {
       if (sN >= nSecoes) return 0;
       focarSecao(sN); uxIndice = 2 + sN; focoIndice = 1;
     }
+    else if (!strncmp(id, "v2-sec-", 7) && id[7] >= '0' && id[7] <= '9') {   // category N opened, first row focused
+      int sN = atoi(id + 7);
+      if (sN >= nSecoes) return 0;
+      focar(primeiroDaSecao(sN)); focoIndice = 0;
+    }
     else if (!strcmp(id, "v2-menu-passando")) { ajArteFundoN = 13; focarSecao(1); uxIndice = 3; focoIndice = 1; }
     else if (!strcmp(id, "v2-aberto") || !strcmp(id, "v2-130")) focarOpcao(AJ_HOME_LAYOUT);
     else if (!strcmp(id, "v2-transicao")) {
@@ -6816,3 +6852,29 @@ int ajustes_shot_valor(const char *chave, int v) {
   return 0;
 }
 #endif
+
+// --- CENTRAL DE CONTROLE (central.h) -----------------------------------------
+// A porta da central para trocar uma opcao sem abrir esta tela. A opcao e
+// achada pela CHAVE do ajustes.txt (estavel entre versoes; o enum nao e). So
+// escolhas curtas (2 a 6 valores) que existem na tela DESTE build; as que
+// pedem a folha de risco (fileiras) ficam fora. A troca passa por
+// definirValorDireto: a mesma gravacao e os mesmos efeitos do OK da tela.
+int ajustes_rapido_op(const char *chave) {
+  int i, op = -1, n;
+  if (!chave || !chave[0]) return -1;
+  for (i = 0; i < AJ_N; i++)
+    if (CHAVE[i] && CHAVE[i][0] != '-' && !strcmp(CHAVE[i], chave)) { op = i; break; }
+  if (op < 0 || OPCOES[op].tipo != OP_ESCOLHA) return -1;
+  if (op == AJ_FIL_LIMITE || op == AJ_ITENS_FILEIRA) return -1;
+  n = nValores(op);
+  if (n < 2 || n > 6) return -1;
+  for (i = 0; i < AJ_N_TELA; i++) if (TELA[i].tipo == IT_OPC && TELA[i].op == op) return op;
+  return -1;
+}
+const char *ajustes_rapido_rotulo(int op) { return op >= 0 && op < AJ_N ? rotuloOpcao(op) : ""; }
+const char *ajustes_rapido_valor(int op) { return op >= 0 && op < AJ_N ? textoValor(op) : ""; }
+int ajustes_rapido_ligado(int op) { return op >= 0 && op < AJ_N && ehInterruptor(op) ? lig(op) : -1; }
+int ajustes_rapido_passo(int op, int dir) {
+  if (op < 0 || op >= AJ_N) return 0;
+  return definirValorDireto(op, passoAdiante(op, dir < 0 ? -1 : 1));
+}

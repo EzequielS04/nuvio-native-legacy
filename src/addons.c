@@ -16,6 +16,7 @@
 // So para a cache UNICA de manifesto (desc_manifesto_cache_obter/guardar): ver
 // a nota grande em sondar(), mais abaixo.
 #include "descoberta.h"
+#include "legextras.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,7 +49,7 @@
 // inicial. A diferenca importa na tela: "ainda nao sei" e diferente de "nao
 // fornece".
 static struct {
-  char nome[64]; char base[600];
+  char nome[64]; char base[NV_ADDON_URL_MAX];
   int fonte, catalogo, legenda;
   int meta;      // declara o resource "meta" (ficha e lista de episodios)
   int ativo, sondado;
@@ -86,14 +87,14 @@ static int jfAlvo;
 // perguntar a quem nao publicou o canal — o id do canal e do addon que o
 // declarou, e outro addon nao o conhece (o Meu Futebol responde 404 a id
 // alheio, ja se mediu hoje).
-static char alvoBase[600];
+static char alvoBase[NV_ADDON_URL_MAX];
 // A COPIA QUE O FIO LE. app.c chama addons_definir_origem(NULL) logo depois de
 // addons_buscar, e o fio so acorda depois disso: lendo alvoBase direto ele
 // achava a origem vazia e perguntava a TODOS os addons — MEDIDO na C9 em
 // 18/09 (Debridio e AIOStreams consultados por canal do Meu Futebol com a
 // origem definida). A busca copia no disparo; o que o app zere depois nao
 // importa mais.
-static char fioBase[600];
+static char fioBase[NV_ADDON_URL_MAX];
 static int fioVivo;
 static Stream *resultado;
 static int nResultado;
@@ -228,21 +229,19 @@ static void listaMudou(void) {
 // pedido pela base certa, devolve 12 titulos. E a issue #24 inteira: nao era
 // falta de parametro, era a URL.
 //
-// Medido na TV do dono com a base cortada: o mesmo catalogo devolve 19.908
-// bytes de metas com ou sem a query re-anexada, entao a query nao carrega
-// configuracao e pode cair. Se um dia aparecer addon que precise dela no
-// caminho de catalogo, e aqui que isso se decide.
+// A QUERY AGORA FICA (paridade com o Nuvio oficial, ver nv_addon_base em
+// addonurl.h): o Bingecat continua certo porque todo pedido e montado com
+// nv_addon_url, que poe o caminho ANTES da query
+// (".../catalog/movie/<id>.json?ver=N", o que o Nuvio web e o Stremio pedem).
+// Medido na TV do dono que, para o Bingecat, o catalogo responde igual com ou
+// sem a query; um addon que guarde a configuracao nela precisa dela.
 static void baseNormalizada(const char *url, char *dst, size_t tam) {
-  size_t k;
-  char *q;
-  snprintf(dst, tam, "%s", url);
-  q = strchr(dst, '?');
-  if (q) *q = 0;
-  k = strlen(dst);
-  if (k > 14 && !strcmp(dst + k - 14, "/manifest.json")) { k -= 14; dst[k] = 0; }
-  // Barra final fora nos dois casos: "<base>//catalog" e uma URL diferente de
-  // "<base>/catalog" para mais de um servidor.
-  while (k && dst[k - 1] == '/') dst[--k] = 0;
+  nv_addon_base(url, dst, tam);
+}
+
+// O pedido ao addon `i` coube no buffer? Ver nv_addon_pedido_coube (addonurl.h).
+static int pedidoCoube(int i, int w, size_t tam) {
+  return nv_addon_pedido_coube(addon[i].nome, w, tam);
 }
 
 // --- leitura do arquivo de configuracao -------------------------------------
@@ -253,7 +252,8 @@ void addons_marcar_da_conta(int perfil) { perfilLista = perfil > 0 ? perfil : 0;
 int  addons_perfil_da_lista(void) { return perfilLista; }
 
 int addons_carregar(const char *dirArte) {
-  char caminho[600], linha[900];
+  // A linha e nome<TAB>url<TAB>colunas: a URL inteira mais folga para o resto.
+  char caminho[600], linha[NV_ADDON_URL_MAX + 256];
   FILE *f;
   perfilLista = 0;
   snprintf(caminho, sizeof caminho, "%s/addons.txt", dirArte ? dirArte : ".");
@@ -263,6 +263,16 @@ int addons_carregar(const char *dirArte) {
   while (nAddon < ADD_MAX && fgets(linha, sizeof linha, f)) {
     char *tab = strchr(linha, '\t');
     char *fim;
+    // LINHA MAIOR QUE O BUFFER: o fgets devolveria o resto dela como se fosse
+    // outra linha. Come o resto e pula o addon, dizendo — metade de uma URL e
+    // outra URL (addonurl.h).
+    if (!strchr(linha, '\n') && !feof(f)) {
+      int c, extra = 0;
+      while ((c = fgetc(f)) != EOF && c != '\n') extra++;
+      if (tab) *tab = 0;
+      nv_addon_url_cabe(tab ? linha : "addons.txt", sizeof linha - 1 + (size_t)extra);
+      continue;
+    }
     // TAB e nao "|" como separador: nome de addon contem "|" de verdade
     // ("AIOStreams | ElfHosted") e partir no primeiro pipe corrompia a URL.
     if (!tab) continue;
@@ -270,6 +280,9 @@ int addons_carregar(const char *dirArte) {
     fim = tab + 1 + strlen(tab + 1);
     while (fim > tab + 1 && (fim[-1] == '\n' || fim[-1] == '\r' || fim[-1] == ' ')) *--fim = 0;
     if (linha[0] == '#' || !tab[1]) continue;
+    { const char *fimUrl = strchr(tab + 1, '\t');
+      size_t lenUrl = fimUrl ? (size_t)(fimUrl - (tab + 1)) : strlen(tab + 1);
+      if (!nv_addon_url_cabe(linha, lenUrl)) continue; }
     // Terceira coluna (opcional): 1 = fornece stream. Ausente vale 1, para
     // arquivo antigo continuar funcionando.
     addon[nAddon].fonte = 1;
@@ -320,7 +333,7 @@ int addons_carregar(const char *dirArte) {
 static int listaIgual(const AddonRemoto *nova, int n) {
   int i, k = 0;
   for (i = 0; i < n && k < ADD_MAX; i++) {
-    char base[600];
+    char base[NV_ADDON_URL_MAX];
     if (!nova[i].url[0]) continue;
     baseNormalizada(nova[i].url, base, sizeof base);
     if (k >= nAddon) return 0;
@@ -693,6 +706,23 @@ static pthread_t fioLeg;
 static int fioLegVivo, fioLegCriado, legParar;
 static char legId[64], legTipo[16];
 static unsigned legGeracao;
+// Extras do Stremio do arquivo que toca (#201). Valem so para `id`: o titulo
+// seguinte nao herda o nome nem o hash do anterior.
+typedef struct {
+  char id[64];
+  char arquivo[256];
+  unsigned long long tamanho;
+  char hash[20];
+  char video[4096];
+  int exigeCab;
+} LegExtras;
+static LegExtras legExt;
+// A busca em curso e um REFAZER com extras: a lista anterior fica na tela ate
+// esta terminar inteira (publicarLegendas so publica no fim).
+static int legManter;
+// Hash ja medido, para a mesma fonte nao ir de novo ao CDN a cada busca.
+static char hashDeUrl[4096], hashMedido[20];
+static unsigned long long hashTam;
 static pthread_mutex_t legTrava = PTHREAD_MUTEX_INITIALIZER;
 
 int addons_n_legendas(void) {
@@ -865,11 +895,22 @@ static int distribuirLegendas(const LegLote *lotes, int nLotes, int nGrupos,
 // Agora cada addon tem o seu fio, o teto e de LEG_TETO_S, e a lista e PUBLICADA
 // a cada resposta (a folha ganha linhas ao vivo); "prontas" so quando todos
 // voltaram.
-#define LEG_TETO_S 8
+//
+// 30 s e nao 8 (#202, "o add-on Subtitlesync.stream nao esta carregando"). O
+// Nuvio web da 20 s por addon de legenda (subtitleRepository,
+// PER_ADDON_TIMEOUT_MS) e o Stremio espera mais. O Subtitle Sync alinha a
+// legenda ao video ANTES de responder e documenta "usually a few seconds, at
+// most about 25" na primeira vez de cada video (faq.wait em
+// subtitlesync.stream/web/i18n.mjs): com 8 s ele era cortado sempre que o
+// video era novo. Como a lista sai a cada resposta, o prazo longo so pesa no
+// "prontas", e a legenda automatica decide sozinha em FX_AUTO_FIM_MS (faixas.c).
+#define LEG_TETO_S 30
 
 typedef struct {
   LegLote *lotes;          // um por addon
   int nLotes, nGrupos;
+  int manter;              // refazer com extras: publica so no fim
+  char extras[1200];       // segmento legextras_segmento; "" = sem extras
   const char *grupos[3];
   char gruposTexto[3][16];
   char id[64], tipo[16];
@@ -880,9 +921,10 @@ typedef struct {
 
 typedef struct { LegBusca *B; int i; } LegFio;
 
-static void publicarLegendas(LegBusca *B) {
+static void publicarLegendas(LegBusca *B, int final) {
   Legenda achadas[LEG_MAX] = {{0}};
   int n;
+  if (B->manter && !final) return;
   pthread_mutex_lock(&B->m);
   n = distribuirLegendas(B->lotes, B->nLotes, B->nGrupos, achadas);
   pthread_mutex_unlock(&B->m);
@@ -897,15 +939,29 @@ static void publicarLegendas(LegBusca *B) {
 static void *buscarUmAddon(void *u) {
   LegFio *F = u;
   LegBusca *B = F->B;
-  int i = F->i, array = 0, recebidas = 0, gi;
-  char url[900], *corpo;
+  int i = F->i, array = 0, recebidas = 0, gi, comExtras = 0, recuou = 0, cortadas = 0;
+  char url[NV_ADDON_PEDIDO_MAX], *corpo = NULL;
   const char *p, *q;
   RedeMedida medida = {0};
   LegLote *lote = calloc(1, sizeof *lote);
   if (!lote) return NULL;
   if (pedidoMudou(B->geracao)) { free(lote); return NULL; }
-  snprintf(url, sizeof url, "%s/subtitles/%s/%s.json", addon[i].base, B->tipo, B->id);
-  corpo = rede_baixar_medido_controle(url, LEG_TETO_S, NULL, NULL, &medida);
+  // Com extras (#201) quando ha; o formato antigo continua sendo o pedido de
+  // quem nao sabe o arquivo. O protocolo diz que extra e opcional, mas um addon
+  // que responder 4xx/5xx ao caminho com extras ganha o pedido antigo em
+  // seguida: legenda generica e melhor que nenhuma.
+  if (B->extras[0] && legextras_url(url, sizeof url, addon[i].base, B->tipo, B->id, B->extras)) {
+    comExtras = 1;
+    corpo = rede_baixar_medido_controle(url, LEG_TETO_S, NULL, NULL, &medida);
+    if (pedidoMudou(B->geracao)) { free(corpo); free(lote); return NULL; }
+    if (medida.status >= 400) { free(corpo); corpo = NULL; recuou = 1; }
+  }
+  if (!comExtras || recuou) {
+    memset(&medida, 0, sizeof medida);
+    corpo = pedidoCoube(i, legextras_url(url, sizeof url, addon[i].base, B->tipo, B->id, NULL)
+                             ? (int)strlen(url) : (int)sizeof url, sizeof url)
+            ? rede_baixar_medido_controle(url, LEG_TETO_S, NULL, NULL, &medida) : NULL;
+  }
   if (pedidoMudou(B->geracao)) { free(corpo); free(lote); return NULL; }
   p = js_array(corpo, NULL, "subtitles");
   // js_array devolve NULL tambem para []: o diagnostico precisa distinguir
@@ -921,7 +977,7 @@ static void *buscarUmAddon(void *u) {
     int noGrupo = 0, teto = LEG_MAX / B->nGrupos;
     for (q = p; q && noGrupo < teto;) {
       const char *f = js_fim(q);
-      char l[64] = "", cod[16], nome[120] = "";
+      char l[64] = "", cod[16], nome[120] = "", link[2048];
       Legenda *d = &lote->itens[lote->n];
       if (!f || f <= q) break;
       if (*q == '{' && episodioCorreto(q, f, B->temporada, B->episodio) &&
@@ -930,7 +986,12 @@ static void *buscarUmAddon(void *u) {
         // codigo so; antes o nome entrava cortado em 8 bytes ("PORTUGU") e
         // nao casava com a preferencia.
         ling_normalizar(l, cod, sizeof cod);
-        if (ling_casa(cod, B->grupos[gi]) && js_texto(q, f, "url", d->url, sizeof d->url)) {
+        // Link lido num buffer MAIOR que o campo: o que nao cabe em d->url e
+        // descartado e contado, em vez de virar um link cortado que so falha
+        // na hora de baixar.
+        if (ling_casa(cod, B->grupos[gi]) && js_texto(q, f, "url", link, sizeof link) &&
+            !(strlen(link) >= sizeof d->url && ++cortadas)) {
+          snprintf(d->url, sizeof d->url, "%s", link);
           js_texto(q, f, "subtitleFileName", nome, sizeof nome);
           if (!nome[0]) js_texto(q, f, "movieReleaseName", nome, sizeof nome);
           snprintf(d->idioma, sizeof d->idioma, "%s", cod);
@@ -951,16 +1012,28 @@ static void *buscarUmAddon(void *u) {
   }
   // Somente medidas e enumeracoes publicas. Nao registrar URL, id do
   // titulo, corpo, nome de arquivo, nome configurado ou cabecalhos.
-  printf("[addon-recurso] addon=%d resource=subtitles tipo=%s http=%d bytes=%ld ms=%lu array=%d recebidas=%d candidatas=%d\n",
+  printf("[addon-recurso] addon=%d resource=subtitles tipo=%s http=%d bytes=%ld ms=%lu array=%d recebidas=%d candidatas=%d extras=%d%s cortadas=%d\n",
          i + 1, !strcmp(B->tipo, "movie") ? "movie" : !strcmp(B->tipo, "series") ? "series" : "outro",
-         medida.status, medida.bytes, medida.ms, array, recebidas, lote->n);
+         medida.status, medida.bytes, medida.ms, array, recebidas, lote->n,
+         comExtras && !recuou, recuou ? " (recusou extras: pedido antigo)" : "", cortadas);
+  // A MESMA LINHA DAS FONTES, com o nome (#202). "addon=3" nao dizia qual era o
+  // Subtitle Sync num log de usuario, e "[legendas] concluida: 3" nao separava
+  // "respondeu vazio" de "estourou o prazo". O nome do addon ja vai no log das
+  // fontes ("[addons] X: N fontes"); URL, id e corpo continuam fora (o corpo de
+  // erro pode repetir a configuracao, ver tests/addons_legendas.sh). O texto da
+  // libcurl so diz o tipo da falha e o host.
+  { const char *erro = medida.status ? "" : rede_ultimo_erro();
+    printf("[legendas] %s: %d legendas, %d no idioma (HTTP %d, %ld bytes, %lu ms)%s%s%s\n",
+           addon[i].nome, recebidas, lote->n, medida.status, medida.bytes, medida.ms,
+           comExtras && !recuou ? ", com extras" : "",
+           erro && erro[0] ? ": " : "", erro ? erro : ""); }
   fflush(stdout);
   free(corpo);
   pthread_mutex_lock(&B->m);
   B->lotes[i] = *lote;
   pthread_mutex_unlock(&B->m);
   free(lote);
-  publicarLegendas(B);
+  publicarLegendas(B, 0);
   return NULL;
 }
 
@@ -968,6 +1041,68 @@ static unsigned relogioMs(void) {
   struct timespec t;
   clock_gettime(CLOCK_MONOTONIC, &t);
   return (unsigned)(t.tv_sec * 1000u + t.tv_nsec / 1000000u);
+}
+
+// HASH DO OPENSUBTITLES PELA REDE (#201): dois Range de 64 KiB, comeco e fim.
+// So 206 com o trecho inteiro vale — servidor que ignora o Range devolve o
+// comeco do arquivo com 200, e somar isso como "o fim" daria um hash errado,
+// pior que nenhum (o addon casaria a legenda de OUTRO arquivo).
+static int medirHash(const char *url, unsigned long long tam, char out[17],
+                     const char **motivo) {
+  long n1 = 0, n2 = 0;
+  int st1 = 0, st2 = 0, e = 0, ok = 0;
+  char *a, *b = NULL;
+  a = rede_baixar_trecho_st(url, 6, 0, LEGEXTRAS_BLOCO - 1, &n1, &st1, &e, NULL, 0);
+  if (a && st1 == 206 && n1 == LEGEXTRAS_BLOCO)
+    b = rede_baixar_trecho_st(url, 6, (long)(tam - LEGEXTRAS_BLOCO), (long)(tam - 1),
+                              &n2, &st2, &e, NULL, 0);
+  if (b && st2 == 206 && n2 == LEGEXTRAS_BLOCO)
+    ok = legextras_hash((const unsigned char *)a, (size_t)n1, (const unsigned char *)b,
+                        (size_t)n2, tam, out);
+  *motivo = ok ? "measured" : !a ? "network failure" : st1 != 206 || (b && st2 != 206) ? "no Range support" : "short range";
+  free(a); free(b);
+  return ok;
+}
+
+// Prepara o segmento de extras de uma busca, com o hash quando da para
+// medir. Roda no fio da busca, antes dos addons: o hash custa dois pedidos
+// curtos (prazo de 6 s cada) e o resultado vale para todos eles.
+static void prepararExtras(LegBusca *B) {
+  LegExtras e;
+  char hash[20] = "", nome[256];
+  const char *motivo = "no source";
+  pthread_mutex_lock(&legTrava);
+  e = legExt;
+  pthread_mutex_unlock(&legTrava);
+  B->extras[0] = 0;
+  if (!e.id[0] || strcmp(e.id, B->id)) return;
+  snprintf(nome, sizeof nome, "%s", e.arquivo);
+  if (!nome[0]) legextras_nome_da_url(e.video, nome, sizeof nome);
+  if (e.hash[0]) { snprintf(hash, sizeof hash, "%s", e.hash); motivo = "from the addon"; }
+  else if (!e.video[0] || !legextras_url_remota(e.video)) motivo = "local or P2P";
+  else if (e.exigeCab) motivo = "source needs headers";
+  else if (e.tamanho < 2ull * LEGEXTRAS_BLOCO) motivo = "no exact size";
+  else {
+    int cache;
+    pthread_mutex_lock(&legTrava);
+    cache = hashMedido[0] && hashTam == e.tamanho && !strcmp(hashDeUrl, e.video);
+    if (cache) snprintf(hash, sizeof hash, "%s", hashMedido);
+    pthread_mutex_unlock(&legTrava);
+    if (cache) motivo = "measured (cached)";
+    else if (medirHash(e.video, e.tamanho, hash, &motivo)) {
+      pthread_mutex_lock(&legTrava);
+      snprintf(hashDeUrl, sizeof hashDeUrl, "%s", e.video);
+      snprintf(hashMedido, sizeof hashMedido, "%s", hash);
+      hashTam = e.tamanho;
+      pthread_mutex_unlock(&legTrava);
+    }
+  }
+  if (legextras_segmento(B->extras, sizeof B->extras, nome, e.tamanho, hash) < 0)
+    legextras_segmento(B->extras, sizeof B->extras, NULL, e.tamanho, hash);   // nome enorme: sem ele
+  // Sem valores no log: nome de arquivo e hash identificam o que a pessoa ve.
+  printf("[legendas] extras: nome=%d tamanho=%d hash=%d (%s)\n", nome[0] != 0,
+         e.tamanho != 0, hash[0] != 0, motivo);
+  fflush(stdout);
 }
 
 static void *buscarLegendas(void *u) {
@@ -987,7 +1122,9 @@ static void *buscarLegendas(void *u) {
     snprintf(B.id, sizeof B.id, "%s", legId);
     snprintf(B.tipo, sizeof B.tipo, "%s", legTipo);
     B.geracao = legGeracao;
+    B.manter = legManter;
     pthread_mutex_unlock(&legTrava);
+    prepararExtras(&B);
     episodioPedido(B.id, &B.temporada, &B.episodio);
     B.nGrupos = gruposIdioma(B.grupos);
     for (i = 0; i < B.nGrupos; i++) {
@@ -1007,12 +1144,16 @@ static void *buscarLegendas(void *u) {
     }
     for (i = 0; i < B.nLotes; i++) if (criado[i]) pthread_join(th[i], NULL);
 
+    // Refazer com extras: a lista nova entra de uma vez, agora que todos
+    // responderam (publicarLegendas descarta se a geracao ja mudou).
+    if (B.manter && B.lotes) publicarLegendas(&B, 1);
     free(B.lotes);
     pthread_mutex_destroy(&B.m);
     pthread_mutex_lock(&legTrava);
     if (legParar) { fioLegVivo = 0; pthread_mutex_unlock(&legTrava); return NULL; }
     if (B.geracao != legGeracao) { pthread_mutex_unlock(&legTrava); continue; }
     fioLegVivo = 0;
+    legManter = 0;
     i = nLegs;
     pthread_mutex_unlock(&legTrava);
     printf("[legendas] concluida: %d (%d addon(s) em paralelo, %u ms)\n", i, nAtivos,
@@ -1070,9 +1211,11 @@ int addons_alternar(int i) {
 // por base NORMALIZADA, e nao pela URL crua: "<base>", "<base>/" e
 // "<base>/manifest.json" sao o mesmo addon.
 int addons_adicionar(const char *nome, const char *urlManifest) {
-  char nova[600];
+  char nova[NV_ADDON_URL_MAX];
   int i;
   if (!urlManifest || !*urlManifest) return 0;
+  // Antes de normalizar: o que nao cabe nao entra, nem cortado (addonurl.h).
+  if (!nv_addon_url_cabe(nome, strlen(urlManifest))) return 0;
   if (nAddon >= ADD_MAX) {
     printf("[addons] nao coube: a lista ja tem %d\n", ADD_MAX);
     fflush(stdout);
@@ -1081,7 +1224,7 @@ int addons_adicionar(const char *nome, const char *urlManifest) {
   baseNormalizada(urlManifest, nova, sizeof nova);
   if (!nova[0]) return 0;
   for (i = 0; i < nAddon; i++) {
-    char base[600];
+    char base[NV_ADDON_URL_MAX];
     baseNormalizada(addon[i].base, base, sizeof base);
     if (!strcmp(base, nova)) {
       printf("[addons] ja instalado: %s\n", addon[i].nome);
@@ -1101,8 +1244,11 @@ int addons_adicionar(const char *nome, const char *urlManifest) {
   addon[nAddon].canalLido = 0; addon[nAddon].nCanal = 0; addon[nAddon].mudoSeg = 0;
   nAddon++;
   listaMudou();
-  printf("[addons] instalado pelo guia: %s (%s)\n",
-         addon[nAddon - 1].nome, nova);
+  // So o host: a base inteira ia para o log aqui, com a chave do addon no
+  // caminho (ver rede_url_publica em rede.h).
+  { char seg[120];
+    printf("[addons] instalado pelo guia: %s (%s)\n",
+           addon[nAddon - 1].nome, rede_url_publica(nova, seg, sizeof seg)); }
   fflush(stdout);
   return 1;
 }
@@ -1376,9 +1522,10 @@ static void *sondar(void *u) {
   unsigned versao = addons_versao();
   (void)u;
   for (i = 0; i < nAddon; i++) {
-    char url[700], *corpo;
+    char url[NV_ADDON_PEDIDO_MAX], *corpo;
     if (addon[i].sondado) continue;
-    snprintf(url, sizeof url, "%s/manifest.json", addon[i].base);
+    if (!pedidoCoube(i, nv_addon_url(url, sizeof url, addon[i].base, "/manifest.json"),
+                     sizeof url)) continue;
     corpo = desc_manifesto_cache_obter(url, versao);
     if (corpo) {
       printf("[addons] %s: manifesto do cache da descoberta (sem rede)\n", addon[i].nome);
@@ -1427,6 +1574,8 @@ void addons_legendas_reiniciar(void) {
   if (id[0]) addons_buscar_legendas(id, tp[0] ? tp : "movie");
 }
 
+static void dispararLegendas(int juntar);
+
 void addons_buscar_legendas(const char *imdb, const char *tipo) {
   int serie, juntar = 0;
   char id[64], tp[16];
@@ -1446,11 +1595,64 @@ void addons_buscar_legendas(const char *imdb, const char *tipo) {
   snprintf(legId, sizeof legId, "%s", id);
   snprintf(legTipo, sizeof legTipo, "%s", tp);
   legGeracao++;
+  legManter = 0;
   nLegs = 0;
   if (fioLegVivo) { pthread_mutex_unlock(&legTrava); return; }
   juntar = fioLegCriado;
   pthread_mutex_unlock(&legTrava);
+  dispararLegendas(juntar);
+}
 
+// Ver addons.h. Mesmo id normalizado de addons_buscar_legendas, para que os
+// extras e a lista falem do MESMO pedido.
+void addons_legendas_fonte(const char *imdb, const char *tipo, const char *arquivo,
+                           unsigned long long tamanho, const char *hash,
+                           const char *urlVideo, int exigeCabecalhos) {
+  int serie, juntar, manter;
+  char id[64], tp[16];
+  LegExtras novo;
+  if (!nAddon || !imdb || !*imdb || jfid_e(imdb)) return;
+  serie = tipo && !strcmp(tipo, "series");
+  if (serie && !idbase_tem_episodio(imdb))
+    snprintf(id, sizeof id, idbase_e_imdb(imdb) ? "%s:1:1" : "%s:1", imdb);
+  else
+    snprintf(id, sizeof id, "%s", imdb);
+  snprintf(tp, sizeof tp, "%s", serie ? "series" : "movie");
+  memset(&novo, 0, sizeof novo);
+  snprintf(novo.id, sizeof novo.id, "%s", id);
+  snprintf(novo.arquivo, sizeof novo.arquivo, "%s", arquivo ? arquivo : "");
+  novo.tamanho = tamanho;
+  snprintf(novo.hash, sizeof novo.hash, "%s", hash ? hash : "");
+  snprintf(novo.video, sizeof novo.video, "%s", urlVideo ? urlVideo : "");
+  novo.exigeCab = exigeCabecalhos != 0;
+  // Nada que um addon possa usar: o pedido sem extras ja e o que esta feito.
+  if (!novo.arquivo[0] && !novo.tamanho && !novo.hash[0] &&
+      !legextras_url_remota(novo.video)) return;
+
+  pthread_mutex_lock(&legTrava);
+  if (!memcmp(&novo, &legExt, sizeof novo) && !strcmp(id, legId) && !strcmp(tp, legTipo)) {
+    pthread_mutex_unlock(&legTrava);
+    return;
+  }
+  legExt = novo;
+  // Mesmo titulo: a lista atual fica ate a nova terminar. Titulo outro (a
+  // fonte chegou antes da busca do episodio): busca normal.
+  manter = !strcmp(id, legId) && !strcmp(tp, legTipo) && nLegs > 0;
+  snprintf(legId, sizeof legId, "%s", id);
+  snprintf(legTipo, sizeof legTipo, "%s", tp);
+  legGeracao++;
+  legManter = manter;
+  if (!manter) nLegs = 0;
+  printf("[legendas] fonte conhecida: refazendo a busca com extras%s\n",
+         manter ? " (lista atual fica ate a nova chegar)" : "");
+  fflush(stdout);
+  if (fioLegVivo) { pthread_mutex_unlock(&legTrava); return; }
+  juntar = fioLegCriado;
+  pthread_mutex_unlock(&legTrava);
+  dispararLegendas(juntar);
+}
+
+static void dispararLegendas(int juntar) {
   if (juntar) pthread_join(fioLeg, NULL);
   pthread_mutex_lock(&legTrava);
   fioLegCriado = 0;
@@ -1567,7 +1769,7 @@ static void *fioFontes(void *u) {
   Consulta *c = u;
   for (;;) {
     int meu, i, n;
-    char url[900], *corpo;
+    char url[NV_ADDON_PEDIDO_MAX], idUrl[768], *corpo;
     const char *t1, *t2;
     Stream *achados;
     pthread_mutex_lock(&c->trava);
@@ -1578,6 +1780,8 @@ static void *fioFontes(void *u) {
     // interrompe (libcurl), mas o proximo nem comeca.
     if (c->cancelado && c->cancelado(c->ctx)) continue;
     i = c->baldes[meu].idx;
+    // Id codificado como o Nuvio web (nv_addon_id): "tt123:1:2" sai igual.
+    if (!nv_addon_id(idUrl, sizeof idUrl, c->id)) idUrl[0] = 0;
     // O NOME QUE O MANIFESTO DECLARA VAI PRIMEIRO (issue #112). Ver
     // tipoCanalDeclarado: o FrostView declara "channel" e o app perguntava
     // "tv" antes, gastando uma viagem inteira por canal aberto so para
@@ -1585,10 +1789,11 @@ static void *fioFontes(void *u) {
     { const char *dec = c->tipoAlt && c->tipoAlt[0] ? tipoCanalDeclarado(i) : NULL;
       t1 = c->tipo; t2 = c->tipoAlt;
       if (dec && !strcmp(dec, c->tipoAlt)) { t1 = c->tipoAlt; t2 = c->tipo; } }
-    snprintf(url, sizeof url, "%s/stream/%s/%s.json", addon[i].base, t1, c->id);
-    // 12 s e nao 25: com os addons em paralelo o timeout deixa de ser somado,
-    // mas continua sendo o tempo que o dono espera pelo mais lento.
-    corpo = rede_baixar(url, c->timeout > 0 ? c->timeout : 12);
+    // Prazo da consulta (c->timeout): 30 s para filme/serie, 12 s para canal e
+    // prefetch. Ver ADD_PRAZO_VOD_S em consultar().
+    corpo = pedidoCoube(i, nv_addon_url(url, sizeof url, addon[i].base, "/stream/%s/%s.json",
+                                    t1, idUrl), sizeof url) && idUrl[0]
+            ? rede_baixar(url, c->timeout > 0 ? c->timeout : 12) : NULL;
     achados = NULL; n = 0;
     if (corpo) n = stream_extrair(corpo, addon[i].nome, &achados);
     // CANAL AO VIVO TEM DOIS NOMES DE TIPO NO PROTOCOLO, e addons diferentes
@@ -1616,8 +1821,9 @@ static void *fioFontes(void *u) {
     // Origin: null e User-Agent a resposta e a mesma, byte a byte.
     if (n <= 0 && t2 && t2[0] && !(c->cancelado && c->cancelado(c->ctx))) {
       char *alt;
-      snprintf(url, sizeof url, "%s/stream/%s/%s.json", addon[i].base, t2, c->id);
-      alt = rede_baixar(url, c->timeout > 0 ? c->timeout : 12);
+      alt = pedidoCoube(i, nv_addon_url(url, sizeof url, addon[i].base, "/stream/%s/%s.json",
+                                    t2, idUrl), sizeof url) && idUrl[0]
+            ? rede_baixar(url, c->timeout > 0 ? c->timeout : 12) : NULL;
       if (alt) {
         Stream *a2 = NULL;
         int n2 = stream_extrair(alt, addon[i].nome, &a2);
@@ -1634,8 +1840,13 @@ static void *fioFontes(void *u) {
     }
     if (!corpo) {
       free(achados);
-      printf("[addons] %s: sem resposta (%u ms)\n", addon[i].nome,
-             (unsigned)(SDL_GetTicks() - c->inicio));
+      // O MOTIVO NA MESMA LINHA (#202): "curl 28: Operation timed out after
+      // 12002 ms" ou o HTTP (a linha "[rede] HTTP 403 em <host>" sai antes, sem
+      // o nome do addon). Prazo junto: diz se foi a 1a ou a 2a rodada.
+      { const char *erro = rede_ultimo_erro();
+        printf("[addons] %s: sem resposta (%u ms, prazo %d s)%s%s\n", addon[i].nome,
+               (unsigned)(SDL_GetTicks() - c->inicio), c->timeout > 0 ? c->timeout : 12,
+               erro && erro[0] ? ": " : "", erro ? erro : ""); }
       // Desistiu de vez quando nao ha segunda chance pela frente: a mesma regra
       // de segundaChance (mudoSeg ainda e o da consulta anterior aqui).
       if (c->progresso)
@@ -1703,9 +1914,11 @@ static const char *tipoAlternativo(const char *tipo) {
 // titulo e responde rapido na seguinte, porque ja guardou o resultado — o que
 // o dono fazia a mao com Recarregar. A lista era publicada sem ele e nada mais
 // o perguntava. Agora quem NAO respondeu (timeout ou erro; lista vazia conta
-// como resposta) e perguntado UMA vez mais, em paralelo, com 20 s, antes de a
+// como resposta) e perguntado UMA vez mais, em paralelo, com 20 s (30 s em
+// filme/serie, #202), antes de a
 // lista ser publicada. Custo limitado: um addon que falha nas duas rodadas
 // duas consultas seguidas deixa de ganhar a segunda (mudoSeg).
+#define ADD_PRAZO_VOD_S 30   // 1a rodada de filme/serie; a 2a soma mais 30 = 60 s do oficial
 static void segundaChance(Consulta *c, int fios) {
   Consulta c2;
   int q, m = 0, criados = 0;
@@ -1724,10 +1937,10 @@ static void segundaChance(Consulta *c, int fios) {
   if (m > 0) {
     c2.id = c->id; c2.tipo = c->tipo; c2.tipoAlt = c->tipoAlt;
     c2.nBaldes = m; c2.cancelado = c->cancelado; c2.ctx = c->ctx;
-    c2.timeout = 20;
+    c2.timeout = c->timeout > 20 ? c->timeout : 20;
     c2.progresso = c->progresso; c2.rodada = 2; c2.inicio = c->inicio;
     pthread_mutex_init(&c2.trava, NULL);
-    printf("[addons] %d sem resposta: segunda tentativa (20 s)\n", m);
+    printf("[addons] %d sem resposta: segunda tentativa (%d s)\n", m, c2.timeout);
     fflush(stdout);
     if (fios > ADD_FIOS) fios = ADD_FIOS;
     for (q = 0; q < fios && q < m; q++)
@@ -1869,6 +2082,17 @@ static int consultar(const char *id, const char *tipo, const char *base, int fio
   c.id = id; c.tipo = tipo; c.tipoAlt = tipoAlternativo(tipo);
   c.cancelado = cancelado; c.ctx = ctx;
   c.progresso = progresso;
+  // PRAZO DA BUSCA DE FILME/SERIE (paridade com o Nuvio oficial, #202). O
+  // Nuvio web espera 60 s por addon (streamRepository,
+  // STREAM_SOURCE_REQUEST_TIMEOUT_MS) num pedido so. Aqui eram 12 s e, para
+  // quem nao respondeu, um pedido NOVO de 20 s: addon que raspa indexadores na
+  // hora (StreamFusion, WAStream, Comet sem cache) era cortado no meio do
+  // trabalho e perguntado de novo do zero. Log do .tpk (2.0.0):
+  // "StreamFusionReborn falha 28 ... after 12002 milliseconds with 0 bytes",
+  // e so a segunda volta trouxe fonte. Com a lista publicada aos poucos (#221)
+  // o prazo longo nao segura quem ja respondeu, e a fonte automatica tem prazo
+  // proprio (fonteauto). Canal ao vivo e prefetch continuam com 12 s.
+  c.timeout = progresso ? ADD_PRAZO_VOD_S : 12;
   c.inicio = SDL_GetTicks();
   pthread_mutex_init(&c.trava, NULL);
   c.baldes = calloc((size_t)nAddon, sizeof(BaldeFonte));
@@ -1876,7 +2100,7 @@ static int consultar(const char *id, const char *tipo, const char *base, int fio
     // SO O ADDON DE ORIGEM, quando se sabe qual e. Comparacao por base
     // normalizada — "<base>" e "<base>/manifest.json" sao o mesmo addon.
     if (base && *base) {
-      char alvo[600], mine[600];
+      char alvo[NV_ADDON_URL_MAX], mine[NV_ADDON_URL_MAX];
       baseNormalizada(base, alvo, sizeof alvo);
       for (i = 0; i < nAddon; i++) {
         if (!addon[i].ativo || !addon[i].fonte) continue;

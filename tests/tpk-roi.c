@@ -17,6 +17,7 @@ int mkv_faixas_do_trecho(const unsigned char *buf, long n, MkvFaixa *out, int ma
   if (nCaps) *nCaps = 0;
   return 0;
 }
+void mkvass_aceitar_texto(int sim) { (void)sim; }
 int mkvass_cabecalho(const char *url, unsigned char **buf, long *n) {
   (void)url; if (buf) *buf = NULL; if (n) *n = 0; return 0;
 }

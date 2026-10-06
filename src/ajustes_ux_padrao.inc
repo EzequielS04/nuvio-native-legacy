@@ -226,3 +226,5 @@
   0, /* rest screen style: Vitrine */
   0, /* showcase titles: Catalogo */
   0, /* clock format: 24 horas */
+  0, 0, /* automatic source size range: max and min, Sem limite */
+  0, /* support the project (Sobre e ajuda): action */

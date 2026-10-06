@@ -46,7 +46,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(NV_LINUX_DESKTOP)
 #define LTD_TEM_PLAYER 0   // o Mac nao tem pipeline (video.c: stubs)
 #else
 #define LTD_TEM_PLAYER 1

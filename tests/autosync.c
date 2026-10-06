@@ -86,9 +86,13 @@ static void stress(void) {
       assert(r.estado==AUTOSYNC_ACCEPTED&&abs(r.offsetMs-offset)<=25);
       if(r.tempoMs>maiorTempo)maiorTempo=r.tempoMs;casos++;
     }
-    /* A local edit amidst an otherwise exact timeline must never apply. */
+    /* One line 1 s off amidst an otherwise exact timeline: the shared offset
+     * may apply (that line stays as the file had it), nothing else may. */
     LegendaDocumento *cut=documento("stress-cut","pt",offset/1000.0,1,LEGENDA_DOC_COMPLETO,77,7);
-    recusa(cut,b,AUTOSYNC_OK);
+    for(int modo=0;modo<2;modo++) {
+      AutoSyncResultado r=comparar(cut,b,(AutoSyncModo)modo);
+      assert(r.estado!=AUTOSYNC_ACCEPTED||(r.tipo==AUTOSYNC_T_OFFSET&&abs(r.offsetMs-offset)<=25));casos++;
+    }
     legenda_documento_liberar(a);legenda_documento_liberar(b);legenda_documento_liberar(cut);
   }
   memcpy(corpus,original,sizeof corpus);
@@ -183,15 +187,43 @@ int main(void) {
     {3,1,LEGENDA_DOC_COMPLETO,AUTOSYNC_REPEATED},
     {4,1,LEGENDA_DOC_COMPLETO,AUTOSYNC_FORCED_SIGNS},
     {5,1,LEGENDA_DOC_COMPLETO,AUTOSYNC_FORCED_SIGNS},
-    {1,1,LEGENDA_DOC_COMPLETO,AUTOSYNC_OK},
-    {0,25.0/23.976,LEGENDA_DOC_COMPLETO,AUTOSYNC_OK},
-    {6,1,LEGENDA_DOC_COMPLETO,AUTOSYNC_REGION_DISAGREEMENT},
-    {7,1,LEGENDA_DOC_COMPLETO,AUTOSYNC_REGION_DISAGREEMENT},
-    {8,1,LEGENDA_DOC_COMPLETO,AUTOSYNC_OK}
   };
   for(size_t i=0;i<sizeof ruins/sizeof *ruins;i++) {
     LegendaDocumento *doc=documento("bad","en",0,ruins[i].escala,ruins[i].flags,11,ruins[i].variante);
     recusa(doc,ref,ruins[i].motivo);legenda_documento_liberar(doc);
+  }
+  /* Since 2.1 these are corrected instead of refused: a cut (two pieces), a
+   * framerate (scale) and a linear drift. Every line must land on its
+   * reference time through the map. One shifted line among 119 correct ones
+   * leaves the timing alone (it is not dragged, the rest is already right). */
+  {
+    const struct {int variante;double escala;AutoSyncTipo tipo;} corrige[]={
+      {1,1,AUTOSYNC_T_TRECHOS},{0,25.0/23.976,AUTOSYNC_T_ESCALA},{0,23.976/24,AUTOSYNC_T_ESCALA},
+      {8,1,AUTOSYNC_T_ESCALA}};
+    for(size_t k=0;k<sizeof corrige/sizeof *corrige;k++)for(int modo=0;modo<2;modo++) {
+      LegendaDocumento *doc=documento("fix","pt",0,corrige[k].escala,LEGENDA_DOC_COMPLETO,11,corrige[k].variante);
+      AutoSyncConfig c=autosync_config((AutoSyncModo)modo);AutoSyncMapa *m=NULL;
+      AutoSyncResultado r=autosync_alinhar(doc,ref,&c,NULL,NULL,&m);
+      if(r.estado!=AUTOSYNC_ACCEPTED)fprintf(stderr,"fix %zu rejected %s\n",k,autosync_motivo(r.motivo));
+      assert(r.estado==AUTOSYNC_ACCEPTED&&r.tipo==corrige[k].tipo&&m);
+      int n=0;const LegendaCue *v=legenda_documento_dados(doc,&n);
+      int ok=0;
+      for(int i=0;i<n;i++)if(fabs(autosync_mapa_tempo(m,corpus[i].inicio)-v[i].inicio)<=.05)ok++;
+      /* a cut hides at most the lines right at the seam */
+      assert(ok>=n-(corrige[k].tipo==AUTOSYNC_T_TRECHOS?3:0));
+      autosync_mapa_liberar(m);legenda_documento_liberar(doc);casos++;
+    }
+    for(int variante=6;variante<=7;variante++) {
+      LegendaDocumento *doc=documento("one-line","pt",0,1,LEGENDA_DOC_COMPLETO,11,variante);
+      AutoSyncResultado r=comparar(doc,ref,AUTOSYNC_QUICK);
+      assert(r.estado!=AUTOSYNC_ACCEPTED||(r.tipo==AUTOSYNC_T_OFFSET&&r.offsetMs==0));
+      legenda_documento_liberar(doc);casos++;
+    }
+    /* Already in sync within manterMs: accepted as kept, nothing moves. */
+    LegendaDocumento *doc=documento("kept","pt",.08,1,LEGENDA_DOC_COMPLETO,11,0);
+    AutoSyncResultado r=comparar(doc,ref,AUTOSYNC_QUICK);
+    assert(r.estado==AUTOSYNC_ACCEPTED&&r.mantida&&r.offsetMs==0);
+    legenda_documento_liberar(doc);casos++;
   }
   LegendaDocumento *periodico=documento("periodic","en",0,1,LEGENDA_DOC_COMPLETO,11,2);
   LegendaDocumento *periodico2=documento("periodic2","pt",1,1,LEGENDA_DOC_COMPLETO,11,2);
@@ -213,9 +245,11 @@ int main(void) {
   LegendaDocumento *noise=documento("noise","pt",1,1,LEGENDA_DOC_COMPLETO,11,9);
   cfg=autosync_config(AUTOSYNC_QUICK);r=autosync_comparar(noise,ref,&cfg,NULL,NULL);
   assert(r.estado==AUTOSYNC_ACCEPTED&&abs(r.offsetMs-1000)<=100);
-  assert(r.erroMs>=100&&r.erroMs<=250);casos++;
+  /* erroMs = worst segment median |residual| (the +-100 ms noise). */
+  assert(r.erroMs>=30&&r.erroMs<=100);casos++;
+  int erro=r.erroMs;
   cfg.toleranciaMs=50;r=autosync_comparar(noise,ref,&cfg,NULL,NULL);
-  assert(r.estado!=AUTOSYNC_ACCEPTED&&r.motivo==AUTOSYNC_REGION_DISAGREEMENT);casos++;
+  assert(erro<=50||(r.estado!=AUTOSYNC_ACCEPTED&&r.motivo==AUTOSYNC_REGION_DISAGREEMENT));casos++;
   AutoSync *s=autosync_criar();assert(s);autosync_iniciar(s,11);
   LegendaDocumento *p=documento("primary","pt",5,1,LEGENDA_DOC_COMPLETO,11,0);
   LegendaDocumento *q=documento("secondary","en",-1,1,LEGENDA_DOC_COMPLETO,11,0);
@@ -235,6 +269,18 @@ int main(void) {
     autosync_selecionar(s,0,q);assert(autosync_offset_ms(s,0)==0);
     usleep(3000);assert(autosync_estado(s,0).estado==AUTOSYNC_UNAVAILABLE);
     autosync_selecionar(s,0,p);
+  }
+  /* Framerate on slot 1: no offset is added, the position goes through the
+   * map; undo returns to the identity with the manual offset intact. */
+  {
+    LegendaDocumento *f=documento("fps","en",0,25.0/23.976,LEGENDA_DOC_COMPLETO,11,0);
+    assert(autosync_selecionar(s,1,f)&&autosync_manual(s,1,-200)&&autosync_solicitar(s,1,ref,NULL));
+    AutoSyncResultado e=esperar(s,1);
+    assert(e.estado==AUTOSYNC_ACCEPTED&&e.tipo==AUTOSYNC_T_ESCALA&&autosync_offset_ms(s,1)==-200);
+    assert(fabs(autosync_posicao(s,1,corpus[50].inicio)-corpus[50].inicio*25.0/23.976)<.05);
+    autosync_desfazer(s,1);
+    assert(autosync_posicao(s,1,100)==100&&autosync_offset_ms(s,1)==-200);
+    autosync_selecionar(s,1,q);legenda_documento_liberar(f);casos++;
   }
   autosync_iniciar(s,12);assert(autosync_offset_ms(s,0)==0&&!autosync_selecionar(s,0,p));
   assert(!autosync_solicitar(s,0,ref,NULL));casos++;

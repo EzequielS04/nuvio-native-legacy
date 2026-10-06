@@ -49,11 +49,18 @@ typedef struct {
   // texto livre. Cortado dos dois lados igual continua casando, pelo mesmo
   // motivo de FONTEPREF_TRILHA.
   char bingeGroup[128];
+  // behaviorHints.videoHash (hash do OpenSubtitles) quando o addon de fonte
+  // manda; vai para a busca de legendas como extra do Stremio (#201).
+  char videoHash[24];
   // Stream SEM url, so com o hash do torrent (Torrentio/Comet sem debrid na
   // URL). So entra na lista quando debrid_ativo(); a url e preenchida na
   // verificacao, por debrid_resolver.
   char infoHash[48];
   int  fileIdx;         // -1 quando o addon nao disse
+  // Quantos semeiam o torrent, lido do texto do addon ("👤 12" no Torrentio).
+  // So vale com temSemeadores: zero lido e zero desconhecido sao coisas
+  // diferentes, e "0 seeds" e justamente o aviso que importa.
+  int  semeadores, temSemeadores;
   // "sources" do stream (Stremio): trackers e nos DHT do torrent, UMA entrada
   // por linha ("tracker:udp://...", "dht:<hash>"). So serve ao P2P
   // experimental (p2p.c), que os repassa ao servidor de streaming. 640 cobre

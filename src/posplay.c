@@ -17,6 +17,7 @@
 #include "player.h"
 #include "plrui.h"
 #include "plrilha.h"
+#include "velocidade.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
 #include "escala.h"
 #include <stdio.h>
@@ -322,7 +323,8 @@ void posplay_atualizar(float dt, Uint32 agora, double posSeg, double durSeg,
   // comecam muito antes do fim em algumas series, e um relogio fixo
   // dispararia no meio deles.
   if (visivel && serie && !fecharEm) {
-    double resta = durSeg - posSeg;
+    // #202: a 1,5x os segundos do arquivo passam mais depressa que os do relogio.
+    double resta = vel_tempo_real(durSeg - posSeg, player_velocidade_efetiva());
     if (resta <= (double)PP_CONTAGEM_S) {
       if (resta < 0.0) resta = 0.0;
       fecharEm = agora + (Uint32)(resta * 1000.0);

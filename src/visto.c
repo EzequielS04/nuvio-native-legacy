@@ -1,7 +1,7 @@
 #include "visto.h"
 #include "trakt.h"
 #include "simkl.h"
-#include "syncprog.h"
+#include "contapend.h"
 #include "sessao.h"
 #include <pthread.h>
 #include <stdio.h>
@@ -28,7 +28,13 @@ int visto_episodios_ja(const char *imdb, const char *tipo, const VistoPar *pares
   // impede os seguintes (cada um diz no log o que aconteceu).
   if (destinos & VISTO_TRAKT) ok &= trakt_episodios_marcar(imdb, pares, n, visto) ? 1 : 0;
   if (destinos & VISTO_SIMKL) ok &= simkl_episodios_marcar(imdb, pares, n, visto) ? 1 : 0;
-  if (destinos & VISTO_CONTA) ok &= syncep_empurrar(imdb, tipo, pares, n, visto) ? 1 : 0;
+  // A CONTA PASSA PELO JORNAL (contapend.c): o gesto fica em disco antes da
+  // rede e so sai de la com 2xx. Era uma RPC solta — sem rede, a marca se
+  // perdia. Quem ja registrou (visto_episodios) manda VISTO_CONTA_JORNAL.
+  if (destinos & VISTO_CONTA) {
+    if (!(destinos & VISTO_CONTA_JORNAL)) contapend_episodios(imdb, tipo, pares, n, visto);
+    ok &= contapend_enviar() >= 0 ? 1 : 0;
+  }
   return ok;
 }
 
@@ -37,7 +43,10 @@ int visto_titulo_ja(const char *imdb, const char *tipo, const int *temporadas,
   int ok = 1;
   if (!imdb || !imdb[0]) return 0;
   if (destinos & VISTO_SIMKL) ok &= simkl_titulo_marcar(imdb, tipo, temporadas, nt, visto) ? 1 : 0;
-  if (destinos & VISTO_CONTA) ok &= syncvisto_titulo(imdb, tipo, visto) ? 1 : 0;
+  if (destinos & VISTO_CONTA) {
+    if (!(destinos & VISTO_CONTA_JORNAL)) contapend_titulo(imdb, tipo, visto);
+    ok &= contapend_enviar() >= 0 ? 1 : 0;
+  }
   return ok;
 }
 
@@ -70,9 +79,15 @@ int visto_episodios(const char *imdb, const char *tipo, const VistoPar *pares,
   Envio *e;
   if (!imdb || !imdb[0] || !pares || n < 1) return 0;
   if (!destinos) return 1;   // so local: nao ha o que mandar
+  if (n > VT_LOTE) n = VT_LOTE;
+  // NO FIO DE QUEM CHAMOU, antes de qualquer rede: o gesto ja esta em disco
+  // quando o fio sai, e um fio que morre no meio nao leva a marca junto.
+  if (destinos & VISTO_CONTA) {
+    contapend_episodios(imdb, tipo, pares, n, visto);
+    destinos |= VISTO_CONTA_JORNAL;
+  }
   e = (Envio *)calloc(1, sizeof *e);
   if (!e) return 0;
-  if (n > VT_LOTE) n = VT_LOTE;
   snprintf(e->imdb, sizeof e->imdb, "%s", imdb);
   snprintf(e->tipo, sizeof e->tipo, "%s", tipo && tipo[0] ? tipo : "series");
   memcpy(e->pares, pares, sizeof(VistoPar) * (size_t)n);
@@ -86,6 +101,10 @@ int visto_titulo(const char *imdb, const char *tipo, const int *temporadas,
   destinos &= ~VISTO_TRAKT;
   if (!imdb || !imdb[0]) return 0;
   if (!destinos) return 1;
+  if (destinos & VISTO_CONTA) {
+    contapend_titulo(imdb, tipo && tipo[0] ? tipo : "movie", visto);
+    destinos |= VISTO_CONTA_JORNAL;
+  }
   e = (Envio *)calloc(1, sizeof *e);
   if (!e) return 0;
   snprintf(e->imdb, sizeof e->imdb, "%s", imdb);

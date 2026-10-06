@@ -12,7 +12,7 @@ if [ ${#estados[@]} -eq 0 ]; then estados=(osd osd-barra legendas fontes pausa e
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/nuvio-fluidez-perf-player-XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 sources=()
-for s in src/*.c; do [ "$s" != src/main.c ] && sources+=("$s"); done
+for s in src/*.c src/dts/*.c; do [ "$s" != src/main.c ] && sources+=("$s"); done
 cc -DNV_SHOT_HOOKS -DNV_FLUIDEZ_PERF "${sources[@]}" tests/fluidez_perf_player.c -Isrc -Itests \
   -o "$tmp/perf" -O1 -I/opt/homebrew/include -I/opt/homebrew/include/SDL2 \
   -L/opt/homebrew/lib -lSDL2 -lSDL2_image -lSDL2_ttf -lz -framework OpenGL \

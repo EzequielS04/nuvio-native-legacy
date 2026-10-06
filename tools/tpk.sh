@@ -3,7 +3,7 @@
 #
 #   bash tools/tpk.sh          # compila libnuvio.so e gera o .tpk em build/tpk/
 #
-# O C do Nuvio vira libnuvio.so (src/*.c + src/tpk.c, -DNV_TPK) e um host .NET
+# O C do Nuvio vira libnuvio.so (src/*.c src/dts/*.c + src/tpk.c, -DNV_TPK) e um host .NET
 # (tizen-tpk/NuvioTpk) abre o GLWindow e a chama a cada quadro. Por que assim, e
 # nao um executavel C: ver src/tpk.h. O spike que provou cada peca (.so propria,
 # fios, GLWindow) esta em tizen-tpk-spike/.
@@ -120,7 +120,7 @@ docker run --rm --platform linux/arm/v5 --env-file "$ENVF" $P2P_VOL \
   # o -D tem de ir na linha de comando, SO para esse arquivo.
   P2P_CFLAGS=""
   [ "${NUVIO_P2P_MOTOR:-}" = "1" ] && P2P_CFLAGS="-DNV_P2P_MOTOR -DNV_P2P_MOTOR_DLOPEN -I/p2p/include"
-  ls src/*.c | grep -v "src/video_tizen.c" | xargs -P 6 -I{} sh -c \
+  ls src/*.c src/dts/*.c | grep -v "src/video_tizen.c" | xargs -P 6 -I{} sh -c \
     "gcc $CFLAGS -c {} -o /tmp/o/\$(basename {} .c).o -DNV_TPK -include src/tpk.h -fvisibility=hidden -Wno-unused-result $NUVIO_EXTRA_CFLAGS $P2P_CFLAGS \$(case {} in src/p2pmotor_motor.c) echo -D_GNU_SOURCE;; esac) @/tmp/flags -I/deps/include -I/deps/include/SDL2" 
   # SDL e zlib ESTATICOS: a TV nao tem libSDL2 garantida, e a libz entra junto
   # para nao depender da versao do aparelho. GLES/EGL/dl/pthread/m sao do
@@ -149,7 +149,7 @@ docker run --rm --platform linux/arm/v5 --env-file "$ENVF" $P2P_VOL \
   mkdir -p /tmp/o40
   # p2pmotor_motor.c entra sempre aqui: o 4/5 NUNCA leva o motor (a UEP barra
   # .so de arquivo), entao ele e recompilado SEM -DNV_P2P_MOTOR (sem P2P_CFLAGS).
-  { grep -l NV_TPK40 src/*.c; echo src/p2pmotor_motor.c; } | sort -u | grep -v "src/video_tizen.c" | xargs -P 6 -I{} sh -c \
+  { grep -l NV_TPK40 src/*.c src/dts/*.c; echo src/p2pmotor_motor.c; } | sort -u | grep -v "src/video_tizen.c" | xargs -P 6 -I{} sh -c \
     "gcc $CFLAGS -c {} -o /tmp/o40/\$(basename {} .c).o -DNV_TPK -DNV_TPK40 -include src/tpk.h -fvisibility=hidden -Wno-unused-result $NUVIO_EXTRA_CFLAGS @/tmp/flags -I/deps/include -I/deps/include/SDL2"
   OBJ40=""
   for o in /tmp/o/*.o; do

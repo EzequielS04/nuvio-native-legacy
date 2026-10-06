@@ -24,6 +24,7 @@
 #include "proximo.h"
 #include "perfis.h"
 #include "artereserva.h"
+#include "artefontes.h"
 #include "idbase.h"
 #include "cwfrente.h"
 #include "servidores.h"
@@ -445,35 +446,41 @@ static void fotosDoElenco(CatItem *d, const char *imdbSerie, int serie, int mant
         // d->logo vira "resposta nao e imagem" no tex e o titulo fica sem a
         // arte para sempre (o FALHOU e lembrado). Visto no log da TV em
         // 21/09 com /f91b8uWsSaeGRYCj8k73uIFj9pu.svg.
+        // ORDEM (af_tmdb_logo): o do idioma, o ingles, o sem idioma, e
+        // nenhuma outra lingua. O do idioma e o PRIMEIRO da lista (o mais
+        // votado); era o ultimo, que mudava conforme a ordem da resposta.
         const char *im = strstr(corpo, "\"images\"");
         const char *imObj = im ? strchr(im, '{') : NULL;
         const char *imFim = imObj ? js_fim(imObj) : NULL;
-        const char *p = (imObj && imFim) ? js_array(imObj, imFim, "logos")
-                                         : NULL;
-        char base[3] = "", local[160] = "", neutro[160] = "", en[160] = "";
+        char base[3] = "", esc[160] = "", escIso[8] = "";
         snprintf(base, sizeof base, "%.2s", desc_tmdb_idioma());
-        while (p) {
-          const char *f = js_fim(p);
-          char iso[8] = "", fp[160] = "";
-          js_texto(p, f, "iso_639_1", iso, sizeof iso);
-          js_texto(p, f, "file_path", fp, sizeof fp);
-          if (fp[0] == '/' && !ehSvg(fp)) {
-            if      (!strcmp(iso, base)) snprintf(local,  sizeof local,  "%s", fp);
-            else if (!iso[0] && !neutro[0]) snprintf(neutro, sizeof neutro, "%s", fp);
-            else if (!strcmp(iso, "en") && !en[0]) snprintf(en, sizeof en, "%s", fp);
+        if (imObj && imFim) {
+          size_t tam = (size_t)(imFim - imObj) + 1;
+          char *imCopia = (char *)malloc(tam + 1);
+          if (imCopia) {
+            memcpy(imCopia, imObj, tam); imCopia[tam] = 0;
+            af_tmdb_logo(imCopia, base, esc, sizeof esc, escIso, sizeof escIso);
+            // O FUNDO do TMDB tambem: o backdrop_path da raiz pode ter letreiro
+            // em qualquer lingua (af_tmdb_fundo_padrao).
+            if (d->backdropTmdb[0]) {
+              const char *fp = strstr(d->backdropTmdb, "/t/p/w1280");
+              char ok[160];
+              if (fp && af_tmdb_fundo_padrao(imCopia, base, fp + 10, ok, sizeof ok))
+                snprintf(d->backdropTmdb, sizeof d->backdropTmdb,
+                         "https://image.tmdb.org/t/p/w1280%s", ok);
+              else if (fp) d->backdropTmdb[0] = 0;
+            }
+            free(imCopia);
           }
-          p = js_prox(f);
         }
         // "LOGO DO ADDON" (Ajustes, desligado de fabrica): o logo que o addon
         // mandou no catalogo fica; o do TMDB so entra em quem nao tinha.
         int manterAddon = ajustes_logo_addon() && d->origem[0] && logoAntes[0] &&
                           !ehSvg(logoAntes) && strcmp(logoAntes, d->poster);
-        { const char *esc = local[0] ? local : neutro[0] ? neutro : en;
-          if (esc[0] && !manterAddon) {
+        { if (esc[0] && !manterAddon) {
             snprintf(d->logo, sizeof d->logo,
                      "https://image.tmdb.org/t/p/w500%s", esc);
-            snprintf(d->logoIdioma, sizeof d->logoIdioma, "%s",
-                     local[0] ? base : neutro[0] ? "und" : "en");
+            snprintf(d->logoIdioma, sizeof d->logoIdioma, "%s", escIso);
             snprintf(d->logoIdiomaUrl, sizeof d->logoIdiomaUrl, "%s", d->logo);
           } }
         // LIMPA O QUE JA ESTAVA ENVENENADO: item do cache do catalogo pode ter
@@ -671,8 +678,23 @@ static int lerBusca(const char *tipo, const char *termo, CatItem *saida,
 #define BUSCA_POR_ALVO 12          // uma fileira por alvo, 12 cabem na tela
 #define BUSCA_FIOS    3            // quantos alvos em voo ao mesmo tempo
 
+// O PEDIDO A UM ADDON COUBE NO BUFFER? `w` e o retorno do snprintf que o
+// montou (addonurl.h). Pedido cortado nao sai: o addon responderia a OUTRA URL
+// como se fosse a certa. O log leva o nome do addon e o tamanho, nunca a URL —
+// nela viaja a chave de debrid.
+static int descPedidoCoube(const char *base, int w, size_t tam) {
+  const char *nome = "";
+  int i;
+  if (w >= 0 && (size_t)w < tam) return 1;
+  for (i = 0; base && i < addons_n(); i++)
+    if (!strcmp(addons_base(i), base)) { nome = addons_nome(i); break; }
+  return nv_addon_pedido_coube(nome, w, tam);
+}
+
 typedef struct {
-  char base[300];
+  // NV_ADDON_URL_MAX e nao 300: com 300 a base do Xperience (367) e a do Comet
+  // (870) eram cortadas e a busca perguntava a outra URL, em silencio (#201).
+  char base[NV_ADDON_URL_MAX];
   char tipo[8];
   char id[96];
   char titulo[96];
@@ -752,7 +774,7 @@ void desc_alvo_busca(const char *base, const char *tipo, const char *id,
 // Consulta UM alvo. Devolve quantos itens leu.
 static int consultarAlvo(const AlvoBusca *a, const char *termo,
                          CatItem *saida, int max) {
-  char url[600], esc[300];
+  char url[NV_ADDON_PEDIDO_MAX], esc[300];
   char *corpo;
   const char *p;
   int n = 0;
@@ -768,8 +790,8 @@ static int consultarAlvo(const AlvoBusca *a, const char *termo,
                                metaprov_get_rede, NULL, NULL);
   } else {
     urlEscapar(termo, esc, sizeof esc);
-    snprintf(url, sizeof url, "%s/catalog/%s/%s/search=%s.json",
-             a->base, a->tipo, a->id, esc);
+    if (!descPedidoCoube(a->base, nv_addon_url(url, sizeof url, a->base, "/catalog/%s/%s/search=%s.json",
+                                           a->tipo, a->id, esc), sizeof url)) return 0;
     corpo = rede_baixar(url, 6);
   }
   if (!corpo) return 0;
@@ -1143,12 +1165,13 @@ static int deMeta(const char *ini, const char *fim, const char *tipo, CatItem *d
 // era exatamente por isso que nao dava para dizer o que falhou num arranque.
 static int lerCatalogo(const char *base, const char *tipo, const char *id,
                        CatItem *saida, int max, int quantos, int *respondeu) {
-  char url[900];
+  char url[NV_ADDON_PEDIDO_MAX];
   char *corpo;
   const char *p;
   int n = 0;
   if (respondeu) *respondeu = 0;
-  snprintf(url, sizeof url, "%s/catalog/%s/%s.json", base, tipo, id);
+  if (!descPedidoCoube(base, nv_addon_url(url, sizeof url, base, "/catalog/%s/%s.json", tipo, id),
+                       sizeof url)) return 0;
   // 8 s e nao 25: um addon fora do ar segurava um dos tres fios por 25 s, e a
   // fileira dele atrasa TODAS as seguintes porque a montagem caminha em ordem.
   // E a mesma licao ja registrada no cache de texturas — la o timeout caiu de
@@ -1406,7 +1429,7 @@ static void formatarTitulo(const char *nome, const char *tipo, char *dst, size_t
 #define MANI_MAX  12
 #define MANI_FIOS  4
 static struct {
-  char  url[900];
+  char  url[NV_ADDON_PEDIDO_MAX];   // <base>/manifest.json inteiro (addonurl.h)
   char *corpo;
   int   ativo, erro;
   int   pronto;      // 1 = tentativa terminada (corpo pode ser NULL)
@@ -1454,7 +1477,7 @@ static unsigned long long descAgoraMs(void);
 // e na pratica ~300 KB (manifestos tipicos tem <30 KB).
 #define MANI_CACHE_BYTES (128 * 1024)
 static struct {
-  char    url[900];
+  char    url[NV_ADDON_PEDIDO_MAX];
   unsigned versao;
   char   *corpo;
 } maniCache[MANI_MAX];
@@ -1582,7 +1605,7 @@ static void *fioManifesto(void *u) {
   for (;;) {
     int meu;
     char *corpo;
-    char url[900];
+    char url[NV_ADDON_PEDIDO_MAX];
     pthread_mutex_lock(&maniTrava);
     if (minha == maniGeracao)
       while (maniProx < maniN && mani[maniProx].pronto) maniProx++;
@@ -1645,7 +1668,7 @@ static void maniLargar(void) {
     i = maniN++;
     mani[i].ativo = addons_ativo(ad);
     int cache;
-    snprintf(mani[i].url, sizeof mani[i].url, "%s/manifest.json", addons_base(ad));
+    nv_addon_url(mani[i].url, sizeof mani[i].url, addons_base(ad), "/manifest.json");
     mani[i].pronto = 0; mani[i].erro = 0;
     // CACHE HIT: o manifesto deste addon ja foi baixado numa volta com a
     // MESMA versao da lista (lista inalterada). Reaproveita sem rede. A
@@ -1807,7 +1830,12 @@ static int exigeBusca(const char *p, const char *f) {
 // Xperience sozinho declara 605, mas os que a cota deixa passar sao os que a
 // conta pode citar, e o anel gira em vez de recusar.
 #define NOMECAT_MAX 512
+// `base` aqui e so IDENTIDADE (nunca vira pedido) e fica em 300: 512 entradas
+// com NV_ADDON_URL_MAX custariam ~900 KB. Por isso a comparacao e por PREFIXO
+// (nomeCatBase): com strcmp, a base cortada de um addon de URL longa nunca
+// casava com a inteira e o nome do catalogo dele nunca era achado (#201).
 static struct { char base[300], tipo[8], id[96], nome[96]; } nomeCat[NOMECAT_MAX];
+#define nomeCatBase(i, b) (!strncmp(nomeCat[i].base, (b), sizeof nomeCat[i].base - 1))
 static int nNomeCat, nomeCatProx;
 static pthread_mutex_t nomeCatTrava = PTHREAD_MUTEX_INITIALIZER;
 static void registrarNomeCatalogo(const char *base, const char *tipo, const char *id, const char *nome) {
@@ -1815,7 +1843,7 @@ static void registrarNomeCatalogo(const char *base, const char *tipo, const char
   if (!base || !nome || !nome[0]) return;
   pthread_mutex_lock(&nomeCatTrava);
   for (i = 0; i < nNomeCat; i++)
-    if (!strcmp(nomeCat[i].base, base) && !strcmp(nomeCat[i].tipo, tipo) && !strcmp(nomeCat[i].id, id)) break;
+    if (nomeCatBase(i, base) && !strcmp(nomeCat[i].tipo, tipo) && !strcmp(nomeCat[i].id, id)) break;
   if (i == nNomeCat) { i = nomeCatProx; nomeCatProx = (nomeCatProx + 1) % NOMECAT_MAX; if (nNomeCat < NOMECAT_MAX) nNomeCat++; }
   snprintf(nomeCat[i].base, sizeof nomeCat[i].base, "%s", base);
   snprintf(nomeCat[i].tipo, sizeof nomeCat[i].tipo, "%s", tipo);
@@ -1830,7 +1858,7 @@ const char *desc_nome_catalogo(const char *base, const char *tipo, const char *i
   if (!base || !base[0] || !tipo || !id) return saida;
   pthread_mutex_lock(&nomeCatTrava);
   for (i = 0; i < nNomeCat; i++)
-    if (!strcmp(nomeCat[i].base, base) && !strcmp(nomeCat[i].tipo, tipo) && !strcmp(nomeCat[i].id, id)) {
+    if (nomeCatBase(i, base) && !strcmp(nomeCat[i].tipo, tipo) && !strcmp(nomeCat[i].id, id)) {
       snprintf(saida, sizeof saida, "%s", nomeCat[i].nome); break; }
   // SEM A BASE EXATA (pasta Netflix, 01/10: a aba mostrava
   // "streaming_netflix_movies"): a base que a conta grava na fonte pode nao ser
@@ -1988,16 +2016,16 @@ static int nManiFalhouVolta;
 // e desligado nos dois lugares.
 static int lerManifesto(int iAddon, const char *base, Decl *saida, int max,
                          int ativo, int *totalReal, int *promovidos) {
-  char url[900], addonId[96] = "", nome[96], tipo[8], id[96];
+  char url[NV_ADDON_PEDIDO_MAX], addonId[96] = "", nome[96], tipo[8], id[96];
   char *corpo, *escolhido;
   const char *p, *fim;
   int n = 0, total = 0, e = 0, nEleg = 0;
   if (totalReal) *totalReal = 0;
   if (promovidos) *promovidos = 0;
-  snprintf(url, sizeof url, "%s/manifest.json", base);
   // Ja largado em paralelo no comeco de montar(); so cai na rede aqui quando
   // este addon nao estava na lista daquele instante.
-  corpo = maniObter(url, ativo);
+  corpo = descPedidoCoube(base, nv_addon_url(url, sizeof url, base, "/manifest.json"), sizeof url)
+          ? maniObter(url, ativo) : NULL;
   if (!corpo) {
     // Sem esta linha o log dizia "0 catalogo(s) declarado(s)", igual a um
     // addon que so tem stream.
@@ -2143,7 +2171,7 @@ static int lerManifesto(int iAddon, const char *base, Decl *saida, int max,
 
 typedef struct {
   const Decl *d;        // so para quem monta; o fio le as copias abaixo
-  char base[800], tipo[8], id[96];
+  char base[NV_ADDON_URL_MAX], tipo[8], id[96];
   CatItem itens[MAX_POR_FILEIRA];
   int  n;
   int  respondeu;
@@ -4866,10 +4894,11 @@ static void metaNegLimpar(void) {
 // `prazo` em segundos: o texto localizado espera 15; a ficha do catalogo 8, para
 // um addon lento nao segurar a pagina.
 static char *metaDoAddonT(int i, const char *tipo, const char *id, int prazo) {
-  char url[700], chave[96], *c;
+  char url[NV_ADDON_PEDIDO_MAX], chave[96], idUrl[768], *c;
   const char *base;
   unsigned h;
   if (!addons_ativo(i) || !addons_sondado(i) || !addons_fornece(i, ADD_META)) return NULL;
+  if (!nv_addon_id(idUrl, sizeof idUrl, id) || !idUrl[0]) return NULL;
   base = addons_base(i);
   if (!base || !base[0] || strstr(base, "cinemeta")) return NULL;
   h = hashBaseAddon(base);
@@ -4877,7 +4906,8 @@ static char *metaDoAddonT(int i, const char *tipo, const char *id, int prazo) {
   c = metaCacheObter(chave);
   if (c) return c;
   if (metaNegAtiva(chave)) return NULL;
-  snprintf(url, sizeof url, "%s/meta/%s/%s.json", base, tipo, id);
+  if (!descPedidoCoube(base, nv_addon_url(url, sizeof url, base, "/meta/%s/%s.json", tipo, idUrl),
+                       sizeof url)) return NULL;
   c = rede_baixar(url, prazo);
   if (c) metaCacheGuardar(chave, c);
   else metaNegGuardar(chave);
@@ -6615,7 +6645,7 @@ static int pendItem = -1, pendTemp;
 
 static CatItem  vtItens[VT_MAX];
 static int      vtN;
-static char     vtBase[600], vtTipo[8], vtCat[96], vtGenre[96];
+static char     vtBase[NV_ADDON_URL_MAX], vtTipo[8], vtCat[96], vtGenre[96];
 static int      vtPagina, vtFim, vtFioVivo, vtErro;
 static unsigned vtGeracao;
 // Fonte nao-addon aberta por desc_vertudo_fonte (issue #44): vtProvedor 1 e
@@ -6795,7 +6825,7 @@ static const char *tmdbMontarUrl(const ColSource *f, int pagina,
 static void *fioVerTudo(void *u) {
   (void)u;
   for (;;) {
-  char url[1600], base[600], type[8], id[96], genre[96], encoded[290], *corpo;
+  char url[NV_ADDON_PEDIDO_MAX], base[NV_ADDON_URL_MAX], type[8], id[96], genre[96], encoded[290], *corpo;
   int raw=0, skip, cap, prov;unsigned generation;
   ColSource fonte;
   pthread_mutex_lock(&vtTrava);
@@ -6892,10 +6922,11 @@ static void *fioVerTudo(void *u) {
     if((*c>='a'&&*c<='z')||(*c>='A'&&*c<='Z')||(*c>='0'&&*c<='9')||*c=='-'||*c=='_')encoded[z++]=*c;
     else {snprintf(encoded+z,4,"%%%02X",*c);z+=3;}
   }encoded[z]=0;
-  if(genre[0])snprintf(url,sizeof url,"%s/catalog/%s/%s/genre=%s&skip=%d.json",base,type,id,encoded,skip);
-  else if(skip)snprintf(url,sizeof url,"%s/catalog/%s/%s/skip=%d.json",base,type,id,skip);
-  else snprintf(url,sizeof url,"%s/catalog/%s/%s.json",base,type,id);
-  corpo=rede_baixar(url,10);
+  { int w;
+  if(genre[0])w=nv_addon_url(url,sizeof url,base,"/catalog/%s/%s/genre=%s&skip=%d.json",type,id,encoded,skip);
+  else if(skip)w=nv_addon_url(url,sizeof url,base,"/catalog/%s/%s/skip=%d.json",type,id,skip);
+  else w=nv_addon_url(url,sizeof url,base,"/catalog/%s/%s.json",type,id);
+  corpo=descPedidoCoube(base,w,sizeof url)?rede_baixar(url,10):NULL; }
   cap=strstr(id,"top100")?100:strstr(id,"top250")?250:VT_MAX;
   pthread_mutex_lock(&vtTrava);
   if(generation!=vtGeracao){pthread_mutex_unlock(&vtTrava);free(corpo);continue;}

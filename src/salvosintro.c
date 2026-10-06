@@ -19,6 +19,7 @@
 // e da classificacao "14" inventada: informacao com cara de dado.
 #include "salvosintro.h"
 #include "salvos.h"
+#include "sessao.h"
 #include "catalogo.h"
 #include "dados.h"
 #include "ajustes.h"
@@ -354,8 +355,11 @@ void sintro_desenhar(Uint32 agora) {
 
   desenhaOpcao(x, y, animFoco[0], !ajustes_salvos_no_trakt(),
                "Lista do Nuvio",
-               "Fica guardada nesta TV. O que você salvar no celular continua "
-               "chegando aqui pela sua conta.", a);
+               // Com conta, o "+" tambem vai para o perfil (contapend.c).
+               sessao_logada()
+                 ? "Fica nesta TV e no seu perfil da conta, em todo aparelho onde você entrar."
+                 : "Fica guardada nesta TV. O que você salvar no celular continua "
+                   "chegando aqui pela sua conta.", a);
   y += SI_OPCAO_H + 12.0f;
   desenhaOpcao(x, y, animFoco[1], ajustes_salvos_no_trakt(),
                "Watchlist do Trakt",
