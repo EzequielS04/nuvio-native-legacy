@@ -309,6 +309,12 @@ static void cenario(SDL_Window *w, const char *cen) {
   home_ir_topo();
   // Assenta: artes sobem, molas param.
   for (i = 0; i < 240; i++) { quadro(w, NULL, t); t += 16; }
+  // O DESTAQUE NO TOPO, parado: no layout Dinamica e o fundo + a arte de tela
+  // cheia (GFX_VITRINE / GFX_VITRINE_DIN), a tela que a TCL mede ao abrir.
+  for (i = 0; i < 120; i++) { quadro(w, &qs[i], t); t += 16; }
+  relatar(cen, "topo", qs, 120);
+  if (getenv("NV_RASTRO")) { gfx_rastro_grandes = 1; quadro(w, NULL, t); t += 16; gfx_rastro_grandes = 0; }
+  if (getenv("PERF_BMP")) { char b[800]; snprintf(b, sizeof b, "%s-%s-topo.bmp", getenv("PERF_BMP"), cen); guardar(b); }
   // Primeira fileira em foco (o destaque sai do foco), depois parado.
   tecla(SDLK_DOWN);
   for (i = 0; i < 120; i++) { quadro(w, NULL, t); t += 16; }

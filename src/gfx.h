@@ -253,7 +253,13 @@ typedef enum {
   // COORDENADA DE TELA (vAmb) e recortada pelos cantos do painel: o vidro
   // fosco. uTex = o assado; uCor.a = alfa. Use gfx_vidro_fosco.
   GFX_FOSCO = 43,
-  GFX_NMODOS = 44
+  // GFX_VITRINE_DIN — o GFX_VITRINE OPACO sobre o fundo da Dinamica
+  // (GFX_FUNDO_DIN) calculado no proprio fragmento: o destaque e o fundo numa
+  // passada so. Nao se pede direto: gfx_rect troca o GFX_VITRINE por ele
+  // quando o fundo da Dinamica esta pendente e o destaque cobre o topo da tela
+  // (ver gfx_fundo_din_desenhar). uDin = cor do topo e queda.
+  GFX_VITRINE_DIN = 44,
+  GFX_NMODOS = 45
 } GfxModo;
 
 typedef struct {
@@ -561,6 +567,14 @@ void gfx_vidro_fosco_fonte(GLuint tex);
 // imersiva, so quando `chave` (n <= 24 floats) muda. Devolve a textura (0 =
 // sem FBO: desenhe direto).
 GLuint gfx_luz_canal(int canal, const float *chave, int n, void (*pintar)(void *), void *ctx);
+// O MESMO fundo de tela cheia (alfa 1, sem veu), ADIADO como a luz imersiva
+// pendente: o primeiro desenho decide. A arte com rampa de tela cheia
+// (GFX_DETALHE, GFX_HERO*) le o fundo pelo uAmb e sai opaca numa passada so;
+// um veu de cor de tela cheia vai junto na passada do fundo; qualquer outro
+// desenho pinta o fundo antes, como gfx_luz_canal_desenhar faria. Devolve 0
+// (e nao adia) dentro de snapshot/miniatura, com tesoura ou opacidade de grupo.
+// Quem precisa LER a tela logo depois do fundo (conferencia) nao adia.
+int gfx_luz_canal_adiar(GLuint tex, int pontilhar);
 // A passada de tela da luz imersiva (GFX_SNAP de tela cheia, opaca e sem
 // mistura com alfa 1). `veu` = { r, g, b, forca } aplicado na mesma passada, ou
 // NULL; `pontilhar` = a cor pelo nv_dither.
@@ -585,6 +599,10 @@ void gfx_ambiente_descarregar(void);
 // Um quad de tela cheia, OPACO e sem mistura, com um degrade vertical de uma
 // cor: `topo` no alto e topo*`queda` na base. E o unico custo do fundo — nada
 // e assado nem decodificado por troca de titulo. Substitui o clear.
+// ADIADO ate o primeiro desenho do quadro: se ele e o destaque (GFX_VITRINE)
+// de largura inteira, a partir do topo e com alfa 1, os dois saem numa passada
+// opaca (GFX_VITRINE_DIN) e o fundo so e pintado onde o destaque nao chega;
+// senao o fundo e pintado antes dele, como sempre. Mesmo pixel.
 void          gfx_fundo_din_desenhar(const float topo[3], float queda);
 // Contorno de `esp` PIXELS por dentro de r: a borda de fora do anel e a borda
 // de r, entao anel e miolo no mesmo rect dao uma borda so. `raio` e o de r,
