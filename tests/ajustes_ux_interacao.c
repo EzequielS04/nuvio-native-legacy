@@ -150,7 +150,8 @@ int main(void) {
   ajustes_abrir_opcao(AJ_TEX_MB); ajustes_iniciar(); assert(uxVeioBusca);
   ajustes_encerrar(); ajustes_iniciar(); assert(!uxVeioBusca);
   focarOpcao(AJ_TEX_MB);
-  key(SDLK_LEFT); while (uxIndice > 0) key(SDLK_UP);
+  key(SDLK_LEFT); while (uxIndice >= 2) key(SDLK_UP);   // grade: sobe ate a fileira de cima
+  while (uxChipAv || uxIndice > 0) key(SDLK_LEFT);        // e anda ate o Buscar
   key(SDLK_RETURN); assert(ajustes_pediu_busca()); assert(!ajustes_pediu_busca());
 
   // Dependência: abrir requisito e voltar retorna à opção original.
@@ -177,18 +178,30 @@ int main(void) {
     valor[AJ_AVANCADAS] = 0;
     for (i = 0; i < AJ_N_TELA; i++) if (TELA[i].tipo == IT_OPC && uxAvancada(TELA[i].op)) assert(visivel(i) || TELA[i].op == AJ_ICONE_APP);
     focoIndice = 1; }   // focus on the index: the row rests (no hover)
-  // Top pills in several rows (uxChipLinha, measured by the draw): Up/Down change
-  // row, Left/Right stay inside it.
-  { focoIndice = 1; uxChipAv = 0; uxChipLinha[0] = 0; uxChipLinha[1] = 1; uxChipLinha[2] = 1;
-    uxIndice = 0; key(SDLK_RIGHT); assert(uxIndice == 0 && !uxChipAv);          // Buscar alone in its row
-    key(SDLK_DOWN); assert(uxIndice == 1 && !uxChipAv);                         // down to Diferentes
-    key(SDLK_RIGHT); assert(uxChipAv);                                          // same row as Avancadas
-    key(SDLK_UP); assert(!uxChipAv && uxIndice == 0);                           // up to Buscar
-    uxChipLinha[0] = 0; uxChipLinha[1] = 0; uxChipLinha[2] = 1;
-    uxIndice = 1; uxChipAv = 0; key(SDLK_RIGHT); assert(!uxChipAv && uxIndice == 1);   // Avancadas is a row below
-    key(SDLK_DOWN); assert(uxChipAv);
-    key(SDLK_UP); assert(!uxChipAv && uxIndice == 0);
-    uxChipLinha[0] = uxChipLinha[1] = uxChipLinha[2] = 0; uxIndice = 1; focoIndice = 1; }
+  // 2.0.2: the index is a GRID. Top row: Buscar, Diferentes, Avancadas (one row,
+  // each over a column); below, one column per group. Up/Down inside a column,
+  // Left/Right across columns at the same height, Up from the first card goes
+  // to the pill over its column, OK opens.
+  { focoIndice = 1; uxChipAv = 0;
+    uxIndice = 0; key(SDLK_RIGHT); assert(uxIndice == 1 && !uxChipAv);
+    key(SDLK_RIGHT); assert(uxChipAv);
+    key(SDLK_RIGHT); assert(uxChipAv);                                          // last of the row
+    key(SDLK_LEFT); assert(!uxChipAv && uxIndice == 1);
+    key(SDLK_LEFT); assert(uxIndice == 0);
+    key(SDLK_DOWN); assert(uxIndice == 2 + AJS_HOME);                           // Buscar -> first card of Telas
+    key(SDLK_DOWN); assert(uxIndice == 2 + AJS_TITULO);
+    key(SDLK_RIGHT); assert(uxIndice == 2 + AJS_REPRODUCAO + 1);                // same height in Assistir
+    key(SDLK_RIGHT); assert(uxIndice == 2 + AJS_CONTAS + 1);
+    key(SDLK_RIGHT); assert(uxIndice == 2 + AJS_CONTAS + 1);                    // last column
+    key(SDLK_UP); key(SDLK_UP); assert(uxChipAv && focoIndice);                 // pill over Conta e sistema
+    key(SDLK_DOWN); assert(!uxChipAv && uxIndice == 2 + AJS_CONTAS);
+    key(SDLK_LEFT); assert(uxIndice == 2 + AJS_REPRODUCAO);
+    key(SDLK_UP); assert(uxIndice == 1 && !uxChipAv);                           // Diferentes over Assistir
+    key(SDLK_DOWN); key(SDLK_DOWN); key(SDLK_DOWN); key(SDLK_DOWN); key(SDLK_DOWN);
+    assert(uxIndice == 2 + AJS_CONTAS - 1);                                     // stops at the end of the column
+    key(SDLK_RETURN); assert(!focoIndice && secAtual == AJS_CONTAS - 1);        // OK opens
+    key(SDLK_LEFT); assert(focoIndice && uxIndice == 2 + AJS_CONTAS - 1);       // Left goes back to the card
+    uxIndice = 1; focoIndice = 1; }
   valor[AJ_ANIM] = 1; ajustes_atualizar(1.0f, SDL_GetTicks());
   assert(animItem[focoItem] == 0);
 

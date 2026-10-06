@@ -338,11 +338,8 @@ static float aj2X0(void) { return (48.0f + ajustes_rail_largura_fixa()) / AJ2_S;
 static float aj2N1;
 static GfxRect aj2MenuR(void) {
   float n = aj2N1 < 0 ? 0 : aj2N1 > 1 ? 1 : aj2N1;
-  return (GfxRect){ aj2X0(), AJ2_TOPO, AJ2_MENU_W - (AJ2_MENU_W - AJ2_RAIL_W) * n, NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM };
-}
-static GfxRect aj2ResumoR(void) {
-  float x = aj2X0() + AJ2_MENU_W + 24.0f;
-  return (GfxRect){ x, AJ2_TOPO, NV_VTELA_W - AJ2_MARGEM - x, NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM };
+  (void)n;   // 2.0.2: o indice e a grade; o menu so aparece como trilho
+  return (GfxRect){ aj2X0(), AJ2_TOPO, AJ2_RAIL_W, NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM };
 }
 static int aj2TemInsp(void) { return ajustes_tamanho_ajustes() < 1.19f; }
 // A LARGURA DA LISTA DA V2 (1000 em 80-100%). Nao desenha mais nada: e a regua
@@ -358,19 +355,20 @@ static float aj2ListaWRef(void) {
 // opcao em foco fica a esquerda, grande, com kicker, titulo e descricao
 // embaixo (sem ilha); a LISTA compacta numa ilha a direita. A coluna da arte
 // comeca depois da ilha do menu recolhida; arte 44% do que sobra, 36 de vao.
-static float aj2ArteX(void) { return aj2X0() + AJ2_RAIL_W + 28.0f; }
+#define AJ2_CORPO (AJ2_TOPO + AJ_CAB_PAGINA)   // 2.0.2: abaixo do cabecalho da pagina
+static float aj2ArteX(void) { return aj2X0(); }
 static float aj2ArteW(void) { return (NV_VTELA_W - AJ2_MARGEM - aj2ArteX()) * 0.44f; }
 static GfxRect aj2ListaR(void) {
   float x = aj2ArteX() + aj2ArteW() + 36.0f;
-  return (GfxRect){ x, AJ2_TOPO, NV_VTELA_W - AJ2_MARGEM - x, NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM };
+  return (GfxRect){ x, AJ2_CORPO, NV_VTELA_W - AJ2_MARGEM - x, NV_VTELA_H - AJ2_CORPO - AJ2_MARGEM };
 }
 // O "inspetor" da A3 e a coluna da arte (sem ilha).
 static GfxRect aj2InspR(void) {
-  return (GfxRect){ aj2ArteX(), AJ2_TOPO, aj2ArteW(), NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM };
+  return (GfxRect){ aj2ArteX(), AJ2_CORPO, aj2ArteW(), NV_VTELA_H - AJ2_CORPO - AJ2_MARGEM };
 }
 static GfxRect aj2EditorR(void) {
   float x = aj2X0() + AJ2_EDITOR_DX;
-  return (GfxRect){ x, AJ2_TOPO, NV_VTELA_W - AJ2_MARGEM - x, NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM };
+  return (GfxRect){ x, AJ2_CORPO, NV_VTELA_W - AJ2_MARGEM - x, NV_VTELA_H - AJ2_CORPO - AJ2_MARGEM };
 }
 // Onde a lista comeca (o fim do cabecalho: 42 + kicker 21,8 + 4 + titulo 62,9
 // + 8 + sub 29 + 18) e onde termina (a margem; os ultimos 90 px esvanecem).

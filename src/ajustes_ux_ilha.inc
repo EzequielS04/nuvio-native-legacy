@@ -230,9 +230,9 @@ static float aj2Cabecalho(GfxRect fr, const char *kick, const char *titulo, cons
 // A3: o cabecalho compacto da ilha da lista (o nome da categoria em 26/800 e,
 // a direita, o chip Avancados, que continua focavel com ↑ da primeira linha).
 // O kicker grande e a descricao da categoria moram agora na coluna da arte.
+// 2.0.2: o titulo foi para o cabecalho da pagina (aj2DesenharPagina).
 static void aj2CabecalhoA3(GfxRect fr, const char *titulo, float reservaDir, float a) {
-  TxtLinha t = ajTxtC(TXT_V2_GRUPO, titulo, fr.w - 80.0f - reservaDir);
-  txt_desenhar_alpha(t, fr.x + 40.0f, fr.y + 22.0f + (60.0f - t.h) * 0.5f, a);
+  (void)fr; (void)titulo; (void)reservaDir; (void)a;
 }
 // RODAPE DA LISTA (A3): as dicas a esquerda e o aviso ("Ajuste salvo nesta
 // TV.") a direita, na mesma faixa abaixo da lista. Antes o aviso era desenhado
@@ -838,7 +838,8 @@ static void ajDesenharTela(void) {
   if (modal) gfx_opacidade_grupo = 0.16f;
   g0 = gfx_opacidade_grupo;
   aj2DesenharMenu(&p);
-  if (p.rA > 0.003f) aj2DesenharResumo(p.rA);
+  if (p.rA > 0.003f) aj2DesenharGrade(p.rA);
+  if (p.rA < 0.997f && uxIndice >= 1) aj2DesenharPagina(1.0f - p.rA);
   // O inspetor antes da lista: na transicao a lista desliza por cima dele.
   if (p.iA > 0.003f && uxIndice >= 1) {
     GfxRect ir = aj2InspR();
@@ -849,9 +850,8 @@ static void ajDesenharTela(void) {
   }
   // A LISTA nasce da linha da categoria: escala em torno dela.
   if (p.lA > 0.003f && uxIndice >= 1) {
-    GfxRect fr = aj2ListaR(), mr = aj2MenuR();
-    float oy = p.lOy > 0 ? p.lOy
-             : mr.y + AJ2_MENU_PAD + aj2MenuY(uxIndice) - aj2MRol + AJ2_MENU_LN * 0.5f;
+    GfxRect fr = aj2ListaR();
+    float oy = p.lOy > 0 ? p.lOy : aj2GradeOrigemY(uxIndice);
     gfx_opacidade_grupo = g0 * p.lA;
     gfx_transformar(fr.x, oy, p.lS, p.lDx, 0);
     aj2TextoLista = p.lTxt;

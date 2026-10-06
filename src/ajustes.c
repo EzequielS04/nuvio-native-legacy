@@ -144,9 +144,12 @@ static int focoEscuro(void) { return tintaFoco() < 128; }   // superficie do foc
 // A3 (04/10): o cabecalho compacto da lista (titulo da categoria + chip
 // Avancados, 96) e o rodape proprio (dicas e o aviso "Ajuste salvo", 72) que o
 // aviso nao cubra mais a ultima linha.
-#define AJ_TOPO        (112.0f / ajustes_tamanho_ajustes() + AJ_A3_CAB)
+#define AJ_TOPO        (112.0f / ajustes_tamanho_ajustes() + AJ_CAB_PAGINA + AJ_A3_CAB)
+// 2.0.2: o cabecalho da pagina da categoria (o cartao da grade crescido), acima
+// da arte e da lista; o titulo saiu de dentro da ilha da lista.
+#define AJ_CAB_PAGINA  136.0f
 #define AJ_BASE        (NV_VTELA_H - 40.0f / ajustes_tamanho_ajustes() - AJ_A3_RODAPE)
-#define AJ_A3_CAB       96.0f
+#define AJ_A3_CAB       28.0f
 #define AJ_A3_RODAPE    72.0f
 // Raio da linha em fracao do menor lado (o SDF do shader e normalizado):
 // 12px sobre 88 de altura.
