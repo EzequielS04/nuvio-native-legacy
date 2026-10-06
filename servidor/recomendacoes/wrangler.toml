@@ -7,6 +7,13 @@ binding = "DB"
 database_name = "nuvio-recomendacoes"
 database_id = "fbea4764-9125-474e-ae4e-875d2e21b2fc"
 
+# TV VIDAA: o site e o proxy dela vivem no worker nuvio-tv (servidor/tv). Este
+# binding so repassa /tv/* e /v1/proxy para la (ver index.js). NUNCA ponha
+# [assets] aqui de novo: todo deploy sem o site montado apagava a pagina da TV.
+[[services]]
+binding = "TV"
+service = "nuvio-tv"
+
 # CRIADORES: contas que levam o selo "Criador" ao lado do nome (amigos.js,
 # seloDe). Ids canonicos separados por virgula; cada perfil da conta
 # (`...:<n>`) conta tambem. O id nao e segredo e nunca sai nas respostas.
