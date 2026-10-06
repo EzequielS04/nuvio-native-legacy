@@ -485,7 +485,15 @@ static int epgIdx = -1;
 // PRIMEIRA reproducao da sessao e ficaria mudo em todas as outras — que e
 // justamente quando o relato acontece.
 static int credAvisado, credFimAvisado, semProxAvisado;
-static double credAvisadoEm;
+static double credAvisadoEm, credAvisadoDur;
+// 2.0.1, "o Proximo apareceu no meio do episodio". Zerados a cada ABERTURA, e
+// nao a cada episodio: a mesma copia reaberta por outra fonte e outra duracao.
+//   duracaoReal    o pipeline ja disse a duracao DESTE video. Ate la duracaoSeg
+//                  e a minutagem do catalogo ou os 114 min de reserva, e decidir
+//                  com ela e decidir com numero inventado.
+//   durCurtaAvisado/durPassouAvisado   uma linha de log cada, por reproducao.
+static int duracaoReal, durCurtaAvisado, durPassouAvisado;
+static int concluiuAgora(double cred);
 static int introIdx=-1, introT=-1, introE=-1;
 static int retomadaAplicada, retomarPct;
 #ifdef NV_ANDROID
@@ -633,7 +641,7 @@ void player_definir_episodio(int t, int e) {
     if (idx != introIdx || introT || introE) {
       introIdx = idx; introT = introE = 0;
       intro_pedir(c->imdb, 0, 0);
-      credAvisado = credFimAvisado = semProxAvisado = 0; credAvisadoEm = 0;
+      credAvisado = credFimAvisado = semProxAvisado = 0; credAvisadoEm = credAvisadoDur = 0;
     }
     return;
   }
@@ -684,7 +692,7 @@ void player_definir_episodio(int t, int e) {
         else if(ep->episodio==epE+1)dP=duracaoTexto(ep->duracao);
       }
       intro_pedir_vizinhos(c->imdb,epT,epE,dA,dP); }
-    credAvisado=credFimAvisado=semProxAvisado=0;credAvisadoEm=0;
+    credAvisado=credFimAvisado=semProxAvisado=0;credAvisadoEm=credAvisadoDur=0;
   }
 }
 
@@ -1248,6 +1256,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
   const CatItem *c = item();
   float d = c ? duracaoDeMeta(c->meta) : 0.0f;
   duracaoSeg = d > 1.0f ? d : PLR_DUR_PADRAO;
+  duracaoReal = durCurtaAvisado = durPassouAvisado = 0;
 
   // Identidade do episodio e independente do foco no painel de navegacao.
   //
@@ -1462,7 +1471,7 @@ static void lembrarFonte(void) {
   if (erroFonte || video_falhou()) { fontevolta_esquecer("sessao falhou"); return; }
   if (!video_pronto() || duracaoSeg < 120.0f) return;
   cred = credEfetivo();
-  if (player_regra_concluiu(posSeg, duracaoSeg, cred)) { fontevolta_esquecer("titulo concluido"); return; }
+  if (concluiuAgora(cred)) { fontevolta_esquecer("titulo concluido"); return; }
   // A lista pode ter sido trocada por baixo (a busca de fundo do Retomar que
   // abriu pela fonte guardada): quem toca e a entrada que ja existe.
   if (!s || strcmp(s->url, url)) return;
@@ -1521,7 +1530,7 @@ static void fecharSessao(int manter) {
     // do Matroska descreve ESTA copia, o TheIntroDB descreve o lancamento.
     double cred = credEfetivo();
     int concluiu;
-    concluiu = player_regra_concluiu(posSeg, duracaoSeg, cred);
+    concluiu = concluiuAgora(cred);
     float pos = concluiu ? duracaoSeg : posSeg;
     // Pelo indice CORRENTE do titulo, nao pelo guardado: depois de uma
     // republicacao o guardado grava o progresso no titulo errado.
@@ -1654,8 +1663,7 @@ static int podeReter(void) {
          video_pronto() && video_ativo() && !video_falhou() && !video_terminou() &&
          !video_conflito_recurso() && !video_reconectando() && video_url_atual()[0] &&
          duracaoSeg >= 120.0f && home_retorno_vale(idxAtual(), posSeg, duracaoSeg) &&
-         !player_regra_concluiu(posSeg, duracaoSeg,
-                               credEfetivo());
+         !concluiuAgora(credEfetivo());
 }
 
 void player_preparar_retencao(void) {
@@ -1983,7 +1991,23 @@ int player_regra_proximo(double posSeg, double durSeg, double cred) {
   if (durSeg <= 1.0) return 0;
   if (cred > 1.0 && durSeg - cred <= credJanelaDe(durSeg))
     return posSeg >= cred;   // marcador aceito: ele manda, e so ele
+  // PISO DA ESTIMATIVA. Log da TCL na 2.0.0: "2 min finais: pos 0s de 30s" — o
+  // pipeline informou 30 s e os "2 minutos finais" eram o video inteiro, do
+  // segundo zero. Abaixo de duas janelas nao ha "fim" para estimar.
+  if (durSeg < 2.0 * PLR_CRED_PISO_S) return 0;
   return durSeg - posSeg <= PLR_CRED_PISO_S;
+}
+
+// A DURACAO INFORMADA NAO E A DO EPISODIO. Log de webOS na 2.0.0: uma fonte MP4
+// informou "duration":536033 num episodio cujo marcador de creditos fica em
+// 1335 s. Com 536 s a estimativa sobe o cartao aos 416 s — o meio do episodio.
+// O catalogo traz a minutagem do episodio ("38 min"); quando o pipeline diz
+// MENOS DE UM TERCO dela, o numero dele nao descreve este episodio. Um terco e
+// largo de proposito: minutagem de catalogo e arredondada, as vezes a media da
+// serie, e episodio duplo existe.
+#define PLR_CAT_MIN_S 900.0
+int player_duracao_suspeita(double durSeg, double catSeg) {
+  return catSeg >= PLR_CAT_MIN_S && durSeg > 1.0 && durSeg * 3.0 < catSeg;
 }
 
 // Ver a nota longa em player.h. Aqui so a conta: a mesma regra do cartao, mais
@@ -1992,11 +2016,48 @@ int player_regra_proximo(double posSeg, double durSeg, double cred) {
 // valerem alguma coisa.
 int player_regra_concluiu(double posSeg, double durSeg, double cred) {
   if (durSeg <= 1.0) return 0;
-  if (posSeg >= durSeg - 60.0) return 1;
+  // MARCADOR MUITO DEPOIS DO "FIM": a duracao e que esta errada (536 s contra
+  // creditos em 1335 s). Sem isto os 60 s de folga abaixo davam o episodio por
+  // visto aos 476 s.
+  if (cred > 1.0 && cred - durSeg > credJanelaDe(durSeg)) return posSeg >= cred;
+  // A folga nunca vale antes da metade: com 30 s informados ela concluia o
+  // titulo no segundo zero.
+  if (posSeg >= durSeg - 60.0 && posSeg >= durSeg * 0.5) return 1;
   return player_regra_proximo(posSeg, durSeg, cred);
 }
 
+// Minutagem do episodio corrente no catalogo, em segundos (0 = nao ha). Lida na
+// hora: a lista de episodios pode chegar depois da abertura (#151).
+static double duracaoCatalogo(void) {
+  if (epT <= 0) return 0.0;
+  for (int ix = idxAtual(), i = 0; i < cat_n_episodios(ix); i++) {
+    const CatEp *ep = cat_episodio(ix, i);
+    if (ep && ep->temporada == epT && ep->episodio == epE) return duracaoTexto(ep->duracao);
+  }
+  return 0.0;
+}
+
+// player_regra_concluiu com o estado do player: e o que as saidas chamam.
+// Duracao suspeita e sem marcador, quem mede o fim e a minutagem do catalogo.
+static int concluiuAgora(double cred) {
+  double cat = duracaoCatalogo();
+  if (!(cred > 1.0) && player_duracao_suspeita(duracaoSeg, cat))
+    return posSeg >= cat * 0.9;
+  return player_regra_concluiu(posSeg, duracaoSeg, cred);
+}
+
 static int ofertaProximo(void) {
+  // SEM A DURACAO DO VIDEO NAO SE DECIDE NADA. Log da 2.0.0: "creditos
+  // RECUSADO: comecam em 1335s de 6840s" impresso ANTES de "abrir: url ao
+  // pipeline" — a conta rodou com os 114 min de reserva e ainda gastou a linha
+  // unica de diagnostico daquele marcador.
+  if (comVideo && !duracaoReal) return 0;
+  if (!durPassouAvisado && duracaoReal && posSeg > duracaoSeg + 5.0f) {
+    durPassouAvisado = 1;
+    printf("[posplay] duracao informada errada: posicao %.0fs ja passou dos %.0fs\n",
+           (double)posSeg, (double)duracaoSeg);
+    fflush(stdout);
+  }
   const CatEp *p=player_proximo_episodio();
   // #151: "o Proximo as vezes nao aparece". Sem proximo episodio na lista o
   // cartao nao existe, e isso nao deixava rastro: uma linha por episodio, nos
@@ -2026,8 +2087,8 @@ static int ofertaProximo(void) {
     // antes do final" nao tinha como ser medido — nao dava para saber se quem
     // abriu o cartao foi o marcador aceito ou a regra dos 2 minutos com uma
     // duracao errada.
-    if (!credAvisado || credAvisadoEm != cred) {
-      credAvisado = 1; credAvisadoEm = cred;
+    if (!credAvisado || credAvisadoEm != cred || credAvisadoDur != (double)duracaoSeg) {
+      credAvisado = 1; credAvisadoEm = cred; credAvisadoDur = (double)duracaoSeg;
       printf("[posplay] creditos %s: comecam em %.0fs de %.0fs (sobram %.0fs, janela %.0fs)\n",
              aceito ? "aceito" : "RECUSADO", cred, (double)duracaoSeg,
              resta, janela);
@@ -2048,7 +2109,17 @@ static int ofertaProximo(void) {
   }
   // FALLBACK sem dado de ninguem. Se a duracao estiver errada, e ELE quem abre
   // o cartao cedo — por isso a linha abaixo diz de onde veio.
-  if (duracaoSeg - posSeg <= PLR_CRED_PISO_S) {
+  { double cat = duracaoCatalogo();
+    if (player_duracao_suspeita(duracaoSeg, cat)) {
+      if (!durCurtaAvisado) {
+        durCurtaAvisado = 1;
+        printf("[posplay] duracao suspeita: pipeline diz %.0fs, catalogo diz %.0fs; sem marcador o cartao nao sobe\n",
+               (double)duracaoSeg, cat);
+        fflush(stdout);
+      }
+      return 0;
+    } }
+  if (player_regra_proximo(posSeg, duracaoSeg, 0.0)) {
     if (!credFimAvisado) {
       credFimAvisado = 1;
       printf("[posplay] 2 min finais: pos %.0fs de %.0fs\n",
@@ -2734,7 +2805,7 @@ void player_atualizar(float dt, Uint32 agora) {
       legsync_audio_habilitar(ajustes_legenda_sync_audio());
       legsync_passo(video_url_atual(), posSeg, bf > 0.5 ? bf - (double)posSeg : -1.0,
                     scrubbing || video_bufferando_ms() > 0, agora); }
-    if (d > 1.0) duracaoSeg = (float)d;
+    if (d > 1.0) { duracaoSeg = (float)d; duracaoReal = 1; }
     // MINIATURAS DO SEEKR: so com a duracao REAL (o servico escolhe a versao
     // da folha por ela) e uma vez por titulo — seekr_pedir ignora o repetido.
     if (d > 60.0 && video_pronto() && !ehCanal() && ajustes_seekr_ligado()) {
@@ -2788,7 +2859,7 @@ void player_atualizar(float dt, Uint32 agora) {
       if (ci && ci->imdb[0] && video_pronto() && duracaoSeg >= 120.0f) {
         double cr = credEfetivo();
         atividade_player_passo(ci, epT, epE, posSeg, duracaoSeg, tocando && !scrubbing,
-                               player_regra_concluiu(posSeg, duracaoSeg, cr), dt);
+                               concluiuAgora(cr), dt);
       }
     }
     relogio_amostra(&relLeg, video_pos(), monoSeg(), tocando && !scrubbing);
@@ -4502,7 +4573,7 @@ void player_shot_favorito(int f) { shotFav = f; }
 void player_shot_estado(Uint32 agora, float pos, float dur, int toca, int bt,
                         int barra, int so) {
   posSeg = posVis = pos; posVisSolto = 0;
-  if (dur > 0.0f) duracaoSeg = dur;
+  if (dur > 0.0f) { duracaoSeg = dur; duracaoReal = 1; }
   tocando = toca; botao = bt; barraFoco = barra; soBarra = so;
   cheio = so ? 0.0f : 1.0f;
   fileira = barra ? 0.0f : 1.0f;
