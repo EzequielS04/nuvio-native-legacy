@@ -155,6 +155,12 @@ void mkvass_ultima_falha(int *http, int *curl);
 void mkvass_parar(void);
 
 int  mkvass_estado(void);
+// #269: aceitar tambem faixa de TEXTO SIMPLES (S_TEXT/UTF8 e S_TEXT/WEBVTT),
+// entregue ao overlay como SubRip (o estilo do app vale, como na externa).
+// Padrao 0: LG e Tizen web seguem so com ASS/SSA (a TV desenha SRT bem). O
+// .tpk liga, porque o player dele nao entrega o texto da legenda embutida. A
+// pre-busca antes do video continua so ASS.
+void mkvass_aceitar_texto(int sim);
 // 1 quando o estado e um dos no-go.
 int  mkvass_nogo(void);
 // 1 quando a colheita e por VARREDURA dos Clusters (o indice nao apontava os

@@ -10,6 +10,14 @@
 // escolhe por hEscolher. Legenda EMBUTIDA: o player entrega o texto por evento
 // (SubtitleUpdated, com duracao) e o app desenha, igual ao Tizen web. Legenda
 // EXTERNA (OpenSubtitles/addon) nem passa por aqui: legenda.c baixa e desenha.
+//
+// #269: legenda embutida de TEXTO num MKV (ASS, SRT, WebVTT) nao depende mais
+// do SubtitleUpdated: faixas.c entrega a faixa ao overlay do app, que a le do
+// MKV por Range (mkvass.c, ligado aqui por mkvass_aceitar_texto), e o player
+// fica com a legenda "desligada" (legAtual = -1: o texto dele, se vier, nao e
+// desenhado — sem desenho duplo). O caminho nativo continua para fonte que nao
+// e MKV, faixa sem par no cabecalho e no-go do mkvass, e agora deixa rastro:
+// "[video] tpk: first subtitle cue ..." ou "... no subtitle cue in 60 s ...".
 #ifdef NV_TPK
 #include "video.h"
 #include "video_reconexao.h"
@@ -48,6 +56,19 @@ static char legTexto[1024];
 static Uint32 legAte;
 // Host cue callbacks may run on another thread; only access under travaLeg.
 static int legCuesBloqueados = 1;
+// #269 DIAGNOSTICO DO SubtitleUpdated. Nenhum log de TV jamais mostrou um cue
+// nativo chegando, entao nao se sabia se o evento dispara no Tizen 9. Sob
+// travaLeg: `legEnvAtivo`/`legEnvEm` = ha escrita de faixa no player, e
+// quando; `legEnvFaixa` = qual; `legCueSessao` = ja veio
+// algum cue nesta sessao, `legCueEnv` = ja veio cue depois da escrita.
+// `legSemCueMs` (fio do app) = tempo TOCANDO desde a escrita, sem cue.
+static Uint32 legEnvEm, legAbriuEm;
+static int legEnvAtivo;
+static int legEnvFaixa = -1, legCueSessao, legCueEnv, legSemCueLogado;
+static Uint32 legSemCueMs, legBombeouEm;
+#ifndef LEG_SEM_CUE_MS
+#define LEG_SEM_CUE_MS 60000u   // o teste encurta
+#endif
 
 static char urlAtual[4096];
 static char cabecalhos[2048];
@@ -100,6 +121,9 @@ static int reconBuscarMs = -1;
 // mkvEstado: 0 nada a fazer, 1 procurando, 2 fio na rede, 3 lido (ou desistiu).
 static MkvFaixa mkvFx[MKV_MAX_FAIXAS];
 static volatile int mkvN, mkvEstado, faixasNovas;
+// #269: a folha pediu a sonda ja (video_sondar_mkv_agora); `mkvNaoMkv`: a
+// sonda pela rede voltou sem TrackEntry nenhuma (nao e MKV).
+static volatile int mkvSondarJa, mkvNaoMkv;
 static unsigned mkvGeracao;
 static int fonteMp4;
 static Uint32 mkvOlhou;
@@ -188,7 +212,24 @@ void nv_tpk_video_faixas_fim(int selAudio, int selLeg) {
 // Host: texto da legenda embutida escolhida, valido por `durMs`.
 __attribute__((visibility("default")))
 void nv_tpk_video_legenda(const char *texto, int durMs) {
+  int primeiroSessao = 0, primeiroEnv = 0, faixa = -1, chars = texto ? (int)strlen(texto) : 0;
+  Uint32 agora = SDL_GetTicks(), desdeEnv = 0, desdeAbriu = 0;
   if (!travaLeg) return;
+  SDL_LockMutex(travaLeg);
+    // O cue que chega DURANTE a escrita (bloqueado) e da faixa velha: nao prova
+  // a nova.
+  if (!legCueSessao) { legCueSessao = 1; primeiroSessao = 1; desdeAbriu = agora - legAbriuEm; }
+  if (legEnvAtivo && !legCueEnv && !legCuesBloqueados) {
+    legCueEnv = 1; primeiroEnv = 1; desdeEnv = agora - legEnvEm; faixa = legEnvFaixa;
+  }
+  SDL_UnlockMutex(travaLeg);
+  if (primeiroEnv)
+    printf("[video] tpk: first subtitle cue after %u ms, %d chars (track=%d, dur %d ms)\n",
+           (unsigned)desdeEnv, chars, faixa, durMs);
+  else if (primeiroSessao)
+    printf("[video] tpk: first subtitle cue of the session %u ms after open, %d chars (no track written)\n",
+           (unsigned)desdeAbriu, chars);
+  if (primeiroEnv || primeiroSessao) fflush(stdout);
   SDL_LockMutex(travaLeg);
   if (legCuesBloqueados) { SDL_UnlockMutex(travaLeg); return; }
   snprintf(legTexto, sizeof legTexto, "%s", texto ? texto : "");
@@ -231,16 +272,56 @@ static void legendaLimpar(int bloquear) {
   legTexto[0] = 0; legAte = 0; legCuesBloqueados = bloquear;
   SDL_UnlockMutex(travaLeg);
 }
+// #269: marca a escrita da faixa `i` no player (ou -1 = nenhuma), para o
+// diagnostico do primeiro cue / do silencio de 60 s.
+static void legendaMarcarEnvio(int i) {
+  if (!travaLeg) return;
+  SDL_LockMutex(travaLeg);
+  legEnvAtivo = i >= 0; legEnvEm = SDL_GetTicks();
+  legEnvFaixa = i; legCueEnv = 0;
+  SDL_UnlockMutex(travaLeg);
+  legSemCueMs = 0; legSemCueLogado = 0;
+}
 static void legendaEnviar(int i) {
   // Discard the cached old cue and callbacks during the host write. The host
   // callback has no track/session identity; late cues after dispatch cannot
   // be identified here and still require the host's track switch to work.
   legendaLimpar(1);
+  legendaMarcarEnvio(i);
   if (hEscolher) hEscolher(1, faixaLeg[i].numero);
   legendaLimpar(0);
 }
 
-int  video_iniciar(void) { if (!travaLeg) travaLeg = SDL_CreateMutex(); return hAbrir != NULL; }
+// #269: escrita feita, video TOCANDO ha 60 s e nenhum cue do player: o
+// SubtitleUpdated nao entrega esta faixa nesta TV. Uma linha por escrita, com
+// o codec do cabecalho do MKV (o player nao expoe codec de legenda: a
+// SubtitleTrackInfo do Tizen.Multimedia so tem GetCount/GetLanguageCode/
+// Selected). Conta tempo de reproducao, nao de relogio: pausa e buffer nao
+// valem como silencio.
+static void legendaVigiarSilencio(Uint32 agora) {
+  int env, cue, faixa, l = legAtual;
+  Uint32 dt = legBombeouEm ? agora - legBombeouEm : 0;
+  legBombeouEm = agora;
+  if (!travaLeg || legSemCueLogado || l < 0) return;
+  SDL_LockMutex(travaLeg);
+  env = legEnvAtivo; cue = legCueEnv; faixa = legEnvFaixa;
+  SDL_UnlockMutex(travaLeg);
+  if (!env || cue || faixa != l) return;
+  if (tocando && !bufferando && dt < 1000u) legSemCueMs += dt;
+  if (legSemCueMs < LEG_SEM_CUE_MS) return;
+  legSemCueLogado = 1;
+  printf("[video] tpk: no subtitle cue in %u s (track=%d, lang=%s, codec=%s, mkv probe=%d)\n",
+         LEG_SEM_CUE_MS / 1000u, faixa, faixaLeg[l].idioma[0] ? faixaLeg[l].idioma : "-",
+         faixaLeg[l].codec[0] ? faixaLeg[l].codec : "unknown", mkvEstado);
+  fflush(stdout);
+}
+
+int  video_iniciar(void) {
+  if (!travaLeg) travaLeg = SDL_CreateMutex();
+  // #269: legenda de texto simples do MKV pelo overlay (ver faixas.c).
+  mkvass_aceitar_texto(1);
+  return hAbrir != NULL;
+}
 int  video_iniciar_auto(void) { return hAbrir != NULL; }
 int  video_registro_negado(void) { return 0; }
 
@@ -254,6 +335,8 @@ static int abrirSessao(void) {
   comecou = 0; comecouEm = 0; audioComecou = 0; audioPend = legPend = -1;
   if (!travaLeg) travaLeg = SDL_CreateMutex();
   legendaLimpar(1);
+  legendaMarcarEnvio(-1);
+  if (travaLeg) { SDL_LockMutex(travaLeg); legCueSessao = 0; legAbriuEm = SDL_GetTicks(); SDL_UnlockMutex(travaLeg); }
   emTrailer = 0;
   sessao++;
   velEnviada = 100;   // Player novo no host: nasce em 1x
@@ -264,7 +347,7 @@ static int abrirSessao(void) {
 
 int video_tocar(const char *u) {
   snprintf(urlAtual, sizeof urlAtual, "%s", u ? u : "");
-  mkvGeracao++; mkvN = 0; faixasNovas = 0; mkvOlhou = 0;
+  mkvGeracao++; mkvN = 0; faixasNovas = 0; mkvOlhou = 0; mkvSondarJa = 0; mkvNaoMkv = 0;
   // Um fio da fonte anterior ainda na rede ve a geracao mudada e descarta.
   mkvEstado = urlAtual[0] ? 1 : 0;
   nv_recon_zerar(&recon);
@@ -300,6 +383,7 @@ static void *fioMkv(void *arg) {
   if (p->geracao == mkvGeracao) {
     printf("[mkv] sonda pela rede: %d faixa(s)\n", n);
     if (n > 0) guardarMkv(fx, n);
+    else mkvNaoMkv = 1;
     mkvEstado = 3;
   }
   free(fx); free(p);
@@ -323,7 +407,7 @@ static void sondaMkv(double pos) {
     }
     // Sem pre-busca (ou Tracks fora do trecho): Range proprio, com o video
     // andando. MP4 nao tem TrackEntry: nao vale a descida.
-    if (mkvEstado == 1 && pronto && pos >= 5.0) {
+    if (mkvEstado == 1 && pronto && (pos >= 5.0 || mkvSondarJa)) {
       PedidoMkv *p = fonteMp4 ? NULL : malloc(sizeof *p);
       pthread_t fio;
       mkvEstado = 3;
@@ -397,6 +481,7 @@ static void escolhasPendentes(void) {
 
 void video_bombear(void) {
   escolhasPendentes();
+  legendaVigiarSilencio(SDL_GetTicks());
   // O SetPlaybackRate exige Ready/Playing/Paused: so com o prepare feito.
   if (!velRecusada && pronto && hEscolher && velEnviada != velPedida) {
     velEnviada = velPedida;
@@ -615,8 +700,18 @@ int  video_n_legenda(void) { return nLeg; }
 const VideoFaixa *video_audio(int i) { return (i >= 0 && i < nAudio) ? &faixaAudio[i] : 0; }
 const VideoFaixa *video_legenda(int i) { return (i >= 0 && i < nLeg) ? &faixaLeg[i] : 0; }
 int  video_legenda_ordinal_mkv(int i) { return (i >= 0 && i < nLeg) ? faixaLeg[i].ordinalMkv : -1; }
-int  video_mkv_sondado(void) { return 2; }
-void video_sondar_mkv_agora(void) {}
+// #269: a sonda de verdade (antes era sempre 2, "nao e MKV", e nenhuma faixa
+// ia ao overlay). 0 enquanto procura, ou com o cabecalho lido e ainda nao
+// aplicado as faixas (sondaMkv, no proximo bombear); 2 quando nao e MKV.
+int  video_mkv_sondado(void) {
+  if (!urlAtual[0] || fonteMp4 || mkvNaoMkv) return 2;
+  if (mkvEstado == 1 || mkvEstado == 2) return 0;
+  if (faixasNovas && mkvN > 0 && (nAudio || nLeg)) return 0;
+  return 1;
+}
+// Barato: a folha chama a cada quadro enquanto espera. O Range sai no proximo
+// bombear, sem esperar os 5 s de video (precisa do prepare feito).
+void video_sondar_mkv_agora(void) { if (mkvEstado == 1) mkvSondarJa = 1; }
 int  video_audio_atual(void) { return audioAtual; }
 int  video_legenda_atual(void) { return legAtual; }
 void video_escolher_audio(int i) {
@@ -634,6 +729,7 @@ void video_escolher_legenda(int i) {
   // choices made after the settle window but before the next pump.
   legPend = -1;
   legendaLimpar(1);
+  if (i < 0) legendaMarcarEnvio(-1);
   if (i >= 0 && hEscolher) {
     if (!comecou || SDL_GetTicks() - comecouEm < LEG_ACOMODAR_MS) { legPend = i; return; }
     legendaEnviar(i);

@@ -79,6 +79,19 @@ static int casarTipo(int nF, const MkvFaixa *fx, int n, int tipo, int *mapa) {
   return pulouImagem ? 2 : 1;
 }
 
+int faixasmkv_overlay(const char *c, int textoSimples) {
+  if (!c || !*c) return 0;
+  if (!strncmp(c, "S_TEXT/ASS", 10) || !strncmp(c, "S_TEXT/SSA", 10)) return 1;
+  return textoSimples && (!strcmp(c, "S_TEXT/UTF8") || !strcmp(c, "S_TEXT/WEBVTT"));
+}
+
+// Posicao da TrackEntry `j` entre as legendas do arquivo (o ordinal do mkvass).
+static int ordinalLegenda(const MkvFaixa *fx, int j) {
+  int k, o = 0;
+  for (k = 0; k < j; k++) if (fx[k].tipo == MKV_LEG) o++;
+  return o;
+}
+
 static int aplicarUma(VideoFaixa *f, const MkvFaixa *m, int ordinal) {
   char id[8], rot[sizeof f->rotulo], base[sizeof f->rotulo];
   idiomaFinal(f, m, id, sizeof id);
@@ -127,7 +140,12 @@ int faixasmkv_aplicar(VideoFaixa *aud, int nAud, VideoFaixa *leg, int nLeg,
   comoA = casarTipo(nAud, fx, n, MKV_AUDIO, mapa);
   for (k = 0; k < nAud; k++) if (mapa[k] >= 0) mudou += aplicarUma(&aud[k], &fx[mapa[k]], k + 1);
   comoL = casarTipo(nLeg, fx, n, MKV_LEG, mapa);
-  for (k = 0; k < nLeg; k++) if (mapa[k] >= 0) mudou += aplicarUma(&leg[k], &fx[mapa[k]], k + 1);
+  for (k = 0; k < nLeg; k++) {
+    if (mapa[k] < 0) continue;
+    mudou += aplicarUma(&leg[k], &fx[mapa[k]], k + 1);
+    snprintf(leg[k].codec, sizeof leg[k].codec, "%s", fx[mapa[k]].codec);
+    leg[k].ordinalMkv = ordinalLegenda(fx, mapa[k]);
+  }
   if ((nAud && comoA != 1) || (nLeg && comoL != 1)) {
     int nA = 0, nL = 0, j;
     for (j = 0; j < n; j++) { if (fx[j].tipo == MKV_AUDIO) nA++; else if (fx[j].tipo == MKV_LEG) nL++; }

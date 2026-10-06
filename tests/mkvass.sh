@@ -13,7 +13,7 @@ cc -I/opt/homebrew/include tests/video_url.c src/video.c -o /tmp/nuvio-video-url
 FFMPEG=${FFMPEG:-/opt/homebrew/bin/ffmpeg}
 [ -x "$FFMPEG" ] || { echo "mkvass.sh: ffmpeg nao encontrado em $FFMPEG"; exit 1; }
 
-DIR=$(mktemp -d /tmp/nuvio-mkvass.XXXXXX)
+DIR=$(mktemp -d "${TMPDIR:-/tmp}/nuvio-mkvass.XXXXXX")
 trap 'kill $SRV 2>/dev/null || true; if [ "${NUVIO_MKVASS_KEEP:-0}" = "1" ]; then echo "mkvass.sh: arquivos de teste mantidos em $DIR"; else rm -rf "$DIR"; fi' EXIT
 
 # O .ass de referencia: 40 eventos, um a cada 2,9 s, dois estilos (o "Topo"

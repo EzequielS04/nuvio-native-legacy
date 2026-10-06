@@ -20,6 +20,7 @@
 #include "legauto.h"
 #include "cacheboost.h"
 #include "velocidade.h"
+#include "faixasmkv.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
 #include "escala.h"
 #include <stdio.h>
@@ -128,6 +129,22 @@ static int ehAss(const VideoFaixa *f) {
   return f && (!strncmp(f->codec, "S_TEXT/ASS", 10) || !strncmp(f->codec, "S_TEXT/SSA", 10));
 }
 
+// #269: QUEM DESENHA a faixa embutida (regra em faixasmkv_overlay). ASS vai ao
+// overlay em todo alvo (#92). No .tpk da Samsung tambem o TEXTO SIMPLES
+// (S_TEXT/UTF8, WebVTT): o Tizen.Multimedia.Player lista e seleciona a faixa,
+// mas nenhum log de TV jamais mostrou o texto chegando pelo SubtitleUpdated
+// (S90C, Tizen 9: "so a do OpenSubtitles funciona"). O overlay le a faixa do
+// MKV por Range, como a LG faz com ASS; o player so fica de reserva (no-go do
+// mkvass, fonte MP4, faixa sem par no cabecalho).
+#ifdef NV_TPK
+#define FX_TEXTO_OVERLAY 1
+#else
+#define FX_TEXTO_OVERLAY 0
+#endif
+static int vaiOverlay(const VideoFaixa *f) {
+  return f && faixasmkv_overlay(f->codec, FX_TEXTO_OVERLAY);
+}
+
 // O overlay do app assume a faixa embutida `i` (ordinal `ord` no arquivo): a
 // legenda nativa da TV e DESLIGADA (video_escolher_legenda(-1) manda
 // setSubtitleEnable false ao uMS / desliga no AVPlay) e o mkvass comeca a
@@ -157,7 +174,8 @@ static const char *motivoTV(int i) {
   if (sond == 2) return "fonte nao e MKV (nao ha sonda)";
   if (sond == 0) return "sonda do cabecalho ainda nao voltou";
   if (!f->codec[0]) return "sonda voltou sem par para esta faixa (ver [mkv] legendas da TV x arquivo)";
-  if (!ehAss(f)) return "codec nao e ASS/SSA: a TV desenha bem";
+  if (!vaiOverlay(f)) return FX_TEXTO_OVERLAY ? "codec nao e de texto (ASS/SRT/WebVTT): a TV desenha"
+                                               : "codec nao e ASS/SSA: a TV desenha bem";
   if (video_legenda_ordinal_mkv(i) < 0) return "sem ordinal no arquivo";
   return "?";
 }
@@ -612,7 +630,7 @@ static void escolherLegenda(int i) {
   {
     int emb = video_n_legenda();
     const VideoFaixa *fe = (i >= 0 && i < emb) ? video_legenda(i) : NULL;
-    int vaiAoApp = fe && ehAss(fe) && i != legOverlayNoGo && video_url_atual()[0] &&
+    int vaiAoApp = fe && vaiOverlay(fe) && i != legOverlayNoGo && video_url_atual()[0] &&
                    video_legenda_ordinal_mkv(i) >= 0;
     // Qualquer escolha encerra a colheita anterior: o fio do mkvass nao pode
     // continuar entregando ao overlay uma faixa que a pessoa acabou de trocar.
@@ -706,7 +724,9 @@ static void legendaAutomatica(Uint32 agora) {
   // Antes dele a sonda "ja voltou" por falta de pendencia (ver
   // video_mkv_sondado) e as embutidas pareceriam fechadas e vazias.
   if (!legAutoDesde) legAutoDesde = agora | 1u;
-  passou = agora - legAutoDesde;
+  // `| 1` poe o marco 1 ms A FRENTE de um `agora` par: sem a guarda, o
+  // primeiro quadro dava agora - marco = -1, e o log dizia "aos 4294967295 ms".
+  passou = (Sint32)(agora - legAutoDesde) > 0 ? agora - legAutoDesde : 0;
   if (!video_n_audio() && !video_n_legenda() && passou < 8000u) return;
   nEmb = video_n_legenda();
   if (nEmb > NV_FAIXA_MAX) nEmb = NV_FAIXA_MAX;
@@ -751,7 +771,7 @@ static void legendaAutomatica(Uint32 agora) {
   // ser que seja ASS com a TV desenhando: ai o overlay do app assume, que e o
   // motivo do #92 (e o que adota a pre-busca feita antes do video).
   if (r == legendaAtiva() &&
-      !(r < nEmb && legOverlay != r && ehAss(video_legenda(r)) && video_legenda_ordinal_mkv(r) >= 0))
+      !(r < nEmb && legOverlay != r && vaiOverlay(video_legenda(r)) && video_legenda_ordinal_mkv(r) >= 0))
     return;
   // Varias legendas do idioma: a melhor, nao a primeira que respondeu (idioma
   // exato, nome parecido com o arquivo, a que ja deu certo neste titulo).
@@ -987,8 +1007,8 @@ void faixas_atualizar(float dt, Uint32 agora) {
     if (video_mkv_sondado() != 0) {
       int ord = video_legenda_ordinal_mkv(i);
       legOverlayEsperando = -1;
-      if (f && ehAss(f) && ord >= 0 && video_legenda_atual() == i && video_url_atual()[0]) {
-        printf("[legenda] sonda voltou: faixa %d e ASS, o app assume\n", i);
+      if (f && vaiOverlay(f) && ord >= 0 && video_legenda_atual() == i && video_url_atual()[0]) {
+        printf("[legenda] sonda voltou: faixa %d (%s), o app assume\n", i, f->codec);
         overlayAssumir(i, ord);
       } else {
         printf("[legenda] sonda voltou: faixa %d (%s, codec=%s) fica na TV: %s\n", i,

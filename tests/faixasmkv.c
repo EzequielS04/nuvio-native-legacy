@@ -81,7 +81,21 @@ int main(int argc, char **argv) {
     player(a, 2, l, 3);
     faixasmkv_aplicar(a, 2, l, 3, g, nf);
     ok(!strcmp(l[0].rotulo, "Húngaro") && strstr(l[1].rotulo, "Letreiros") && strstr(l[2].rotulo, "English SDH"),
-       "legendas 3x4 com uma PGS: casa sem ela", l[2].rotulo); }
+       "legendas 3x4 com uma PGS: casa sem ela", l[2].rotulo);
+    // O overlay do .tpk (#269) le a faixa pelo ordinal do ARQUIVO: a PGS
+    // escondida pelo player conta, senao o mkvass colheria a legenda vizinha.
+    ok(l[0].ordinalMkv == 0 && l[1].ordinalMkv == 2 && l[2].ordinalMkv == 3,
+       "ordinal do arquivo conta a PGS escondida", NULL);
+    ok(!strcmp(l[2].codec, "S_TEXT/UTF8"), "codec da legenda vem do arquivo", l[2].codec); }
+  // Contagem que nao casa: a legenda fica sem codec e sem ordinal novo (vai a TV).
+  player(a, 2, l, 2);
+  faixasmkv_aplicar(a, 2, l, 2, fx, nf);
+  ok(!l[0].codec[0] && l[1].ordinalMkv == 1, "sem casamento: codec vazio, ordinal do player", l[0].codec);
+  ok(faixasmkv_overlay("S_TEXT/ASS", 0) && faixasmkv_overlay("S_TEXT/SSA", 1) &&
+     !faixasmkv_overlay("S_TEXT/UTF8", 0) && faixasmkv_overlay("S_TEXT/UTF8", 1) &&
+     faixasmkv_overlay("S_TEXT/WEBVTT", 1) && !faixasmkv_overlay("S_HDMV/PGS", 1) &&
+     !faixasmkv_overlay("S_VOBSUB", 1) && !faixasmkv_overlay("", 1) && !faixasmkv_overlay(NULL, 1),
+     "overlay: ASS sempre, texto so no .tpk, imagem nunca", NULL);
 
   // #269: codigos do player da Samsung e o MKV mandando no idioma.
   { MkvFaixa g[MKV_MAX_FAIXAS]; memcpy(g, fx, sizeof g);
