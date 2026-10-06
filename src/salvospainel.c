@@ -1652,7 +1652,7 @@ static void abrirMenuSocial(void) {
       snprintf(menuSxPessoa, sizeof menuSxPessoa, "%s", r->de);
       menuSxAcao[n] = SPX_PERFIL; ex[n++] = PERFIL;
     }
-    // "Mais informações" a partir daqui abre o titulo COM a origem, como o OK.
+    // O titulo aberto a partir daqui (toque) leva a origem.
     atividade_marcar_origem(r->id, r->imdb, r->deNome);
   } else {
     const RecContato *ct = &ctts[social[foco].idx];
@@ -2096,13 +2096,6 @@ void spainel_atualizar(float dt, Uint32 agora) {
     reconstruirSocial();
     foco = f < nSocial ? f : (nSocial > 0 ? nSocial - 1 : 0);
   }
-  // "Mais informações" no menu do painel: o mesmo contrato do toque curto.
-  { const char *id = ctx_pediu_detalhes_imdb();
-    if (id && aberto) {
-      snprintf(pedido, sizeof pedido, "%s", id);
-      temPedido = 1;
-      aberto = 0;
-    } }
   // O menu saiu e a lista ja remontou o que tinha de remontar: o foco volta a
   // ser por indice, como sempre.
   if (menuId[0] && !ctx_aberto() && !listaVelha()) menuId[0] = menuProximo[0] = 0;

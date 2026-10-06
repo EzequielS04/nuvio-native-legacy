@@ -412,7 +412,7 @@ int main(int argc, char **argv) {
     toque(SDLK_DOWN);                    // tituloFocado reabriu o painel no topo
     segurarOk();
     confere("segurar OK abre o menu do cartaz", ctx_do_painel());
-    toques(SDLK_DOWN, 2);                // Mais informacoes, Remover, Mover
+    toque(SDLK_DOWN);                    // Remover, Mover
     foto("19-menu-mover.png");
     toque(SDLK_RETURN);
     quadros(4);

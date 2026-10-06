@@ -3959,24 +3959,6 @@ void app_atualizar(float dt, Uint32 agora) {
   guia_atualizar(dt, agora);
   if (player_aberto()) epg_passo();
   ctx_atualizar(dt, agora);
-  { int i = ctx_pediu_detalhes();
-    // "Ver detalhes" pedido de DENTRO de uma pagina de titulo (recomendacao,
-    // filmografia, saga): vira a troca de titulo de sempre, e o Voltar volta.
-    if (i >= 0 && detail_aberto()) { detail_volta_notar(i); abrirPorIndice(i); i = -1; }
-    if (i >= 0) {
-      player_descartar_retido();
-      const CatItem *ci = cat_item(i);
-      HomeItem it;
-      memset(&it, 0, sizeof it);
-      it.indice = i;
-      it.rect = (GfxRect){ NV_TELA_W * 0.5f - 124.0f, NV_TELA_H * 0.5f - 186.0f,
-                           248.0f, 372.0f };
-      it.arte   = ci ? (ci->poster[0] ? ci->poster : ci->backdrop) : NULL;
-      it.titulo = ci ? ci->titulo : NULL;
-      it.genero = ci ? ci->genero : NULL;
-      it.meta   = ci ? ci->meta : NULL;
-      detail_abrir(&it);
-    } }
   // Titulo escolhido na grade: abre o detalhe, como se tivesse vindo da home.
   { int idx = vertudo_pediu_abrir();
     if (idx >= 0) {

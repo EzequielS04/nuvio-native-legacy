@@ -10,6 +10,10 @@
 //   3. pagina de colecao (vertudo_colecao): o mesmo;
 //   4. resultados da Busca (busca.c incluido: o painel de resultados e estatico).
 //
+// O menu nao tem "Ver detalhes" (o toque ja abre o titulo): no lugar, a
+// EXTENSAO de informacoes ao lado (ctxinfo.h) — cobrada aqui com dado (notas,
+// sinopse) e do lado certo do cartaz.
+//
 // Capturas PNG (menu aberto sobre cada lista) na pasta pedida.
 //
 //   bash tests/ctxlista.sh [pasta-das-capturas]
@@ -19,6 +23,8 @@
 #include "colecoes.h"
 #include "ctxlista.h"
 #include "ctxmenu.h"
+#include "ctxinfo.h"
+#include "extras.h"
 #include "dados.h"
 #include "descoberta.h"
 #include "vertudo.h"
@@ -131,6 +137,43 @@ static void capturaAssentada(SDL_Window *w, const char *nome, int n) {
   }
 }
 
+// O resumo do titulo do menu, no cache como se o fio tivesse voltado da rede
+// (sem isto ele iria ao Trakt e ao MDBList). Semeado logo depois de o menu
+// abrir: a extensao mostra o que chega, quadro a quadro.
+static void semearResumo(void) {
+  const CatItem *ci = ctx_titulo();
+  ExResumo r;
+  if (!ci) return;
+  memset(&r, 0, sizeof r);
+  r.cru[EX_IMDB] = 74; r.cru[EX_TOMATOES] = 880; r.cru[EX_TRAKT] = 760;
+  r.duracao = 117;
+  snprintf(r.cert, sizeof r.cert, "12");
+  snprintf(r.sinopse, sizeof r.sinopse, "Sinopse do resumo: um farol apagado, uma ilha "
+           "sem nome e uma carta que chega trinta anos atrasada.");
+  r.pronto = 1;
+  extras_resumo_definir(ci->imdb, &r);
+}
+
+// A EXTENSAO: desenhada, colada ao menu e fora do cartaz, com as notas e a
+// sinopse.
+static void conferirExtensao(const char *rotulo) {
+  GfxRect ri, rm;
+  int lado = 0, tem = ctx_info_caixa(&ri, &rm, &lado);
+  char msg[160], t[1200];
+  snprintf(msg, sizeof msg, "%s: a extensao de informacoes abre ao lado do menu", rotulo);
+  confere(msg, tem);
+  // Colada ao menu quando cabe; sem lugar dos dois do mesmo lado ela vai para
+  // o outro lado do cartaz (ctxinfo_geometria) — nunca por cima do menu.
+  snprintf(msg, sizeof msg, "%s: do lado %s do menu, sem sobrepor, dentro da tela", rotulo,
+           lado > 0 ? "direito" : "esquerdo");
+  confere(msg, tem && (lado > 0 ? ri.x >= rm.x + rm.w - 0.5f : ri.x + ri.w <= rm.x + 0.5f) &&
+               ri.x >= 0.0f && ri.x + ri.w <= 1920.0f && ri.y + ri.h <= 1080.0f);
+  ctxinfo_texto(ctx_titulo(), NULL, t, sizeof t);
+  if (getenv("NV_VERBOSO")) printf("%s\n[info %g,%g %gx%g menu %g,%g lado %d]\n", t, ri.x, ri.y, ri.w, ri.h, rm.x, rm.y, lado);
+  snprintf(msg, sizeof msg, "%s: com notas (IMDb, RT, Trakt) e sinopse", rotulo);
+  confere(msg, strstr(t, " 1=") && strstr(t, " 3=880") && strstr(t, " 0=760") && !strstr(t, "synopsis: \n"));
+}
+
 // O gesto inteiro numa lista: segura, confere a dica, o menu no limiar, o OK
 // ainda afundado nao escolhe, e Voltar devolve o foco ao mesmo cartao.
 static void segurarEConferir(SDL_Window *w, const char *rotulo, const char *png,
@@ -144,6 +187,7 @@ static void segurarEConferir(SDL_Window *w, const char *rotulo, const char *png,
   durante(w, NV_HOLD_MS / 2 + 150);
   snprintf(msg, sizeof msg, "%s: no limiar, com o dedo no botao, o menu abre", rotulo);
   confere(msg, ctx_aberto());
+  semearResumo();
   { SDL_Event rep = tecla(SDL_KEYDOWN, SDLK_RETURN, 1); SDL_PushEvent(&rep); }
   quadros(w, 3);
   snprintf(msg, sizeof msg, "%s: a repeticao automatica do OK nao escolhe opcao", rotulo);
@@ -152,6 +196,7 @@ static void segurarEConferir(SDL_Window *w, const char *rotulo, const char *png,
   capturaAssentada(w, png, 40);
   snprintf(msg, sizeof msg, "%s: soltar depois do limiar nao abre a pagina", rotulo);
   confere(msg, ctx_aberto());
+  conferirExtensao(rotulo);
   toque(w, SDLK_ESCAPE);
   quadros(w, 4);
   snprintf(msg, sizeof msg, "%s: Voltar fecha so o menu, a lista segue aberta", rotulo);
@@ -188,6 +233,13 @@ int main(int argc, char **argv) {
   if (!dir || !dir[0]) { printf("NUVIO_DADOS ausente; recusando\n"); return 2; }
   dados_iniciar(dir);
   if (strcmp(dados_dir(), dir)) { printf("dados_dir() != NUVIO_DADOS; recusando\n"); return 2; }
+  // NUVIO_SHOT_FONTE=3: as capturas na fonte da TV (Montserrat).
+  if (getenv("NUVIO_SHOT_FONTE")) {
+    char cam[700];
+    FILE *a;
+    snprintf(cam, sizeof cam, "%s/ajustes.txt", dir);
+    if ((a = fopen(cam, "w"))) { fprintf(a, "fonteInterface %d\n", atoi(getenv("NUVIO_SHOT_FONTE"))); fclose(a); }
+  }
   ajustes_dir(dir);
 
   protocolo();
@@ -215,6 +267,7 @@ int main(int argc, char **argv) {
   assert(txt_iniciar("deploy/app", 1));
   tex_iniciar(192);
   gfx_icones_dir("deploy/app/art");
+  extras_carregar("deploy/app/art");   // as marcas das notas (RT, Trakt)
   gfx_snap_iniciar(1920, 1080);
   glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
@@ -250,11 +303,6 @@ int main(int argc, char **argv) {
   confere("toque curto abre a pagina do titulo (na soltura)", idx >= 0 && !ctx_aberto());
   segurarEConferir(w, "catalogo", "lista-catalogo-menu.png", vtAberta, vtFoco);
   confere("depois do menu a soltura nao vira clique", vertudo_pediu_abrir() < 0);
-  // "Ver detalhes" (primeira opcao) abre a pagina do titulo.
-  empurrar(SDL_KEYDOWN, SDLK_RETURN); durante(w, NV_HOLD_MS + 150); empurrar(SDL_KEYUP, SDLK_RETURN); quadros(w, 4);
-  toque(w, SDLK_RETURN); quadros(w, 3);
-  idx = ctx_pediu_detalhes();
-  confere("\"Ver detalhes\" entrega o titulo da grade a quem abre a pagina", idx >= 0 && !ctx_aberto());
   vertudo_fechar_seco();
   quadros(w, 3);
 

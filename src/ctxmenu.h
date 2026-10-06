@@ -1,9 +1,10 @@
 // MENU DE CONTEXTO do cartaz, aberto SEGURANDO OK sobre um card da home.
 //
-// E o `posterHoldMenu` do app web, e as opcoes sao as dele, medidas no bundle
-// 1.0.4 (getPosterHoldMenuOptions): "Ver detalhes", "Adicionar/Remover da
-// biblioteca" e, so em filme e serie, "Marcar como assistido/nao assistido".
-// Os rotulos sao os do pt-BR do proprio app.
+// Nasceu do `posterHoldMenu` do app web (getPosterHoldMenuOptions, bundle
+// 1.0.4): "Salvar/Remover dos Salvos" e, so em filme e serie, "Marcar como
+// assistido/nao assistido". "Ver detalhes" SAIU (dono, 06/10/2026): o toque no
+// cartaz ja abre o titulo, e no lugar dele o menu ganhou a EXTENSAO de
+// informacoes ao lado (ctxinfo.h) — notas, sinopse, onde parou, amigos.
 //
 // Existe porque as duas acoes de biblioteca so tinham caminho DENTRO da tela de
 // titulo: para marcar um filme como visto era preciso abrir o detalhe, esperar
@@ -25,15 +26,20 @@ int  ctx_aberto(void);
 void ctx_evento(const SDL_Event *e);
 void ctx_atualizar(float dt, Uint32 agora);
 void ctx_desenhar(Uint32 agora);
-// Indice do titulo cujo detalhe o dono pediu, ou -1. Consumido uma vez.
-int  ctx_pediu_detalhes(void);
+// A EXTENSAO DE INFORMACOES no ultimo quadro desenhado: 1 e as caixas (tela
+// virtual) da extensao e do menu, e o lado (+1 = a extensao a direita do
+// menu). 0 = nao foi desenhada. Para os testes de layout.
+int  ctx_info_caixa(GfxRect *info, GfxRect *menu, int *lado);
+// O titulo do menu aberto (NULL no menu de lista/estilo ou fechado).
+const CatItem *ctx_titulo(void);
 
 // O MESMO MENU, aberto pelo painel de Salvos (salvospainel.c). A pressao longa
 // la tambem e medida por quem conhece a linha, com o mesmo NV_HOLD_MS, e o
 // painel chama isto no limiar. `titulo` e COPIADO: a linha do painel pode nao
-// ter indice no catalogo (veio so da lista local). Opcoes: "Mais informações",
-// "Remover dos Salvos" (o mesmo OP_LISTA do cartaz: lista local + Trakt ou
-// Simkl + espelho) e, quando da, "Marcar como assistido".
+// ter indice no catalogo (veio so da lista local). Opcoes: "Remover dos
+// Salvos" (o mesmo OP_LISTA do cartaz: lista local + Trakt ou Simkl +
+// espelho), "Mover para categoria" e, quando da, "Marcar como assistido". O
+// toque na linha abre o titulo, como antes.
 void ctx_abrir_salvo(const CatItem *titulo);
 // O MESMO MENU NAS ABAS ATIVIDADE E AMIGOS do painel (modo social). Com IMDb
 // sao as acoes do titulo do modo painel (sem "Mover para categoria") e, por
@@ -60,8 +66,6 @@ int  ctx_pediu_extra(void);
 // 1 enquanto o menu aberto e o do painel: app.c o desenha POR CIMA do painel e
 // entrega a ele as teclas que chegariam ao painel.
 int  ctx_do_painel(void);
-// IMDb do "Mais informações" pedido no modo painel, ou NULL. Consumido uma vez.
-const char *ctx_pediu_detalhes_imdb(void);
 // IMDb do "Mover para categoria" pedido no modo painel, ou NULL. Consumido uma
 // vez; o painel de Salvos abre a escolha de categoria dele.
 const char *ctx_pediu_categoria(void);
