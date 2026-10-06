@@ -573,7 +573,9 @@ static float ajLinhaH(int i) {
   int op = TELA[i].op;
   float h = AJ2_LN_H, baixo = 0;
   GfxRect fr = aj2ListaR();
-  if ((inativa(op) && uxRequisito(op) >= 0) || op == AJ_GUIA) h = AJ2_LN_SUB;
+  // "Depende de: ..." so na linha em foco (2.0.2): nas Notas eram oito linhas
+  // repetindo a mesma frase; apagada, a linha ja diz que esta presa.
+  if ((inativa(op) && uxRequisito(op) >= 0 && aj2FocoNaLista(i)) || op == AJ_GUIA) h = AJ2_LN_SUB;
   // A regua de cores abre NA LINHA, com e sem inspetor: o inspetor mostra a
   // previa viva e as medidas da cor (aj2PreviaCor).
   if (op == AJ_TEMA && ajEditandoLinha(op) && aj2FocoNaLista(i)) baixo += AJ_REGUA_H;
@@ -795,17 +797,20 @@ static void ajMovAtualizar(float dt) {
     else ajMovValor[op] += (alvo-ajMovValor[op])*k;
   }
 }
-// A3: o interruptor da linha compacta (64 x 34, botao de 26) e o estado em 22.
+// A3: o interruptor da linha compacta (64 x 34, botao de 26).
+// 2.0.2: sem o "Ligado"/"Desligado" escrito ao lado. O interruptor ja diz o
+// estado e o texto repetido em toda linha era o ruido da lista; ligado, o
+// trilho fica cheio no acento e o botao na tinta dele (claro ou escuro), para
+// ler de longe sem depender do texto.
 static float aj2ChipLiga(int op, float xDir, float yc, int ligado, float a) {
-  TxtLinha t = ajTxt(TXT_V2_24, ligado ? "Ligado" : "Desligado");
-  float ar,ag,ab, on = 1.0f-ajMov(op, valor[op]);
-  float w = t.w+14+64;
+  float ar,ag,ab, on = 1.0f-ajMov(op, valor[op]), k = ajTinta() / 255.0f;
+  float kr = 1.0f + (k - 1.0f) * on;
+  (void)ligado;
   ajustes_acento(&ar,&ag,&ab);
-  ajNeutro((GfxRect){xDir-64,yc-17,64,34},17,0.10f,AJ_CHIP_SOL,a);
-  gfx_cor((GfxRect){xDir-64,yc-17,64,34},0.5f,ar,ag,ab,0.32f*on*a);
-  gfx_cor((GfxRect){xDir-60+30*on,yc-13,26,26},0.5f,1,1,1,(0.55f+0.45f*on)*a);
-  txt_desenhar_alpha(t,xDir-w,yc-t.h*0.5f,(ligado ? 0.85f : 0.55f)*a);
-  return w;
+  ajNeutro((GfxRect){xDir-64,yc-17,64,34},17,0.12f,AJ_CHIP_SOL,a);
+  gfx_cor((GfxRect){xDir-64,yc-17,64,34},0.5f,ar,ag,ab,0.92f*on*a);
+  gfx_cor((GfxRect){xDir-60+30*on,yc-13,26,26},0.5f,kr,kr,kr,(0.6f+0.4f*on)*a);
+  return 64.0f;
 }
 static float aj2SegLargura(int op, int n) {
   float w = 10.0f;
@@ -878,7 +883,7 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
   GfxRect fr = aj2ListaR();
   GfxRect ln = { fr.x + 18.0f, y, fr.w - 36.0f, h };
   int desligada = inativa(op), emFoco = f > 0.5f, ed = ajEditandoLinha(op);
-  int sub = (desligada && uxRequisito(op) >= 0) || op == AJ_GUIA;
+  int sub = (desligada && uxRequisito(op) >= 0 && aj2FocoNaLista(item)) || op == AJ_GUIA;
   int abre = h > 102.0f;
   float aT = a * (desligada ? 0.45f : 1.0f), aTx = a * aj2TextoLista;
   float xDir = ln.x + ln.w - 22.0f, yc = abre ? y + AJ2_LN_LINHA1 * 0.5f : y + h * 0.5f;
@@ -1030,24 +1035,19 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
 // fio, nao a 10 — o grupo leva 2 e a linha os seus 4.
 // A3: margem 20 e 8 embaixo (era 26 e 12); o nome continua 26/800 a 100%.
 #define AJ2_GRUPO_H (20.0f + 31.2f + 8.0f + 2.0f + 2.0f)
-static int ajContaGrupo(int item) {
-  int i, n = 0;
-  for (i = item + 1; i < secFim(secDoItem[item]) && TELA[i].tipo == IT_OPC; i++)
-    if (visivel(i)) n++;
-  return n;
-}
+// 2.0.2: sem a contagem a direita (so a nota de um ROTS, "para quem faz o app").
 static void ajDesenharGrupo(int item, float y, float a) {
   GfxRect fr = aj2ListaR();
   float x = fr.x + 18.0f, w = fr.w - 36.0f, yc = y + 20.0f + 15.6f;
-  char q[16];
-  TxtLinha t, c;
+  TxtLinha t;
   a *= aj2TextoLista;
   if (a <= 0.004f) return;
-  snprintf(q, sizeof q, "%d", ajContaGrupo(item));
   t = ajTxt(TXT_V2_GRUPO, TELA[item].titulo);
-  c = ajTxt(TXT_V2_24, TELA[item].sub ? TELA[item].sub : q);
   txt_desenhar_alpha(t, x + 22, yc - t.h * 0.5f, a);
-  txt_desenhar_alpha(c, x + w - 22 - c.w, yc - c.h * 0.5f + 1.0f, 0.60f * a);
+  if (TELA[item].sub && TELA[item].sub[0]) {
+    TxtLinha c = ajTxtC(TXT_V2_24, TELA[item].sub, w - 44.0f - t.w - 24.0f);
+    txt_desenhar_alpha(c, x + w - 22 - c.w, yc - c.h * 0.5f + 1.0f, 0.60f * a);
+  }
   gfx_cor((GfxRect){ x, y + 20.0f + 31.2f + 8.0f, w, 2 }, 0, 1, 1, 1, 0.18f * a);
 }
 

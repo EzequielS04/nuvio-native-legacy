@@ -203,11 +203,6 @@ static int aj2MenuFocado(void) { return focoIndice ? uxIndice : -1; }
 static int aj2Grupo(int s) { return s < AJS_REPRODUCAO ? 0 : s < AJS_CONTAS ? 1 : 2; }
 static int aj2GrupoIni(int s) { return s == 0 || aj2Grupo(s) != aj2Grupo(s - 1); }
 static const char *aj2GrupoNome(int g) { return g == 0 ? "Telas" : g == 1 ? "Assistir" : "Conta e sistema"; }
-static int aj2ContaOpcoes(int sec) {
-  int i, n = 0;
-  for (i = secIni[sec] + 1; i < secFim(sec); i++) if (TELA[i].tipo == IT_OPC) n++;
-  return n;
-}
 static float aj2MenuAltura(int j) { return j < 2 ? AJ2_MENU_CHIP : AJ2_MENU_LN; }
 // y do alto da linha j relativo ao topo do conteudo (sem a rolagem). Cada
 // pilula fica na sua fileira (aj2Chips).
@@ -365,17 +360,16 @@ static void aj2DesenharMenu(const Aj2Pose *p) {
     if (ativa && !foco) gfx_cor((GfxRect){ rx + 9.0f, lc - 4.0f, 8, 8 }, 0.5f, ar, ag, ab, mk);
     ajIcone(aj2MenuIcone(j), rx + 28.0f, lc - AJ2_MENU_ICO * 0.5f, AJ2_MENU_ICO, al * mk);
     if (p->mRot > 0.003f) {
-      TxtLinha t, cn;
-      char qn[16];
-      snprintf(qn, sizeof qn, "%d", aj2ContaOpcoes(j - 2));
-      cn = ajTxt(TXT_V2_26, qn);
-      { float livre = AJ2_MENU_W - 2 * AJ2_MENU_PAD - 28 - AJ2_MENU_ICO - AJ2_MENU_ICO_GAP - 20 - cn.w - 16;
+      TxtLinha t;
+      // Sem a contagem de opcoes a direita (2.0.2): o numero nao ajuda a achar
+      // nada e roubava a largura que os nomes longos (alemao, russo) pedem.
+      // A contagem continua no resumo ("32 opcoes · 7 avancadas").
+      { float livre = AJ2_MENU_W - 2 * AJ2_MENU_PAD - 28 - AJ2_MENU_ICO - AJ2_MENU_ICO_GAP - 20;
         TxtEstilo e = ativa ? TXT_V2_MENU_B : TXT_V2_MENU;
         // Nome que nao cabe inteiro (idiomas longos): um corpo menor antes do
         // corte com reticencias.
         if ((float)txt_largura(e, aj2MenuTitulo(j)) > livre) e = TXT_V2_28;
         t = ajTxtC(e, aj2MenuTitulo(j), livre); }
-      txt_desenhar_alpha(cn, m.x + m.w - AJ2_MENU_PAD - 28.0f - cn.w, lc - cn.h * 0.5f, 0.5f * mk * p->mRot);
       txt_desenhar_alpha(t, rx + 28 + AJ2_MENU_ICO + AJ2_MENU_ICO_GAP, lc - t.h * 0.5f, al * mk * p->mRot);
       if (aj2MDesc[j] > 0.003f && h > AJ2_MENU_LN + 4) {
         float dy = (1.0f - aj2MDesc[j]) * 6.0f;
