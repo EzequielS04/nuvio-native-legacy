@@ -421,6 +421,10 @@ typedef enum {
   // APOIAR O PROJETO (Sobre e ajuda, apoio.h): a previa mostra os QRs do
   // Patreon e do Ko-fi. Acao, sem valor. No fim: valor[]/CHAVE[] posicionais.
   AJ_APOIAR,
+  // Classificacao indicativa no player (pedido do dono, 06/10): Ligado (padrao)
+  // = a guia parental sobe da ilha com a faixa etaria ("Guia parental · 12");
+  // Desligado = nada dela aparece. LOCAL. No fim: valor[]/CHAVE[] posicionais.
+  AJ_PLR_CLASSIF,
   AJ_N
 } OpcaoId;
 
@@ -1183,6 +1187,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Tamanho máximo",                  V_TAMANHO_GB, 7),       // local: tamanhoMaxLocal
   ESC("Tamanho mínimo",                  V_TAMANHO_GB, 7),       // local: tamanhoMinLocal
   ACAO("Apoiar o projeto"),
+  ESC("Classificação no player",         V_LIGA, 2),             // local: classifPlayerLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1381,6 +1386,7 @@ static const char *CHAVE[] = {
   "relogio12hLocal",
   "tamanhoMaxLocal", "tamanhoMinLocal",
   "-apoiar",
+  "classifPlayerLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1777,6 +1783,7 @@ void ajustes_teste_vidro_env(void) {
 }
 int ajustes_relogio_ligado(void) { return lig(AJ_RELOGIO); }
 int ajustes_relogio_pos(void) { return valor[AJ_RELOGIO_POS]; }
+int ajustes_classif_player(void) { return lig(AJ_PLR_CLASSIF); }
 int ajustes_relogio_12h(void) { return valor[AJ_RELOGIO_12H] == 1; }
 // GB da faixa de tamanho da escolha automatica; 0 = "Sem limite".
 int ajustes_tamanho_max_gb(void) { int v = valor[AJ_TAM_MAX]; return v < 0 || v >= (int)(sizeof TAMANHO_GB / sizeof *TAMANHO_GB) ? 0 : TAMANHO_GB[v]; }
@@ -3650,6 +3657,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_ENQUETES:       /* o web nao tem a ilha; a conta guarda o opt-out por outro caminho (enquete.c) */
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER: /* o web nao tem a ilha */
     case AJ_RELOGIO_12H:    /* formato da hora: desta TV */
+    case AJ_PLR_CLASSIF:    /* o web nao tem esta escolha */
     case AJ_TAM_MAX: case AJ_TAM_MIN: /* o web nao tem a faixa de tamanho */
     case AJ_FONTE_PRAZO:    /* o web nao tem: a rede e os addons sao desta casa */
     case AJ_MEDIDOR:        /* o medidor e da GPU desta TV; o web nao tem */
@@ -4873,6 +4881,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_SAIDA_PLAYER: return "Ao sair de um filme ou episódio no meio. Home: o vídeo encolhe até a pílula do relógio, que fica com o título para você retomar (CH+ ou AZUL). Página do título: volta para onde você estava. Só vale com o relógio na tela; terminar o título segue para o próximo episódio como sempre.";
     case AJ_TAM_MAX: return "Na escolha automática, fontes maiores que este tamanho ficam para o fim da fila. Serve para quem tem franquia de internet limitada. Só vale para arquivos com tamanho conhecido; se só houver fontes fora da faixa, a melhor delas ainda toca.";
     case AJ_TAM_MIN: return "Na escolha automática, fontes menores que este tamanho ficam para o fim da fila. Se for maior que o tamanho máximo, o mínimo é ignorado. Só vale para arquivos com tamanho conhecido; se só houver fontes fora da faixa, a melhor delas ainda toca.";
+    case AJ_PLR_CLASSIF: return "Ligado (padrão): no começo do filme, a ilha mostra a classificação indicativa e os avisos do guia parental (violência, nudez, palavrões). Desligado: o player não mostra nada disso.";
     case AJ_RELOGIO_12H: return "Como a hora aparece no relógio, na tela de descanso, no fim do filme e no guia de TV: 18:30 ou 6:30 PM.";
     case AJ_RELOGIO_POS: return "Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.";
     case AJ_AVANCADAS: return "Mostra, em todas as categorias, as opções técnicas marcadas como Avançado. Vale só para esta TV.";
@@ -6428,7 +6437,7 @@ static AjPreview familiaPreviaOpcao(int op) {
   switch (op) {
     case AJ_LEG2_POS: case AJ_LEG2_TAMANHO: case AJ_LEG2_COR: case AJ_LEG2_FUNDO: case AJ_LEG2_BORDA:
     case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: case AJ_LEG_LINGUA: case AJ_LEG_LINGUA2: case AJ_CACHE_SEEK:
-    case AJ_AUD_LINGUA: case AJ_PAUSA_OVERLAY: case AJ_FONTE_MANUAL:
+    case AJ_AUD_LINGUA: case AJ_PAUSA_OVERLAY: case AJ_PLR_CLASSIF: case AJ_FONTE_MANUAL:
     case AJ_FONTE_AUTO: case AJ_FONTE_REPOR: case AJ_FONTE_TEXTO: case AJ_SELOS_CORES:
     case AJ_FONTE_PRIORIDADE: case AJ_FONTE_HDR:
     case AJ_SELOS_PACOTE:

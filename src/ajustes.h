@@ -101,6 +101,7 @@ int ajustes_dolby_atmos(void);
 // pauseOverlayEnabled: o painel de ficha que sobe alguns segundos depois de
 // pausar o video. Ver pausao.h.
 int ajustes_pausa_overlay(void);
+int ajustes_classif_player(void);   // 1 = mostra a classificacao/guia parental no player (padrao)
 // "O que achou?" nos creditos (reacao.h). Ligado de fabrica.
 int ajustes_reacao_creditos(void);
 // Medidor de desempenho na ilha do relogio (desempenho.h): Desempenho desta TV,
