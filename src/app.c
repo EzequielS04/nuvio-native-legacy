@@ -82,6 +82,8 @@
 #include "novidades170.h"
 #include "novidades180.h"
 #include "novidades20.h"
+#include "novidades202.h"
+#include "apoio.h"
 #include "telemetria.h"
 #include "avisos.h"
 #include "ilha.h"
@@ -1531,6 +1533,8 @@ int app_iniciar(const char *dirArte) {
   novidades170_dir(dirArte);
   novidades180_dir(dirArte);
   novidades20_dir(dirArte);
+  novidades202_dir(dirArte);
+  apoio_dir(dirArte);
   if (!homePronta)
     printf("[app] sem arte no pacote: a home so aparece depois do primeiro sync\n");
   menu_iniciar();
@@ -1814,6 +1818,13 @@ void app_evento(const SDL_Event *e) {
   // O GUIA DA 2.0 (novidades20.h) e tela inteira e come o teclado todo,
   // inclusive a AZUL (pula para o resumo). "Abrir o Guia de uso" leva a
   // Ajustes › Sobre e ajuda › Guia de uso.
+  // O CARTAO DA 2.0.2 (novidades202.h): come o teclado todo; "Abrir a
+  // Central" fecha o cartao e abre a Central de controle no lugar.
+  if (novidades202_aberto()) {
+    novidades202_evento(e);
+    if (novidades202_pedido() == N202_PEDIU_CENTRAL && app_central_pode()) central_abrir();
+    return;
+  }
   if (novidades20_aberto()) {
     novidades20_evento(e);
     if (novidades20_pedido() == N20_PEDIU_GUIA) {
@@ -2497,9 +2508,13 @@ void app_atualizar(float dt, Uint32 agora) {
   // ele prepara a fila antiga, grava a marca da 1.8.0 e abre uma vez, para
   // quem atualiza e para quem instala do zero. novidades180_primeira_vez nao
   // e mais chamada: o cartao da 1.8.0 so vive como cena do Guia de uso.
-  if (tela == TELA_HOME && homePronta && !player_aberto() && !detail_aberto())
+  // A 2.0.2 decide ANTES do guia da 2.0, no mesmo quadro: ela olha se o guia
+  // ja foi visto antes de ele gravar a marca (novidades202.h).
+  if (tela == TELA_HOME && homePronta && !player_aberto() && !detail_aberto()) {
+    novidades202_primeira_vez();
     novidades20_primeira_vez();
-  if (tela == TELA_HOME && homePronta && !player_aberto() && !detail_aberto() && !novidades170_aberto() && !novidades180_aberto() && !novidades20_aberto()) {
+  }
+  if (tela == TELA_HOME && homePronta && !player_aberto() && !detail_aberto() && !novidades170_aberto() && !novidades180_aberto() && !novidades20_aberto() && !novidades202_aberto()) {
     // Esta e a primeira explicacao da versao: aparece antes dos demais
     // cartoes de onboarding. Depois de OK, o bloco abaixo continua a fila
     // antiga no quadro seguinte.
@@ -3932,6 +3947,7 @@ void app_atualizar(float dt, Uint32 agora) {
   novidades170_atualizar(dt, agora);
   novidades180_atualizar(dt, agora);
   novidades20_atualizar(dt, agora);
+  novidades202_atualizar(dt, agora);
   telemetria_atualizar(dt, agora);
   recintro_atualizar(dt, agora);
   atualizacao_atualizar(dt, agora);
@@ -4159,7 +4175,7 @@ static int relogioCabe(void) {
       novidades13_aberto() || novidades131_aberto() || novidades132_aberto() ||
       novidades133_aberto() || novidades134_aberto() || novidades139_aberto() ||
       novidades1312_aberto() || novidades142_aberto() || novidades148_aberto() ||
-      novidades170_aberto() || novidades180_aberto() || novidades20_aberto() || telemetria_aberto() || recintro_aberto() ||
+      novidades170_aberto() || novidades180_aberto() || novidades20_aberto() || novidades202_aberto() || telemetria_aberto() || recintro_aberto() ||
       atualizacao_aberta() || agendaviso_aberto() || avisos_cartao_aberto() ||
       glem_cartao_aberto() || recenviar_aberto() || pessoas_aberto() ||
       recomenda_aberta() || pipintro_aberto() || diagnostico_intro_aberto())
@@ -4176,6 +4192,17 @@ void app_desenhar(Uint32 agora) {
             NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
     ponteiro_camada();
     novidades20_desenhar(agora);
+    return;
+  }
+  // O CARTAO DA 2.0.2 cobre quase a tela inteira: o app por baixo nao e
+  // pintado (uma camada de tela cheia a menos na Mali). O esmaecer de saida
+  // vem pelo caminho de baixo, por cima do app que ja voltou.
+  if (novidades202_aberto() && !registro_aberto() && !player_aberto()) {
+    gfx_sem_recorte();
+    gfx_cor((GfxRect){0, 0, NV_TELA_W, NV_TELA_H}, 0,
+            NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
+    ponteiro_camada();
+    novidades202_desenhar(agora);
     return;
   }
   // The highlights modal owns input and covers almost the whole screen.
@@ -4288,6 +4315,7 @@ void app_desenhar(Uint32 agora) {
   if (!registro_aberto()) novidades180_desenhar(agora);
   // O esmaecer de saida do guia da 2.0, por cima do app que ja voltou.
   if (!registro_aberto() && novidades20_visivel()) novidades20_desenhar(agora);
+  if (!registro_aberto()) novidades202_desenhar(agora);   // so o esmaecer de saida
   CAMADA_SE(telemetria_aberto());
   if (!registro_aberto()) telemetria_desenhar(agora);
   CAMADA_SE(recintro_aberto());
@@ -4393,7 +4421,8 @@ int app_central_pode(void) {
   if (central_aberta()) return 1;   // o CH+ que fecha passa pelo mesmo caminho
   return tela != TELA_LOGIN && tela != TELA_ESCOLHA_PERFIL && login_concluido() &&
          perfilsel_concluido() && !registro_aberto() && !spot_aberto() &&
-         !teclado_aberto() && !diagnostico_intro_aberto() && !novidades20_aberto();
+         !teclado_aberto() && !diagnostico_intro_aberto() && !novidades20_aberto() &&
+         !novidades202_aberto();
 }
 
 void app_encerrar(void) {
