@@ -226,6 +226,22 @@ int  video_mkv_sondado(void);
 // Dispara a sonda ja, sem esperar o gatilho de buffer. Inocuo se ja rodou.
 void video_sondar_mkv_agora(void);
 int  video_audio_atual(void);
+// A faixa e DTS? 0 nao, 1 DTS, 2 DTS-HD (MA/HRA/Express), 3 DTS:X. Le o codec
+// e o rotulo (o uMS e o MKV escrevem "DTS", "A_DTS/LOSSLESS", "DTS-HD MA";
+// a sessao convertida, o nome do FFmpeg "dts"). Codigo puro, todos os alvos.
+int  video_faixa_dts(const VideoFaixa *f);
+// O que aconteceu com o audio DTS da faixa atual (marca DTS no player e o
+// aviso da ilha). A marca aparece em TODOS os estados diferentes de NENHUM:
+// o DTS e da fonte, e o estado so diz como ele chega (pedido do dono, 06/10).
+enum {
+  VIDEO_DTS_NENHUM = 0,     // faixa atual nao e DTS (ou nada tocando)
+  VIDEO_DTS_NATIVO,         // a TV decodifica o DTS sozinha
+  VIDEO_DTS_PREPARANDO,     // a conversao local (PR #259) esta abrindo
+  VIDEO_DTS_CONVERTIDO,     // DTS -> AAC estereo convertido no app
+  VIDEO_DTS_FALHOU,         // a conversao falhou; voltou ao nativo sem som
+  VIDEO_DTS_SEM_SOM         // a TV recusa DTS e a conversao esta desligada aqui
+};
+int  video_dts_estado(void);
 int  video_legenda_atual(void);   // -1 = desligada
 
 void video_escolher_audio(int i);
@@ -356,6 +372,7 @@ typedef struct {
   int pronto, reconectando;
   unsigned bufferandoMs;
   double pos, duracao, bufferFim;
+  int dts;           // VIDEO_DTS_* que video_dts_estado devolve
 } VideoSimulacao;
 void video_simular(const VideoSimulacao *s);
 #endif

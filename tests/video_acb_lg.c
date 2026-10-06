@@ -22,6 +22,8 @@ int dts_overlay_draw(DtsPlayback *p,double t,float x,float y,float w,float h,int
 }
 void legenda_carregar(const char *url) { (void)url;assert(0); }
 int esmaecer_segura_protetor_tv(void) { return 0; }
+char *dados_ler(const char *nome) { (void)nome; return NULL; }
+int dados_gravar(const char *nome, const char *conteudo) { (void)nome; (void)conteudo; return 1; }
 void marco(const char *name) { (void)name; }
 const char *i18n(const char *s) { return s; }
 const char *rede_url_publica(const char *url,char *dst,unsigned n) { snprintf(dst,n,"%s",url);return dst; }

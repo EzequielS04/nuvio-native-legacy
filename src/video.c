@@ -18,6 +18,7 @@
 #include "ajustes.h"
 #include "dts/dts_overlay.h"
 #include "legenda.h"
+#include "dados.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -30,6 +31,27 @@
 static DtsPlayback *dtsSessao;
 static char dtsSaida[64];
 const char *video_dts_saida(void) { return dtsSaida; }
+
+int video_faixa_dts(const VideoFaixa *f) {
+  char s[96];
+  size_t i;
+  if (!f) return 0;
+  snprintf(s, sizeof s, " %s %s ", f->codec, f->rotulo);
+  for (i = 0; s[i]; i++) s[i] = (char)tolower((unsigned char)s[i]);
+  if (!strstr(s, "dts") && !strstr(s, " dca")) return 0;
+  if (strstr(s, "dts:x") || strstr(s, "dts-x") || strstr(s, "dtsx")) return 3;
+  if (strstr(s, "dts-hd") || strstr(s, "dts hd") || strstr(s, "a_dts/") ||
+      strstr(s, "dts-ma") || strstr(s, "dts ma")) return 2;
+  return 1;
+}
+// So o ramo webOS escreve aqui (PREPARANDO, CONVERTIDO, FALHOU): o resto sai
+// da faixa e do pipeline, igual em todos os alvos. No Mac, video_simular.
+static int dtsEstado;
+int video_dts_estado(void) {
+  if (dtsEstado) return dtsEstado;
+  if (!video_pronto() || !video_faixa_dts(video_audio(video_audio_atual()))) return VIDEO_DTS_NENHUM;
+  return video_audio_nao_suportado() ? VIDEO_DTS_SEM_SOM : VIDEO_DTS_NATIVO;
+}
 int video_dts_legenda_desenhar(double seconds, int delay, float x, float y,
                               float w, float h, float alpha) {
   return dts_overlay_draw(dtsSessao, seconds - delay / 1000.0, x, y, w, h,
@@ -171,7 +193,10 @@ static unsigned  sessao;
 // app compilar e rodar igual, so sem imagem em movimento. As capturas podem
 // simular um video (video_simular, video.h); zerado e o coto mudo.
 static VideoSimulacao SIM;
-void video_simular(const VideoSimulacao *s) { if (s) SIM = *s; else memset(&SIM, 0, sizeof SIM); }
+void video_simular(const VideoSimulacao *s) {
+  if (s) SIM = *s; else memset(&SIM, 0, sizeof SIM);
+  dtsEstado = SIM.dts;
+}
 int  video_iniciar(void) { return 0; }
 int  video_iniciar_auto(void) { return 0; }
 int  video_registro_negado(void) { return 0; }
@@ -485,6 +510,8 @@ static char dtsLegUrlAntes[1024];
 static char cabsHttp[512];
 static int iniciarDts(int stream);
 static void bombearDts(void);
+static int dtsLiberadoNestaTv(void);
+static void dtsMarcarAbertas(int n);
 // RECONEXAO (video_reconexao.h). O erro chega no fio do LS2 e so ANOTA
 // (reconErroPend); a decisao e o recarregar sao do video_bombear, no fio
 // principal, como o `recuperando`.
@@ -1878,8 +1905,8 @@ int  video_reconectando(void) {
 
 int video_tocar(const char *url) {
   dvRecuado = 0;
-  dtsTentou = 0; dtsRevisao = 0; dtsSaida[0] = 0; dtsNativePending = 0;
-  dtsHabilitado = dts_playback_enabled();
+  dtsTentou = 0; dtsRevisao = 0; dtsSaida[0] = 0; dtsNativePending = 0; dtsEstado = 0;
+  dtsHabilitado = dts_playback_enabled() && dtsLiberadoNestaTv();
   // O modo vale para esta fonte e para os recarregar dela (tocarInterno).
   modoLoad = video_modo_live_consumir();
   nv_recon_zerar(&recon);
@@ -1906,10 +1933,20 @@ void video_bombear(void) {
   if (ligado) acbConfigurarTipo(dtsSessao != NULL);
   if (dtsSessao) bombearDts();
   else if (dtsHabilitado && !dtsNativePending && !dtsTentou && !modoLoad && urlAtual[0]) {
-    const VideoFaixa *a = video_audio(audioAtual);
-    int knownDts = a && (!strncasecmp(a->codec, "dts", 3) || !strcasecmp(a->codec, "dca"));
-    if (audioNaoSup && (!a || !a->codec[0] || knownDts))
+    // SO COM FAIXA DTS CONHECIDA (teste na C9, 06/10): o erro 200 tambem vem
+    // de TrueHD e de faixa ainda sem codec; o fallback derrubava a reproducao
+    // nativa, que na 2.0.0 seguia. Sem a lista de faixas, espera ela chegar.
+    int knownDts = video_faixa_dts(video_audio(audioAtual)) > 0;
+    int forcar = 0;
+#ifdef NV_DTS_DEBUG
+    // A C9 decodifica DTS sozinha: sem isto o caminho de conversao nunca roda
+    // nela. `touch /tmp/nuvio-dts-forcar` converte toda faixa DTS escolhida.
+    forcar = knownDts && access("/tmp/nuvio-dts-forcar", F_OK) == 0;
+#endif
+    if ((audioNaoSup && knownDts) || forcar) {
+      dtsEstado = VIDEO_DTS_PREPARANDO;
       iniciarDts(-1);
+    }
   }
   // O ACB demora cerca de 1,5 s para ligar uma sessao. Se o usuario sair e
   // reabrir nesse intervalo, o loadCompleted novo encontra bindVivo=1. Antes
@@ -2297,12 +2334,77 @@ static void pararSessao(void) {
     snprintf(b, sizeof b, "{\"mediaId\":\"%s\"}", midia);
     chamar("unload", b, soLog);
   }
-  if (tinhaDts) dts_overlay_draw(NULL, 0, 0, 0, 0, 0, 0, 0, 0);
+  if (tinhaDts) {
+    dts_overlay_draw(NULL, 0, 0, 0, 0, 0, 0, 0, 0);
+    dtsMarcarAbertas(0);   // fechou sem o app morrer
+    if (dtsEstado != VIDEO_DTS_FALHOU) dtsEstado = 0;
+  }
   midia[0] = 0; tocando = pronto = 0; falhou = 0; audioNaoSup = 0;
   erroTexto[0] = 0;
 }
 
 
+// CONVERSAO DE DTS SO NO webOS 5+ (PR #259). Na LG C9 (webOS 4.10.2), com a
+// conversao forcada, o app morreu as duas vezes no mesmo ponto, logo depois de
+// "native-play-accepted": SIGSEGV em pthread_setname_np com pthread_t nulo,
+// chamado por KADP_OSA_CreateThread <- KADP_AUDIO_OpenMaster <- lxao_open_renderer
+// <- gst_lx_audio_render_event, numa thread do GStreamer que o pipeline
+// BUFFERSTREAM da Starfish roda DENTRO do nosso processo (o caminho normal do
+// uMS roda o audio no processo da LG). Ou seja, o pthread_create da LG falhou
+// e ela nao conferiu. Nosso codigo nao esta na pilha e a causa do pthread_create
+// falhar NAO esta provada (palpite: thread de tempo real negada ao app na
+// jaula). Ate haver prova numa TV webOS 3/4 a conversao fica desligada nelas,
+// e a TV faz o que a 2.0.0 fazia: video sem o audio que ela recusa.
+// `touch /tmp/nuvio-dts-liberar` religa para teste.
+//
+// E EM QUALQUER VERSAO: dts-conversao.txt conta as conversoes abertas que nao
+// fecharam. Duas seguidas = o app morreu duas vezes com a conversao aberta, e
+// ela se desliga nesta TV. Uma so pode ser a TV desligada no meio do filme.
+#define DTS_MARCA_ARQ "dts-conversao.txt"
+static int dtsAbertasSemFechar(void) {
+  char *t = dados_ler(DTS_MARCA_ARQ);
+  int n = t ? atoi(t) : 0;
+  free(t);
+  return n;
+}
+static void dtsMarcarAbertas(int n) {
+  char b[16];
+  if (!n && !dtsAbertasSemFechar()) return;
+  snprintf(b, sizeof b, "%d\n", n);
+  dados_gravar(DTS_MARCA_ARQ, b);
+}
+static int dtsLiberadoNestaTv(void) {
+  static int v = -1;
+  int maior, abertas;
+  if (v >= 0) return v;
+  if (access("/tmp/nuvio-dts-liberar", F_OK) == 0) {
+    printf("[dts] conversao liberada por /tmp/nuvio-dts-liberar\n"); fflush(stdout);
+    return v = 1;
+  }
+  maior = webosMaior();
+  abertas = dtsAbertasSemFechar();
+  if (maior < 5) {
+    printf("[dts] conversao desligada no webOS %d (crash no audio da LG na C9 4.10)\n", maior);
+    v = 0;
+  } else if (abertas >= 2) {
+    printf("[dts] conversao desligada: o app morreu %d vezes com ela aberta\n", abertas);
+    v = 0;
+  } else v = 1;
+  fflush(stdout);
+  return v;
+}
+// A CONVERSAO FALHOU: volta ao player nativo na mesma posicao, como se o DTS
+// nunca tivesse sido tentado (video sem o audio recusado, o comportamento da
+// 2.0.0). dtsTentou continua 1, entao nao ha segunda tentativa nesta fonte.
+// Antes o player fechava (log da C9: "playback failed" e logo "saida").
+static void dtsVoltarNativo(const char *motivo) {
+  char lu[sizeof legUrlAtual];
+  dtsEstado = VIDEO_DTS_FALHOU;
+  printf("[dts] conversao falhou (%s): volta ao player nativo em %.1fs\n", motivo, posSeg);
+  fflush(stdout);
+  snprintf(lu, sizeof lu, "%s", legUrlAtual);
+  if (!recarregarMesmaFonte(posSeg, -1, -1, lu)) falhou = 1;
+}
 static int iniciarDts(int stream) {
   /* Retry from the next pump before unloading or spawning a native worker.
    * The old bind must finish before its ACB handle can become MSE. */
@@ -2326,19 +2428,20 @@ static int iniciarDts(int stream) {
   posSeg = alvo; pausaPedida = paused;
   dtsRevisao = 0; dtsFalhaLogada = 0;
   if (acbCriar && !acbConfigurarTipo(1)) {
-    falhou = 1;
-    snprintf(erroTexto, sizeof erroTexto, "DTS video plane initialization failed");
     marco("DTS startup failed: MSE video plane initialization");
+    dtsVoltarNativo("video plane");
     return 0;
   }
+  dtsMarcarAbertas(dtsAbertasSemFechar() + 1);
   dtsSessao = dts_playback_start(urlAtual, cabsHttp, stream, alvo,
                                paused, expWin, 0, a ? &selected : NULL, ordinal, count);
   if (!dtsSessao) {
-    falhou = 1;
-    snprintf(erroTexto, sizeof erroTexto, "DTS software playback unavailable");
+    dtsMarcarAbertas(0);
     marco("DTS startup failed: software playback unavailable");
+    dtsVoltarNativo("converter unavailable");
     return 0;
   }
+  dtsEstado = VIDEO_DTS_PREPARANDO;
   snprintf(dtsSaida, sizeof dtsSaida, "DTS: preparing audio");
   marco("DTS: local software conversion requested");
   return 1;
@@ -2387,8 +2490,8 @@ static void bombearDts(void) {
       printf("[dts] playback failed: %.159s\n", st.error); fflush(stdout);
       dtsFalhaLogada = 1;
     }
-    falhou = 1; tocando = 0; dtsSaida[0] = 0;
-    snprintf(erroTexto, sizeof erroTexto, "%.95s", st.error);
+    dtsSaida[0] = 0;
+    dtsVoltarNativo("converter");
     return;
   }
   /* Load may synchronously queue videoInfo/playing before the worker publishes
@@ -2461,6 +2564,7 @@ static void bombearDts(void) {
       for (i = 0; i < nLeg; i++) if (faixaLeg[i].stream_index == selectedSub) legAtual = i;
     }
     snprintf(dtsSaida, sizeof dtsSaida, "DTS → AAC Stereo");
+    dtsEstado = VIDEO_DTS_CONVERTIDO;
     if (expWin[0]) expJanelaAplicar();
     protegerScreensaver();
   }
