@@ -2681,7 +2681,15 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
       if(s->tamanhoMB && !ajustes_fonte_texto_addon()) { snprintf(gb,sizeof gb,s->tamanhoMB>=102400?"%.0f":"%.1f",s->tamanhoMB/1024.0); plrui_decimal(gb); }
       lg=txt_linha(TXT_CW_TITULO,gb,cg,cg,cg-2,255);
       lu=txt_linha(TXT_PG_FIM,"GB",120,120,118,255);
-      lp=txt_linha_corta(TXT_PG_FIM,s->provedor,sel?150:110,sel?150:110,sel?148:108,255,240);
+      // TORRENT SEM DEBRID: quantos semeiam vai junto do addon. E o numero que
+      // diz se a fonte abre (log da 2.0.0 no Android: "metadados nao chegaram
+      // em 30 s"); a pessoa escolhia as cegas. "seeds" fica sem traducao: e o
+      // termo que quem usa torrent conhece em qualquer idioma.
+      { char pv[160];
+        if(!s->url[0] && s->infoHash[0] && s->temSemeadores)
+          snprintf(pv,sizeof pv,"%d seeds · %s",s->semeadores,s->provedor);
+        else snprintf(pv,sizeof pv,"%s",s->provedor);
+        lp=txt_linha_corta(TXT_PG_FIM,pv,sel?150:110,sel?150:110,sel?148:108,255,340); }
       colW=lp.w;
       if(gb[0] && lg.w+6+lu.w>colW) colW=lg.w+6+lu.w;
       cy=y+20+(temMarca(i,automatica)?FOLHA_MARCA_H:0);
