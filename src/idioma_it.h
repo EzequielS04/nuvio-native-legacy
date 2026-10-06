@@ -3615,6 +3615,7 @@
   T("Segure OK para marcar como assistido", "Tieni premuto OK per segnare come visto"),
   T("Segure OK para opções", "Tieni premuto OK per le opzioni"),
   T("Segure OK: Mais informações, Remover ou Marcar como assistido.", "Tieni premuto OK per Più info, Rimuovi o Segna come visto."),
+  T("Segure para abrir a central", "Tieni premuto per aprire il centro di controllo"),
   T("Segure para opções", "Tieni premuto per le opzioni"),
   T("Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "Tieni premuto ↑ o ↓ nella guida per saltare tra le categorie; tieni premuto OK per il preferito."),
   T("Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "Tieni premuto ↑ o ↓ per saltare di categoria. OK tenuto premuto segna il canale come preferito."),

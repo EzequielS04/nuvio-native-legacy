@@ -3615,6 +3615,7 @@
   T("Segure OK para marcar como assistido", "Tahan OK untuk menandai sudah ditonton"),
   T("Segure OK para opções", "Tahan OK untuk opsi"),
   T("Segure OK: Mais informações, Remover ou Marcar como assistido.", "Tahan OK untuk Info selengkapnya, Hapus, atau Tandai sudah ditonton."),
+  T("Segure para abrir a central", "Tahan untuk membuka pusat kontrol"),
   T("Segure para opções", "Tahan untuk opsi"),
   T("Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "Tahan ↑ atau ↓ di panduan untuk melompat antarkategori; tahan OK untuk favorit."),
   T("Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "Tahan ↑ atau ↓ untuk melompati kategori. Menahan OK menandai saluran sebagai favorit."),

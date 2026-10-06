@@ -3615,6 +3615,7 @@
   T("Segure OK para marcar como assistido", "Palaikykite OK, kad pažymėtumėte kaip peržiūrėtą"),
   T("Segure OK para opções", "Palaikykite OK parinktims"),
   T("Segure OK: Mais informações, Remover ou Marcar como assistido.", "Palaikykite OK: Daugiau informacijos, Pašalinti arba Pažymėti kaip peržiūrėtą."),
+  T("Segure para abrir a central", "Laikykite, kad atidarytumėte valdymo centrą"),
   T("Segure para opções", "Palaikykite parinktims"),
   T("Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "Vadove palaikykite ↑ arba ↓, kad peršoktumėte kategorijas; palaikykite OK, kad pažymėtumėte mėgstamiausiu."),
   T("Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "Laikyk ↑ arba ↓, kad peršoktum į kitą kategoriją. Laikomas OK pažymi kanalą kaip mėgstamą."),

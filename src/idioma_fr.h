@@ -3614,6 +3614,7 @@
   T("Segure OK para marcar como assistido", "Maintenez OK pour marquer comme vu"),
   T("Segure OK para opções", "Maintenez OK pour les options"),
   T("Segure OK: Mais informações, Remover ou Marcar como assistido.", "Maintenez OK: Plus d'infos, Supprimer ou Marquer comme vu."),
+  T("Segure para abrir a central", "Maintenez pour ouvrir le centre de contrôle"),
   T("Segure para opções", "Maintenez pour les options"),
   T("Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "Maintenez ↑ ou ↓ dans le guide pour changer de catégorie; OK maintenu ajoute aux favoris."),
   T("Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "Maintenez ↑ ou ↓ pour sauter de catégorie. OK maintenu met la chaîne en favori."),

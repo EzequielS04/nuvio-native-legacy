@@ -3615,6 +3615,7 @@
   T("Segure OK para marcar como assistido", "İzlendi olarak işaretlemek için OK'e basılı tut"),
   T("Segure OK para opções", "Seçenekler için OK'e basılı tut"),
   T("Segure OK: Mais informações, Remover ou Marcar como assistido.", "Daha fazla bilgi, Kaldır veya İzlendi olarak işaretle için OK'e basılı tut."),
+  T("Segure para abrir a central", "Denetim merkezi için basılı tutun"),
   T("Segure para opções", "Seçenekler için basılı tut"),
   T("Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "Rehberde kategoriler arasında atlamak için ↑ veya ↓'e basılı tut; favorilemek için OK'e basılı tut."),
   T("Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "Kategori atlamak için ↑ veya ↓ basılı tut. Basılı tutulan OK kanalı favori yapar."),

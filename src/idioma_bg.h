@@ -3615,6 +3615,7 @@
   T("Segure OK para marcar como assistido", "Задръжте OK, за да отбележите като гледано"),
   T("Segure OK para opções", "Задръжте OK за опции"),
   T("Segure OK: Mais informações, Remover ou Marcar como assistido.", "Задръжте OK за Повече информация, Премахни или Отбележи като гледано."),
+  T("Segure para abrir a central", "Задръжте, за да отворите контролния център"),
   T("Segure para opções", "Задръжте за опции"),
   T("Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "В ръководството задръжте ↑ или ↓, за да прескачате категории; задръжте OK за любим."),
   T("Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "Задръжте ↑ или ↓, за да прескочите категория. Задържането на OK прави канала любим."),

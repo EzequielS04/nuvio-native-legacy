@@ -3614,6 +3614,7 @@
   T("Segure OK para marcar como assistido", "Утримуйте OK, щоб позначити як переглянуте"),
   T("Segure OK para opções", "Утримуйте OK для параметрів"),
   T("Segure OK: Mais informações, Remover ou Marcar como assistido.", "Утримуйте OK: «Докладніше», «Видалити» або «Позначити як переглянуте»."),
+  T("Segure para abrir a central", "Утримуйте, щоб відкрити пункт керування"),
   T("Segure para opções", "Утримуйте для параметрів"),
   T("Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "Утримуйте ↑ або ↓ у гіді, щоб перестрибувати між категоріями; довге натискання OK додає в обране."),
   T("Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "Утримуйте ↑ або ↓, щоб перескочити категорію. Утримання OK додає канал до обраного."),

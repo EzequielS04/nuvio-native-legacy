@@ -3614,6 +3614,7 @@
   { "Segure OK para marcar como assistido", "Hold OK to mark as watched" },
   { "Segure OK para opções", "Hold OK for options" },
   { "Segure OK: Mais informações, Remover ou Marcar como assistido.", "Hold OK for More info, Remove or Mark as watched." },
+  { "Segure para abrir a central", "Hold to open the control center" },
   { "Segure para opções", "Hold for options" },
   { "Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "Hold ↑ or ↓ in the guide to jump categories; hold OK to favorite." },
   { "Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "Hold ↑ or ↓ to jump between categories. Holding OK marks the channel as a favorite." },

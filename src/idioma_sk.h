@@ -3615,6 +3615,7 @@
   T("Segure OK para marcar como assistido", "Podržaním OK označíte ako pozreté"),
   T("Segure OK para opções", "Podržaním OK zobrazíte možnosti"),
   T("Segure OK: Mais informações, Remover ou Marcar como assistido.", "Podržaním OK zobrazíte Viac informácií, Odstrániť alebo Označiť ako pozreté."),
+  T("Segure para abrir a central", "Podržte na otvorenie ovládacieho centra"),
   T("Segure para opções", "Podržaním zobrazíte možnosti"),
   T("Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "V sprievodcovi podržte ↑ alebo ↓ na preskakovanie kategórií; podržaním OK pridáte do obľúbených."),
   T("Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "Podrž ↑ alebo ↓ na skok na inú kategóriu. Podržané OK označí kanál ako obľúbený."),

@@ -3615,6 +3615,7 @@
   T("Segure OK para marcar como assistido", "长按 OK 标记为已看"),
   T("Segure OK para opções", "长按 OK 查看选项"),
   T("Segure OK: Mais informações, Remover ou Marcar como assistido.", "长按 OK：更多信息、移除或标记为已看。"),
+  T("Segure para abrir a central", "按住打开控制中心"),
   T("Segure para opções", "长按查看选项"),
   T("Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "在指南中长按 ↑ 或 ↓ 可跳转分类；长按 OK 可收藏。"),
   T("Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "按住 ↑ 或 ↓ 跳过一个类别。按住 OK 将频道设为收藏。"),

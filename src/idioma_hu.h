@@ -3615,6 +3615,7 @@
   T("Segure OK para marcar como assistido", "Tartsd nyomva az OK-t a megnézettnek jelöléshez"),
   T("Segure OK para opções", "Tartsd nyomva az OK-t a lehetőségekhez"),
   T("Segure OK: Mais informações, Remover ou Marcar como assistido.", "Tartsd nyomva az OK-t a További információhoz, Eltávolításhoz vagy Megnézettként jelöléshez."),
+  T("Segure para abrir a central", "Tartsa lenyomva a vezérlőközponthoz"),
   T("Segure para opções", "Tartsd nyomva a lehetőségekhez"),
   T("Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "Az útmutatóban tartsd nyomva a ↑ vagy ↓ gombot a kategóriák közti ugráshoz; az OK nyomva tartása kedvencekhez ad."),
   T("Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "Tartsd nyomva a ↑ vagy ↓ gombot a kategóriaváltáshoz. A nyomva tartott OK kedvencnek jelöli a csatornát."),

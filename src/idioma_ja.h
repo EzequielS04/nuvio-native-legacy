@@ -3615,6 +3615,7 @@
   T("Segure OK para marcar como assistido", "OK を長押しして視聴済みにする"),
   T("Segure OK para opções", "OK を長押ししてオプションを表示"),
   T("Segure OK: Mais informações, Remover ou Marcar como assistido.", "OK を長押し: 詳細情報、削除、視聴済みにする。"),
+  T("Segure para abrir a central", "長押しでコントロールセンター"),
   T("Segure para opções", "長押しでオプション"),
   T("Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "ガイドで ↑ か ↓ を長押しするとカテゴリを飛ばせます。OK を長押しするとお気に入りにできます。"),
   T("Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "↑ か ↓ を長押しでカテゴリを移動します。OK の長押しでチャンネルをお気に入りにします。"),

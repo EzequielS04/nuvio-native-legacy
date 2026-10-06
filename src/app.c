@@ -4125,7 +4125,7 @@ static void desenharTelas(Uint32 agora) {
   // camadas dele: a pilula da hora, os avisos e o que nasce dela (Audio,
   // Legendas, estilo, carregando, erro) — e a folha de Fontes, que cresce
   // dela (streams.c) e por isso nao a esconde mais.
-  if (player_aberto()) plrilha_desenhar(agora);
+  if (player_aberto()) { central_desenhar(agora); plrilha_desenhar(agora); }
   gfx_osd_mult = 1.0f;
 }
 
@@ -4374,8 +4374,6 @@ void app_desenhar(Uint32 agora) {
   if (!registro_aberto()) diagnostico_intro_desenhar(agora);
   // O MEDIDOR DE DESEMPENHO (Ajustes > Desempenho desta TV) nao e mais camada
   // propria: e conteudo da ilha do relogio (ilha.c, plrilha.c; desempenho.h).
-  // A Central de controle fica acima de tudo, menos do painel de registro.
-  if (!registro_aberto()) central_desenhar(agora);
   CAMADA_SE(registro_aberto());
   registro_desenhar();
   // A ilha do relogio fica acima do painel de registro, no canto de sempre.

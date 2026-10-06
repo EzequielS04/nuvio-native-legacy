@@ -1,5 +1,7 @@
 // CENTRAL DE CONTROLE (dono, 06/10: "control centre tipo da Apple TV quando
-// segura o CH+"). Uma ilha na borda direita, por cima de qualquer tela, com:
+// segura o CH+"). Ela NASCE DA ILHA DO RELOGIO (dono: "tem que sair da ilha do
+// relogio"): a pilula estica ate o painel (ilha_corpo; no player, a plrilha
+// cresce da pilula da hora) e volta para ela ao fechar. O painel tem:
 //  - o que o app ja sabe e e util ver sem procurar: hora, perfil, internet,
 //    memoria de imagens, versao e plataforma, e o video que esta tocando
 //    (resolucao, HDR, Atmos — so o que o pipeline disse, nunca palpite);
@@ -21,7 +23,9 @@ void central_fechar(void);
 int  central_aberta(void);
 // Aberta: come o teclado todo.
 void central_evento(const SDL_Event *e);
+// Por quadro, antes do desenho: pede a ilha esticada (fora do player).
 void central_atualizar(float dt, Uint32 agora);
+// Com o player aberto: o pedido a plrilha, logo antes de plrilha_desenhar.
 void central_desenhar(Uint32 agora);
 
 // A TECLA (main.c). `ehCh` = este evento e o CH+ cru (antes do remapeamento

@@ -3614,6 +3614,7 @@
   T("Segure OK para marcar como assistido", "Ține apăsat OK pentru a marca ca vizionat"),
   T("Segure OK para opções", "Ține apăsat OK pentru opțiuni"),
   T("Segure OK: Mais informações, Remover ou Marcar como assistido.", "Ține apăsat OK: Mai multe informații, Elimină sau Marchează ca vizionat."),
+  T("Segure para abrir a central", "Ține apăsat pentru centrul de control"),
   T("Segure para opções", "Ține apăsat pentru opțiuni"),
   T("Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca favorito.", "Ține apăsat ↑ sau ↓ în ghid pentru a sări între categorii; OK apăsat lung marchează favorit."),
   T("Segure ↑ ou ↓ para pular de categoria. OK segurado marca o canal como favorito.", "Ține apăsat ↑ sau ↓ ca să sari la altă categorie. OK ținut apăsat marchează canalul ca favorit."),
