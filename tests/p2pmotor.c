@@ -24,7 +24,7 @@ void debrid_episodio(int *t, int *e) { *t = 0; *e = 0; }
 const char *dados_dir(void) { return "/nao/usado"; }
 char *rede_baixar_st(const char *u, int s, const char *const *c, int *st) { (void)u; (void)s; (void)c; if (st) *st = 0; return NULL; }
 char *rede_postar_st(const char *u, int s, const char *const *c, const char *b, int *st) { (void)u; (void)s; (void)c; (void)b; if (st) *st = 0; return NULL; }
-char *rede_baixar_trecho_st(const char *u, int s, long a, long b, long *t, int *st, int *e, char *f, unsigned n) {
+char *rede_baixar_trecho_st(const char *u, int s, long long a, long long b, long *t, int *st, int *e, char *f, unsigned n) {
   (void)u; (void)s; (void)a; (void)b; (void)t; (void)e; (void)f; (void)n; if (st) *st = 0; return NULL; }
 int rede_pedir(const RedePedido *p, RedeResposta *r) { (void)p; r->erro = REDE_INDISPONIVEL; return 0; }
 void rede_resposta_limpar(RedeResposta *r) { (void)r; }

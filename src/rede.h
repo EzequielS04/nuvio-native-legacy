@@ -174,7 +174,8 @@ char *rede_baixar_trecho(const char *url, int segundos, long ini, long fim,
 // um teto de pedido lembrado a sessao inteira (rede_corte_host), e os trechos
 // seguintes ja saem em pedacos desse tamanho. `segundos` e o prazo do trecho
 // INTEIRO, nao de cada pedaco. rede_baixar_trecho passa pelo mesmo laco.
-char *rede_baixar_trecho_st(const char *url, int segundos, long ini, long fim,
+// `ini`/`fim` em 64 bits: Range alem de 2 GiB num ARM de 32 bits (#269).
+char *rede_baixar_trecho_st(const char *url, int segundos, long long ini, long long fim,
                             long *tam, int *status, int *erro,
                             char *final, unsigned tamFinal);
 
