@@ -497,6 +497,8 @@ static void limparNotas(const char *md, char *dst, size_t tam) {
     while (n > 0 && (linha[n - 1] == ' ' || linha[n - 1] == '\r')) linha[--n] = 0;
     if (!n) continue;
     if (!strncmp(linha, "---", 3)) break;
+    // Imagem (banner, captura) nao e texto do cartao: "![x](url)" ou <img/<p>.
+    if (!strncmp(linha, "![", 2) || !strncmp(linha, "<img", 4) || !strncmp(linha, "<p", 2)) continue;
     if (linha[0] == '#') {
       const char *t = linha;
       while (*t == '#') t++;

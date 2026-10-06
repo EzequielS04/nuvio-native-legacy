@@ -37,6 +37,8 @@ The first time you open it, a short guide walks through what changed. It stays i
 
 ## Notes
 
+![Nuvio Legacy 2.0](https://raw.githubusercontent.com/iqui27/nuvio-native-legacy/master/docs/releases/2.0.0/banner.jpg)
+
 **Samsung .tpk: install this version by hand.** 2.0 changes the app's images and fonts, and the automatic update only replaces the program, so it is not offered this time.
 
 | Platform | File |
