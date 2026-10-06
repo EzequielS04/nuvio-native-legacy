@@ -2235,6 +2235,14 @@ void stream_folha_atualizar(float dt, Uint32 agora) {
   folhaGeometria();
   (void)agora;
   anim=anim_mola(anim,aberta?1:0,dt,NV_MOLA_TELA);
+  // FOLHA FECHADA E JA FORA DA TELA: nada a montar. Esta funcao roda todo
+  // quadro em qualquer tela (app.c), e montar + stream_automatico percorrem
+  // a lista inteira de fontes duas vezes: MEDIDO no Mac (06/10/2026), 1 ms
+  // por quadro na pagina do titulo com 201 fontes e a folha fechada (~97% do
+  // `upd`). Abrir (stream_folha_abrir), as teclas e o desenho montam de novo
+  // por conta propria; o foco pedido com a folha fechada era sobrescrito ao
+  // abrir, entao sai daqui tambem.
+  if (!aberta && anim < .005f) { focoFixo = -1; return; }
   atualizarProvedores();
   montar(automaticaDaFolha());
   nf=nOrdem;
