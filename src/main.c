@@ -1,6 +1,7 @@
 // Bootstrap: janela, contexto GL, loop e telemetria. Toda a UI vive nos modulos.
 #include <SDL2/SDL.h>
 #include "tpkteclas.h"
+#include "central.h"
 #include "sdlcompat.h"
 #include <SDL2/SDL_image.h>
 #include "gl_compat.h"
@@ -174,9 +175,32 @@ static void remapCanal(SDL_Event *e) {
       e->key.keysym.sym = sobe ? SDLK_s : SDLK_F5;
     }
   }
+#elif defined(__EMSCRIPTEN__)
+  // .wgt: tizen-shell.html entrega o CH+ (427) como F7, com keydown e keyup,
+  // para a Central de controle saber quanto ele ficou embaixo. Fora disso ele
+  // e o "s" de sempre (Salvos).
+  if ((e->type == SDL_KEYDOWN || e->type == SDL_KEYUP) && e->key.keysym.sym == SDLK_F7) {
+    e->key.keysym.sym = SDLK_s;
+    e->key.keysym.scancode = SDL_SCANCODE_S;
+  }
 #else
   (void)e;
 #endif
+}
+
+// O CH+ CRU, antes de remapCanal: F7 onde o host o entrega assim (Android,
+// .tpk, .wgt, Mac) e o scancode do LG. Segurado abre a Central de controle
+// (central.h); o toque curto volta por entregarCh.
+static int teclaCh(const SDL_Event *e) {
+  if (e->type != SDL_KEYDOWN && e->type != SDL_KEYUP) return 0;
+#if defined(NV_ANDROID) || defined(NV_TPK) || defined(__APPLE__) || defined(__EMSCRIPTEN__)
+  if (e->key.keysym.sym == SDLK_F7) return 1;
+#endif
+  return e->key.keysym.scancode == (SDL_Scancode)NV_SCANCODE_CH_UP;
+}
+static void entregarCh(SDL_Event *e) {
+  remapCanal(e);
+  app_evento(e);
 }
 
 // Teclas injetadas por arquivo, para conferir a UI sem alguem no sofa com o
@@ -1269,6 +1293,9 @@ int main(int argc, char **argv) {
       if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE)
         e.key.keysym.sym = SDLK_AC_BACK;
 #endif
+      // CH+ segurado x tocado (central.h). Com canal na tela (zap) ele segue
+      // direto, sem atraso.
+      if (teclaCh(&e) && central_tecla(&e, !app_zap_ativo() && app_central_pode())) continue;
       remapCanal(&e);
       // TECLA DESCONHECIDA, UMA LINHA CADA, UMA VEZ SO.
       //
@@ -1303,6 +1330,7 @@ int main(int argc, char **argv) {
       }
       app_evento(&e);
     }
+    central_tecla_quadro(SDL_GetTicks(), entregarCh);
     teclasInjetadas(app_evento);
     texto_sistema_quadro();
     fEv = NV_DT(tEv);
