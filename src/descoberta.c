@@ -6499,7 +6499,18 @@ static void *buscarEps(void *u) {
       // sobrescreveriam os dela.
       if (idbase_e_imdb(it->imdb))
         fotosDoElenco(&edit, idBase, !strcmp(it->tipo, "series"), manter);
-      else { printf("[desc] elenco %s: id fora do IMDb, sem fotos (meta pedido como %s)\n", it->imdb, serie); fflush(stdout); } }
+      else {
+        // TVDB / TMDB (resultado de busca de addon: Ted Lasso pelo Spotlight
+        // chegava como "tvdb:383203", MEDIDO na TCL 05/10/2026, e saia sem foto
+        // e sem clique no elenco). Esses ids sao da SERIE INTEIRA, entao o "tt"
+        // que a propria ficha revela vale. O Kitsu continua de fora (acima).
+        char tt[32] = "";
+        if (strncmp(it->imdb, "kitsu:", 6)) metaImdbDaFicha(corpo, tt, sizeof tt);
+        if (tt[0]) {
+          printf("[desc] elenco %s: fotos pelo IMDb da ficha (%s)\n", it->imdb, tt); fflush(stdout);
+          fotosDoElenco(&edit, tt, !strcmp(it->tipo, "series"), manter);
+        } else { printf("[desc] elenco %s: id fora do IMDb, sem fotos (meta pedido como %s)\n", it->imdb, serie); fflush(stdout); }
+      } }
     if (alvoItem >= 0 && (alvoItem = epAlvoDe(alvoItem, meuId)) >= 0) cat_atualizar_item(alvoItem, &edit);
     printf("[desc] %s: %d atores, dir='%s', %d temporadas\n",
            edit.titulo, edit.nElenco, edit.direcao, edit.nTemporadas);
