@@ -200,6 +200,13 @@ int main(int argc, char **argv) {
   tecla(SDLK_RIGHT); tecla(SDLK_RIGHT);
   assert(video_velocidade_atual() == 150);
   estado(); quadros(30); salvar("audio-velocidade-150");
-  puts("cacheboost_shot: 6 captures ok");
+  // 7. Audio goes out as passthrough while at 1,5x: back to 1x, the row is
+  // dimmed with the reason and the focus cannot land on it.
+  cacheboost_ganho_relato(CB_GANHO_PASSTHROUGH);
+  estado(); quadros(30);
+  assert(video_velocidade_atual() == 100);
+  salvar("audio-velocidade-receptor");
+  cacheboost_ganho_relato(CB_GANHO_PCM);
+  puts("cacheboost_shot: 7 captures ok");
   return 0;
 }

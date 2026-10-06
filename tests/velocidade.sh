@@ -8,8 +8,11 @@ trap 'rm -rf "$work"' EXIT
 cc -std=gnu11 -O1 -g -Wall -Wextra -Werror -Isrc src/velocidade.c tests/velocidade.c -lm -o "$work/t"
 "$work/t"
 # A ilha e a contagem do proximo episodio contam em tempo de relogio.
-grep -q 'vel_tempo_real((double)(duracaoSeg - posSeg), video_velocidade_atual())' src/player.c
-grep -q 'vel_tempo_real(durSeg - posSeg, video_velocidade_atual())' src/posplay.c
+# ...com a velocidade MEDIDA, nunca a pedida (TCL 06/10: "ok" com o video a 1x).
+grep -q 'vel_tempo_real((double)(duracaoSeg - posSeg), velMed.efetiva)' src/player.c
+grep -q 'relogio_taxa(&relLeg, velMed.efetiva / 100.0)' src/player.c
+grep -q 'vel_tempo_real(durSeg - posSeg, player_velocidade_efetiva())' src/posplay.c
+! grep -q 'relogio_taxa(&relLeg, video_velocidade_atual()' src/player.c
 # O .wgt nao oferece a linha (AVPlay setSpeed e trick play inteiro).
 grep -q 'int  video_velocidade_suportada(void) { return 0; }' src/video_tizen.c
-echo "velocidade: termina as, proximo episodio e .wgt conferidos"
+echo "velocidade: legenda, termina as, proximo episodio (pela efetiva) e .wgt conferidos"

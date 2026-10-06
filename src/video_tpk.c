@@ -676,6 +676,12 @@ void video_velocidade(int c) {
   if (!velRecusada) velPedida = c;
 }
 int  video_velocidade_atual(void) { return velRecusada ? 100 : velPedida; }
+void video_velocidade_recusada(void) {
+  velRecusada = 1; velPedida = 100;
+  if (ativo && pronto && hEscolher && velEnviada != 100) hEscolher(3, 100);
+  velEnviada = 100;
+}
+int  video_velocidade_bloqueada(void) { return 0; }
 void video_forcar_sdr(void) {}
 void video_encerrar(void) { video_parar(); }
 #endif

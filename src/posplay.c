@@ -324,7 +324,7 @@ void posplay_atualizar(float dt, Uint32 agora, double posSeg, double durSeg,
   // dispararia no meio deles.
   if (visivel && serie && !fecharEm) {
     // #202: a 1,5x os segundos do arquivo passam mais depressa que os do relogio.
-    double resta = vel_tempo_real(durSeg - posSeg, video_velocidade_atual());
+    double resta = vel_tempo_real(durSeg - posSeg, player_velocidade_efetiva());
     if (resta <= (double)PP_CONTAGEM_S) {
       if (resta < 0.0) resta = 0.0;
       fecharEm = agora + (Uint32)(resta * 1000.0);

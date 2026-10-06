@@ -1909,6 +1909,7 @@
   T("Indisponível", "Unavailable"),
   T("Indisponível agora", "Jelenleg nem elérhető"),
   T("Indisponível com os ajustes atuais.", "A jelenlegi beállításokkal nem érhető el."),
+  T("Indisponível com áudio pelo receptor", "Nem érhető el, ha a hang az erősítőn megy át"),
   T("Indisponível nesta plataforma", "Ezen a platformon nem érhető el"),
   T("Indisponível: falha de rede ao ler a referência", "Nem érhető el: hálózati hiba a referencia olvasásakor"),
   T("Indisponível: limite de dados atingido", "Nem érhető el: elérte az adatkorlátot"),

@@ -276,4 +276,8 @@ void player_shot_favorito(int f);   // 1 = botao Favorito na fileira, 2 = e o ca
 void player_shot_canal(const AoVivoEpg *e, int numero, int atrasS, int botaoFoco, int info);   // comVideo sem furo: a arte faz de video
 #endif
 
+// #202: a velocidade (centesimos) que o pipeline esta MEDIDO tocando; 100
+// ate a pedida se confirmar pela posicao contra o relogio (velocidade.h).
+int player_velocidade_efetiva(void);
+
 #endif

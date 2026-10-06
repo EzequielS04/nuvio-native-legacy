@@ -1909,6 +1909,7 @@
   T("Indisponível", "Unavailable"),
   T("Indisponível agora", "Inte tillgängligt just nu"),
   T("Indisponível com os ajustes atuais.", "Inte tillgängligt med nuvarande inställningar."),
+  T("Indisponível com áudio pelo receptor", "Inte tillgängligt med ljud via receivern"),
   T("Indisponível nesta plataforma", "Inte tillgängligt på den här plattformen"),
   T("Indisponível: falha de rede ao ler a referência", "Inte tillgängligt: nätverksfel vid läsning av referensen"),
   T("Indisponível: limite de dados atingido", "Inte tillgängligt: datagränsen nådd"),

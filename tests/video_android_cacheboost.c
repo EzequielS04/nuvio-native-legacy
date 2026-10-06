@@ -162,6 +162,21 @@ int main(void) {
   video_bombear();
   assert(!strcmp(registro, "A"));            // the trailer is never sped up
 
+  // Passthrough (TCL 06/10): the row is blocked with a reason; PCM frees it.
+  Java_space_nuvio_nativelegacy_NvPlayer_nativeAudioEstado(&env, NULL, 2);
+  assert(video_velocidade_bloqueada());
+  Java_space_nuvio_nativelegacy_NvPlayer_nativeAudioEstado(&env, NULL, 1);
+  assert(!video_velocidade_bloqueada());
+  // The player MEASURED 1x after "ok": refused -> back to 1x in the pipeline,
+  // the row gone, later requests ignored.
+  video_velocidade(150); video_bombear();
+  registro[0] = 0;
+  video_velocidade_recusada(); video_bombear();
+  assert(!strcmp(registro, "V100"));
+  assert(!video_velocidade_suportada() && video_velocidade_atual() == 100);
+  video_velocidade(200); video_bombear();
+  assert(!strcmp(registro, "V100"));
+
   // An older Kotlin shell without cache()/ganho(): nothing crosses, open works.
   semCache = 1;
   assert(resolverMetodos(&env));

@@ -1909,6 +1909,7 @@
   T("Indisponível", "Unavailable"),
   T("Indisponível agora", "Momentálně nedostupné"),
   T("Indisponível com os ajustes atuais.", "Při současném nastavení nedostupné."),
+  T("Indisponível com áudio pelo receptor", "Nedostupné se zvukem přes receiver"),
   T("Indisponível nesta plataforma", "Na této platformě nedostupné"),
   T("Indisponível: falha de rede ao ler a referência", "Nedostupné: chyba sítě při čtení reference"),
   T("Indisponível: limite de dados atingido", "Nedostupné: dosažen limit dat"),

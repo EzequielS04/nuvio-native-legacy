@@ -1909,6 +1909,7 @@
   T("Indisponível", "Unavailable"),
   T("Indisponível agora", "Šiuo metu nepasiekiama"),
   T("Indisponível com os ajustes atuais.", "Nepasiekiama esant dabartiniams nustatymams."),
+  T("Indisponível com áudio pelo receptor", "Neprieinama, kai garsas eina per imtuvą"),
   T("Indisponível nesta plataforma", "Šioje platformoje nepasiekiama"),
   T("Indisponível: falha de rede ao ler a referência", "Nepasiekiama: tinklo klaida skaitant nuorodą"),
   T("Indisponível: limite de dados atingido", "Nepasiekiama: pasiektas duomenų limitas"),

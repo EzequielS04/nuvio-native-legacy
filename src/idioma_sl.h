@@ -1909,6 +1909,7 @@
   T("Indisponível", "Unavailable"),
   T("Indisponível agora", "Trenutno ni na voljo"),
   T("Indisponível com os ajustes atuais.", "Ni na voljo s trenutnimi nastavitvami."),
+  T("Indisponível com áudio pelo receptor", "Ni na voljo z zvokom prek sprejemnika"),
   T("Indisponível nesta plataforma", "Na tej platformi ni na voljo"),
   T("Indisponível: falha de rede ao ler a referência", "Ni na voljo: omrežna napaka pri branju reference"),
   T("Indisponível: limite de dados atingido", "Ni na voljo: dosežena omejitev podatkov"),

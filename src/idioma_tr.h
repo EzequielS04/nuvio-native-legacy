@@ -1909,6 +1909,7 @@
   T("Indisponível", "Unavailable"),
   T("Indisponível agora", "Şu an kullanılamıyor"),
   T("Indisponível com os ajustes atuais.", "Mevcut ayarlarla kullanılamaz."),
+  T("Indisponível com áudio pelo receptor", "Ses alıcı üzerinden giderken kullanılamaz"),
   T("Indisponível nesta plataforma", "Bu platformda kullanılamaz"),
   T("Indisponível: falha de rede ao ler a referência", "Kullanılamaz: referans okunurken ağ hatası"),
   T("Indisponível: limite de dados atingido", "Kullanılamaz: veri sınırına ulaşıldı"),

@@ -1909,6 +1909,7 @@
   T("Indisponível", "Unavailable"),
   T("Indisponível agora", "目前無法使用"),
   T("Indisponível com os ajustes atuais.", "目前設定下無法使用。"),
+  T("Indisponível com áudio pelo receptor", "音訊經由擴大機輸出時無法使用"),
   T("Indisponível nesta plataforma", "此平台無法使用"),
   T("Indisponível: falha de rede ao ler a referência", "無法使用：讀取參考時網路錯誤"),
   T("Indisponível: limite de dados atingido", "無法使用：已達資料上限"),

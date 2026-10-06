@@ -1908,6 +1908,7 @@
   { "Indisponível", "Unavailable" },
   { "Indisponível agora", "Unavailable right now" },
   { "Indisponível com os ajustes atuais.", "Unavailable with the current settings." },
+  { "Indisponível com áudio pelo receptor", "Unavailable with audio through the receiver" },
   { "Indisponível nesta plataforma", "Not available on this platform" },
   { "Indisponível: falha de rede ao ler a referência", "Unavailable: network error reading the reference" },
   { "Indisponível: limite de dados atingido", "Unavailable: data limit reached" },

@@ -162,6 +162,7 @@ int main(void) {
   ok("refusal hides the row and pins 1x", !video_velocidade_suportada() && video_velocidade_atual() == 100);
   video_velocidade(200); video_bombear();
   ok("nothing more is sent after a refusal", nVels == 2);
+  ok("tpk never blocks for passthrough", !video_velocidade_bloqueada());
 
   printf(falhas ? "tpk-escolha: %d falha(s)\n" : "tpk-escolha: ok\n", falhas);
   return falhas != 0;

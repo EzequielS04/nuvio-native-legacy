@@ -1909,6 +1909,7 @@
   T("Indisponível", "Unavailable"),
   T("Indisponível agora", "Μη διαθέσιμο αυτή τη στιγμή"),
   T("Indisponível com os ajustes atuais.", "Μη διαθέσιμο με τις τρέχουσες ρυθμίσεις."),
+  T("Indisponível com áudio pelo receptor", "Μη διαθέσιμο με ήχο μέσω του δέκτη"),
   T("Indisponível nesta plataforma", "Μη διαθέσιμο σε αυτή την πλατφόρμα"),
   T("Indisponível: falha de rede ao ler a referência", "Μη διαθέσιμο: σφάλμα δικτύου κατά την ανάγνωση της αναφοράς"),
   T("Indisponível: limite de dados atingido", "Μη διαθέσιμο: συμπληρώθηκε το όριο δεδομένων"),

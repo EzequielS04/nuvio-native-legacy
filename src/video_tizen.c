@@ -1527,6 +1527,8 @@ void video_forcar_sdr(void) { }
 int  video_velocidade_suportada(void) { return 0; }
 void video_velocidade(int c) { (void)c; }
 int  video_velocidade_atual(void) { return 100; }
+void video_velocidade_recusada(void) {}
+int  video_velocidade_bloqueada(void) { return 0; }
 
 // Guardado e NAO USADO no AVPlay: nao ha como pedir uma camada de Dolby Vision
 // ao player. Fica registrado para nao parecer esquecimento, e para o dia em que

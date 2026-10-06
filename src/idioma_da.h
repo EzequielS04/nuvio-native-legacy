@@ -1909,6 +1909,7 @@
   T("Indisponível", "Unavailable"),
   T("Indisponível agora", "Ikke tilgængeligt lige nu"),
   T("Indisponível com os ajustes atuais.", "Ikke tilgængelig med de nuværende indstillinger."),
+  T("Indisponível com áudio pelo receptor", "Ikke tilgængelig med lyd via receiveren"),
   T("Indisponível nesta plataforma", "Ikke tilgængelig på denne platform"),
   T("Indisponível: falha de rede ao ler a referência", "Ikke tilgængelig: netværksfejl ved læsning af referencen"),
   T("Indisponível: limite de dados atingido", "Ikke tilgængelig: datagrænsen er nået"),

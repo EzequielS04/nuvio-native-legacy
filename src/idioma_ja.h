@@ -1909,6 +1909,7 @@
   T("Indisponível", "Unavailable"),
   T("Indisponível agora", "現在利用できません"),
   T("Indisponível com os ajustes atuais.", "現在の設定では使用できません。"),
+  T("Indisponível com áudio pelo receptor", "レシーバー経由の音声では使用できません"),
   T("Indisponível nesta plataforma", "このプラットフォームでは利用できません"),
   T("Indisponível: falha de rede ao ler a referência", "利用不可：基準の読み込み中にネットワークエラー"),
   T("Indisponível: limite de dados atingido", "利用不可：データ上限に達しました"),

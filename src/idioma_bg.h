@@ -1909,6 +1909,7 @@
   T("Indisponível", "Unavailable"),
   T("Indisponível agora", "Недостъпно в момента"),
   T("Indisponível com os ajustes atuais.", "Недостъпно с текущите настройки."),
+  T("Indisponível com áudio pelo receptor", "Недостъпно при звук през ресивъра"),
   T("Indisponível nesta plataforma", "Не е налично на тази платформа"),
   T("Indisponível: falha de rede ao ler a referência", "Не е налично: мрежова грешка при четене на еталона"),
   T("Indisponível: limite de dados atingido", "Не е налично: достигнат лимит на данните"),

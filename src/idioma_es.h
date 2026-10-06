@@ -1908,6 +1908,7 @@
   T("Indisponível", "No disponible"),
   T("Indisponível agora", "No disponible ahora"),
   T("Indisponível com os ajustes atuais.", "No disponible con los ajustes actuales."),
+  T("Indisponível com áudio pelo receptor", "No disponible con el audio por el receptor"),
   T("Indisponível nesta plataforma", "No disponible en esta plataforma"),
   T("Indisponível: falha de rede ao ler a referência", "No disponible: error de red al leer la referencia"),
   T("Indisponível: limite de dados atingido", "No disponible: límite de datos alcanzado"),

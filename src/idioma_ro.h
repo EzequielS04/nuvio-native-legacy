@@ -1908,6 +1908,7 @@
   T("Indisponível", "Unavailable"),
   T("Indisponível agora", "Indisponibil acum"),
   T("Indisponível com os ajustes atuais.", "Indisponibil cu setările actuale."),
+  T("Indisponível com áudio pelo receptor", "Indisponibil cu audio prin receiver"),
   T("Indisponível nesta plataforma", "Indisponibil pe această platformă"),
   T("Indisponível: falha de rede ao ler a referência", "Indisponibil: eroare de rețea la citirea referinței"),
   T("Indisponível: limite de dados atingido", "Indisponibil: limita de date a fost atinsă"),

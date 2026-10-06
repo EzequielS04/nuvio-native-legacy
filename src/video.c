@@ -12,6 +12,7 @@
 #include "lsregistro.h"
 #include "rede.h"
 #include "velocidade.h"
+#include "cacheboost.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -237,6 +238,9 @@ static int velMac = VEL_NORMAL;
 int  video_velocidade_suportada(void) { return 1; }
 void video_velocidade(int c) { velMac = c > 0 ? c : VEL_NORMAL; }
 int  video_velocidade_atual(void) { return velMac; }
+void video_velocidade_recusada(void) { velMac = VEL_NORMAL; }
+// Capturas: o passthrough simulado (cacheboost_ganho_relato) esmaece a linha.
+int  video_velocidade_bloqueada(void) { return cacheboost_ganho_estado() == CB_GANHO_PASSTHROUGH; }
 // .tpk da Samsung: o player e o do host .NET, em video_tpk.c.
 #elif !defined(NV_TPK) && !defined(NV_ANDROID)   // ramo luna (webOS): Android usa video_android.c
 #include <dlfcn.h>
@@ -2672,6 +2676,17 @@ void video_velocidade(int c) {
   velPedida = c;
 }
 int  video_velocidade_atual(void) { return velRecusada ? 100 : velPedida; }
+void video_velocidade_recusada(void) {
+  velRecusada = 1; velPedida = 100;
+  // Desfaz no pipeline tambem (o setPlayRate pode ter valido pela metade).
+  if (ligado && midia[0]) {
+    char b[160];
+    snprintf(b, sizeof b, "{\"mediaId\":\"%s\",\"playRate\":1.00,\"audioOutput\":true}", midia);
+    chamar("setPlayRate", b, soLog);
+  }
+  velEnviada = 100;
+}
+int  video_velocidade_bloqueada(void) { return 0; }
 
 void video_encerrar(void) {
   if (!ligado) return;

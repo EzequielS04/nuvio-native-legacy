@@ -1909,6 +1909,7 @@
   T("Indisponível", "Unavailable"),
   T("Indisponível agora", "Hiện không khả dụng"),
   T("Indisponível com os ajustes atuais.", "Không khả dụng với cài đặt hiện tại."),
+  T("Indisponível com áudio pelo receptor", "Không khả dụng khi âm thanh đi qua bộ thu"),
   T("Indisponível nesta plataforma", "Không khả dụng trên nền tảng này"),
   T("Indisponível: falha de rede ao ler a referência", "Không khả dụng: lỗi mạng khi đọc tham chiếu"),
   T("Indisponível: limite de dados atingido", "Không khả dụng: đã đạt giới hạn dữ liệu"),

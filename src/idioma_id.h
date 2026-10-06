@@ -1909,6 +1909,7 @@
   T("Indisponível", "Unavailable"),
   T("Indisponível agora", "Tidak tersedia saat ini"),
   T("Indisponível com os ajustes atuais.", "Tidak tersedia dengan pengaturan saat ini."),
+  T("Indisponível com áudio pelo receptor", "Tidak tersedia dengan audio melalui receiver"),
   T("Indisponível nesta plataforma", "Tidak tersedia di platform ini"),
   T("Indisponível: falha de rede ao ler a referência", "Tidak tersedia: kesalahan jaringan saat membaca referensi"),
   T("Indisponível: limite de dados atingido", "Tidak tersedia: batas data tercapai"),

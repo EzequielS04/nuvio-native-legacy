@@ -315,6 +315,10 @@ static float posSeg = 0.0f;
 // C9 chega a cada ~200 ms. A legenda desenhada com ele andava aos degraus e em
 // media 100 ms atras; relogio.c interpola entre as amostras.
 static Relogio relLeg;
+// #202: a velocidade que o PIPELINE esta tocando, medida (velocidade.h). E
+// ela, e nao o pedido, que move a legenda, o "termina as" e o proximo episodio.
+static VelMedidor velMed = { 100, 100, 0, 0, 0, 0, 0, 0 };
+int player_velocidade_efetiva(void) { return velMed.efetiva; }
 static double monoSeg(void) {
   struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
   return (double)ts.tv_sec + ts.tv_nsec / 1e9;
@@ -1229,7 +1233,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
 #endif
   botao = PLR_PLAY;
   memset(focoB, 0, sizeof focoB);
-  posSeg = 0.0f; relogio_zerar(&relLeg);
+  posSeg = 0.0f; relogio_zerar(&relLeg); velmed_zerar(&velMed);
   ultimoInput = SDL_GetTicks();
   esperandoFonte = (url == NULL);
   // Legenda externa e da sessao que acabou, nao desta.
@@ -2866,8 +2870,23 @@ void player_atualizar(float dt, Uint32 agora) {
                                concluiuAgora(cr), dt);
       }
     }
-    // #202: a legenda interpola na velocidade pedida (relogio.h).
-    relogio_taxa(&relLeg, video_velocidade_atual() / 100.0);
+    // #202: confere que o pipeline anda na velocidade pedida antes de usa-la.
+    // So com o video tocando de verdade: pausa, busca e buffering fecham a
+    // janela de medida. "ok" da plataforma com o video a 1x (passthrough na
+    // TCL) desfaz o pedido e a folha avisa (faixas_atualizar).
+    { int r;
+      velmed_pedir(&velMed, video_velocidade_atual());
+      r = velmed_passo(&velMed, monoSeg(), video_pos(),
+                       comVideo && video_pronto() && tocando && !scrubbing &&
+                       !video_bufferando_ms() && !ehCanal());
+      if (r == VELMED_CONFIRMOU) vel_log(velMed.efetiva, "confirmada pelo relogio do pipeline");
+      else if (r == VELMED_NAO_ANDOU) {
+        vel_log(velMed.pedida, "pipeline seguiu a 1x: volta a 1x");
+        video_velocidade_recusada();
+        velmed_pedir(&velMed, VEL_NORMAL);
+      } }
+    // A legenda interpola na velocidade MEDIDA (relogio.h).
+    relogio_taxa(&relLeg, velMed.efetiva / 100.0);
     relogio_amostra(&relLeg, video_pos(), monoSeg(), tocando && !scrubbing);
     // A cada 10 s: o numero cru do pipeline e o do relogio da legenda, no
     // mesmo instante. A diferenca e o que a interpolacao acrescenta (0..~250).
@@ -4237,8 +4256,8 @@ void player_desenhar(Uint32 agora) {
   // faixas, os avisos): o tempo que falta e dado a ilha a cada quadro.
   // #202: "termina as" em tempo de RELOGIO: a 1,5x o resto do arquivo passa
   // em 2/3 do tempo. A ilha tambem mostra a velocidade quando nao e 1x.
-  plrilha_relogio(0.0f, ehCanal() ? -1.0 : vel_tempo_real((double)(duracaoSeg - posSeg), video_velocidade_atual()));
-  plrilha_velocidade(ehCanal() ? VEL_NORMAL : video_velocidade_atual());
+  plrilha_relogio(0.0f, ehCanal() ? -1.0 : vel_tempo_real((double)(duracaoSeg - posSeg), velMed.efetiva));
+  plrilha_velocidade(ehCanal() ? VEL_NORMAL : velMed.efetiva);
   float a = anim * entrada;
   // FOLHA ABERTA, OSD APAGADO. A folha de Fontes e a de Legendas sao vidro
   // translucido: o relogio, os selos 4K/HDR e o tempo do player apareciam
@@ -4516,7 +4535,7 @@ static void desenharOsdCorpo(Uint32 agora, float a, float ac, const CatItem *c) 
 
   // A PILULA DA ILHA (plrilha.h): a hora e "termina as" moram nela agora, no
   // canto da Posicao do relogio. O canal nao tem fim.
-  plrilha_relogio(ac, ehCanal() ? -1.0 : vel_tempo_real((double)(duracaoSeg - posSeg), video_velocidade_atual()));
+  plrilha_relogio(ac, ehCanal() ? -1.0 : vel_tempo_real((double)(duracaoSeg - posSeg), velMed.efetiva));
 
   // Selos de formato no alto, no canto OPOSTO ao da ilha. Vem do FLUXO, nao
   // de constante: selo que mente e pior que selo ausente, porque e nele que o

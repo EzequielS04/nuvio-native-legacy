@@ -324,6 +324,14 @@ void video_forcar_sdr(void);
 int  video_velocidade_suportada(void);
 void video_velocidade(int centesimos);
 int  video_velocidade_atual(void);
+// O PLAYER mediu que o pipeline nao acelerou (velocidade.h, VelMedidor) apesar
+// do "ok" da plataforma: o backend passa a se comportar como depois de uma
+// recusa (suportada = 0, atual = 100) e devolve o pipeline a 1x.
+void video_velocidade_recusada(void);
+// 1 = a velocidade nao e possivel AGORA, com motivo conhecido: o audio sai em
+// passthrough para o receptor (Android: o ExoPlayer nao muda o tempo de um
+// fluxo EAC3/AC3 que ele nao decodifica). A linha fica esmaecida com o motivo.
+int  video_velocidade_bloqueada(void);
 
 void video_encerrar(void);
 

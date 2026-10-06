@@ -36,4 +36,29 @@ void vel_rotulo(char *b, size_t n, int cent);
 // A linha unica do registro: "[player] velocidade 1.50x (plataforma ok)".
 void vel_log(int cent, const char *estado);
 
+
+// A VELOCIDADE EFETIVA, MEDIDA (#202, TV TCL 06/10). O backend dizer "ok" nao
+// prova nada: com o audio em passthrough o ExoPlayer aceitou 1,5x e o video
+// seguiu a 1x (pipeline 49,8 -> 59,8 s em 10 s), e a legenda, interpolada a
+// 1,5x, ficou +525 ms adiantada. Quem decide a taxa que o resto do app usa
+// (relogio da legenda, "termina as", contagem do proximo episodio) e este
+// medidor: quanto a POSICAO do pipeline andou contra o relogio monotonico, em
+// janelas de VELMED_JANELA_S so com o video tocando de verdade (sem pausa,
+// busca, buffering). Ate confirmar, a efetiva continua a anterior.
+#define VELMED_JANELA_S 5.0
+enum { VELMED_NADA = 0, VELMED_CONFIRMOU, VELMED_NAO_ANDOU };
+typedef struct {
+  int pedida, efetiva;   // centesimos
+  int medindo, uns;      // janela aberta; janelas seguidas medindo ~1x
+  double t0, p0, tUlt, pUlt;
+} VelMedidor;
+void velmed_zerar(VelMedidor *m);               // pedida = efetiva = 100
+void velmed_pedir(VelMedidor *m, int cent);     // a pessoa pediu `cent`
+// A cada quadro. `valido` = 0 enquanto pausado, buscando, em buffering ou sem
+// pipeline pronto (fecha a janela). Devolve VELMED_CONFIRMOU quando a medida
+// bate com a pedida, VELMED_NAO_ANDOU quando DUAS janelas seguidas mediram 1x
+// com outra velocidade pedida (a efetiva volta a 100; quem chama desfaz o
+// pedido). Medida que nao bate com nenhuma das duas (travou no meio) nao conta.
+int  velmed_passo(VelMedidor *m, double agora, double pos, int valido);
+
 #endif

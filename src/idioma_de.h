@@ -1908,6 +1908,7 @@
   T("Indisponível", "Unavailable"),
   T("Indisponível agora", "Gerade nicht verfügbar"),
   T("Indisponível com os ajustes atuais.", "Mit den aktuellen Einstellungen nicht verfügbar."),
+  T("Indisponível com áudio pelo receptor", "Nicht verfügbar mit Ton über den Receiver"),
   T("Indisponível nesta plataforma", "Auf dieser Plattform nicht verfügbar"),
   T("Indisponível: falha de rede ao ler a referência", "Nicht verfügbar: Netzwerkfehler beim Lesen der Referenz"),
   T("Indisponível: limite de dados atingido", "Nicht verfügbar: Datenlimit erreicht"),

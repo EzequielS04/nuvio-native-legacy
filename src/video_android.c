@@ -249,7 +249,7 @@ static volatile int durMs, bufferando, posMs;
 // que ele esta pronto. setPlaybackSpeed aceita qualquer valor positivo; com o
 // audio em PASSTHROUGH (bitstream ao receptor) eu acho que o sink nao consegue
 // mudar o tempo e o Media3 segue em 1x, sem erro — nao provado em TV.
-static volatile int velPedida = 100, velEnviada = 100;
+static volatile int velPedida = 100, velEnviada = 100, velRecusada;
 static volatile Uint32 bufferDesde, tocandoDesde;
 static volatile const char *hdrAtual = "none";
 static volatile int dvAtual, atmosAtual;
@@ -555,7 +555,9 @@ void video_bombear(void) {
   if (mVelocidade && ativo && prontoLoad && velEnviada != velPedida) {
     velEnviada = velPedida;
     kInt(mVelocidade, velEnviada);
-    vel_log(velEnviada, "plataforma ok");
+    // So "enviado": o setPlaybackSpeed nao recusa nada, e quem prova que andou
+    // e o medidor do player (VelMedidor), pela posicao contra o relogio.
+    vel_log(velEnviada, "enviado ao ExoPlayer");
   }
   if (prontoLoad && pos > 0.5) reconIniciou = 1;
   if (prontoLoad && reconBuscarMs < 0) nv_recon_progresso(&recon, pos);
@@ -757,9 +759,16 @@ const char *video_hdr(void) { return (const char *)hdrAtual; }
 int  video_largura(void) { return largura; }
 int  video_altura(void) { return altura; }
 int  video_pode_forcar_sdr(void) { return 0; }
-int  video_velocidade_suportada(void) { return mVelocidade != NULL; }
-void video_velocidade(int c) { velPedida = (c <= 0 || c > 400) ? 100 : c; }
-int  video_velocidade_atual(void) { return velPedida; }
+int  video_velocidade_suportada(void) { return mVelocidade != NULL && !velRecusada; }
+void video_velocidade(int c) { if (!velRecusada) velPedida = (c <= 0 || c > 400) ? 100 : c; }
+int  video_velocidade_atual(void) { return velRecusada ? 100 : velPedida; }
+void video_velocidade_recusada(void) { velRecusada = 1; velPedida = 100; }   // o bombear manda o 100
+// PASSTHROUGH (medido na TCL, 06/10: EAC3 ao receptor, 1,5x pedido, video a
+// 1x). Trocar o audio para PCM decodificado enquanto a velocidade != 1 exigiria
+// reabrir o player com outra cadeia de audio no meio do filme (e o receptor
+// perderia o Atmos/5.1 por isso): nao e uma mudanca contida. A linha fica
+// esmaecida com o motivo.
+int  video_velocidade_bloqueada(void) { return cacheboost_ganho_estado() == CB_GANHO_PASSTHROUGH; }
 void video_forcar_sdr(void) {}
 void video_encerrar(void) { video_parar(); }
 #endif
