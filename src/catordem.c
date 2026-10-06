@@ -17,6 +17,26 @@ static int  temOrdem;
 static int  temNLanc, valNLanc, temSublinhado, valSublinhado;
 static unsigned revisao;
 unsigned catordem_revisao(void) { return revisao; }
+// Itens da resposta que nao couberam (ordem ou ocultos), so para o log.
+static int nAlem;
+
+// Impressao digital do que foi lido. Substitui as copias inteiras de antes
+// (antesOrdem/antesOcultos: 442 KB com 768 itens, 1,2 MB com 2048).
+static unsigned long long assinaturaLida(void) {
+  unsigned long long h = 1469598103934665603ULL;
+  int i;
+  const unsigned char *b;
+  for (i = 0; i < nOrdem; i++) {
+    for (b = (const unsigned char *)ordem[i]; *b; b++) h = (h ^ *b) * 1099511628211ULL;
+    h = (h ^ 1u) * 1099511628211ULL;
+  }
+  h = (h ^ (unsigned)nOrdem) * 1099511628211ULL;
+  for (i = 0; i < nOcultos; i++) {
+    for (b = (const unsigned char *)ocultos[i]; *b; b++) h = (h ^ *b) * 1099511628211ULL;
+    h = (h ^ 2u) * 1099511628211ULL;
+  }
+  return (h ^ (unsigned)nOcultos) * 1099511628211ULL;
+}
 
 // ---------------------------------------------------------------- leitura
 
@@ -38,15 +58,17 @@ static void minusculas(char *s) {
 
 static void addOrdem(const char *chave) {
   int i;
-  if (!chave || !chave[0] || nOrdem >= CATORD_MAX) return;
+  if (!chave || !chave[0]) return;
   for (i = 0; i < nOrdem; i++) if (!strcmp(ordem[i], chave)) return;
+  if (nOrdem >= CATORD_MAX) { nAlem++; return; }
   snprintf(ordem[nOrdem++], CATORD_CHAVE, "%s", chave);
 }
 
 static void addOculto(const char *chave) {
   int i;
-  if (!chave || !chave[0] || nOcultos >= CATORD_MAX) return;
+  if (!chave || !chave[0]) return;
   for (i = 0; i < nOcultos; i++) if (!strcmp(ocultos[i], chave)) return;
+  if (nOcultos >= CATORD_MAX) { nAlem++; return; }
   snprintf(ocultos[nOcultos++], CATORD_DESL, "%s", chave);
 }
 
@@ -97,10 +119,11 @@ static int lerItens(const char *ini, const char *fim) {
     while (*q && (unsigned char)*q <= ' ') q++;
     return *q == ']';
   }
-  for (; p && nv < CATORD_MAX; p = js_prox(fimElemento(p))) {
+  for (; p; p = js_prox(fimElemento(p))) {
     const char *f = fimElemento(p);
     char b[32];
     if (*p != '{') continue;
+    if (nv >= CATORD_MAX) { nAlem++; continue; }
     if (!chaveDoItem(p, f, v[nv].chave, CATORD_CHAVE)) continue;
     v[nv].ordem  = (int)js_num(p, f, "order", nv);
     // `enabled !== false`: ausente significa LIGADO. Tratar ausencia como
@@ -182,9 +205,8 @@ static const char *blobDe(const char *resposta, const char **fimOut) {
 }
 
 int catordem_ler(const char *resposta) {
-  static char antesOrdem[CATORD_MAX][CATORD_CHAVE];
-  static char antesOcultos[CATORD_MAX][CATORD_DESL];
-  int nAntesOrdem = nOrdem, nAntesOcultos = nOcultos, mudou = 0, i;
+  unsigned long long antes = assinaturaLida();
+  int nAntesOrdem = nOrdem, nAntesOcultos = nOcultos, mudou = 0;
   int nlAntes = temNLanc, vnlAntes = valNLanc;
   int suAntes = temSublinhado, vsuAntes = valSublinhado;
   const char *fim = NULL, *blob;
@@ -217,8 +239,10 @@ int catordem_ler(const char *resposta) {
     return 0;
   }
 
-  memcpy(antesOrdem, ordem, sizeof ordem);
-  memcpy(antesOcultos, ocultos, sizeof ocultos);
+  // Sem copia do que estava: quando nenhum dos dois formatos responde, nada foi
+  // escrito (lerItens so grava depois de ler ao menos um item, e lerLista sem
+  // array nao grava), entao voltar os contadores devolve o estado anterior.
+  nAlem = 0;
   nOrdem = nOcultos = 0;
 
   if (!lerItens(blob, fim)) {
@@ -228,8 +252,6 @@ int catordem_ler(const char *resposta) {
     // ordem VAZIA — devolver a lista local para o comeco aqui apagaria a home.
     if (!a && !d) {
       printf("[catordem] a conta nao gravou ordem nem catalogos ocultos\n");
-      memcpy(ordem, antesOrdem, sizeof ordem);
-      memcpy(ocultos, antesOcultos, sizeof ocultos);
       nOrdem = nAntesOrdem;
       nOcultos = nAntesOcultos;
       return 0;
@@ -244,11 +266,7 @@ int catordem_ler(const char *resposta) {
       temSublinhado = 1; valSublinhado = strstr(b, "true") != NULL;
     } }
 
-  if (nOrdem != nAntesOrdem || nOcultos != nAntesOcultos) mudou = 1;
-  for (i = 0; !mudou && i < nOrdem; i++)
-    if (strcmp(ordem[i], antesOrdem[i])) mudou = 1;
-  for (i = 0; !mudou && i < nOcultos; i++)
-    if (strcmp(ocultos[i], antesOcultos[i])) mudou = 1;
+  if (nOrdem != nAntesOrdem || nOcultos != nAntesOcultos || assinaturaLida() != antes) mudou = 1;
   temOrdem = nOrdem > 0 || nOcultos > 0;
   if (nlAntes != temNLanc || vnlAntes != valNLanc ||
       suAntes != temSublinhado || vsuAntes != valSublinhado) mudou = 1;
@@ -258,6 +276,11 @@ int catordem_ler(const char *resposta) {
   // (nenhuma), e "a home nao obedeceu" nao tem como ser respondido assim.
   if (mudou)
     printf("[catordem] %d na ordem da conta, %d desligadas\n", nOrdem, nOcultos);
+  // O TETO NAO E MAIS MUDO (#255): o que passou dele perde posicao e o
+  // "desligado" — um catalogo desligado no web pode voltar como fileira.
+  if (nAlem)
+    printf("[catordem] %d item(ns) da conta alem do teto de %d: ficam sem posicao e sem desligar\n",
+           nAlem, CATORD_MAX);
   else if (!temOrdem)
     printf("[catordem] a conta nao tem ordem de catalogos gravada\n");
   return mudou;
@@ -271,7 +294,9 @@ const char *catordem_chave(int i)    { return (i >= 0 && i < nOrdem) ? ordem[i] 
 
 int catordem_unir(const char *const *locais, int nLocais, int *saida, int max) {
   int n = 0, i, j;
-  char usado[CATORD_MAX * 8];
+  // Locais vem do registro de fileiras (FIL_MAX) ou dos catalogos declarados;
+  // nao do tamanho da ordem da conta. Pilha fixa, como era (6 KB).
+  char usado[6144];
   if (!locais || !saida || nLocais < 1) return 0;
   if (nLocais > (int)sizeof usado) nLocais = (int)sizeof usado;
   memset(usado, 0, (size_t)nLocais);

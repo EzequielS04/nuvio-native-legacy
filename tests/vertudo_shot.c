@@ -18,6 +18,7 @@
 #include <assert.h>
 
 static ColFolder pasta;
+static ColSource pastaFontes[COL_SOURCE_MAX];   // a pasta so aponta (#255)
 
 static void captura(const char *nome, SDL_Window *win) {
   int i;
@@ -64,6 +65,7 @@ int main(int argc, char **argv) {
   const char *saida = argc > 1 ? argv[1] : "/tmp/nuvio-vertudo";
   char nome[600];
   SDL_Window *w;
+  pasta.sources = pastaFontes;
   SDL_GLContext gl;
 
   assert(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) == 0);
@@ -114,7 +116,7 @@ int main(int argc, char **argv) {
   // PASTA NETFLIX DA CONTA SEM TITULO NAS FONTES (01/10): colecoes.c copia o
   // catId para o titulo e o manifesto nao casou pela base — a aba mostrava
   // "streaming_netflix_movies · Movies". Agora: so o tipo.
-  memset(pasta.sources, 0, sizeof pasta.sources);
+  memset(pastaFontes, 0, sizeof pastaFontes);
   fonte(0, "streaming_netflix_movies", "movie");
   fonte(1, "streaming_netflix_series", "series");
   snprintf(pasta.sources[0].catId, sizeof pasta.sources[0].catId, "streaming_netflix_movies");
