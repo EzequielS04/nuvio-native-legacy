@@ -295,6 +295,12 @@ extern float gfx_desliza_atual;
 // 1 = o GFX_CARD deve sempre preencher a moldura com cover. Usado pela forma
 // editorial 4:3, que nao pode cair no contain quando recebe arte 16:9.
 extern float gfx_card_forcar_cover_atual;
+// 1 = o GFX_CARD escurece a arte pelos dois veus de borda da tela de perfis
+// (os mesmos GFX_VEU_TOPO 330 px / 0,92 e GFX_VEU_BAIXO 300 px / 0,95, em
+// coordenada de tela). Sobre fundo preto e o mesmo pixel que os dois veus
+// desenhados por cima, sem as duas passadas de largura inteira. So a parede
+// de capas (psestilos.c) liga; quem liga desliga.
+extern float gfx_card_veu_tela_atual;
 // 1 = o cartaz em foco ganha o rebordo claro no GFX_CARD; 0 = nao ganha. E um
 // ajuste da pessoa (Ajustes > Foco no cartaz), lido uma vez por quadro pela
 // tela que desenha; o brilho e o especular do foco nao dependem dele.
@@ -403,6 +409,10 @@ void gfx_snap_comecar(void);   // redireciona o desenho para o snapshot
 void gfx_snap_terminar(void);  // volta para a tela
 void gfx_snap_desenhar(void);  // pinta o snapshot ocupando a tela toda
 void gfx_snap_encerrar(void);
+int  gfx_snap_ativo(void);     // 1 enquanto o desenho vai para o snapshot
+// Cresce a cada gfx_snap_comecar: quem guardou algo no FBO sabe se outro
+// desenho passou por cima desde entao (explorar.c, o ceu assado).
+unsigned gfx_snap_geracao(void);
 
 void gfx_tamanho_alvo(int w, int h);
 
@@ -604,6 +614,10 @@ void gfx_ambiente_descarregar(void);
 // opaca (GFX_VITRINE_DIN) e o fundo so e pintado onde o destaque nao chega;
 // senao o fundo e pintado antes dele, como sempre. Mesmo pixel.
 void          gfx_fundo_din_desenhar(const float topo[3], float queda);
+// Um cartaz OPACO desenhado sobre o fundo da Dinamica adiado (Android): marca
+// o retangulo (sem os cantos de `raioPx`) na profundidade para o fundo nao ser
+// sombreado embaixo dele. No-op fora desse regime. Ver dinAdiado em gfx.c.
+void          gfx_mascara_opaca(GfxRect r, float raioPx);
 // Contorno de `esp` PIXELS por dentro de r: a borda de fora do anel e a borda
 // de r, entao anel e miolo no mesmo rect dao uma borda so. `raio` e o de r,
 // normalizado pela altura, como em gfx_cor.

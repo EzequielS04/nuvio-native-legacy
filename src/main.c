@@ -32,6 +32,7 @@
 #include "gfx.h"
 #include "fundo.h"
 #include "gpunivel.h"
+#include "gputempo.h"
 #include "text.h"
 #include "marco.h"
 #include "rede.h"
@@ -1020,6 +1021,7 @@ int main(int argc, char **argv) {
   // NIVEL DE GPU (gpunivel.h): le GL_*, marca a GPU fraca no perfil e decide
   // o nivel de partida ANTES de tex_iniciar, que tira o perfil do aparelho.
   gpun_iniciar(dw, dh);
+  gputempo_iniciar();   // GPU clock per frame (Android, where the extension exists)
   int gpuPref = ajustes_gpu_efeitos();
   if (gpuPref) gpun_preferencia(gpuPref);
   if (ajustes_720p()) gpun_forcar_720();
@@ -1391,8 +1393,8 @@ int main(int argc, char **argv) {
     // todos, na ordem, ao lado das teclas.
     if (rastroQuadros && dtms > 25.0)
       printf("[qd] %.1fms ev=%.1f bomb=%.1f(%d tex %.1fMB) upd=%.1f clr=%.1f des=%.1f aux=%.1f swap=%.1f"
-             " [prep=%.1f glclear=%.1f] txt=%.1fms/%d rects=%d fill=%.2f assados=%d %s\n", dtms, fEv, fBomb, fUplN, fUplB / 1048576.0,
-             fUpd, fClr, fDes, fAux, fSwap, fPrep, fGlClr, txtMsQuadro, txtNQuadro, fNRect, fFill, gfx_n_assados, home_rastro_foco());
+             " [prep=%.1f glclear=%.1f] txt=%.1fms/%d rects=%d fill=%.2f assados=%d gpu~=%.1f %s\n", dtms, fEv, fBomb, fUplN, fUplB / 1048576.0,
+             fUpd, fClr, fDes, fAux, fSwap, fPrep, fGlClr, txtMsQuadro, txtNQuadro, fNRect, fFill, gfx_n_assados, gputempo_ultimo(), home_rastro_foco());
     if (rastroQuadros && dtms > 25.0) {
       int k; printf("[qd-fill]");
       for (k = 0; k < GFX_NMODOS; k++) if (gfx_fill_modo[k] > 0.02) printf(" %d=%.2f", k, gfx_fill_modo[k]);
@@ -1426,6 +1428,7 @@ int main(int argc, char **argv) {
     // pedacos.
     Uint64 t0 = NV_T0();
     tex_upl_n = 0; tex_upl_bytes = 0;
+    gputempo_quadro_inicio();   // the GPU clock brackets uploads + draw
     tex_bombear(3);
     fBomb = NV_DT(t0);
     fUplN = tex_upl_n; fUplB = tex_upl_bytes;
@@ -1527,6 +1530,7 @@ int main(int argc, char **argv) {
     videoSeSolicitado();
     capturaSeSolicitado();
     fAux = NV_DT(t0);
+    gputempo_quadro_fim();
     t0 = NV_T0();
     SDL_GL_SwapWindow(win);
 #ifdef __EMSCRIPTEN__
@@ -1665,6 +1669,11 @@ int main(int argc, char **argv) {
       // `bomb` e a subida de textura para a GPU; `upl` diz se foi UMA arte
       // grande ou muitas pequenas, que e a diferenca entre partir o upload e
       // reduzir o orcamento.
+      // GPU time of the window, by the GPU's own clock (gputempo.h). Only where
+      // the extension exists; the line is what tells a 17 ms frame from a 30 ms
+      // one when both show as "33" to the CPU.
+      { double gMed, gPior, gUlt; int gN = gputempo_colher(&gMed, &gPior, &gUlt);
+        if (gN > 0) printf("[gpu-tempo] med=%.1fms pior=%.1fms ult=%.1fms n=%d\n", gMed, gPior, gUlt, gN); }
       if (pior > 33.0) {
         printf("[quadro] pior=%.1fms | ev=%.1f bomb=%.1f(%d tex, %.1fMB)"
                " upd=%.1f clr=%.1f des=%.1f aux=%.1f swap=%.1f\n",
@@ -1705,6 +1714,22 @@ int main(int argc, char **argv) {
           } }
 #endif
         if (m != gfx_modos_desligados) { printf("[gpu-modos] desligados=%llx\n", m); gfx_modos_desligados = m; }
+        // Field instruments on Android, where there is no /tmp (all read once per
+        // 3 s report, all no-ops when the property is unset or "0"):
+        //   debug.nuvio.quadros 1  -> per-frame trace, same as /tmp/nuvio-quadros
+        //   debug.nuvio.fill 1     -> the "[gpu-modos] fill" line every report
+        //   debug.nuvio.gpunivel N -> force GPU level N (0-3) for A/B measurement
+        int forcaFill = 0;
+#ifdef NV_ANDROID
+        { char pv[PROP_VALUE_MAX] = "";
+          if (__system_property_get("debug.nuvio.quadros", pv) > 0 && pv[0] && pv[0] != '0') rastroQuadros = 1;
+          pv[0] = 0;
+          forcaFill = __system_property_get("debug.nuvio.fill", pv) > 0 && pv[0] && pv[0] != '0';
+          pv[0] = 0;
+          if (__system_property_get("debug.nuvio.gpunivel", pv) > 0 && pv[0] >= '0' && pv[0] <= '3' &&
+              pv[0] - '0' != gpun_nivel())
+            gpun_definir_nivel(pv[0] - '0'); }
+#endif
         // NO CAMPO, SEM ARQUIVO: interface lenta (FPS < 50 com mais de 9
         // texturas na tela) solta a mesma linha, no maximo uma vez a cada 30 s,
         // com layout, tema e vidro. Registros 10063-10235 (LG webOS 5): 60 fps
@@ -1729,7 +1754,7 @@ int main(int argc, char **argv) {
           printf("[gpu-modos] lento: fps=%.1f layout=%d cor-viva=%d vidro=%d tela=%s\n",
                  fpsAgora, ajustes_home_layout(), ajustes_cor_viva(), ajustes_vidro(),
                  app_tela_nome()); }
-        if (fo || lenta || getenv("NUVIO_FILL_MODOS")) {
+        if (fo || lenta || forcaFill || getenv("NUVIO_FILL_MODOS")) {
           int k; printf("[gpu-modos] fill: forca=%.2f |", nv_ambiente_forca);
           for (k = 0; k < GFX_NMODOS; k++) if (gfx_fill_modo_ult[k] > 0.02) printf(" %d=%.2f", k, gfx_fill_modo_ult[k]);
           // gpu = o que a GPU pinta de fato (gfx.h, gfx_fill_gpu); mist = a parte com mistura

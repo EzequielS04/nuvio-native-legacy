@@ -6,6 +6,7 @@
 // offsets, and the AutoSync provider row (hidden when NULL).
 #include "../src/legendasui.c"
 #include "linguas.h"
+#include "../src/legauto.c"
 #include <assert.h>
 
 // --- the world around the selector ------------------------------------------------
@@ -43,6 +44,9 @@ void faixas_escolher_externa(const Legenda *l) {
 }
 const char *faixas_legenda_marca(int i) { (void)i; return NULL; }
 const char *i18n(const char *s) { return s; }
+static const char *tocando = "https://h.invalid/Show.S01E01.WEB.mkv";
+const char *video_url_atual(void) { return tocando; }
+uint64_t legsync_hash_url(const char *u) { uint64_t h = 1469598103934665603ull; while (*u) h = (h ^ (unsigned char)*u++) * 1099511628211ull; return h; }
 unsigned rede_pedido_capacidades(void) { return (unsigned)caps; }
 VideoLegendaEstilo *player_leg_estilo(void) { return &estilo; }
 void player_leg_estilo_mudou(void) {}
@@ -165,6 +169,52 @@ int main(void) {
   subDe("s|-", sub, sizeof sub);                                          // ... and says why
   assert(strstr(sub, "Embutida como secundária: indisponível"));
 
+  // --- #202: a row with several versions opens THAT language's versions ---
+  { int r, ant;
+    focarChave("p|Português|A:SubDL");              // one version: OK applies at once
+    escolhidasExt = 0;
+    tecla(SDLK_RETURN);
+    assert(!ver && escolhidasExt == 1 && !strcmp(escolhidaExtUrl, "https://h.invalid/3"));
+    escolhidasExt = 0; extId[0] = 0; ativaEmb = 0;
+    focarChave("p|Português|A:OpenSubtitles");      // two versions: OK opens the list
+    ant = foco;
+    assert(tecla(SDLK_RETURN) == LEGUI_TRATADO);
+    assert(ver && escolhidasExt == 0 && nLinhasV == 2);
+    assert(linhas[0].tipo == LR_CAND && linhas[1].tipo == LR_CAND && linhas[0].slot == 0);
+    r = versaoRecomendada(verGrupo);
+    assert(r == linhas[0].cand && linhas[0].nVar < 0 && linhas[1].nVar > 0);   // release match wins
+    { char nome[96]; const char *id, *ic; int at, ap;
+      textoLinha(&linhas[0], nome, sizeof nome, sub, sizeof sub, &id, &ic, &at, &ap);
+      assert(strstr(nome, "Recomendada") && strstr(sub, "SRT") && strstr(sub, "Show.S01E01.WEB.srt") && !at);
+      textoLinha(&linhas[1], nome, sizeof nome, sub, sizeof sub, &id, &ic, &at, &ap);
+      assert(!strstr(nome, "Recomendada")); }
+    tecla(SDLK_DOWN);                               // the second version, exactly
+    assert(foco == 1);
+    tecla(SDLK_RETURN);
+    assert(escolhidasExt == 1 && !strcmp(escolhidaExtUrl, "https://h.invalid/2") && ver);
+    { char nome[96]; const char *id, *ic; int at, ap;
+      textoLinha(&linhas[1], nome, sizeof nome, sub, sizeof sub, &id, &ic, &at, &ap);
+      assert(at);
+      textoLinha(&linhas[0], nome, sizeof nome, sub, sizeof sub, &id, &ic, &at, &ap);
+      assert(!at); }
+    assert(tecla(SDLK_ESCAPE) == LEGUI_TRATADO);    // Back: the main list, focus on that language
+    assert(!ver && aberto && foco == ant && !strcmp(linhas[foco].chave, "p|Português|A:OpenSubtitles"));
+    escolhidasExt = 0; extId[0] = 0; ativaEmb = 0;
+    // Second slot: its own versions list.
+    nAdd = 7;
+    addon(6, "en", "OpenSubtitles", "Show.S01E01.WEB.en.srt", "https://h.invalid/8");
+    focarChave("s|Inglês|A:OpenSubtitles");
+    assert(linhas[foco].nVar == 2);
+    tecla(SDLK_RETURN);
+    assert(ver && nLinhasV == 2 && linhas[0].slot == 1);
+    tecla(SDLK_DOWN);
+    secEscolhas = 0;
+    tecla(SDLK_RETURN);
+    assert(secEscolhas == 1 && escolhidasExt == 0 && escolhidaEmb == -99 + 0);
+    tecla(SDLK_ESCAPE);
+    assert(!ver && !strcmp(linhas[foco].chave, "s|Inglês|A:OpenSubtitles"));
+    nAdd = 6; sec[0] = 0; secEscolhas = 0; escolhidasExt = 0; montarLinhas(); }
+
   // --- no configured language: unfiltered primary, second slot only None ---
   ling_local_legenda("*"); ling_local_legenda2("");
   montarLinhas();
@@ -246,8 +296,12 @@ int main(void) {
   // Unsupported platform: honest refusal, nothing changes.
   caps = 0;
   focarChave("s|Português|A:OpenSubtitles");
+  tecla(SDLK_RETURN);                             // two versions: opens the list first
+  assert(ver);
   tecla(SDLK_RETURN);
   assert(secEscolhas == 0 && strstr(aviso, "nesta plataforma"));
+  tecla(SDLK_ESCAPE);
+  assert(!ver);
   caps = REDE_CAP_CORPO;
   // An external SRT as the second subtitle.
   ling_local_legenda2("en");
@@ -260,13 +314,20 @@ int main(void) {
     assert(at); }
   // The same file cannot be both.
   focarChave("p|Português|A:OpenSubtitles");
+  tecla(SDLK_RETURN);                             // the versions list: pick the .../1 file
+  assert(ver);
+  for (i = 0; i < nLinhasV; i++) if (!strcmp(cand[linhas[i].cand].leg.url, "https://h.invalid/1")) focar(i);
   tecla(SDLK_RETURN);
-  assert(escolhidasExt == 1 && strstr(escolhidaExtUrl, "h.invalid/1"));
+  tecla(SDLK_ESCAPE);
+  assert(!ver && escolhidasExt == 1 && strstr(escolhidaExtUrl, "h.invalid/1"));
   ling_local_legenda2("pt");
   montarLinhas();
   secEscolhas = 0;
   focarChave("s|Português|A:OpenSubtitles");
   tecla(SDLK_RETURN);
+  for (i = 0; i < nLinhasV; i++) if (!strcmp(cand[linhas[i].cand].leg.url, "https://h.invalid/1")) focar(i);
+  tecla(SDLK_RETURN);
+  tecla(SDLK_ESCAPE);
   assert(secEscolhas == 0 && strstr(aviso, "Já é a principal"));
   ling_local_legenda2("en");
   // None per slot.
