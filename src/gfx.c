@@ -3069,8 +3069,12 @@ int gfx_snap_iniciar(int w, int h) {
 
 int gfx_snap_ok(void) { return snapFbo != 0; }
 
+static unsigned snapGeracao;
+int gfx_snap_ativo(void) { return snapAtivo; }
+unsigned gfx_snap_geracao(void) { return snapGeracao; }
 void gfx_snap_comecar(void) {
   if (!snapFbo || snapAtivo) return;
+  snapGeracao++;
   gfx_ambiente_descarregar();   // a luz e da tela, nao do snapshot
   GFX_OUTRO_INI();
   snapTelaW = telaW; snapTelaH = telaH;

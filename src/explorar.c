@@ -453,9 +453,34 @@ void explorar_evento(const SDL_Event *e) {
 
 // --- desenho: comum ----------------------------------------------------------------
 
+// O CEU ASSADO NOS EFEITOS LEVES (gpunivel.h, nivel >= 1). O GFX_CEU e um
+// hash por pixel em tela cheia: MEDIDO na TCL Smart TV Pro (Mali-G52, GPU
+// timer, 06/10/2026) a Explorar parada custava 27,6 ms por quadro (36 fps),
+// ~20 ms deles o ceu. Com efeitos leves ele e pintado UMA vez no FBO do
+// snapshot (gfx_snap_*) e cada quadro copia o assado: as estrelas param de
+// cintilar e de derivar — e uma troca de aparencia, so nesse nivel. Refaz
+// quando a cor de acento muda ou quando outro desenho usou o FBO
+// (gfx_snap_geracao); dentro de um snapshot (painel de log) desenha direto.
 static void desenharFundo(void) {
   float ar, ag, ab;
+  static int ceuPronto; static unsigned ceuGer; static float ceuCor[3], ceuTempo;
   ajustes_acento(&ar, &ag, &ab);
+  if (gfx_efeitos_leves() && gfx_snap_ok() && !gfx_snap_ativo()) {
+    if (!ceuPronto || ceuGer != gfx_snap_geracao() ||
+        ceuCor[0] != ar || ceuCor[1] != ag || ceuCor[2] != ab) {
+      ceuTempo = tempo;
+      gfx_snap_comecar();
+      gfx_sem_recorte();
+      gfx_rect((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0, GFX_CEU, ceuTempo,
+               ceuTempo * 0.35f, 0, 0, ar, ag, ab, 1.0f);
+      gfx_snap_terminar();
+      ceuGer = gfx_snap_geracao(); ceuPronto = 1;
+      ceuCor[0] = ar; ceuCor[1] = ag; ceuCor[2] = ab;
+    }
+    gfx_snap_desenhar();
+    return;
+  }
+  ceuPronto = 0;
   gfx_rect((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0, GFX_CEU, tempo,
            tempo * 0.35f, 0, 0, ar, ag, ab, 1.0f);
 }

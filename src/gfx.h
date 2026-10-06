@@ -409,6 +409,10 @@ void gfx_snap_comecar(void);   // redireciona o desenho para o snapshot
 void gfx_snap_terminar(void);  // volta para a tela
 void gfx_snap_desenhar(void);  // pinta o snapshot ocupando a tela toda
 void gfx_snap_encerrar(void);
+int  gfx_snap_ativo(void);     // 1 enquanto o desenho vai para o snapshot
+// Cresce a cada gfx_snap_comecar: quem guardou algo no FBO sabe se outro
+// desenho passou por cima desde entao (explorar.c, o ceu assado).
+unsigned gfx_snap_geracao(void);
 
 void gfx_tamanho_alvo(int w, int h);
 
