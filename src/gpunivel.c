@@ -134,6 +134,20 @@ static void logExtensoes(const char *ext) {
 }
 #endif
 
+#if defined(NV_ANDROID)
+#include <SDL.h>
+// Extensao inteira na lista (sem casar prefixo de outra).
+static int temExt(const char *lista, const char *nome) {
+  size_t n = strlen(nome);
+  const char *p = lista;
+  while (p && (p = strstr(p, nome)) != NULL) {
+    if ((p == lista || p[-1] == ' ') && (p[n] == ' ' || p[n] == 0)) return 1;
+    p += n;
+  }
+  return 0;
+}
+#endif
+
 static void gravar(void) {
   char buf[400];
   if (!adaptativo) return;
@@ -207,6 +221,17 @@ void gpun_iniciar(int w, int h) {
   }
   profStencil = db > 0 || sb > 0;
   printf("[gl] descarte de alvo: %s%s\n", descarteNome,
+         descarte && profStencil ? " (+ profundidade/stencil da janela no fim do quadro)" : "");
+#elif defined(NV_ANDROID)
+  // Same facts as the .tpk log, for the Android field logs: which GPU, which
+  // buffers the window got (a depth/stencil the app never asked for is
+  // bandwidth written back every frame unless discarded below).
+  printf("[gl] GL_RENDERER=%s | %s\n", renderer, versaoGl);
+  printf("[gl] janela: profundidade=%d stencil=%d\n", (int)db, (int)sb);
+  if (temExt(ext, "GL_EXT_discard_framebuffer"))
+    *(void **)&descarte = SDL_GL_GetProcAddress("glDiscardFramebufferEXT");
+  profStencil = db > 0 || sb > 0;
+  printf("[gl] descarte de alvo: %s%s\n", descarte ? "glDiscardFramebufferEXT" : "nenhum",
          descarte && profStencil ? " (+ profundidade/stencil da janela no fim do quadro)" : "");
 #else
   (void)ext; (void)db; (void)sb;
