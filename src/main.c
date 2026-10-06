@@ -329,6 +329,10 @@ static void teclasInjetadas(void (*entregar)(const SDL_Event *)) {
   if (!pedidoNovo("/tmp/nuvio-key", &bloqueadoKey)) return;
   FILE *f = fopen("/tmp/nuvio-key", "r");
   if (!f) return;
+  // A tecla injetada tambem conta como gente no controle: sem isto a tela de
+  // descanso entrava 2 min depois da ultima tecla DE VERDADE, no meio de uma
+  // medida feita so por este arquivo. Nao engole a tecla (consumivel = 0).
+  esmaecer_entrada(SDL_GetTicks(), 0);
   char linha[32];
   while (fgets(linha, sizeof linha, f)) {
     char *fim = linha + strlen(linha);
@@ -1170,6 +1174,8 @@ int main(int argc, char **argv) {
   Uint32 ultRelato = SDL_GetTicks();
   double txtMsQuadro = 0, piorTxtMs = 0;
   static int rastroQuadros;
+  static double gpuFillSoma, gpuFillPico;   // [gpu-modos] fill: media e pico da janela
+  static int gpuFillN;
   double fPrep = 0, fGlClr = 0;
   int    txtNQuadro = 0, piorTxtN = 0;
   int quadros = 0, janks = 0; double pior = 0;
@@ -1514,6 +1520,9 @@ int main(int argc, char **argv) {
     fNRect = gfx_n_rect; fNProg = gfx_n_prog; fNBind = gfx_n_bind; fNBusca = tex_n_busca;
     fOutMs = gfx_ms_outros; fNOut = gfx_n_outros;
     fFill = gfx_fill; fNCheio = gfx_n_cheio;
+    // Media e pico do preenchimento real na janela de 3 s ([gpu-modos] fill).
+    gpuFillSoma += gfx_fill_gpu; gpuFillN++;
+    if (gfx_fill_gpu > gpuFillPico) gpuFillPico = gfx_fill_gpu;
     t0 = NV_T0();
     videoSeSolicitado();
     capturaSeSolicitado();
@@ -1723,8 +1732,11 @@ int main(int argc, char **argv) {
         if (fo || lenta || getenv("NUVIO_FILL_MODOS")) {
           int k; printf("[gpu-modos] fill: forca=%.2f |", nv_ambiente_forca);
           for (k = 0; k < GFX_NMODOS; k++) if (gfx_fill_modo_ult[k] > 0.02) printf(" %d=%.2f", k, gfx_fill_modo_ult[k]);
-          printf("\n");
-        } }
+          // gpu = o que a GPU pinta de fato (gfx.h, gfx_fill_gpu); mist = a parte com mistura
+          printf(" | gpu=%.2f mist=%.2f med=%.2f pico=%.2f\n", gfx_fill_gpu_ult, gfx_fill_gpu_mist_ult,
+                 gpuFillN ? gpuFillSoma / gpuFillN : 0.0, gpuFillPico);
+        }
+        gpuFillSoma = 0.0; gpuFillPico = 0.0; gpuFillN = 0; }
 #ifdef NV_TPK
       // Quanto de tela o pior quadro pintou (gfx_fill, em telas 1920x1080) e
       // em que nivel de GPU (gpunivel.h): e o que separa "a GPU nao da conta

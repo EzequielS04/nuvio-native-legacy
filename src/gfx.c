@@ -37,6 +37,7 @@ typedef struct {
   GLint leve;    // uLeve: 1 = efeitos leves (sem dither), ver gfx_definir_efeitos_leves
   GLint sub;     // uSub do VS: o pedaco do rect desenhado (gfx_sombra_vazada)
   float subAtual[4];
+  GLint din;     // uDin: cor do topo e queda do fundo da Dinamica (GFX_VITRINE_DIN)
   GLint giro;    // uGiro do VS: rotacao de grupo (gfx_girar)
   float giroAtual[4];
   float altAtual, margemAtual, leveAtual;  // o ultimo valor enviado: so chama o GL se mudar
@@ -95,7 +96,35 @@ static int telaW = (int)NV_TELA_W, telaH = (int)NV_TELA_H;
 static float uTelaW = NV_TELA_W, uTelaH = NV_TELA_H;
 static int   miniAtiva, miniPxW, miniPxH;
 static float miniX0, miniY0, miniEsc;
-void gfx_tamanho_alvo(int w, int h) { telaW = w; telaH = h; }
+// O alvo da TELA (o ultimo gfx_tamanho_alvo): a unidade de gfx_fill_gpu. Os
+// alvos pequenos (luz assada, snapshot) mudam telaW por dentro e contam pelo
+// tamanho deles.
+static int telaRealW = (int)NV_TELA_W, telaRealH = (int)NV_TELA_H;
+// A tesoura ligada por gfx_recorte, em pixels do alvo (origem embaixo).
+static int recorteAtivo;
+static GLint recorteBox[4];
+// Pixels que o quad `r` (layout) pinta no alvo atual: cortado pelo alvo e pela
+// tesoura, em telas do alvo da tela. Ignora giro e miniatura (aproximado).
+static double fillGpuArea(GfxRect r, const float sub[4]) {
+  float ex = (float)telaW / NV_TELA_W, ey = (float)telaH / NV_TELA_H;
+  float x0 = (r.x + r.w * sub[0]) * ex, x1 = (r.x + r.w * sub[2]) * ex;
+  float y0 = (NV_TELA_H - (r.y + r.h * sub[3])) * ey, y1 = (NV_TELA_H - (r.y + r.h * sub[1])) * ey;
+  if (x0 < 0.0f) x0 = 0.0f;
+  if (y0 < 0.0f) y0 = 0.0f;
+  if (x1 > (float)telaW) x1 = (float)telaW;
+  if (y1 > (float)telaH) y1 = (float)telaH;
+  if (recorteAtivo) {
+    float sx0 = (float)recorteBox[0], sy0 = (float)recorteBox[1];
+    float sx1 = sx0 + (float)recorteBox[2], sy1 = sy0 + (float)recorteBox[3];
+    if (x0 < sx0) x0 = sx0;
+    if (y0 < sy0) y0 = sy0;
+    if (x1 > sx1) x1 = sx1;
+    if (y1 > sy1) y1 = sy1;
+  }
+  if (x1 <= x0 || y1 <= y0 || telaRealW <= 0 || telaRealH <= 0) return 0.0;
+  return (double)(x1 - x0) * (double)(y1 - y0) / ((double)telaRealW * (double)telaRealH);
+}
+void gfx_tamanho_alvo(int w, int h) { telaW = w; telaH = h; telaRealW = w; telaRealH = h; }
 // Tamanho da interface (gfx.h). escAtiva multiplica o retangulo de layout
 // antes de tudo: o SDF, os raios e as espessuras sao fracoes do proprio rect,
 // e uAlt sai da altura JA ampliada — a rampa de borda segue com 1 px do alvo.
@@ -244,6 +273,7 @@ static const char *FS_CABECA =
   "uniform vec3  uReg2;\n"
   "uniform vec3  uReg3;\n"
   "uniform float uVaza;\n"
+  "uniform vec4  uDin;\n"
   // A LUZ AMBIENTE ASSADA, LIDA PELO PROPRIO SHADER DA ARTE (30/09/2026).
   //
   // Com o tema imersivo o destaque de tela cheia sai com alfa = 1 - rampa
@@ -1268,6 +1298,31 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  if (m <= 0.001) discard;\n"
   "  gl_FragColor = nv_dither(texture2D(uTex, vAmb).rgb, uCor.a * m);\n"
   "}\n",
+
+  // GFX_VITRINE_DIN — o corpo do GFX_VITRINE (copiado: um ramo no programa
+  // dele reservaria registradores pelo pior caminho, ver GFX_HERO_CAM) e, por
+  // baixo, o degrade do GFX_FUNDO_DIN na altura de TELA do fragmento (vAmb.y
+  // conta de baixo). A arte e misturada no fundo aqui, e o pixel sai opaco:
+  // mix(fundo, arte, alfa) e o que a mistura do GFX_VITRINE fazia sobre o
+  // fundo ja pintado.
+  "void main(){\n"
+  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  vec2 uv = vec2(vUv.x - uDesliza, vUv.y);\n"
+  "  float dentro = step(0.0, uv.x) * step(uv.x, 1.0);\n"
+  "  float ra = uAspect / max(uTexAsp, 0.01);\n"
+  "  if (uTexAsp > 0.0) {\n"
+  "    if (ra > 1.0) uv.y = uv.y / ra + uPar.x * (1.0 - 1.0 / ra);\n"
+  "    else          uv.x = (uv.x - 0.5) * ra + 0.5;\n"
+  "  }\n"
+  "  vec3 c = texture2D(uTex, clamp(uv, 0.0, 1.0)).rgb;\n"
+  "  float ge = smoothstep(0.62, 0.0, vUv.x) * 0.80 * uFoco;\n"
+  "  float gb = smoothstep(uCor.r > 0.0 ? uCor.r : 0.38, 1.0, vUv.y) * 0.72 * uFoco;\n"
+  "  c *= 1.0 - clamp(ge + gb - ge * gb, 0.0, 1.0);\n"
+  "  float d = smoothstep(0.66, 1.0, vUv.y);\n"
+  "  float a = clamp(uCor.a * m * dentro * (1.0 - uPar.y * d * d), 0.0, 1.0);\n"
+  "  vec3 bg = uDin.rgb * mix(1.0, uDin.a, smoothstep(0.0, 1.0, 1.0 - vAmb.y));\n"
+  "  gl_FragColor = nv_dither(mix(bg, c, a), 1.0);\n"
+  "}\n",
 };
 
 // Cada corpo declara o que usa; montar so o necessario mantem o shader enxuto.
@@ -1304,7 +1359,8 @@ static const struct { int sdf, cover; } PRECISA[GFX_NMODOS] = {
   {0,0},   /* GFX_VEU_CSS — degrade puro, sem SDF */
   {1,0},   /* GFX_MINI — SDF dos cantos; a textura e um FBO */
   {1,0},   /* GFX_TEXTURA — SDF dos cantos; o recorte vem pronto em uJan */
-  {1,0}    /* GFX_FOSCO — SDF dos cantos; a textura e o assado, lido por vAmb */
+  {1,0},   /* GFX_FOSCO — SDF dos cantos; a textura e o assado, lido por vAmb */
+  {1,0}    /* GFX_VITRINE_DIN — o do GFX_VITRINE */
 };
 
 static GLuint compila(GLenum tipo, const char *src) {
@@ -1370,6 +1426,7 @@ int gfx_iniciar(void) {
     progs[m].jan    = glGetUniformLocation(p, "uJan");
     progs[m].sub    = glGetUniformLocation(p, "uSub");
     progs[m].giro   = glGetUniformLocation(p, "uGiro");
+    progs[m].din    = glGetUniformLocation(p, "uDin");
     progs[m].altAtual = -1.0f;
     progs[m].telaAtual[0] = NV_TELA_W; progs[m].telaAtual[1] = NV_TELA_H;
     progs[m].margemAtual = 0.0f;   // o default de um uniform recem-linkado e 0
@@ -1462,6 +1519,8 @@ double gfx_ms_rect = 0.0, gfx_ms_outros = 0.0;
 // contador e uma medida por quadro.
 double gfx_fill = 0.0;
 double gfx_fill_vis = 0.0;
+double gfx_fill_gpu = 0.0, gfx_fill_gpu_mist = 0.0;
+double gfx_fill_gpu_ult = 0.0, gfx_fill_gpu_mist_ult = 0.0;
 unsigned long long gfx_modos_desligados = 0;
 int    gfx_n_cheio = 0;   // desenhos que cobrem >= 50% da tela
 // So na medida (tests/fluidez_perf.c, -DNV_FLUIDEZ_PERF): quantos desses foram
@@ -1575,6 +1634,18 @@ static int ambLado;
 int gfx_n_assados;
 static float ambChave[20];
 static int ambPendente, ambIntacta;
+// A FONTE INTACTA: a textura que E a tela agora (ambIntacta = 1), lida pelo
+// uAmb dos modos de arte. A luz imersiva (ambTex) ou um fundo de tela cheia
+// adiado por gfx_luz_canal_adiar (o Frost assado). 0 = nenhuma.
+static GLuint ambFonte;
+// O que gfx_ambiente_descarregar pinta: a textura e se passa pelo nv_dither.
+static GLuint ambPendTex;
+static int ambPendPont;
+// O FUNDO DA DINAMICA ADIADO (gfx_fundo_din_desenhar): cor do topo e queda.
+static int dinPendente;
+static float dinPend[4];
+static void dinDescarregar(void);
+static void dinPintar(float y0);
 static int foscoOk;   // este quadro assou fundo (gfx_ambiente_preparar): o vidro fosco tem fonte
 static int foscoBloq; // este quadro tem video vivo por baixo (gfx_vidro_fosco_bloquear)
 static GLuint foscoFonte; // fonte do fosco posta pelo fundo deste quadro (gfx_vidro_fosco_fonte)
@@ -1582,10 +1653,13 @@ void gfx_novo_quadro(void) {
   gfx_n_rect = gfx_n_prog = gfx_n_bind = gfx_n_outros = 0;
   gfx_ms_rect = gfx_ms_outros = 0.0;
   gfx_fill = 0.0; gfx_fill_vis = 0.0; gfx_n_cheio = 0; gfx_n_cheio_mistura = 0;
+  gfx_fill_gpu_ult = gfx_fill_gpu; gfx_fill_gpu_mist_ult = gfx_fill_gpu_mist;
+  gfx_fill_gpu = 0.0; gfx_fill_gpu_mist = 0.0;
   memcpy(gfx_fill_modo_ult, gfx_fill_modo, sizeof gfx_fill_modo);
   memset(gfx_fill_modo, 0, sizeof gfx_fill_modo);
   desfGeradosQuadro = 0;
   ambPendente = 0; ambIntacta = 0; foscoOk = 0; foscoBloq = 0; foscoFonte = 0;
+  ambFonte = 0; dinPendente = 0;
   gfx_n_assados = 0;
 }
 // Relogio dos pontos de GL que NAO sao gfx_rect: recorte, FBO do snapshot e as
@@ -1615,15 +1689,33 @@ static float ambPendAlfa;
 // Qualquer desenho derruba; gfx_ambiente levanta.
 static void ambPintar(float alfa);
 void gfx_ambiente_descarregar(void) {
+  int rec;
+  float g;
+  dinDescarregar();
   if (!ambPendente) return;
   ambPendente = 0;
+  // O pedido foi feito sem tesoura (tela cheia): a que estiver ligada agora e
+  // do desenho que o disparou, nao do fundo.
+  // O mesmo vale para a opacidade de grupo: o pedido foi feito com ela em 1.
+  rec = recorteAtivo;
+  g = gfx_opacidade_grupo;
+  if (rec) { glDisable(GL_SCISSOR_TEST); recorteAtivo = 0; }
+  gfx_opacidade_grupo = 1.0f;
   ambPintar(ambPendAlfa);
+  gfx_opacidade_grupo = g;
+  if (rec) { glEnable(GL_SCISSOR_TEST); recorteAtivo = 1; }
 }
+// O pendente pintado JA com um veu de cor (cr, cg, cb) a `va` por cima, numa
+// passada opaca: o GFX_SNAP faz mix(textura, cor, uFoco), que e o pixel do
+// veu misturado sobre ele. Ver o veu de tela cheia em gfx_rect.
+static void ambPintarVeu(float cr, float cg, float cb, float va);
+
 
 void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
               float parx, float pary, float raio,
               float cr, float cg, float cb, float ca) {
   int comAmb = 0, opaco = 0, cheia, clearCor, duplo = 0;
+  float din[4] = { 0.0f, 0.0f, 0.0f, 0.0f }, dinResto = -1.0f;
   if ((int)modo < 0 || (int)modo >= GFX_NMODOS) return;
   // Grupo a 0 = "desenhar sem aparecer" (quem mede uma previa ou pede as
   // texturas de uma cena que ainda nao entrou): todo modo multiplica o alfa
@@ -1678,13 +1770,49 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   // Efeitos minimos: sombra e halo tambem saem (o anel continua marcando o foco).
   if (efeitosMinimos && modo == GFX_SOMBRA) return;
   if (gfx_modos_desligados && ((gfx_modos_desligados >> (unsigned)modo) & 1ull)) return;
+  // O FUNDO DA DINAMICA ADIADO (gfx_fundo_din_desenhar) E O DESTAQUE POR CIMA
+  // DELE NUMA PASSADA SO. O destaque (GFX_VITRINE) de largura inteira, a partir
+  // do topo, alfa 1 e sem canto cobre o fundo com alfa 1 em ~2/3 da altura e o
+  // dissolve na base: o fundo inteiro era uma tela opaca pintada e quase toda
+  // escondida, e o destaque, uma tela inteira misturada por cima. Aqui o
+  // GFX_VITRINE_DIN calcula o degrade do fundo no proprio fragmento e sai
+  // OPACO; o que sobra abaixo do retangulo (destaque rolado) leva o fundo no
+  // fim deste desenho. Qualquer outro primeiro desenho pinta o fundo antes,
+  // como sempre.
+  if (dinPendente) {
+    if (modo == GFX_VITRINE && tex && !giroOn && !snapAtivo && !miniAtiva && !recorteAtivo &&
+        raio <= 0.0f && ca * gfx_opacidade_grupo >= 0.999f && gfx_desliza_atual == 0.0f &&
+        progs[GFX_VITRINE_DIN].din >= 0 && !((gfx_modos_desligados >> (unsigned)GFX_FUNDO_DIN) & 1ull)) {
+      float rx = r.x, ry = r.y, rw = r.w, rh = r.h;   // r ja em coordenadas de tela
+      if (rx <= 0.0f && rx + rw >= NV_TELA_W && ry <= 0.0f && rh > 0.0f) {
+        memcpy(din, dinPend, sizeof din);
+        dinPendente = 0;
+        modo = GFX_VITRINE_DIN;
+        if (ry + rh < NV_TELA_H) dinResto = (ry + rh) / NV_TELA_H;
+      }
+    }
+    if (modo != GFX_VITRINE_DIN) dinDescarregar();
+  }
+  // VEU DE TELA CHEIA SOBRE O FUNDO PENDENTE (a luz imersiva, ou o Frost
+  // adiado): o "dt-cobre" de 55% da pagina do titulo rolada era uma tela
+  // inteira misturada sobre a passada opaca do fundo. Aqui o fundo sai com o
+  // veu na MESMA passada opaca (GFX_SNAP: mix(fundo, cor, alfa)), que e o
+  // pixel da mistura, e o veu nao e desenhado.
+  if (ambPendente && modo == GFX_COR && raio <= 0.0f && !giroOn && !recorteAtivo) {
+    float va = ca * gfx_opacidade_grupo, rx = r.x, ry = r.y, rw = r.w, rh = r.h;
+    if (va > 0.001f && va < 0.999f && rx <= 0.0f && ry <= 0.0f && rx + rw >= NV_TELA_W && ry + rh >= NV_TELA_H) {
+      ambPendente = 0;
+      ambPintarVeu(cr, cg, cb, va);
+      return;
+    }
+  }
   // ARTE COM RAMPA SOBRE A LUZ AMBIENTE INTACTA, opaca: o shader le a luz
   // (uAmb) e faz a mistura. So com alfa 1, sem deslize (o `dentro` do shader
   // deixaria o lado de fora transparente), sem o modo "so a rampa" (uPar.x) e
   // fora de snapshot. As condicoes sao as mesmas em que o blend daria alfa
   // final 1 em todo pixel do retangulo.
   if ((modo == GFX_HERO || modo == GFX_HERO_CHEIO || modo == GFX_DETALHE) &&
-      ambIntacta && (ambPendente || ambTex) && ambChave[0] >= 0.0f &&
+      ambIntacta && ambFonte &&
       nv_ambiente_forca > 0.001f && !efeitosMinimos && !snapAtivo &&
       parx <= 0.5f && ca * gfx_opacidade_grupo >= 0.999f && gfx_desliza_atual == 0.0f &&
       progs[modo].ambOn >= 0)
@@ -1719,6 +1847,7 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
     duplo = 1; opaco = 1;
     comAmb = nv_ambiente_forca > 0.001f;
   }
+  if (modo == GFX_VITRINE_DIN) opaco = 1;
   cheia = !giroOn && r.x <= 0.0f && r.y <= 0.0f && r.x + r.w >= NV_TELA_W && r.y + r.h >= NV_TELA_H;
   // COR CHAPADA DE TELA CHEIA, canto vivo e alfa 1 (o fundo opaco que varias
   // telas pintam por cima do clear): e um glClear com essa cor — o mesmo
@@ -1770,6 +1899,11 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
     ambIntacta = 0;
     return;
   }
+  if (!miniAtiva) {
+    double ag = fillGpuArea(r, subAtual);
+    gfx_fill_gpu += ag;
+    if (blendLigado && !comAmb && !opaco) gfx_fill_gpu_mist += ag;
+  }
   Programa *P = &progs[modo];
   if (progAtual != (int)modo) { glUseProgram(P->prog); progAtual = (int)modo; gfx_n_prog++; }
   // Uniform que o shader do modo nao declara volta como -1 do link; passar -1
@@ -1813,6 +1947,7 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
     glUniform3fv(P->reg3, 1, nv_ambiente_viva[3]);
   }
   if (P->vaza >= 0)   glUniform1f(P->vaza, nv_ambiente_forca > 0.001f ? 1.0f : 0.0f);
+  if (P->din >= 0)    glUniform4f(P->din, din[0], din[1], din[2], din[3]);
   if (duplo) {
     glUniform1f(P->texAspB, camAspB);
     glUniform1f(P->alfaB, camAlfaB * gfx_opacidade_grupo);
@@ -1824,7 +1959,7 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
     glUniform1f(P->ambOn, comAmb ? 1.0f : 0.0f);
     if (comAmb) {
       glActiveTexture(GL_TEXTURE1);
-      glBindTexture(GL_TEXTURE_2D, ambTex);
+      glBindTexture(GL_TEXTURE_2D, ambFonte);
       glActiveTexture(GL_TEXTURE0);
     }
   }
@@ -1889,6 +2024,11 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
 #ifdef NV_PERF_FINO
   gfx_ms_rect += (double)(SDL_GetPerformanceCounter() - t0) * gfxFreqMs;
 #endif
+  // O destaque nao chegou ao pe da tela: o fundo da Dinamica no resto.
+  if (dinResto >= 0.0f) {
+    memcpy(dinPend, din, sizeof dinPend);
+    dinPintar(dinResto);
+  }
 }
 
 void gfx_cor(GfxRect r, float raio, float cr, float cg, float cb, float ca) {
@@ -1958,8 +2098,7 @@ int gfx_hero_camadas(GfxRect r, GfxModo modo, GLuint texA, float aspA, float alf
   if (gfx_modos_desligados && ((gfx_modos_desligados >> (unsigned)modo) & 1ull)) return 0;
   // Com a luz imersiva o fundo e a luz assada: ela precisa existir e estar
   // intacta (nada desenhado por cima ainda neste quadro).
-  if (nv_ambiente_forca > 0.001f &&
-      !(ambIntacta && (ambPendente || ambTex) && ambChave[0] >= 0.0f && progs[cam].ambOn >= 0))
+  if (nv_ambiente_forca > 0.001f && !(ambIntacta && ambFonte && progs[cam].ambOn >= 0))
     return 0;
   if (!texA) { texA = texB; aspA = aspB; alfaA = alfaB; texB = 0; }
   camTexB = texB ? texB : texA;
@@ -2044,7 +2183,7 @@ static int ambCriarAlvos(GLuint *tex, GLuint *fbo, int n) {
 // da camada, mistura) e volta como estava.
 static void ambAssarEm(GLuint fbo, void (*pintar)(void *), void *ctx) {
   GLint fboAnt, vpAnt[4];
-  int twAnt = telaW, thAnt = telaH, pend = ambPendente, intacta = ambIntacta, blendAnt = blendLigado;
+  int twAnt = telaW, thAnt = telaH, pend = ambPendente, intacta = ambIntacta, blendAnt = blendLigado, recAnt, dinAnt;
   float g = gfx_opacidade_grupo, desl = gfx_desliza_atual;
   GLboolean tesoura;
   GFX_OUTRO_INI();
@@ -2052,6 +2191,7 @@ static void ambAssarEm(GLuint fbo, void (*pintar)(void *), void *ctx) {
   glGetIntegerv(GL_VIEWPORT, vpAnt);
   tesoura = glIsEnabled(GL_SCISSOR_TEST);
   if (tesoura) glDisable(GL_SCISSOR_TEST);
+  recAnt = recorteAtivo; recorteAtivo = 0;
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, 0);
   texAtual = 0;
@@ -2066,17 +2206,19 @@ static void ambAssarEm(GLuint fbo, void (*pintar)(void *), void *ctx) {
   glClearColor(NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
   ambPendente = 0; ambIntacta = 0;   // a luz pendente e da tela, nao do assado
+  dinAnt = dinPendente; dinPendente = 0;
   gfx_opacidade_grupo = 1.0f; gfx_desliza_atual = 0.0f;
   { ESC_REAL_INI();
     pintar(ctx);
     ESC_REAL_FIM(); }
   gfx_opacidade_grupo = g; gfx_desliza_atual = desl;
-  ambPendente = pend; ambIntacta = intacta;
+  ambPendente = pend; ambIntacta = intacta; dinPendente = dinAnt;
   gfxBlend(blendAnt);
   telaW = twAnt; telaH = thAnt;
   glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)fboAnt);
   glViewport(vpAnt[0], vpAnt[1], vpAnt[2], vpAnt[3]);
   if (tesoura) glEnable(GL_SCISSOR_TEST);
+  recorteAtivo = recAnt;
   GFX_OUTRO_FIM();
 }
 // O desenho de um assado de luz: as quatro luzes de regiao (nv_ambiente_viva)
@@ -2143,10 +2285,40 @@ void gfx_ambiente(float alfa) {
   // primeiro desenho decidir (ver gfx_rect). A tela e so o clear ate aqui.
   if (alfa >= 0.999f && gfx_opacidade_grupo >= 0.999f && !ambPendente) {
     ambPendente = 1; ambPendAlfa = alfa; ambIntacta = 1;
+    ambPendTex = ambTex; ambPendPont = 0; ambFonte = ambTex;
     return;
   }
   gfx_ambiente_descarregar();
+  ambPendTex = ambTex; ambPendPont = 0;
   ambPintar(alfa);
+}
+// O FUNDO DE TELA CHEIA ADIADO (gfx.h). Mesmo regime da luz pendente: o
+// primeiro desenho decide se o fundo e pintado antes dele, lido pelo uAmb da
+// arte, ou levado junto de um veu de tela cheia.
+int gfx_luz_canal_adiar(GLuint tex, int pontilhar) {
+  if (!tex || snapAtivo || miniAtiva || recorteAtivo || giroOn || dinPendente ||
+      gfx_opacidade_grupo < 0.999f) return 0;
+  // Um fundo opaco de tela cheia: a luz que estivesse pendente nao apareceria.
+  ambPendente = 1; ambPendAlfa = 1.0f; ambIntacta = 1;
+  ambPendTex = tex; ambPendPont = pontilhar ? 1 : 0; ambFonte = tex;
+  return 1;
+}
+static void ambPintarVeu(float cr, float cg, float cb, float va) {
+  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+  float aspAnt = gfx_tex_aspect_atual, deslAnt = gfx_desliza_atual,
+        coverAnt = gfx_card_forcar_cover_atual, g = gfx_opacidade_grupo;
+  int bl = blendLigado;
+  ESC_REAL_INI();
+  gfx_desliza_atual = 0.0f; gfx_card_forcar_cover_atual = 0.0f; gfx_tex_aspect_atual = 0.0f;
+  gfx_opacidade_grupo = 1.0f;
+  gfxBlend(0);
+  gfx_rect(tela, ambPendTex, GFX_SNAP, va, ambPendPont ? 1.0f : 0.0f, 1.0f, 0.0f, cr, cg, cb, 1.0f);
+  gfxBlend(bl);
+  ambIntacta = 0;   // a tela agora e o fundo COM o veu, nao a fonte
+  gfx_opacidade_grupo = g;
+  gfx_tex_aspect_atual = aspAnt; gfx_desliza_atual = deslAnt;
+  gfx_card_forcar_cover_atual = coverAnt;
+  ESC_REAL_FIM();
 }
 static void ambPintar(float alfa) {
   GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
@@ -2173,13 +2345,14 @@ static void ambPintar(float alfa) {
   if (alfa >= 0.999f && gfx_opacidade_grupo >= 0.999f) {
     int intacta = ambIntacta;
     gfxBlend(0);
-    gfx_rect(tela, ambTex, GFX_SNAP, 0, 0.0f, 1.0f, 0.0f, 0, 0, 0, 1.0f);
+    gfx_rect(tela, ambPendTex, GFX_SNAP, 0, ambPendPont ? 1.0f : 0.0f, 1.0f, 0.0f, 0, 0, 0, 1.0f);
     gfxBlend(1);
     // A luz pintada sobre o clear continua sendo "so a luz": o destaque que
     // vier depois ainda pode misturar com ela pelo uAmb.
     ambIntacta = intacta;
+    if (intacta) ambFonte = ambPendTex;
   } else {
-    gfx_rect(tela, ambTex, GFX_SNAP, 0, 0.0f, 1.0f, 0.0f, 0, 0, 0, alfa);
+    gfx_rect(tela, ambPendTex, GFX_SNAP, 0, ambPendPont ? 1.0f : 0.0f, 1.0f, 0.0f, 0, 0, 0, alfa);
   }
   gfx_tex_aspect_atual = aspAnt; gfx_desliza_atual = deslAnt;
   gfx_card_forcar_cover_atual = coverAnt;
@@ -2193,14 +2366,50 @@ static void ambPintar(float alfa) {
 // C9. Agora e um unico quad OPACO, sem mistura e sem textura: um degrade
 // vertical de UMA cor (a do titulo em foco, cruzada no CPU por home.c). Nada e
 // assado, nada e decodificado, nenhum FBO.
+// ADIADO: o pedido fica pendente ate o primeiro desenho do quadro (ver o
+// GFX_VITRINE_DIN em gfx_rect). O fundo e opaco e de tela cheia, entao a luz
+// pendente embaixo dele nao apareceria em pixel nenhum.
 void gfx_fundo_din_desenhar(const float topo[3], float queda) {
   GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+  if (!snapAtivo && !miniAtiva && !recorteAtivo && !giroOn && gfx_opacidade_grupo >= 0.999f) {
+    dinDescarregar();
+    dinPend[0] = topo[0]; dinPend[1] = topo[1]; dinPend[2] = topo[2]; dinPend[3] = queda;
+    dinPendente = 1;
+    ambPendente = 0; ambIntacta = 0;
+    return;
+  }
   gfx_tex_aspect_atual = 0.0f;
   ESC_REAL_INI();
   gfxBlend(0);   // substitui o clear: a GPU nao le a tela para misturar
   gfx_rect(tela, 0, GFX_FUNDO_DIN, queda, 0, 0, 0.0f, topo[0], topo[1], topo[2], 1.0f);
   gfxBlend(1);
   ESC_REAL_FIM();
+}
+// O fundo pendente (dinPend) de `y0` (fracao da altura) ate a base: o mesmo
+// quad de tela cheia com uSub, entao o degrade e o mesmo pixel do inteiro.
+// Sem tesoura e com o estado de quem disparou devolvido.
+static void dinPintar(float y0) {
+  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+  float aspAnt = gfx_tex_aspect_atual, deslAnt = gfx_desliza_atual, g = gfx_opacidade_grupo, sub[4];
+  int bl = blendLigado, rec = recorteAtivo;
+  if (y0 >= 1.0f) return;
+  ESC_REAL_INI();
+  if (rec) { glDisable(GL_SCISSOR_TEST); recorteAtivo = 0; }
+  memcpy(sub, subAtual, sizeof sub);
+  subAtual[0] = 0.0f; subAtual[1] = y0 > 0.0f ? y0 : 0.0f; subAtual[2] = 1.0f; subAtual[3] = 1.0f;
+  gfx_tex_aspect_atual = 0.0f; gfx_desliza_atual = 0.0f; gfx_opacidade_grupo = 1.0f;
+  gfxBlend(0);
+  gfx_rect(tela, 0, GFX_FUNDO_DIN, dinPend[3], 0, 0, 0.0f, dinPend[0], dinPend[1], dinPend[2], 1.0f);
+  gfxBlend(bl);
+  memcpy(subAtual, sub, sizeof sub);
+  gfx_tex_aspect_atual = aspAnt; gfx_desliza_atual = deslAnt; gfx_opacidade_grupo = g;
+  if (rec) { glEnable(GL_SCISSOR_TEST); recorteAtivo = 1; }
+  ESC_REAL_FIM();
+}
+static void dinDescarregar(void) {
+  if (!dinPendente) return;
+  dinPendente = 0;
+  dinPintar(0.0f);
 }
 
 void gfx_anel(GfxRect r, float raio, float esp,
@@ -2569,8 +2778,6 @@ void gfx_luz_canto(GfxRect r, float raio, float cx, float cy, float alcance,
 // de um retangulo e o caminho barato para o mesmo resultado. A tesoura cobre
 // exatamente os pixels que o quad cobriria (centro do pixel dentro do rect:
 // de round(x0) a round(x1)), e o recorte que estava ativo volta depois.
-static int recorteAtivo;
-static GLint recorteBox[4];
 void gfx_furo(GfxRect r) {
   float ex = (float)telaW / NV_TELA_W, ey = (float)telaH / NV_TELA_H;
   int x0, x1, y0, y1, cheia;
@@ -2581,6 +2788,7 @@ void gfx_furo(GfxRect r) {
   cheia = r.x <= 0.0f && r.y <= 0.0f && r.x + r.w >= NV_TELA_W && r.y + r.h >= NV_TELA_H;
   // A luz pendente ficaria por cima do furo se saisse depois dele; sob um
   // furo de tela cheia ela nao apareceria em pixel nenhum.
+  if (dinPendente) { if (cheia) dinPendente = 0; else dinDescarregar(); }
   if (ambPendente) { if (cheia) ambPendente = 0; else gfx_ambiente_descarregar(); }
   ambIntacta = 0;
   gfx_n_rect++;
@@ -3106,6 +3314,9 @@ int gfx_mini_alvo(GfxMini *m, int w, int h) {
 }
 void gfx_mini_comecar(GfxMini *m, float x0, float y0, float esc) {
   if (!m->fbo || miniAtiva || esc <= 0.0f) return;
+  // O fundo pendente (luz, Frost adiado, fundo da Dinamica) e da TELA: sai
+  // nela antes de o desenho ir para o alvo da miniatura.
+  gfx_ambiente_descarregar();
   GFX_OUTRO_INI();
   glGetIntegerv(GL_FRAMEBUFFER_BINDING, &miniFboAnt);
   glGetIntegerv(GL_VIEWPORT, miniVpAnt);

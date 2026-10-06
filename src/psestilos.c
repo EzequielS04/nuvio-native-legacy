@@ -220,9 +220,13 @@ static void desenharFilmes(const PSCena *c, float alfa) {
   if (parTemAnt) parDesenhar(&parAnt, (1.0f - k) * PAR_ALFA * alfa);
   parDesenhar(&parAtual, (parTemAnt ? k : 1.0f) * PAR_ALFA * alfa);
   veusBordas(0.92f, 0.95f, 0.0f, alfa);
-  // A luz do perfil sobe do chao, na cor dele.
-  gfx_rect((GfxRect){ NV_TELA_W * 0.5f - 1250.0f, NV_TELA_H + 54.0f - 1250.0f, 2500.0f, 2500.0f },
-           0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, c->luz[0], c->luz[1], c->luz[2], 0.50f * alfa);
+  // A luz do perfil sobe do chao, na cor dele. Uma mancha radial de ~1 tela
+  // visivel, com mistura, por quadro: com efeitos leves (nivel 1 de
+  // gpunivel.h, GPU presa) ela sai primeiro — e enfeite, a parede e o disco
+  // do avatar continuam marcando o perfil. No nivel 2 o GFX_SOMBRA ja saia.
+  if (!gfx_efeitos_leves())
+    gfx_rect((GfxRect){ NV_TELA_W * 0.5f - 1250.0f, NV_TELA_H + 54.0f - 1250.0f, 2500.0f, 2500.0f },
+             0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, c->luz[0], c->luz[1], c->luz[2], 0.50f * alfa);
 }
 
 static void desenharLuz(const PSCena *c, float alfa) {

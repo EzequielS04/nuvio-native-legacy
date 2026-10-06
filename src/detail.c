@@ -6726,8 +6726,14 @@ static void detalheFundo(float s) {
     float salva = nv_ambiente_forca;
     nv_ambiente_forca = 1.0f;
     gfx_tex_aspect_atual = tex_aspecto(arte);
-    gfx_rect(alvo, tex, GFX_DETALHE, 1.0f, 0, 0, 0.0f, 0, 0, 0,
-             fminf(aEntrada * (1.0f - pg), 0.998f));
+    // ALFA 1 NO TOPO PARADO: com o fundo (a luz imersiva, ou o Frost adiado,
+    // gfx_luz_canal_adiar) ainda intacto embaixo, o GFX_DETALHE le o fundo pelo
+    // uAmb e sai OPACO numa passada so — o fundo deixa de ser uma tela pintada
+    // e a arte, uma tela misturada por cima (TCL, 2.0.1: topo da pagina a
+    // ~30 fps, clr 22 ms + swap 21 ms). O teto de 0,998 que havia aqui
+    // obrigava o caminho misturado; sem fundo intacto o caminho continua o
+    // misturado (o "vazar"), com alfa 1 em vez de 0,998.
+    gfx_rect(alvo, tex, GFX_DETALHE, 1.0f, 0, 0, 0.0f, 0, 0, 0, aEntrada * (1.0f - pg));
     gfx_tex_aspect_atual = 0.0f;
     nv_ambiente_forca = salva;
   }

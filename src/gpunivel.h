@@ -13,7 +13,7 @@
 //   0 = como sempre (1080p nativo, efeitos cheios).
 //   1 = EFEITOS LEVES (gfx_definir_efeitos_leves): dither Bayer barato no lugar do highp dos
 //       degrades e sem os realces decorativos (brilho no alto do card, luz de
-//       canto). Resolucao nativa.
+//       canto, a luz do chao da escolha de perfil). Resolucao nativa.
 //   2 = EFEITOS MINIMOS (gfx_definir_efeitos_minimos): nivel 1 + sem a luz de
 //       tela cheia do tema imersivo e sem sombra/halo. Resolucao nativa. So
 //       quando o 1 ainda fica abaixo de 25 fps (Mali-400, registro 9859).
