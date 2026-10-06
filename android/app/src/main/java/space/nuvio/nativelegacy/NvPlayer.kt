@@ -266,8 +266,9 @@ object NvPlayer {
         if (act == null) { confirmarRetomada(geracao, false); return }
         liberar()
         pedidoAtivo = pedido
-        hdrRecriado = false; quadroVisto = false
+        hdrRecriado = false; hdrRecriadoPara = ""; quadroVisto = false
         principal.removeCallbacks(recriar)
+        principal.removeCallbacks(hdrSegunda)
         val minha = sessao
         urlAtual = url
         cabAtual = cabecalhos
@@ -567,11 +568,31 @@ object NvPlayer {
     // A TCL so liga o modo HDR do painel quando a Surface nasce com o decoder
     // ja em HDR: na abertura ela nasceu antes (SDR) e o HDR so aparecia depois
     // de trocar o aspecto (dono, 30/09). Uma recriacao no primeiro quadro HDR.
+    // UMA SO NAO BASTA (TCL, 06/10/2026): de vez em quando o filme DV ainda
+    // abria escuro e so voltava trocando o aspecto. No log do painel a troca
+    // de aspecto reconecta o decoder ao DispLink e o DolbyModule passa de
+    // "SDR -> Dolby"; a recriacao de 200 ms depois do primeiro quadro as vezes
+    // chega antes de o modulo Dolby ver o fluxo. Recria de novo por tipo de
+    // HDR (HDR10 -> DolbyVision tambem conta) e uma segunda vez 1,5 s depois
+    // do primeiro quadro HDR, o mesmo gesto que o dono fazia na mao.
+    private var hdrRecriadoPara = ""
+    private val hdrSegunda = Runnable {
+        if (player != null && quadroVisto && ultHdr.isNotEmpty() && ultHdr != "none") {
+            Log.i(TAG, "HDR ($ultHdr): segunda recriacao da superficie")
+            recriarSuperficie(0)
+        }
+    }
     private fun hdrNaSuperficie() {
-        if (hdrRecriado || !quadroVisto || ultHdr.isEmpty() || ultHdr == "none") return
+        if (!quadroVisto || ultHdr.isEmpty() || ultHdr == "none" || ultHdr == hdrRecriadoPara) return
+        val primeira = !hdrRecriado
         hdrRecriado = true
+        hdrRecriadoPara = ultHdr
         Log.i(TAG, "HDR ($ultHdr): recria a superficie para a TV ligar o modo HDR")
         recriarSuperficie(200)
+        if (primeira) {
+            principal.removeCallbacks(hdrSegunda)
+            principal.postDelayed(hdrSegunda, 1500L)
+        }
     }
 
     // --- escolha de faixa ----------------------------------------------------
