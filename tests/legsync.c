@@ -444,38 +444,34 @@ int main(int argc, char **argv) {
     v = esperarAuto(MKV, 3); assert(trocas == 0); candIdioma = "pt";
 
     // 12f. REGRESSAO "fala que ta ok e ta fora de sincronia" (dono, 04/10).
-    //      Traducao de verdade: outro corte das falas, bordas com folga de
-    //      quadro, +2,0 s do video. O plano automatico RODA o AutoSync contra a
-    //      embutida (sem a pessoa operar nada), a engine recusa (fail-closed: as
-    //      bordas nao casam todas), e entao: nada muda no que o renderer desenha
-    //      (so o manual) e a pilula diz "nao sincronizada" com o aviso, nunca
-    //      "Legenda aplicada" com o check como antes.
+    //      Traducao de verdade: outro corte das falas (juntadas e partidas),
+    //      bordas com folga de quadro, +2,0 s do video. Ate o 2.0 a engine
+    //      recusava (exigia toda borda casando) e a legenda ficava +2 s. Desde
+    //      o 2.1 (grupos 1:2/2:1 na programacao dinamica) ela SINCRONIZA: o
+    //      offset aceito e o +2,0 s, o renderer desenha no instante t do video
+    //      a fala que o arquivo traz em t + 2,0 s, e a pilula diz sincronizada.
     { int p0; char t[200];
       pthread_mutex_lock(&LM); p0 = pedidosLeitor; pthread_mutex_unlock(&LM);
       legsync_iniciar(MKV); trocas = 0; nCand = 0;
       legsync_primaria_externa("ext://0/ext_traduzida_mais2000.srt", "pt", "OpenSubtitles");
-      v = esperarAuto(MKV, 3);
+      v = esperarAuto(MKV, 2);
       pthread_mutex_lock(&LM); assert(pedidosLeitor > p0); pthread_mutex_unlock(&LM);   // leu a referencia
-      assert(v.fase == LEGSYNC_RECUSADA && v.motivo == LEGSYNC_M_CONFIANCA);          // a engine julgou e recusou
-      assert(legsync_offset_ms(0) == 0 && legsync_offset_ms(300) == 300);              // renderer: so o manual
-      assert(!legsync_pilula_final(&v, "OpenSubtitles", t, sizeof t));
-      assert(!strcmp(t, "Legenda aplicada \xc2\xb7 OpenSubtitles \xc2\xb7 n\xc3\xa3o sincronizada"));
-      // No instante t do video a externa desenhada e a que o arquivo traz em t:
-      // nenhum deslocamento escondido.
+      assert(v.fase == LEGSYNC_ACEITA && abs(v.offsetAutoMs - 2000) <= 150);
+      assert(legsync_offset_ms(0) == v.offsetAutoMs && legsync_offset_ms(300) == v.offsetAutoMs + 300);
+      assert(legsync_posicao(123.0) == 123.0);                                       // offset puro: sem mapa
+      assert(legsync_pilula_final(&v, "OpenSubtitles", t, sizeof t));
       { long n; char *b = arquivo("ext_traduzida_mais2000.srt", &n);
         LegendaDocumentoInfo i = { .flags = LEGENDA_DOC_COMPLETO };
         LegendaDocumento *ext = legenda_documento_bytes(b, n, &i); int vistos = 0;
         free(b);
         for (double x = 30; x < 590; x += 0.41) {
           LegendaCue a, e;
-          int na = legenda_cues(x, legsync_offset_ms(0), &a, 1), ne = legenda_documento_cues(ext, x, 0, &e, 1);
+          int na = legenda_cues(x, legsync_offset_ms(0), &a, 1), ne = legenda_documento_cues(ext, x, v.offsetAutoMs, &e, 1);
           assert(na == ne); if (na) { assert(!strcmp(a.texto, e.texto)); vistos++; }
         }
         assert(vistos > 50); legenda_documento_liberar(ext); }
-      // Recusa com a mesma faixa do arquivo: a pilula final nao vira "sincronizada"
-      // com o tempo nem depois de mais passos.
       for (int k = 0; k < 50; k++) passo(MKV, 0);
-      v = legsync_visao(0); assert(!legsync_pilula_final(&v, "OpenSubtitles", t, sizeof t)); }
+      v = legsync_visao(0); assert(legsync_pilula_final(&v, "OpenSubtitles", t, sizeof t)); }
 
     // 12g. REGRESSAO "em todos os filmes ela fala que ta ok e ta fora de
     //      sincronia" (dono, 04/10). Um longa de 2 h (1332 falas) com a

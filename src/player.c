@@ -3362,6 +3362,9 @@ static void desenharLegendaPrincipal(float *topoPilha){
   // F05: manual + automatico aceito, UMA vez, so para o documento dono do
   // overlay (sem ele, o manual intacto). Positivo adianta, como sempre.
   int atraso = legsync_offset_ms(legEstilo.atrasoMs);
+  // Escala/trechos aceitos: o instante na legenda, nao no video (o mesmo
+  // para libass e para o desenho do app).
+  double posLeg = legsync_posicao(posLegenda());
   assrender_aplicar_invalidacao();
   assrender_definir_cor(0, 0, 0, 0);
   if (assrender_ativo()) {
@@ -3370,7 +3373,7 @@ static void desenharLegendaPrincipal(float *topoPilha){
                    legEstilo.opacidade==1?.75f:1.f) * entrada;
     assrender_definir_layout(area.x, area.y, area.w, area.h,
                              video_largura(), video_altura(), escalaFonteAss());
-    assrender_desenhar(posLegenda(), atraso, alpha,
+    assrender_desenhar(posLeg, atraso, alpha,
                         0, 0, NV_TELA_W, NV_TELA_H);
     // R4: libass nao informa onde pintou. Estima duas linhas no tamanho da
     // folha acima da base, para a segunda legenda empilhada nao cobri-las.
@@ -3378,7 +3381,7 @@ static void desenharLegendaPrincipal(float *topoPilha){
     return;
   }
   LegendaCue cues[LEGENDA_SIMULTANEAS];
-  int n = legenda_cues(posLegenda(), atraso, cues, LEGENDA_SIMULTANEAS), i;
+  int n = legenda_cues(posLeg, atraso, cues, LEGENDA_SIMULTANEAS), i;
   // Sem legenda externa, a EMBUTIDA que o player nativo nao desenha (#122):
   // o mesmo overlay, com a mesma folha de estilo da pessoa.
   if (n <= 0 && comVideo && player_texto_legenda_nativa(cues[0].texto, sizeof cues[0].texto)) {

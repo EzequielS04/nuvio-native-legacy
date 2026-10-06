@@ -278,6 +278,20 @@ int legsync_offset_ms(int manual) {
   return total;
 }
 
+// Escala (quadros por segundo) e trechos (corte) nao cabem num offset: o
+// overlay pergunta a posicao NA LEGENDA para o instante do video, nas mesmas
+// condicoes do offset (so o documento dono do overlay). Sem mapa, `pos`.
+double legsync_posicao(double pos) {
+  double t = pos;
+  unsigned g = legenda_geracao();
+  pthread_mutex_lock(&M);
+  if (L.criado && L.primTipo == 1 && L.primFase == 1 && L.primDoc && g == L.primGer &&
+      legenda_documento_info(L.primDoc)->sessao == L.sessao)
+    t = autosync_posicao(L.sync, 0, pos);
+  pthread_mutex_unlock(&M);
+  return t;
+}
+
 // --- REFERENCIA ------------------------------------------------------------------
 static void iniciarColeta(void) {
   LegRefOrcamento o;
