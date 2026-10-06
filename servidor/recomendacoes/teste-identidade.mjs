@@ -270,7 +270,7 @@ test("Simkl com client id: id da conta provado pela API", async (t) => {
   assert.deepEqual(l.body.identidades.map((x) => [x.provedor, x.sujeito, x.metodo]), [["simkl", "4242", "token"]]);
 });
 
-test("feed deduplicado: o mesmo fato em 1 h e uma linha; episodios diferentes nao fundem", async (t) => {
+test("feed limpo: de uma serie so sai o PRIMEIRO comecou, numa linha so", async (t) => {
   const { sqlite, api } = cenario(t);
   for (const tk of ["tok-a", "tok-b"]) await api("nuvio", tk, "POST", "/v1/eu");
   const codB = q(sqlite, "SELECT codigo FROM pessoa WHERE id = 'nuvio:bbb'")[0].codigo;
@@ -283,7 +283,9 @@ test("feed deduplicado: o mesmo fato em 1 h e uma linha; episodios diferentes na
   ins.run(3, agora - 60);     // TV 2, mesmo episodio
   ins.run(4, agora - 30);     // episodio seguinte
   const f = await api("nuvio", "tok-a", "GET", "/v1/feed?desde=0");
-  assert.deepEqual(f.body.itens.map((x) => [x.episodio, agora - x.criado]), [[4, 30], [3, 60], [3, 9000]]);
+  // 06/10/2026: retomar o episodio (outra TV) e o episodio seguinte nao sao
+  // noticia; o comeco da serie, horas antes, e a unica linha.
+  assert.deepEqual(f.body.itens.map((x) => [x.ev, x.episodio, agora - x.criado]), [["inicio", 3, 9000]]);
 });
 
 test("comparacao com cobertura: por midia, em comum e o tamanho da amostra", async (t) => {
