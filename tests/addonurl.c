@@ -28,6 +28,7 @@
 // ---------------------------------------------------------------- duble
 static char pedido[8192];      // a ultima URL que chegou a rede
 static int  nPedidos, nPedidosGrande;
+const char *rede_ultimo_erro(void) { return ""; }
 char *rede_baixar(const char *url, int s) {
   (void)s;
   nPedidos++;
@@ -182,6 +183,49 @@ int main(void) {
   buscar("tt0068646");
   conferir("os dois addons validos foram consultados", nPedidos, 2);
   conferir("nenhum pedido saiu para a URL grande", nPedidosGrande, 0);
+
+  // ---- paridade com o Nuvio oficial (#202): a query viaja, o id e codificado
+  { char u[256];
+    int w;
+    // nv_addon_base: a mesma canonicalizeUrl/normalizeAddonUrl do Nuvio web
+    nv_addon_base("  https://x.test/a/manifest.json?  ", u, sizeof u);
+    conferirUrl("espaco, manifest e '?' vazio saem", u, "https://x.test/a");
+    nv_addon_base("stremio://s.test/abc/Manifest.json", u, sizeof u);
+    conferirUrl("stremio:// vira https:// e Manifest.json sai sem caixa", u, "https://s.test/abc");
+    nv_addon_base("https://q.test/cfg/manifest.json?ver=3&k=a%2Fb", u, sizeof u);
+    conferirUrl("a query fica na base", u, "https://q.test/cfg?ver=3&k=a%2Fb");
+    nv_addon_base("https://q.test/cfg//?x=1", u, sizeof u);
+    conferirUrl("barra antes da query sai", u, "https://q.test/cfg?x=1");
+    nv_addon_base("https://q.test/cfg/manifest.json?muito-longa", u, 20);
+    conferirUrl("base que nao cabe sai vazia", u, "");
+    // nv_addon_url: o caminho entra ANTES da query
+    w = nv_addon_url(u, sizeof u, "https://q.test/cfg?ver=3", "/stream/%s/%s.json", "movie", "tt1");
+    conferirUrl("caminho antes da query", u, "https://q.test/cfg/stream/movie/tt1.json?ver=3");
+    conferir("retorno = tamanho", w, (long)strlen(u));
+    w = nv_addon_url(u, sizeof u, "https://q.test/cfg", "/manifest.json");
+    conferirUrl("sem query, como antes", u, "https://q.test/cfg/manifest.json");
+    w = nv_addon_url(u, 30, "https://q.test/cfg?ver=3", "/stream/%s/%s.json", "movie", "tt1");
+    conferir("pedido que nao cabe: retorno >= tamanho", w >= 30, 1);
+    conferirUrl("pedido que nao cabe sai vazio", u, "");
+    // nv_addon_id: o que nao e pchar vira %XX; ":" e id comum saem iguais
+    nv_addon_id(u, sizeof u, "tt0111161:1:2");
+    conferirUrl("id de episodio igual", u, "tt0111161:1:2");
+    nv_addon_id(u, sizeof u, "iptv:Canal Um/HD#1?a%\xc3\xa7");
+    conferirUrl("id com espaco, barra, #, ?, % e acento", u, "iptv:Canal%20Um%2FHD%231%3Fa%25%C3%A7");
+    conferir("id que nao cabe", nv_addon_id(u, 6, "abc def"), 0); }
+
+  // E o pedido de verdade, pelo caminho da busca de fontes.
+  addons_esquecer();
+  conferir("addon com query entra", addons_adicionar("Query", "https://q.test/cfg/manifest.json?ver=3"), 1);
+  conferirUrl("base com query", addons_base(0), "https://q.test/cfg?ver=3");
+  buscar("tt0111161");
+  conferirUrl("fontes: caminho antes da query", pedido, "https://q.test/cfg/stream/movie/tt0111161.json?ver=3");
+  conferir("a mesma URL sem /manifest.json e o mesmo addon",
+           addons_adicionar("Query", "https://q.test/cfg?ver=3"), 0);
+  addons_esquecer();
+  conferir("addon stremio:// entra", addons_adicionar("Canal", "stremio://c.test/x/manifest.json"), 1);
+  buscar("iptv:Canal Um");
+  conferirUrl("fontes: id codificado, https", pedido, "https://c.test/x/stream/movie/iptv:Canal%20Um.json");
 
   printf(falhas ? "addonurl: FALHOU (%d)\n" : "addonurl: ok\n", falhas);
   return falhas ? 1 : 0;

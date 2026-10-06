@@ -229,21 +229,14 @@ static void listaMudou(void) {
 // pedido pela base certa, devolve 12 titulos. E a issue #24 inteira: nao era
 // falta de parametro, era a URL.
 //
-// Medido na TV do dono com a base cortada: o mesmo catalogo devolve 19.908
-// bytes de metas com ou sem a query re-anexada, entao a query nao carrega
-// configuracao e pode cair. Se um dia aparecer addon que precise dela no
-// caminho de catalogo, e aqui que isso se decide.
+// A QUERY AGORA FICA (paridade com o Nuvio oficial, ver nv_addon_base em
+// addonurl.h): o Bingecat continua certo porque todo pedido e montado com
+// nv_addon_url, que poe o caminho ANTES da query
+// (".../catalog/movie/<id>.json?ver=N", o que o Nuvio web e o Stremio pedem).
+// Medido na TV do dono que, para o Bingecat, o catalogo responde igual com ou
+// sem a query; um addon que guarde a configuracao nela precisa dela.
 static void baseNormalizada(const char *url, char *dst, size_t tam) {
-  size_t k;
-  char *q;
-  snprintf(dst, tam, "%s", url);
-  q = strchr(dst, '?');
-  if (q) *q = 0;
-  k = strlen(dst);
-  if (k > 14 && !strcmp(dst + k - 14, "/manifest.json")) { k -= 14; dst[k] = 0; }
-  // Barra final fora nos dois casos: "<base>//catalog" e uma URL diferente de
-  // "<base>/catalog" para mais de um servidor.
-  while (k && dst[k - 1] == '/') dst[--k] = 0;
+  nv_addon_base(url, dst, tam);
 }
 
 // O pedido ao addon `i` coube no buffer? Ver nv_addon_pedido_coube (addonurl.h).
@@ -902,7 +895,16 @@ static int distribuirLegendas(const LegLote *lotes, int nLotes, int nGrupos,
 // Agora cada addon tem o seu fio, o teto e de LEG_TETO_S, e a lista e PUBLICADA
 // a cada resposta (a folha ganha linhas ao vivo); "prontas" so quando todos
 // voltaram.
-#define LEG_TETO_S 8
+//
+// 30 s e nao 8 (#202, "o add-on Subtitlesync.stream nao esta carregando"). O
+// Nuvio web da 20 s por addon de legenda (subtitleRepository,
+// PER_ADDON_TIMEOUT_MS) e o Stremio espera mais. O Subtitle Sync alinha a
+// legenda ao video ANTES de responder e documenta "usually a few seconds, at
+// most about 25" na primeira vez de cada video (faq.wait em
+// subtitlesync.stream/web/i18n.mjs): com 8 s ele era cortado sempre que o
+// video era novo. Como a lista sai a cada resposta, o prazo longo so pesa no
+// "prontas", e a legenda automatica decide sozinha em FX_AUTO_FIM_MS (faixas.c).
+#define LEG_TETO_S 30
 
 typedef struct {
   LegLote *lotes;          // um por addon
@@ -1014,6 +1016,17 @@ static void *buscarUmAddon(void *u) {
          i + 1, !strcmp(B->tipo, "movie") ? "movie" : !strcmp(B->tipo, "series") ? "series" : "outro",
          medida.status, medida.bytes, medida.ms, array, recebidas, lote->n,
          comExtras && !recuou, recuou ? " (recusou extras: pedido antigo)" : "", cortadas);
+  // A MESMA LINHA DAS FONTES, com o nome (#202). "addon=3" nao dizia qual era o
+  // Subtitle Sync num log de usuario, e "[legendas] concluida: 3" nao separava
+  // "respondeu vazio" de "estourou o prazo". O nome do addon ja vai no log das
+  // fontes ("[addons] X: N fontes"); URL, id e corpo continuam fora (o corpo de
+  // erro pode repetir a configuracao, ver tests/addons_legendas.sh). O texto da
+  // libcurl so diz o tipo da falha e o host.
+  { const char *erro = medida.status ? "" : rede_ultimo_erro();
+    printf("[legendas] %s: %d legendas, %d no idioma (HTTP %d, %ld bytes, %lu ms)%s%s%s\n",
+           addon[i].nome, recebidas, lote->n, medida.status, medida.bytes, medida.ms,
+           comExtras && !recuou ? ", com extras" : "",
+           erro && erro[0] ? ": " : "", erro ? erro : ""); }
   fflush(stdout);
   free(corpo);
   pthread_mutex_lock(&B->m);
@@ -1511,7 +1524,7 @@ static void *sondar(void *u) {
   for (i = 0; i < nAddon; i++) {
     char url[NV_ADDON_PEDIDO_MAX], *corpo;
     if (addon[i].sondado) continue;
-    if (!pedidoCoube(i, snprintf(url, sizeof url, "%s/manifest.json", addon[i].base),
+    if (!pedidoCoube(i, nv_addon_url(url, sizeof url, addon[i].base, "/manifest.json"),
                      sizeof url)) continue;
     corpo = desc_manifesto_cache_obter(url, versao);
     if (corpo) {
@@ -1756,7 +1769,7 @@ static void *fioFontes(void *u) {
   Consulta *c = u;
   for (;;) {
     int meu, i, n;
-    char url[NV_ADDON_PEDIDO_MAX], *corpo;
+    char url[NV_ADDON_PEDIDO_MAX], idUrl[768], *corpo;
     const char *t1, *t2;
     Stream *achados;
     pthread_mutex_lock(&c->trava);
@@ -1767,6 +1780,8 @@ static void *fioFontes(void *u) {
     // interrompe (libcurl), mas o proximo nem comeca.
     if (c->cancelado && c->cancelado(c->ctx)) continue;
     i = c->baldes[meu].idx;
+    // Id codificado como o Nuvio web (nv_addon_id): "tt123:1:2" sai igual.
+    if (!nv_addon_id(idUrl, sizeof idUrl, c->id)) idUrl[0] = 0;
     // O NOME QUE O MANIFESTO DECLARA VAI PRIMEIRO (issue #112). Ver
     // tipoCanalDeclarado: o FrostView declara "channel" e o app perguntava
     // "tv" antes, gastando uma viagem inteira por canal aberto so para
@@ -1774,10 +1789,10 @@ static void *fioFontes(void *u) {
     { const char *dec = c->tipoAlt && c->tipoAlt[0] ? tipoCanalDeclarado(i) : NULL;
       t1 = c->tipo; t2 = c->tipoAlt;
       if (dec && !strcmp(dec, c->tipoAlt)) { t1 = c->tipoAlt; t2 = c->tipo; } }
-    // 12 s e nao 25: com os addons em paralelo o timeout deixa de ser somado,
-    // mas continua sendo o tempo que o dono espera pelo mais lento.
-    corpo = pedidoCoube(i, snprintf(url, sizeof url, "%s/stream/%s/%s.json",
-                                    addon[i].base, t1, c->id), sizeof url)
+    // Prazo da consulta (c->timeout): 30 s para filme/serie, 12 s para canal e
+    // prefetch. Ver ADD_PRAZO_VOD_S em consultar().
+    corpo = pedidoCoube(i, nv_addon_url(url, sizeof url, addon[i].base, "/stream/%s/%s.json",
+                                    t1, idUrl), sizeof url) && idUrl[0]
             ? rede_baixar(url, c->timeout > 0 ? c->timeout : 12) : NULL;
     achados = NULL; n = 0;
     if (corpo) n = stream_extrair(corpo, addon[i].nome, &achados);
@@ -1806,8 +1821,8 @@ static void *fioFontes(void *u) {
     // Origin: null e User-Agent a resposta e a mesma, byte a byte.
     if (n <= 0 && t2 && t2[0] && !(c->cancelado && c->cancelado(c->ctx))) {
       char *alt;
-      alt = pedidoCoube(i, snprintf(url, sizeof url, "%s/stream/%s/%s.json",
-                                    addon[i].base, t2, c->id), sizeof url)
+      alt = pedidoCoube(i, nv_addon_url(url, sizeof url, addon[i].base, "/stream/%s/%s.json",
+                                    t2, idUrl), sizeof url) && idUrl[0]
             ? rede_baixar(url, c->timeout > 0 ? c->timeout : 12) : NULL;
       if (alt) {
         Stream *a2 = NULL;
@@ -1825,8 +1840,13 @@ static void *fioFontes(void *u) {
     }
     if (!corpo) {
       free(achados);
-      printf("[addons] %s: sem resposta (%u ms)\n", addon[i].nome,
-             (unsigned)(SDL_GetTicks() - c->inicio));
+      // O MOTIVO NA MESMA LINHA (#202): "curl 28: Operation timed out after
+      // 12002 ms" ou o HTTP (a linha "[rede] HTTP 403 em <host>" sai antes, sem
+      // o nome do addon). Prazo junto: diz se foi a 1a ou a 2a rodada.
+      { const char *erro = rede_ultimo_erro();
+        printf("[addons] %s: sem resposta (%u ms, prazo %d s)%s%s\n", addon[i].nome,
+               (unsigned)(SDL_GetTicks() - c->inicio), c->timeout > 0 ? c->timeout : 12,
+               erro && erro[0] ? ": " : "", erro ? erro : ""); }
       // Desistiu de vez quando nao ha segunda chance pela frente: a mesma regra
       // de segundaChance (mudoSeg ainda e o da consulta anterior aqui).
       if (c->progresso)
@@ -1894,9 +1914,11 @@ static const char *tipoAlternativo(const char *tipo) {
 // titulo e responde rapido na seguinte, porque ja guardou o resultado — o que
 // o dono fazia a mao com Recarregar. A lista era publicada sem ele e nada mais
 // o perguntava. Agora quem NAO respondeu (timeout ou erro; lista vazia conta
-// como resposta) e perguntado UMA vez mais, em paralelo, com 20 s, antes de a
+// como resposta) e perguntado UMA vez mais, em paralelo, com 20 s (30 s em
+// filme/serie, #202), antes de a
 // lista ser publicada. Custo limitado: um addon que falha nas duas rodadas
 // duas consultas seguidas deixa de ganhar a segunda (mudoSeg).
+#define ADD_PRAZO_VOD_S 30   // 1a rodada de filme/serie; a 2a soma mais 30 = 60 s do oficial
 static void segundaChance(Consulta *c, int fios) {
   Consulta c2;
   int q, m = 0, criados = 0;
@@ -1915,10 +1937,10 @@ static void segundaChance(Consulta *c, int fios) {
   if (m > 0) {
     c2.id = c->id; c2.tipo = c->tipo; c2.tipoAlt = c->tipoAlt;
     c2.nBaldes = m; c2.cancelado = c->cancelado; c2.ctx = c->ctx;
-    c2.timeout = 20;
+    c2.timeout = c->timeout > 20 ? c->timeout : 20;
     c2.progresso = c->progresso; c2.rodada = 2; c2.inicio = c->inicio;
     pthread_mutex_init(&c2.trava, NULL);
-    printf("[addons] %d sem resposta: segunda tentativa (20 s)\n", m);
+    printf("[addons] %d sem resposta: segunda tentativa (%d s)\n", m, c2.timeout);
     fflush(stdout);
     if (fios > ADD_FIOS) fios = ADD_FIOS;
     for (q = 0; q < fios && q < m; q++)
@@ -2060,6 +2082,17 @@ static int consultar(const char *id, const char *tipo, const char *base, int fio
   c.id = id; c.tipo = tipo; c.tipoAlt = tipoAlternativo(tipo);
   c.cancelado = cancelado; c.ctx = ctx;
   c.progresso = progresso;
+  // PRAZO DA BUSCA DE FILME/SERIE (paridade com o Nuvio oficial, #202). O
+  // Nuvio web espera 60 s por addon (streamRepository,
+  // STREAM_SOURCE_REQUEST_TIMEOUT_MS) num pedido so. Aqui eram 12 s e, para
+  // quem nao respondeu, um pedido NOVO de 20 s: addon que raspa indexadores na
+  // hora (StreamFusion, WAStream, Comet sem cache) era cortado no meio do
+  // trabalho e perguntado de novo do zero. Log do .tpk (2.0.0):
+  // "StreamFusionReborn falha 28 ... after 12002 milliseconds with 0 bytes",
+  // e so a segunda volta trouxe fonte. Com a lista publicada aos poucos (#221)
+  // o prazo longo nao segura quem ja respondeu, e a fonte automatica tem prazo
+  // proprio (fonteauto). Canal ao vivo e prefetch continuam com 12 s.
+  c.timeout = progresso ? ADD_PRAZO_VOD_S : 12;
   c.inicio = SDL_GetTicks();
   pthread_mutex_init(&c.trava, NULL);
   c.baldes = calloc((size_t)nAddon, sizeof(BaldeFonte));

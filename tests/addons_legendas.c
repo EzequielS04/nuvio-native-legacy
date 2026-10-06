@@ -6,6 +6,7 @@ static char ultimaUrl[3][2048];
 static int recusaExtras, semRange, trechos;
 static _Atomic int requests;
 static int status[3] = {200, 200, 200};
+const char *rede_ultimo_erro(void) { return ""; }
 char *rede_baixar_medido_controle(const char *url, int seconds,
                                   const char *const *headers,
                                   const RedeControle *controle,

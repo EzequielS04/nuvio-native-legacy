@@ -41,15 +41,17 @@ static const char *respCanalTv, *respCanalChannel;
 static char pedidosCanal[200];
 // lento.test (#182): as primeiras `falhasLento` requisicoes NAO respondem (o
 // timeout do AIOStreams frio); as seguintes respondem com uma fonte.
-static int falhasLento, chamadasLento;
+static int falhasLento, chamadasLento, prazoLento[2], prazoCanal;
+const char *rede_ultimo_erro(void) { return ""; }
 char *rede_baixar(const char *url, int s) {
   const char *r;
-  (void)s;
   if (strstr(url, "lento.test")) {
+    if (chamadasLento < 2) prazoLento[chamadasLento] = s;
     if (++chamadasLento <= falhasLento) return NULL;
     return strdup("{\"streams\":[{\"url\":\"https://x/l.mp4\"}]}");
   }
   if (strstr(url, "canal.test")) {
+    prazoCanal = s;
     int tv = strstr(url, "/stream/tv/") != NULL;
     strncat(pedidosCanal, tv ? "tv," : "channel,",
             sizeof pedidosCanal - strlen(pedidosCanal) - 1);
@@ -260,6 +262,11 @@ int main(void) {
   while (addons_estado() == ADD_BUSCANDO) usleep(1000);
   conferir("lento respondeu na segunda tentativa", addons_estado(), ADD_PRONTO);
   conferir("duas requisicoes", chamadasLento, 2);
+  // #202: filme/serie espera como o Nuvio web (60 s por addon): 30 s na 1a
+  // rodada e 30 s na 2a, e nao 12 + 20. Canal ao vivo continua com 12 s.
+  conferir("prazo da 1a rodada (filme)", prazoLento[0], 30);
+  conferir("prazo da 2a rodada (filme)", prazoLento[1], 30);
+  conferir("prazo de canal ao vivo", prazoCanal, 12);
   // 12) fora do ar de verdade: duas consultas gastam a 2a tentativa, a terceira
   //     nao (um addon morto nao pode dobrar o prazo de toda abertura).
   falhasLento = 1000; chamadasLento = 0;

@@ -1,5 +1,6 @@
 // Ver legextras.h (#201, #269).
 #include "legextras.h"
+#include "addonurl.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -44,10 +45,14 @@ naoCoube:
 
 int legextras_url(char *dst, size_t n, const char *base, const char *tipo,
                   const char *id, const char *seg) {
+  char idUrl[768];
   int w;
   if (!dst || !n) return 0;
-  if (seg && seg[0]) w = snprintf(dst, n, "%s/subtitles/%s/%s/%s.json", base, tipo, id, seg);
-  else w = snprintf(dst, n, "%s/subtitles/%s/%s.json", base, tipo, id);
+  // nv_addon_url: a query da URL instalada vai DEPOIS do caminho, e o id sai
+  // codificado (nv_addon_id), como no buildSubtitlesUrl do Nuvio oficial.
+  if (!nv_addon_id(idUrl, sizeof idUrl, id) || !idUrl[0]) { dst[0] = 0; return 0; }
+  if (seg && seg[0]) w = nv_addon_url(dst, n, base, "/subtitles/%s/%s/%s.json", tipo, idUrl, seg);
+  else w = nv_addon_url(dst, n, base, "/subtitles/%s/%s.json", tipo, idUrl);
   if (w < 0 || (size_t)w >= n) { dst[0] = 0; return 0; }
   return 1;
 }

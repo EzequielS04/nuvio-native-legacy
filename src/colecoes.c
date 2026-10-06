@@ -549,10 +549,13 @@ void col_cor(const ColFolder *f,float *r,float *g,float *b) {
 
 // ---------------------------------------------------------------- conta
 
+// A base da fonte na MESMA forma de addons_base (nv_addon_base, addonurl.h):
+// sem /manifest.json nem barra final, com a query — e o que faz a comparacao
+// com a lista de addons e o pedido de catalogo (nv_addon_url) baterem.
 static void tirarManifest(char *base) {
-  size_t k = strlen(base);
-  if (k > 14 && !strcmp(base + k - 14, "/manifest.json")) base[k - 14] = 0;
-  else while (k && base[k - 1] == '/') base[--k] = 0;
+  char t[NV_ADDON_URL_MAX];
+  nv_addon_base(base, t, sizeof t);
+  memcpy(base, t, strlen(t) + 1);   // nunca cresce: so tira
 }
 
 // Uma colecao do web -> N pastas em `folders`. Mesma traducao de

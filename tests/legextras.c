@@ -43,6 +43,12 @@ int main(int argc, char **argv) {
   ok(legextras_url(url, sizeof url, "https://a.example/cfg", "series", "tt1:2:3", NULL) &&
      !strcmp(url, "https://a.example/cfg/subtitles/series/tt1:2:3.json"), "url sem extras = formato antigo", url);
   ok(!legextras_url(url, 20, "https://a.example/cfg", "movie", "tt1", "x") && !url[0], "url que nao cabe", NULL);
+  // #202: a query da URL instalada vai depois do caminho, e o id e codificado
+  // (buildSubtitlesUrl do Nuvio web).
+  ok(legextras_url(url, sizeof url, "https://a.example/cfg?k=1", "movie", "tt1", "videoSize=1") &&
+     !strcmp(url, "https://a.example/cfg/subtitles/movie/tt1/videoSize=1.json?k=1"), "query depois do caminho", url);
+  ok(legextras_url(url, sizeof url, "https://a.example/cfg", "movie", "x y", NULL) &&
+     !strcmp(url, "https://a.example/cfg/subtitles/movie/x%20y.json"), "id codificado", url);
 
   ok(legextras_nome_da_url("https://cdn.example/d/abc/My%20Movie.2024.mkv?token=1", nome, sizeof nome) &&
      !strcmp(nome, "My Movie.2024.mkv"), "nome pela URL, decodificado, sem query", nome);

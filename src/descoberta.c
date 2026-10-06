@@ -790,8 +790,8 @@ static int consultarAlvo(const AlvoBusca *a, const char *termo,
                                metaprov_get_rede, NULL, NULL);
   } else {
     urlEscapar(termo, esc, sizeof esc);
-    if (!descPedidoCoube(a->base, snprintf(url, sizeof url, "%s/catalog/%s/%s/search=%s.json",
-                                           a->base, a->tipo, a->id, esc), sizeof url)) return 0;
+    if (!descPedidoCoube(a->base, nv_addon_url(url, sizeof url, a->base, "/catalog/%s/%s/search=%s.json",
+                                           a->tipo, a->id, esc), sizeof url)) return 0;
     corpo = rede_baixar(url, 6);
   }
   if (!corpo) return 0;
@@ -1170,7 +1170,7 @@ static int lerCatalogo(const char *base, const char *tipo, const char *id,
   const char *p;
   int n = 0;
   if (respondeu) *respondeu = 0;
-  if (!descPedidoCoube(base, snprintf(url, sizeof url, "%s/catalog/%s/%s.json", base, tipo, id),
+  if (!descPedidoCoube(base, nv_addon_url(url, sizeof url, base, "/catalog/%s/%s.json", tipo, id),
                        sizeof url)) return 0;
   // 8 s e nao 25: um addon fora do ar segurava um dos tres fios por 25 s, e a
   // fileira dele atrasa TODAS as seguintes porque a montagem caminha em ordem.
@@ -1668,7 +1668,7 @@ static void maniLargar(void) {
     i = maniN++;
     mani[i].ativo = addons_ativo(ad);
     int cache;
-    snprintf(mani[i].url, sizeof mani[i].url, "%s/manifest.json", addons_base(ad));
+    nv_addon_url(mani[i].url, sizeof mani[i].url, addons_base(ad), "/manifest.json");
     mani[i].pronto = 0; mani[i].erro = 0;
     // CACHE HIT: o manifesto deste addon ja foi baixado numa volta com a
     // MESMA versao da lista (lista inalterada). Reaproveita sem rede. A
@@ -2024,7 +2024,7 @@ static int lerManifesto(int iAddon, const char *base, Decl *saida, int max,
   if (promovidos) *promovidos = 0;
   // Ja largado em paralelo no comeco de montar(); so cai na rede aqui quando
   // este addon nao estava na lista daquele instante.
-  corpo = descPedidoCoube(base, snprintf(url, sizeof url, "%s/manifest.json", base), sizeof url)
+  corpo = descPedidoCoube(base, nv_addon_url(url, sizeof url, base, "/manifest.json"), sizeof url)
           ? maniObter(url, ativo) : NULL;
   if (!corpo) {
     // Sem esta linha o log dizia "0 catalogo(s) declarado(s)", igual a um
@@ -4894,10 +4894,11 @@ static void metaNegLimpar(void) {
 // `prazo` em segundos: o texto localizado espera 15; a ficha do catalogo 8, para
 // um addon lento nao segurar a pagina.
 static char *metaDoAddonT(int i, const char *tipo, const char *id, int prazo) {
-  char url[NV_ADDON_PEDIDO_MAX], chave[96], *c;
+  char url[NV_ADDON_PEDIDO_MAX], chave[96], idUrl[768], *c;
   const char *base;
   unsigned h;
   if (!addons_ativo(i) || !addons_sondado(i) || !addons_fornece(i, ADD_META)) return NULL;
+  if (!nv_addon_id(idUrl, sizeof idUrl, id) || !idUrl[0]) return NULL;
   base = addons_base(i);
   if (!base || !base[0] || strstr(base, "cinemeta")) return NULL;
   h = hashBaseAddon(base);
@@ -4905,7 +4906,7 @@ static char *metaDoAddonT(int i, const char *tipo, const char *id, int prazo) {
   c = metaCacheObter(chave);
   if (c) return c;
   if (metaNegAtiva(chave)) return NULL;
-  if (!descPedidoCoube(base, snprintf(url, sizeof url, "%s/meta/%s/%s.json", base, tipo, id),
+  if (!descPedidoCoube(base, nv_addon_url(url, sizeof url, base, "/meta/%s/%s.json", tipo, idUrl),
                        sizeof url)) return NULL;
   c = rede_baixar(url, prazo);
   if (c) metaCacheGuardar(chave, c);
@@ -6922,9 +6923,9 @@ static void *fioVerTudo(void *u) {
     else {snprintf(encoded+z,4,"%%%02X",*c);z+=3;}
   }encoded[z]=0;
   { int w;
-  if(genre[0])w=snprintf(url,sizeof url,"%s/catalog/%s/%s/genre=%s&skip=%d.json",base,type,id,encoded,skip);
-  else if(skip)w=snprintf(url,sizeof url,"%s/catalog/%s/%s/skip=%d.json",base,type,id,skip);
-  else w=snprintf(url,sizeof url,"%s/catalog/%s/%s.json",base,type,id);
+  if(genre[0])w=nv_addon_url(url,sizeof url,base,"/catalog/%s/%s/genre=%s&skip=%d.json",type,id,encoded,skip);
+  else if(skip)w=nv_addon_url(url,sizeof url,base,"/catalog/%s/%s/skip=%d.json",type,id,skip);
+  else w=nv_addon_url(url,sizeof url,base,"/catalog/%s/%s.json",type,id);
   corpo=descPedidoCoube(base,w,sizeof url)?rede_baixar(url,10):NULL; }
   cap=strstr(id,"top100")?100:strstr(id,"top250")?250:VT_MAX;
   pthread_mutex_lock(&vtTrava);
