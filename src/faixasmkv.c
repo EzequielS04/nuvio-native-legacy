@@ -108,6 +108,10 @@ static int aplicarUma(VideoFaixa *f, const MkvFaixa *m, int ordinal) {
     const char *cod = faixasmkv_codec(m->codec);
     int temNome = nomeUtil(m);
     const char *meio = temNome ? m->nome : cod;
+    // #293: o player mostra o codec/canais da faixa tocando; a TrackEntry e a
+    // unica fonte no .tpk (o Player nao entrega isso).
+    snprintf(f->codec, sizeof f->codec, "%s", m->codec);
+    f->canais = m->canais;
     int poeCh = ch[0] && !(meio[0] && strstr(meio, ch));
     snprintf(rot, sizeof rot, "%s%s%s%s%s", base,
              (meio[0] || poeCh) ? SEP : "", meio,

@@ -24,6 +24,7 @@
 #include "plrilha.h"
 #include "intro.h"
 #include "video.h"
+#include "cacheboost.h"
 #include "extras.h"
 #include "badges.h"
 #include "seekr.h"
@@ -418,6 +419,33 @@ int main(int argc, char **argv) {
     quadros(60);
     salvar("osd-botao-dir");
     ponteiro_teste_toque(0);
+  }
+  // #293: codec e canais da faixa tocando, em texto ao lado dos selos. Tres
+  // casos: TrueHD Atmos, E-AC-3 com o audio indo ao receptor, AAC estereo.
+  if (quer(argc, argv, "audio-codec") || quer(argc, argv, "audio-codec-ee3") ||
+      quer(argc, argv, "audio-codec-aac")) {
+    static const char *ids[3] = { "audio-codec", "audio-codec-ee3", "audio-codec-aac" };
+    static const char *cod[3] = { "A_TRUEHD", "audio/eac3", "A_AAC/MPEG4/LC" };
+    static const int can[3] = { 8, 6, 2 };
+    int q;
+    for (q = 0; q < 3; q++) {
+      VideoSimulacao v;
+      if (!quer(argc, argv, ids[q])) continue;
+      abrir(&filme);
+      memset(&v, 0, sizeof v);
+      v.largura = 3840; v.altura = 1606; v.dv = 1; v.atmos = q == 0; v.pronto = 1;
+      v.duracao = 9420; v.pos = 4360; v.nAudio = 1; v.audioAtual = 0;
+      faixa(&v.audio[0], q == 0 ? "Ingl\xc3\xaas  \xc2\xb7  TrueHD 7.1 Atmos" : "Ingl\xc3\xaas", "en", cod[q]);
+      v.audio[0].canais = can[q];
+      video_simular(&v);
+      cacheboost_ganho_relato(q == 1 ? CB_GANHO_PASSTHROUGH : CB_GANHO_PCM);
+      quadros(10);
+      player_shot_estado(relogio, 4360.0f, 9420.0f, 1, 0, 0, 0);
+      quadros(120);
+      salvar(ids[q]);
+      cacheboost_ganho_relato(CB_GANHO_PCM);
+      simular(0, 0, "", 0, 0);
+    }
   }
   // A MARCA DO DTS (dono, 06/10): no canto e na ilha, com a TV tocando o DTS
   // sozinha, com o app convertendo (PR #259) e com a TV sem som.

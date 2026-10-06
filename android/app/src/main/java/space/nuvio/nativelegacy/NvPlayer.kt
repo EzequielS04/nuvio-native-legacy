@@ -108,7 +108,7 @@ object NvPlayer {
     // --- natives (src/video_android.c, Java_space_nuvio_nativelegacy_NvPlayer_*) ---
     @JvmStatic external fun nativeIniciar()
     @JvmStatic external fun nativeEvento(tipo: Int, a: Int, b: Int)
-    @JvmStatic external fun nativeFaixa(tipo: Int, idx: Int, lingua: String)
+    @JvmStatic external fun nativeFaixa(tipo: Int, idx: Int, lingua: String, mime: String, canais: Int)
     @JvmStatic external fun nativeFaixasFim(selAudio: Int, selLeg: Int)
     @JvmStatic external fun nativeLegenda(texto: String, durMs: Int)
     @JvmStatic external fun nativePos(ms: Int)
@@ -787,9 +787,10 @@ object NvPlayer {
             for ((n, par) in a.withIndex()) {
                 val (g, i) = par
                 if (sel < 0 && g.isTrackSelected(i)) sel = n
-                nativeFaixa(0, n, g.getTrackFormat(i).language ?: "")
+                val fmt = g.getTrackFormat(i)
+                nativeFaixa(0, n, fmt.language ?: "", fmt.sampleMimeType ?: "", fmt.channelCount.coerceAtLeast(0))
             }
-            for ((n, par) in l.withIndex()) nativeFaixa(1, n, par.first.getTrackFormat(par.second).language ?: "")
+            for ((n, par) in l.withIndex()) nativeFaixa(1, n, par.first.getTrackFormat(par.second).language ?: "", "", 0)
             nativeFaixasFim(sel, -1)
         } catch (e: UnsatisfiedLinkError) { Log.w(TAG, "faixas sem lib: $e") }
     }

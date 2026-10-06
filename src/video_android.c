@@ -28,6 +28,7 @@
 #ifdef NV_ANDROID
 #include "marco.h"
 #include "video.h"
+#include "audioinfo.h"
 #include "video_reconexao.h"
 #include "idioma.h"
 #include "linguas.h"
@@ -304,9 +305,9 @@ static void escolherAudioPreferido(void) {
 static VideoFaixa novasA[MAX_FAIXAS], novasL[MAX_FAIXAS];
 static int nNovasA, nNovasL;
 
-JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeFaixa(JNIEnv *env, jclass cls, jint tipo, jint idx, jstring lingua) {
+JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeFaixa(JNIEnv *env, jclass cls, jint tipo, jint idx, jstring lingua, jstring mime, jint canais) {
   VideoFaixa *f;
-  char l[16];
+  char l[16], mm[24], ai[40];
   (void)cls;
   deJString(env, lingua, l, sizeof l);
   if (tipo == 0) { if (nNovasA >= MAX_FAIXAS) return; f = &novasA[nNovasA++]; }
@@ -318,6 +319,17 @@ JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeFaixa(JNIEnv
   if (f->idioma[0]) snprintf(f->rotulo, sizeof f->rotulo, "%s", i18n(ling_nome(f->idioma)));
   else snprintf(f->rotulo, sizeof f->rotulo, "%s %d", i18n(tipo ? "Legenda" : "Áudio"),
                 tipo ? nNovasL : nNovasA);
+  // #293: codec (mime do Format) e canais; a linha de baixo da folha de Audio
+  // vira "E-AC-3 5.1 Atmos". Mime desconhecido: rotulo como estava.
+  if (tipo == 0) {
+    deJString(env, mime, mm, sizeof mm);
+    snprintf(f->codec, sizeof f->codec, "%s", mm);
+    f->canais = canais;
+    if (audioinfo_texto(mm, canais, 0, ai, sizeof ai))
+    { char base[sizeof f->rotulo];
+      snprintf(base, sizeof base, "%s", f->rotulo);
+      snprintf(f->rotulo, sizeof f->rotulo, "%s  \xc2\xb7  %s", base, ai); }
+  }
 }
 
 JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeFaixasFim(JNIEnv *env, jclass cls, jint selAudio, jint selLeg) {
