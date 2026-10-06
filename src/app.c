@@ -1525,6 +1525,18 @@ static void guiaComCanalNoAr(void) {
 // antes mesmo da tela de login.
 static int homePronta;
 
+static void trocarSalvosDePerfil(void) {
+  int i, n = salvos_n();
+  char (*antes)[24] = n > 0 ? malloc(sizeof *antes * (size_t)n) : NULL;
+  for (i = 0; antes && i < n; i++)
+    snprintf(antes[i], sizeof antes[i], "%s", salvos_item(i)->id);
+  salvos_perfil(perfis_ativo());
+  for (i = 0; antes && i < n; i++)
+    if (!salvos_tem(antes[i])) cat_definir_na_lista_imdb(antes[i], 0);
+  free(antes);
+  salvos_aplicar_catalogo();
+}
+
 // Cada "+"/tirar (salvos_definir, de qualquer tela) entra no jornal da conta e
 // sai num fio. Sem conta, contapend nao registra nada.
 static void salvoParaConta(const CatItem *ci, int salvo) {
@@ -1552,6 +1564,8 @@ int app_iniciar(const char *dirArte) {
   // ANTES do primeiro sync e da primeira descoberta: salvos_aplicar_catalogo
   // marca `naLista` no catalogo do cache, entao o painel e a Biblioteca ja
   // abrem certos no primeiro quadro. Ler depois faria a lista local piscar.
+  // A LISTA E DO PERFIL (salvos-p<N>.txt); perfis_carregar_ativo ja rodou.
+  salvos_perfil(perfis_ativo());
   salvos_iniciar();
   // O JORNAL DA CONTA (contapend.h): todo "+"/tirar vira entrada por perfil, e
   // o pull da biblioteca e dos vistos respeita o que a pessoa mudou aqui.
@@ -2412,6 +2426,9 @@ void app_atualizar(float dt, Uint32 agora) {
         // quando a conta manda linhas, entao um perfil sem colecoes ficava
         // com as do anterior para sempre.
         col_esquecer_perfil();
+        // OS SALVOS SAO DO PERFIL: a lista do anterior sai da tela (so os
+        // titulos que o novo nao tem) e entra a deste.
+        trocarSalvosDePerfil();
         // E A FILEIRA DE CONTINUAR, que invalidarPerfil() nao alcanca.
         //
         // invalidarPerfil() so zera a tela de Perfil/Stats. Quem refaz o

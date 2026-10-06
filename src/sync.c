@@ -1633,6 +1633,22 @@ void sync_passo(unsigned agoraMs) {
   // confirmado antes deste ciclo sai do jornal: o pull acima ja o reflete.
   contapend_podar(cicloInicioMs);
   contapend_aplicar_local();
+  // A LISTA ANTIGA DESTA TV (salvos.txt de antes da lista por perfil) sobe UMA
+  // vez para o perfil que a recebeu, item a item pelo jornal — que le a lista
+  // da conta e so ACRESCENTA. Espera esse perfil estar ativo.
+  { int p = 0;
+    if (sessao_logada() && salvos_migracao_conta(&p) && p == perfis_ativo() &&
+        salvos_perfil_atual() == p) {
+      int i, k = 0;
+      for (i = 0; i < salvos_n(); i++) {
+        const SalvoItem *it = salvos_item(i);
+        if (it) k += contapend_lista(it->id, it->tipo, it->titulo, it->poster, 1);
+      }
+      salvos_migracao_conta_feita();
+      printf("[sync] lista antiga do perfil %d: %d titulos entregues a conta\n", p, k);
+      fflush(stdout);
+      if (k) contapend_chutar();
+    } }
   spMarcar(SP_VISTOS);
   // Rede so quando muda o que buscar. Quando as duas coisas mudam no mesmo
   // ciclo, o ciclo de rede ja remonta as fileiras no fim — nao ha o que somar.

@@ -278,9 +278,14 @@ int main(void) {
   addLib(1, "tt5555555", 1);
   agora += 1000;
   assert(contapend_lista("tt5555555", "movie", "", "", 0) == 1);
-  assert(contapend_enviar() < 0 && nPushLib == 0 && temLib(1, "tt5555555"));
+  assert(contapend_enviar() == 0 && nPushLib == 0 && temLib(1, "tt5555555"));
   assert(contapend_pendentes() == 1);
-  OK("tirar o ultimo titulo pediria push vazio: nao sai, fica pendente");
+  assert(contapend_lista_oculta("tt5555555", 1) == 1);   // fica fora da tela
+  // Outro titulo entra (outra TV): o tirar pendente sai junto, sem push vazio.
+  addLib(1, "tt6666666", 2);
+  assert(contapend_enviar() == 1 && nPushLib == 1);
+  assert(!temLib(1, "tt5555555") && temLib(1, "tt6666666") && contapend_pendentes() == 0);
+  OK("tirar o ultimo: sem push vazio, pendente e oculto; sai quando a lista ganha outro");
   // Sem gesto nenhum, nunca ha RPC de escrita.
   zerar();
   addLib(1, "tt1", 1);

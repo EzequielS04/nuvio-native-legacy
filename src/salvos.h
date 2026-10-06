@@ -54,7 +54,18 @@ typedef struct {
   long long quandoS;  // time(NULL) do salvamento, para "Salvo há 2 horas"
 } SalvoItem;
 
-// Le salvos.txt. Chamar UMA vez no arranque, depois de dados_iniciar — sem
+// Qual perfil a lista em memoria representa (padrao 1). Trocar de perfil
+// larga a lista e le salvos-p<N>.txt do novo. Chamar com perfis_ativo() antes
+// de salvos_iniciar e a cada troca de perfil.
+void salvos_perfil(int perfil);
+int  salvos_perfil_atual(void);
+// A lista antiga (salvos.txt) foi adotada por um perfil nesta TV e AINDA NAO
+// subiu para a conta: 1 e o perfil em *perfil. Depois de entregar ao jornal da
+// conta, salvos_migracao_conta_feita() — e nunca mais se repete.
+int  salvos_migracao_conta(int *perfil);
+void salvos_migracao_conta_feita(void);
+
+// Le a lista do perfil. Chamar UMA vez no arranque, depois de dados_iniciar — sem
 // pasta de dados isto e no-op silencioso e a lista comeca vazia (o log de
 // dados.c ja explicou por que nao ha pasta).
 void salvos_iniciar(void);

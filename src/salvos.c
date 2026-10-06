@@ -8,7 +8,19 @@
 #include <string.h>
 #include <time.h>
 
-#define SALVOS_ARQ "salvos.txt"
+// UM ARQUIVO POR PERFIL (salvos-p<N>.txt), como a conta. Era um so
+// (salvos.txt) para a TV inteira: o perfil 2 via e editava a lista do 1. O
+// arquivo antigo e LEGADO: na primeira leitura desta versao ele vira a lista do
+// perfil ativo naquele momento, e so dele (ver adotarLegado).
+#define SALVOS_LEGADO   "salvos.txt"
+// "<perfil>\t<0|1>": quem recebeu o legado, e se ele ja foi para a conta.
+#define SALVOS_MIGRACAO "salvos-migracao.txt"
+#define SALVOS_PERFIS_MAX 32
+
+static int perfilSalvos = 1;
+static void nomeArquivo(char *d, size_t tam, int perfil) {
+  snprintf(d, tam, "salvos-p%d.txt", perfil);
+}
 
 static SalvoItem *itens;
 static int nItens, capItens;
@@ -127,7 +139,9 @@ static void gravar(void) {
                           itens[i].id, itens[i].tipo, itens[i].quandoS,
                           itens[i].nota, itens[i].meta, itens[i].poster,
                           itens[i].titulo);
-  dados_gravar(SALVOS_ARQ, buf);
+  { char nome[32];
+    nomeArquivo(nome, sizeof nome, perfilSalvos);
+    dados_gravar(nome, buf); }
   free(buf);
 }
 
@@ -141,13 +155,50 @@ static char *campo(char **p) {
   return ini;
 }
 
+static void lerBuffer(char *b);
+
+// A LISTA ANTIGA (salvos.txt, um arquivo para a TV inteira) VAI PARA O PERFIL
+// ATIVO, e so para ele, uma vez: grava salvos-p<N>.txt, anota quem recebeu e
+// apaga o legado. A marca de migracao tambem diz que a lista ainda precisa
+// subir para a conta (salvos_migracao_conta).
+static int adotarLegado(void) {
+  char *b, *m, marca[32];
+  m = dados_ler(SALVOS_MIGRACAO);
+  if (m) { free(m); return 0; }   // ja aconteceu nesta TV
+  b = dados_ler(SALVOS_LEGADO);
+  if (!b) return 0;
+  lerBuffer(b);
+  free(b);
+  gravar();
+  snprintf(marca, sizeof marca, "%d\t0\n", perfilSalvos);
+  dados_gravar(SALVOS_MIGRACAO, marca);
+  dados_apagar(SALVOS_LEGADO);
+  printf("[salvos] lista antiga (%d titulos) movida para o perfil %d\n",
+         nItens, perfilSalvos);
+  fflush(stdout);
+  return 1;
+}
+
 void salvos_iniciar(void) {
-  char *b, *linha, *prox;
+  char *b, nome[32];
   if (carregado) return;
   carregado = 1;
   nItens = 0;
-  b = dados_ler(SALVOS_ARQ);
-  if (!b) return;
+  nomeArquivo(nome, sizeof nome, perfilSalvos);
+  b = dados_ler(nome);
+  if (!b) {
+    if (adotarLegado()) revisao++;
+    return;
+  }
+  lerBuffer(b);
+  free(b);
+  revisao++;
+  printf("[salvos] %d titulos na lista local do perfil %d\n", nItens, perfilSalvos);
+  fflush(stdout);
+}
+
+static void lerBuffer(char *b) {
+  char *linha, *prox;
   for (linha = b; linha && *linha && nItens < SALVOS_MAX; linha = prox) {
     char *p, *id, *tipo, *quando, *nota, *meta, *poster, *titulo;
     char *fim = strchr(linha, '\n');
@@ -181,10 +232,42 @@ void salvos_iniciar(void) {
       s->quandoS = atoll(quando);
       s->nota = atoi(nota); }
   }
-  free(b);
+}
+
+void salvos_perfil(int perfil) {
+  if (perfil < 1) return;
+  if (perfil == perfilSalvos && carregado) return;
+  free(itens);
+  itens = NULL;
+  capItens = 0;
+  nItens = 0;
+  marcaCatN = marcaIdx = -1;
+  marcaId[0] = 0;
+  perfilSalvos = perfil;
+  carregado = 0;
   revisao++;
-  printf("[salvos] %d titulos na lista local\n", nItens);
-  fflush(stdout);
+  salvos_iniciar();
+}
+
+int salvos_perfil_atual(void) { return perfilSalvos; }
+
+int salvos_migracao_conta(int *perfil) {
+  char *m = dados_ler(SALVOS_MIGRACAO);
+  int p = 0, feito = 1;
+  if (!m) return 0;
+  if (sscanf(m, "%d\t%d", &p, &feito) < 1) feito = 1;
+  free(m);
+  if (feito || p < 1) return 0;
+  if (perfil) *perfil = p;
+  return 1;
+}
+
+void salvos_migracao_conta_feita(void) {
+  int p = 0;
+  char marca[32];
+  if (!salvos_migracao_conta(&p)) return;
+  snprintf(marca, sizeof marca, "%d\t1\n", p);
+  dados_gravar(SALVOS_MIGRACAO, marca);
 }
 
 static void (*aoDefinir)(const CatItem *ci, int salvo);
@@ -403,7 +486,15 @@ void salvos_esquecer(void) {
   marcaCatN = marcaIdx = -1;
   marcaId[0] = 0;
   revisao++;
-  dados_apagar(SALVOS_ARQ);
+  // TODOS os perfis, o legado e a marca de migracao: sair da conta numa TV de
+  // sala apaga a lista de quem saiu (o que ja subiu continua na conta dele).
+  { int p; char nome[32];
+    for (p = 1; p <= SALVOS_PERFIS_MAX; p++) {
+      nomeArquivo(nome, sizeof nome, p);
+      dados_apagar(nome);
+    } }
+  dados_apagar(SALVOS_LEGADO);
+  dados_apagar(SALVOS_MIGRACAO);
   // O arquivo foi apagado: ler de novo da vazio, e deixa salvos_iniciar valer
   // para o proximo usuario em vez de ficar preso no "ja carreguei".
   carregado = 0;

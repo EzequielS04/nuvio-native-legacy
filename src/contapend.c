@@ -620,13 +620,20 @@ static int enviarLista(const char *usu, int perfil, Ent *ops, int n) {
   }
   if (saida == 0) {
     // Tirar o ULTIMO titulo exigiria subir lista vazia — e push vazio nunca
-    // sai (regra 2). Fica pendente e oculto aqui; o log diz.
+    // sai (regra 2). O web tambem nao tem como (savedLibrarySyncService.js
+    // pula o push vazio; nao ha RPC nem delete de tabela para isso). Fica
+    // pendente e oculto aqui; sai sozinho quando a lista ganhar outro titulo.
+    // Nao e falha: o log diz UMA vez por sessao.
+    static int avisou;
     jsw_livre(&w);
-    printf("[sync] lista perfil %d: tirar o ultimo titulo pediria push vazio; "
-           "fica pendente\n", perfil);
-    fflush(stdout);
+    if (!avisou) {
+      avisou = 1;
+      printf("[sync] lista perfil %d: tirar o ultimo titulo pediria push vazio; "
+             "fica pendente ate a lista ganhar outro\n", perfil);
+      fflush(stdout);
+    }
     free(usado); paginasLivrar(&pg);
-    return -1;
+    return 0;
   }
   r = sessao_rpc("sync_push_library", jsw_texto_final(&w), &st);
   jsw_livre(&w);
@@ -731,9 +738,11 @@ static int enviarJa(void) {
     }
     free(grupo); }
   free(snap);
-  printf("[sync] jornal da conta: %d confirmadas, %d pendentes\n", total,
-         contapend_pendentes());
-  fflush(stdout);
+  if (total > 0) {
+    printf("[sync] jornal da conta: %d confirmadas, %d pendentes\n", total,
+           contapend_pendentes());
+    fflush(stdout);
+  }
   return falhou ? -1 : total;
 }
 
