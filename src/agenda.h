@@ -216,6 +216,9 @@ void agenda_apoio(const AgItem *it, char *dst, size_t tam);
 int agenda_devidos(const AgItem **saida, int max);
 // Marca como avisado e GRAVA: o mesmo episodio nao avisa duas vezes.
 void agenda_marcar_avisado(const char *imdb);
+// Quantos lembretes ainda nao foram avisados. Barato (so a tabela de
+// lembretes): o aviso da home pergunta isto antes de montar a agenda inteira.
+int agenda_lembretes_pendentes(void);
 
 // --- atualizacao das seguidas ----------------------------------------------
 // Sobe um fio que busca as series seguidas cujo registro esta faltando ou

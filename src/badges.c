@@ -13,7 +13,20 @@
 static const char *ids[]={"r-4k","r-1080","r-720","r-sd","q-remux","q-bluray","q-webdl","q-webrip","q-seadex","v-dv","v-hdr10plus","v-hdr10","v-hdr","v-hlg","v-imax-enhanced","v-imax","v-sdr","a-atmos-dv","a-atmos","a-truehd-dv","a-truehd","a-dtsx","a-dtshdma","a-dtshd","a-dts","a-dd-dv","a-ddp","a-dd","c-71","c-51","co-x265","co-x264","co-av1","p-netflix","p-prime","p-appletv","p-disney","p-max","p-hulu","p-peacock","p-paramount","p-crave","p-crunchyroll"};
 #define NB (sizeof ids/sizeof ids[0])
 static struct {char image[700],name[64];} art[NB];
-static uint64_t bit(const char *id){for(size_t i=0;i<NB;i++)if(!strcmp(id,ids[i]))return UINT64_C(1)<<i;return 0;}
+// BUSCA DO BIT LEMBRADA PELO ENDERECO DO TEXTO. Quem chama passa literal
+// ("r-4k", "v-dv"...), e a folha de Fontes chama isto milhares de vezes por
+// quadro (grupoRes/ehHdr/nivelHdr por fonte, 2-3 montagens por quadro):
+// MEDIDO no Mac (06/10/2026) com 201 fontes, 37% do fio principal em strcmp
+// aqui dentro. A casa guarda so o INDICE (um byte), e o acerto e conferido
+// pelo conteudo: endereco reaproveitado com outro texto, ou duas threads
+// escrevendo a mesma casa, so caem na varredura de sempre — nunca bit errado.
+#define NB_MEMO 128
+static unsigned char bitMemo[NB_MEMO];
+static uint64_t bit(const char *id){
+  unsigned c=(unsigned)(((uintptr_t)id>>2)%NB_MEMO), k=bitMemo[c];
+  if(k<NB&&!strcmp(id,ids[k]))return UINT64_C(1)<<k;
+  for(size_t i=0;i<NB;i++)if(!strcmp(id,ids[i])){bitMemo[c]=(unsigned char)i;return UINT64_C(1)<<i;}
+  return 0;}
 static int token(const char *s,const char *t){size_t n=strlen(t);for(const char *p=s;(p=strstr(p,t));p++)if((p==s||!isalnum((unsigned char)p[-1]))&&!isalnum((unsigned char)p[n]))return 1;return 0;}
 uint64_t badges_detectar(const char *metadata) {
   char s[4096];size_t n=0;for(;metadata&&metadata[n]&&n<sizeof s-1;n++)s[n]=(char)tolower((unsigned char)metadata[n]);s[n]=0;
