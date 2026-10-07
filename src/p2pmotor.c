@@ -95,8 +95,10 @@ static P2pmSondaFn sondaFn = sondaReal;
 // acima de 2 GB falha (EOVERFLOW): o video do torrent nao era contado nem
 // apagado, e o disco da TV enchia sessao apos sessao. O tpk.sh compila este
 // arquivo com 64 bits; se o lstat falhar mesmo assim, apagar tenta o unlink.
-#if defined(NV_TPK) && defined(__arm__)
-_Static_assert(sizeof(off_t) == 8, "p2pmotor.c precisa de -D_FILE_OFFSET_BITS=64 (#202)");
+// #297: o webOS (tools/arm.sh) e o mesmo caso. No Android 32 bits o bionic ja
+// usa struct stat 64 (st_size long long), entao la nao precisa.
+#if (defined(NV_TPK) || defined(NV_WEBOS)) && defined(__arm__)
+_Static_assert(sizeof(off_t) == 8, "p2pmotor.c precisa de -D_FILE_OFFSET_BITS=64 (#202, #297)");
 #endif
 static uint64_t percorrer(const char *p, int apagar, int fundo) {
   struct stat st;
