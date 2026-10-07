@@ -1205,6 +1205,7 @@ int stream_primeira_boa(int tentativas) {
   unsigned char *acima, *excl;
   signed char *grp;
   Conferencia c = { 0, 0 };
+  Uint32 tVerif = 0;
   tentativas = fonteauto_tentativas(modo, tentativas);
   pthread_mutex_lock(&verTrava);
   total = n;
@@ -1257,9 +1258,15 @@ int stream_primeira_boa(int tentativas) {
   }
 
   marco("fonte: verificacao inicio");
+  tVerif = SDL_GetTicks();
   escolhida = fonteauto_primeira(fila, nf, verificarOuParar, falhouUma, &c, &tocadas);
   if (c.abortou) escolhida = -1;
   marco(escolhida >= 0 ? "fonte: verificacao ok" : "fonte: verificacao sem resultado");
+  // QUANTO CUSTOU A VERIFICACAO, DEBRID INCLUIDO (#202): o log so tinha a conta
+  // das candidatas. Entre a decisao e o primeiro quadro e a maior fatia do
+  // inicio (3,8 a 7,4 s de mediana no D1) e nao se separava.
+  printf("[fonte] verificacao/debrid em %u ms (%d candidata(s))\n",
+         (unsigned)(SDL_GetTicks() - tVerif), tocadas);
   printf("[fonte] verificacao (%s): %d de %d candidata(s) conferida(s)%s\n",
          modo == FONTEAUTO_PRIMEIRA ? "primeira da lista" : "melhor fonte",
          tocadas, nf, c.abortou ? ", lista trocada no meio" : "");
@@ -1323,7 +1330,7 @@ int stream_auto_pode_decidir(int preferida, int prefPendente, int prazoPassou, i
   pthread_mutex_unlock(&verTrava);
   p.modo = ajustes_fonte_primeira() ? FONTEAUTO_PRIMEIRA : FONTEAUTO_MELHOR;
   p.total = total; p.preferida = posPref; p.prefPendente = prefPendente;
-  p.prazoPassou = prazoPassou; p.algumPendente = addons_faltam(NULL, 0) > 0;
+  p.prazoPassou = prazoPassou; p.algumPendente = addons_faltam_decisivos() > 0;
   p.pontos = pts; p.acimaTeto = acima; p.excluida = excl; p.boa = boa;
   p.addon = ad; p.pendenteAntes = pendenteAntesCb;
   p.grupo = grp; p.instantaneo = instantaneo;
@@ -1634,6 +1641,25 @@ static int automaticoCom(int regras) {
 }
 // As regras de auto-play (#202) sao de filme e serie, como no oficial: canal
 // ao vivo escolhe sem elas (stream_automatico_canal).
+// A PROXIMA CANDIDATA DO AUTOMATICO, SE A ATUAL FALHAR, NAO E PIOR? (#202)
+// Mesma ordem de automaticoCom, sem a atual. "Pior" = menos resolucao ou sem
+// o Dolby Vision que a atual tem. Serve ao watchdog de abertura: trocar de
+// fonte por demora so e aceitavel quando nao baixa a qualidade — essa decisao
+// e da pessoa, nao de um relogio.
+int stream_proxima_sem_perda(int atual) {
+  int melhor = -1, gMelhor = 0;
+  long maior = 0;
+  if (atual < 0 || atual >= n) return 0;
+  for (int k = 0; k < n; k++) {
+    int i = ORD(k), g = grupoDe(i);
+    if (i == atual || automaticaExcluida(i) || ehInformativa(&lista[i]) || g < 0) continue;
+    long p = pontos(&lista[i]);
+    if (melhor < 0 || g < gMelhor || (g == gMelhor && p > maior)) { maior = p; melhor = i; gMelhor = g; }
+  }
+  if (melhor < 0) return 0;
+  return lista[melhor].altura >= lista[atual].altura &&
+         lista[melhor].dolbyVision >= lista[atual].dolbyVision;
+}
 int stream_automatico(void) { return automaticoCom(1); }
 int stream_automatico_canal(void) { return automaticoCom(0); }
 

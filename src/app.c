@@ -26,6 +26,8 @@
 #include "sessao.h"
 #include "perfis.h"
 #include "fontevolta.h"
+#include "addonstats.h"
+#include "inicio.h"
 #include "perfilsel.h"
 #include "sync.h"
 #include "traktauth.h"
@@ -147,7 +149,7 @@
 // abre o conteudo real. Filme nao passa pelo watchdog de canal, entao sem este
 // prazo a tela fica em "carregando" para sempre e a pessoa precisa abrir a
 // folha para escolher outra fonte na mao.
-#define VOD_FONTE_PRAZO_MS 30000
+// (o prazo da abertura mora em inicio.h: 8 s sem sinal, 30 s com dado chegando)
 #define VOD_FONTE_BUFFER_MS 30000
 // QUANTAS FONTES O AUTOMATICO ENTREGA AO PLAYER NUMA REPRODUCAO: a primeira
 // mais as de "Outra fonte se falhar" em Ajustes. Ate a 1.4.3 eram 8 fixas, e
@@ -177,6 +179,10 @@ static int aguardandoFonte;
 static int autoEsperaN;
 static void idBaseDoTitulo(char *dst, size_t tam);
 static int prefFolhaN = -1;
+// Por que a escolha automatica saiu com a lista ainda enchendo, para o log
+// "[fonte] decisao em N ms (motivo)" (#202). Escrito por autoParcialPronto
+// quando ela devolve 1.
+static const char *autoMotivo = "";
 static int autoParcialPronto(void) {
   char base[24];
   const FontePref *fp;
@@ -198,12 +204,26 @@ static int autoParcialPronto(void) {
     prefPendente = lembrada < 0 && addons_pendente_nome(fp->provedor);
   }
   // Escolher a mao: a folha abre com o que ja chegou e continua enchendo.
-  if (ajustes_fonte_manual() && lembrada < 0) return !prefPendente;
+  if (ajustes_fonte_manual() && lembrada < 0) {
+    if (!prefPendente) autoMotivo = "escolha manual: a folha abre com o que chegou";
+    return !prefPendente;
+  }
   // 0 = Instantaneo, -1 = todos os addons (#202).
   prazo = ajustes_fonte_prazo_ms();
-  return stream_auto_pode_decidir(lembrada, prefPendente,
-                                  prazo > 0 && addons_busca_ms() >= (unsigned)prazo,
-                                  prazo == 0);
+  // O prazo da pessoa e o limite do "lento": quem passa dele quase sempre nesta
+  // TV, ou ficou mudo nas ultimas buscas, deixa de segurar a decisao. -1 ("todos
+  // os add-ons") e a pessoa pedindo para esperar: ninguem sai.
+  addons_definir_espera_decisao(prazo > 0 ? prazo : 0);
+  { int passou = prazo > 0 && addons_busca_ms() >= (unsigned)prazo;
+    int r = stream_auto_pode_decidir(lembrada, prefPendente, passou, prazo == 0);
+    if (r)
+      autoMotivo = lembrada >= 0 && !prefPendente ? "fonte lembrada deste titulo"
+                 : passou ? "prazo de espera pelos add-ons"
+                 : prazo == 0 ? "instantaneo"
+                 : addons_faltam(NULL, 0) > addons_faltam_decisivos()
+                     ? "so faltam add-ons mudos ou lentos nesta TV"
+                     : "fonte boa o bastante";
+    return r; }
 }
 // Episodio que o card de "Continuar assistindo" ANUNCIAVA quando o OK pediu
 // para tocar (issue #93). Armado no ramo home_pediu_tocar e consumido pelo
@@ -1452,6 +1472,106 @@ static void vigiarAberturaManual(void) {
   fonteManualDesde = 0;
   player_erro_fonte_motivo(i18n("A fonte não respondeu a tempo."), NULL);
 }
+// PRAZO DE ABERTURA (#202, inicio.h): 8 s sem nenhum sinal de vida, 30 s com
+// dado chegando — e o curto so quando a proxima candidata nao e pior que esta
+// (nunca baixar a qualidade por pressa; sem proxima, 30 s).
+static int aberturaVencida(Uint32 desde) {
+  static int chaveAt = -1, chaveN = -1, chaveT = -1, semPerda;
+  InicioAbertura g;
+  int at;
+  if (!player_carregando() || desde <= INICIO_ABRE_SEM_SINAL_MS || video_fonte_tocou()) return 0;
+  at = stream_atual();
+  if (at != chaveAt || stream_n() != chaveN || fonteVODTentativas != chaveT) {
+    chaveAt = at; chaveN = stream_n(); chaveT = fonteVODTentativas;
+    semPerda = fonteVODTentativas < VOD_FONTE_MAX_TENTATIVAS && stream_proxima_sem_perda(at);
+  }
+  memset(&g, 0, sizeof g);
+  g.desdeMs = desde;
+  g.proximaSemPerda = semPerda;
+  g.dadoChegando = video_pronto() || video_buffer_fim() > 0.5;
+  if (!inicio_abre_vencida(&g)) return 0;
+  printf("[fonte] sem sinal de abertura em %u ms (prazo %u ms%s)\n", (unsigned)desde,
+         inicio_abre_prazo_ms(&g), semPerda ? ", proxima nao e pior" : "");
+  fflush(stdout);
+  return 1;
+}
+// A EXPLICACAO DA ESPERA NA ILHA (#202, inicio.h). Por quadro enquanto o cartao
+// "Abrindo fonte" esta de pe: o que a abertura esta esperando, em palavras, para
+// a pessoa mudar "Espera pelos add-ons" / "Escolha da fonte" se quiser. So
+// texto e a dica OK > Ajustes: nunca segura nem decide nada.
+// (strcasestr e extensao GNU que a toolchain da webOS nao declara.)
+static int contemSemCaixa(const char *h, const char *n) {
+  size_t ln = strlen(n);
+  for (; *h; h++) if (!strncasecmp(h, n, ln)) return 1;
+  return 0;
+}
+static int fonteViaDebrid(const Stream *s) {
+  char u[160];
+  if (!s) return 0;
+  if (s->infoHash[0]) return 1;
+  snprintf(u, sizeof u, "%s", s->url);
+  return contemSemCaixa(u, "debrid") || contemSemCaixa(u, "torbox") ||
+         contemSemCaixa(u, "premiumize") || contemSemCaixa(u, "/resolve/");
+}
+static void atualizarMotivoInicio(void) {
+  static int ultMotivo = -1;
+  static char ultTxt[112];
+  InicioSinais sn;
+  AddonsInicioInfo ai;
+  char txt[112];
+  const Stream *st = NULL;
+  int m;
+  txt[0] = 0;
+  if (!player_aberto() || player_id_canal()[0] || !player_carregando() || player_quer_sair()) {
+    if (ultTxt[0]) { ultTxt[0] = 0; ultMotivo = -1; player_definir_motivo_inicio(""); }
+    return;
+  }
+  memset(&sn, 0, sizeof sn);
+  memset(&ai, 0, sizeof ai);
+  sn.fase = aguardandoFonte == 1 ? INI_FASE_BUSCA : aguardandoFonte == 2 ? INI_FASE_VERIFICA : INI_FASE_ABRE;
+  sn.desdeMs = sn.fase == INI_FASE_ABRE && fonteVODDesde ? SDL_GetTicks() - fonteVODDesde
+                                                          : player_aberto_ha_ms();
+  sn.tentativa = fonteVODAutomatica ? fonteVODTentativas : 1;
+  if (sn.fase == INI_FASE_BUSCA) {
+    addons_inicio_info(&ai);
+    sn.pendentes = ai.pendentes; sn.pendenteMudo = ai.pendenteMudo; sn.semResposta = ai.semResposta;
+  } else if (sn.fase == INI_FASE_ABRE) {
+    st = stream_item(stream_atual());
+    sn.viaDebrid = fonteViaDebrid(st);
+  }
+  m = inicio_motivo(&sn);
+  switch (m) {
+    case INI_ESPERA_UM:
+      snprintf(txt, sizeof txt, i18n("Esperando %s (lento)"), ai.pendente); break;
+    case INI_ESPERA_MUDO:
+      snprintf(txt, sizeof txt, i18n("%s não respondeu da última vez"), ai.pendente); break;
+    case INI_ESPERA_VARIOS:
+      snprintf(txt, sizeof txt, i18n("Esperando %d add-ons"), sn.pendentes); break;
+    case INI_NAO_RESPONDEU:
+      snprintf(txt, sizeof txt, i18n("%s não respondeu"), ai.semRespostaNome); break;
+    case INI_VERIFICANDO:
+      snprintf(txt, sizeof txt, "%s", i18n("Verificando a fonte…")); break;
+    case INI_FALLBACK:
+      snprintf(txt, sizeof txt, "%s", i18n("Fonte falhou, tentando a próxima")); break;
+    case INI_ABRINDO_DEBRID: {
+      char q[16];
+      if (st && st->altura >= 2160) snprintf(q, sizeof q, "4K");
+      else if (st && st->altura > 0) snprintf(q, sizeof q, "%dp", st->altura);
+      else q[0] = 0;
+      if (q[0]) snprintf(txt, sizeof txt, i18n("Abrindo %s pelo debrid…"), q);
+      else snprintf(txt, sizeof txt, "%s", i18n("Abrindo pelo debrid…"));
+      break; }
+    default: break;
+  }
+  player_definir_motivo_inicio(txt);
+  // O que a ilha disse vai para o log uma vez por mudanca: e como se prova, num
+  // registro, o que a pessoa viu esperando.
+  if (m != ultMotivo || strcmp(txt, ultTxt)) {
+    ultMotivo = m;
+    snprintf(ultTxt, sizeof ultTxt, "%s", txt);
+    if (txt[0]) { printf("[fonte] ilha: %s (%u ms)\n", txt, (unsigned)sn.desdeMs); fflush(stdout); }
+  }
+}
 static void tentarProximaFonteVOD(void) {
   Uint32 desde;
   int atual, motivo = 0;
@@ -1466,7 +1586,7 @@ static void tentarProximaFonteVOD(void) {
   // to the TV player, track switch) is not a source that never opened: on
   // the C9 the 30 s deadline, counted from the first open, swapped a playing
   // film to another source and lost the position.
-  else if (player_carregando() && desde > VOD_FONTE_PRAZO_MS && !video_fonte_tocou()) motivo = 2;
+  else if (aberturaVencida(desde)) motivo = 2;
   else if (video_bufferando_ms() > VOD_FONTE_BUFFER_MS) motivo = 3;
   if (!motivo) return;
 
@@ -1645,6 +1765,7 @@ int app_iniciar(const char *dirArte) {
   // a pessoa abre direto no "Continuar assistindo".
   ondever_iniciar();
   fontepref_iniciar();
+  addonstats_ler();   // #202: latencia de cada add-on NESTA TV (addonstats.h)
   // A ARTE ESCOLHIDA A MAO (#142) tambem, antes do primeiro destaque: sem ela
   // lida, o hero abriria na foto automatica e trocaria no quadro seguinte.
   arteesc_iniciar();
@@ -3406,6 +3527,11 @@ void app_atualizar(float dt, Uint32 agora) {
   if (aguardandoFonte == 1 &&
       (addons_estado() != ADD_BUSCANDO || autoParcialPronto())) {
     unsigned geracao = novaGeracaoFonte();
+    // QUANTO O PLAY ESPEROU PELA DECISAO, e por que ela saiu (#202). Medido no
+    // D1 so havia a decisao parcial; a completa nao deixava rastro.
+    printf("[fonte] decisao em %u ms (%s)\n", (unsigned)player_aberto_ha_ms(),
+           addons_busca_parcial() ? autoMotivo : "todos os add-ons responderam");
+    fflush(stdout);
     if (addons_busca_parcial()) {
       char faltam[160];
       int k = addons_faltam(faltam, sizeof faltam);
@@ -3806,6 +3932,23 @@ void app_atualizar(float dt, Uint32 agora) {
   fitDuracaoMidia();
   fitPassivaPermitir();
   tentarProximaFonteVOD();
+  atualizarMotivoInicio();
+  // O OK na explicacao da ilha: sai do player e cai em Ajustes > Fontes e addons
+  // > Escolha da fonte, na linha da espera. A pessoa pediu: e o unico caso em
+  // que a explicacao leva a algum lugar.
+  if (player_pediu_ajustes_fonte() && player_aberto()) {
+    printf("[fonte] ilha: OK abriu Ajustes > Escolha da fonte\n"); fflush(stdout);
+    aguardandoFonte = 0;
+    limparFonteVOD();
+    novaGeracaoFonte();
+    limparFontePendente();
+    diagnostico_cancelar_vazao();
+    player_definir_motivo_inicio("");
+    player_encerrar();
+    if (detail_aberto()) detail_fechar_seco();
+    ajustes_abrir_na_espera_fonte();
+    trocarTela(TELA_AJUSTES); menu_definir_destino(MENU_AJUSTES);
+  }
   vigiarAberturaManual();
   processarTorrentJob();
 

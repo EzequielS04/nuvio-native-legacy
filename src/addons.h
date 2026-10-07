@@ -109,6 +109,18 @@ unsigned addons_busca_ms(void);
 int  addons_faltam(char *nomes, unsigned tam);
 // O mesmo contando tambem os scrapers de plugin; *plugins = quantos deles.
 int  addons_faltam_tipo(char *nomes, unsigned tam, int *plugins);
+// Quantos ainda seguram a decisao AUTOMATICA: addons_faltam sem quem e mudo
+// seguido ou mais lento que a espera de Ajustes nesta TV (addonstats.h, #202).
+// Quem sai daqui continua sendo consultado e entra na lista quando responde.
+int  addons_faltam_decisivos(void);
+// A espera de Ajustes em ms, que e o limite do "lento"; <= 0 = ninguem sai.
+void addons_definir_espera_decisao(int ms);
+// Para a ilha explicar a espera (inicio.h).
+typedef struct {
+  int pendentes, pendenteMudo, semResposta;
+  char pendente[64], semRespostaNome[64];
+} AddonsInicioInfo;
+void addons_inicio_info(AddonsInicioInfo *o);
 // Algum addon de indice menor que `idx` (ordem de instalacao) ainda falta?
 int  addons_pendente_antes(int idx);
 // O addon com este nome (Stream.provedor) ainda falta?

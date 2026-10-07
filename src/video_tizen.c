@@ -794,6 +794,7 @@ static double avChamar(const char *cmd, const char *txt,
 // callback do navegador e um dos jeitos conhecidos de travar tudo sem mensagem.
 static int    ligado;        // video_iniciar deu certo
 static int    temAvplay;     // o firmware oferece webapis.avplay
+static Uint32 aberturaEm;   // avplay open (log do inicio, #202)
 static int    ativo;         // ha sessao aberta — e o que abre o furo
 static int    tocando, pronto;
 static double posSeg, durSeg;
@@ -911,6 +912,7 @@ int video_tocar(const char *url) {
   // caso o evento nao venha. Mesma decisao do caminho da LG (video_ativo la usa
   // o mediaId, nao o loadCompleted).
   ativo = 1;
+  aberturaEm = SDL_GetTicks();
   marco("avplay open");
   // O retangulo corrente vai junto: quem pediu a janela antes de haver sessao
   // (main.c faz exatamente isso) seria ignorado de outra forma.
@@ -1225,6 +1227,9 @@ void video_bombear(void) {
 
   if (pronto && !estavaPronto) {
     marco("avplay prepared");
+    // #202: o trecho que o .wgt nao separava no log (open -> prepared).
+    if (aberturaEm) printf("[player] load->1o quadro %u ms (avplay prepared)\n",
+                           (unsigned)(SDL_GetTicks() - aberturaEm));
     lerFaixas();
     lerInfoFluxo();
   }
