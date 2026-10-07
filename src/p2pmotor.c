@@ -33,11 +33,12 @@ static int resolvendo;         // um pedido em curso (um por vez)
 static int parando;            // destroy em curso num fio solto
 static int vigiaEventos;       // a vigia esta lendo a fila de eventos
 static int vigiaViva, vigiaSair;
+static int ondeFoiPendente;    // vigia pediu o inventario; pararFio roda depois dos escritores (#297)
 static pthread_t fioVigia;
 static char tidAtual[65], sidAtual[65], hashAtual[41], prefixoUrl[96];
 static int metaPronta;
 static char pastaRaiz[600], pastaMae[600];
-static uint64_t livreSubida;   // livre medido quando o motor subiu (#202)
+static uint64_t livreSubida;   // livre medido quando o motor subiu (#297)
 static P2pmEstado estado;
 
 static _Atomic unsigned geracao;
@@ -91,19 +92,24 @@ static P2pmSondaFn sondaFn = sondaReal;
 // Percorre `p` sem seguir links. apagar=1 remove tudo (inclusive `p`);
 // apagar=0 so soma os blocos REAIS (o arquivo do torrent e esparso: o
 // tamanho mente).
-// #202: no ARM de 32 bits sem _FILE_OFFSET_BITS=64 o lstat de um arquivo
+// #297: no ARM de 32 bits sem _FILE_OFFSET_BITS=64 o lstat de um arquivo
 // acima de 2 GB falha (EOVERFLOW): o video do torrent nao era contado nem
 // apagado, e o disco da TV enchia sessao apos sessao. O tpk.sh compila este
 // arquivo com 64 bits; se o lstat falhar mesmo assim, apagar tenta o unlink.
 // #297: o webOS (tools/arm.sh) e o mesmo caso. No Android 32 bits o bionic ja
 // usa struct stat 64 (st_size long long), entao la nao precisa.
 #if (defined(NV_TPK) || defined(NV_WEBOS)) && defined(__arm__)
-_Static_assert(sizeof(off_t) == 8, "p2pmotor.c precisa de -D_FILE_OFFSET_BITS=64 (#202, #297)");
+_Static_assert(sizeof(off_t) == 8, "p2pmotor.c precisa de -D_FILE_OFFSET_BITS=64 (#297)");
 #endif
-static uint64_t percorrer(const char *p, int apagar, int fundo) {
+// Limite de trabalho (so para medir, nunca para apagar): entradas e prazo.
+typedef struct { unsigned n, max; double ate; int estourou; } LimTrab;
+static uint64_t percorrerL(const char *p, int apagar, int fundo, LimTrab *lim) {
   struct stat st;
   uint64_t soma = 0;
   if (fundo > 16) return 0;
+  if (lim) {
+    if (lim->estourou || ++lim->n > lim->max || agora() > lim->ate) { lim->estourou = 1; return 0; }
+  }
   if (lstat(p, &st) != 0) {
     if (apagar && fundo > 0) unlink(p);
     return 0;
@@ -116,7 +122,7 @@ static uint64_t percorrer(const char *p, int apagar, int fundo) {
       while ((e = readdir(d))) {
         if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
         if (snprintf(f, sizeof f, "%s/%s", p, e->d_name) >= (int)sizeof f) continue;
-        soma += percorrer(f, apagar, fundo + 1);
+        soma += percorrerL(f, apagar, fundo + 1, lim);
       }
       closedir(d);
     }
@@ -126,6 +132,9 @@ static uint64_t percorrer(const char *p, int apagar, int fundo) {
     if (apagar) unlink(p);
   }
   return soma;
+}
+static uint64_t percorrer(const char *p, int apagar, int fundo) {
+  return percorrerL(p, apagar, fundo, NULL);
 }
 
 // Pasta raiz do motor (<dados>/p2p) e a mae dela (onde o statvfs mede: a raiz
@@ -159,11 +168,22 @@ static int orcamento(const char *mae, uint64_t *mole, uint64_t *duro, uint64_t *
   return P2P_OK;
 }
 
-// #202: o livre caiu ~1,2 GB num 4K com a pasta do motor em 16 MB, e nao
+// #297: o livre caiu ~1,2 GB num 4K com a pasta do motor em 16 MB, e nao
 // voltou depois do motor desligado. Sem saber onde o espaco foi, lista o que
-// pesa na pasta do app (pai de <dados>) e no /tmp. So na TV (raiz real): no
-// teste o pai da raiz e o TMPDIR do Mac inteiro. Fio da vigia ou do pedido,
-// nunca o da tela.
+// pesa na pasta do app (pai de <dados>) e no /tmp. So na TV (.tpk), e so se o
+// pai for mesmo a sandbox do app (.../apps_rw/<pacote>): no desktop <dados>
+// pode ser $HOME/.nuvio e o pai seria a home inteira. Roda DEPOIS que os
+// escritores pararam, com limite de entradas e de tempo. Fio de parada ou do
+// pedido, nunca o da tela nem o da vigia.
+#define ONDE_MAX_ENTRADAS 5000u
+#define ONDE_MAX_MS 200
+#ifdef NV_TPK
+static int ehSandboxApp(const char *app) {
+  const char *p = strstr(app, "/apps_rw/");
+  if (!p) return 0;
+  p += 9;
+  return *p && !strchr(p, '/');
+}
 static void ondeFoi(const char *mae) {
   char app[600], f[1200], linha[900];
   const char *outros[3];
@@ -171,34 +191,43 @@ static void ondeFoi(const char *mae) {
   DIR *d;
   struct dirent *e;
   unsigned i;
+  LimTrab lim;
   if (raizInjetada[0]) return;
   snprintf(app, sizeof app, "%s", mae);
   n = strlen(app);
   while (n > 1 && app[n - 1] == '/') app[--n] = 0;
   { char *b = strrchr(app, '/'); if (!b || b == app) return; *b = 0; }
+  if (!ehSandboxApp(app)) return;
+  memset(&lim, 0, sizeof lim);
+  lim.max = ONDE_MAX_ENTRADAS;
+  lim.ate = agora() + ONDE_MAX_MS / 1000.0;
   linha[0] = 0;
   if ((d = opendir(app))) {
-    while ((e = readdir(d))) {
+    while ((e = readdir(d)) && !lim.estourou) {
       uint64_t mb;
       if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
       if (snprintf(f, sizeof f, "%s/%s", app, e->d_name) >= (int)sizeof f) continue;
-      mb = percorrer(f, 0, 0) >> 20;
+      mb = percorrerL(f, 0, 0, &lim) >> 20;
       if (mb && k < sizeof linha - 80)
         k += (size_t)snprintf(linha + k, sizeof linha - k, " %s=%llu", e->d_name, (unsigned long long)mb);
     }
     closedir(d);
   }
   outros[0] = "/tmp"; outros[1] = getenv("TMPDIR"); outros[2] = "/opt/usr/home/owner/share";
-  for (i = 0; i < 3; i++) {
+  for (i = 0; i < 3 && !lim.estourou; i++) {
     uint64_t mb;
     if (!outros[i] || !outros[i][0]) continue;
-    mb = percorrer(outros[i], 0, 0) >> 20;
+    mb = percorrerL(outros[i], 0, 0, &lim) >> 20;
     if (mb && k < sizeof linha - 80)
       k += (size_t)snprintf(linha + k, sizeof linha - k, " %s=%llu", outros[i], (unsigned long long)mb);
   }
-  printf("[p2p-motor] onde (MB) em %s:%s\n", app, linha[0] ? linha : " nada acima de 1 MB");
+  printf("[p2p-motor] onde (MB) em %s:%s%s\n", app, linha[0] ? linha : " nada acima de 1 MB",
+         lim.estourou ? " (parcial: limite)" : "");
   fflush(stdout);
 }
+#else
+static void ondeFoi(const char *mae) { (void)mae; }   // so a TV Samsung tem sandbox conhecida
+#endif
 
 static int contem(const char *s, const char *agulha) {   // sem strcasestr
   size_t n = strlen(agulha);
@@ -300,7 +329,8 @@ static void *pararFio(void *x) {
   void *m;
   int jv;
   pthread_t v;
-  char tid[65], sid[65], raiz[600];
+  char tid[65], sid[65], raiz[600], mae[600];
+  int inventario;
   double t0 = agora();
   pthread_mutex_lock(&trava);
   // ORDEM 1: ninguem mais usa o ponteiro (o pedido sai em <= 20 ms depois da
@@ -312,6 +342,8 @@ static void *pararFio(void *x) {
   snprintf(tid, sizeof tid, "%s", tidAtual);
   snprintf(sid, sizeof sid, "%s", sidAtual);
   snprintf(raiz, sizeof raiz, "%s", pastaRaiz);
+  snprintf(mae, sizeof mae, "%s", pastaMae);
+  inventario = ondeFoiPendente; ondeFoiPendente = 0;
   prefixoUrl[0] = 0;
   pthread_mutex_unlock(&trava);
   // ORDEM 2: a vigia saiu do laco (vigiaSair foi posto por quem pediu a parada).
@@ -327,6 +359,8 @@ static void *pararFio(void *x) {
     if (tid[0] && o->remover) o->remover(m, tid);
     o->destruir(m);
   }
+  // Escritores parados: inventario (limitado) antes de apagar o cache.
+  if (inventario) ondeFoi(mae);
   // ORDEM 4: so agora a pasta, com nenhum escritor vivo.
   if (raiz[0]) percorrer(raiz, 1, 0);
   pthread_mutex_lock(&trava);
@@ -439,7 +473,7 @@ static void *vigiaFio(void *x) {
       motivo = P2P_ERR_SEM_ESPACO;
     else if (st.ram_usada > ((uint64_t)P2PM_RAM_DURO_MB << 20)) motivo = P2P_ERR_RAM;
 
-    // #202: a cada ~60 s, quem gasta o disco. O livre caindo com a pasta
+    // #297: a cada ~60 s, quem gasta o disco. O livre caindo com a pasta
     // parada aponta para fora do motor.
     if (++volta * vigiaMs >= 60000u) {
       volta = 0;
@@ -452,7 +486,6 @@ static void *vigiaFio(void *x) {
     if (motivo == P2P_ERR_SEM_ESPACO) {
       printf("[p2p-motor] sem espaco: baixado %.0f MB, livre ao subir %.0f MB\n",
              (double)st.baixado / 1048576.0, (double)subida / 1048576.0);
-      ondeFoi(mae);
     }
 
     pthread_mutex_lock(&trava);
@@ -466,6 +499,7 @@ static void *vigiaFio(void *x) {
     pthread_cond_broadcast(&sinal);
     if (motivo && !parando) {
       atomic_store(&motivoParada, motivo);
+      if (motivo == P2P_ERR_SEM_ESPACO) ondeFoiPendente = 1;   // roda no pararFio, sem escritores
       printf("[p2p-motor] vigia: erro %d (disco %.0f/%.0f MB, livre %.0f MB, RAM %.1f MB): parando\n",
              motivo, (double)usado / 1048576.0, (double)duro / 1048576.0,
              (double)livre / 1048576.0, (double)st.ram_usada / 1048576.0);
