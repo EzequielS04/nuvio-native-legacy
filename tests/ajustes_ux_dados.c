@@ -441,7 +441,7 @@ static void reorganizacao202(void) {
 static void autoplay202(const char *dir) {
   // #202: o auto-play do oficial depois do Apoiar. Escopo e regex por PERFIL
   // (o escopo com a chave do oficial na conta); listas e padrao sao acoes.
-  assert(AJ_FONTE_ESCOPO == AJ_PLR_CLASSIF + 1 && AJ_FONTE_REGEX_MODELO == AJ_N - 1);
+  assert(AJ_FONTE_ESCOPO == AJ_PLR_CLASSIF + 1 && AJ_FONTE_REGEX_MODELO == AJ_N - 3);
   assert(!strcmp(CHAVE[AJ_FONTE_ESCOPO], "streamAutoPlaySource") && OPCOES[AJ_FONTE_ESCOPO].n == 3 && valorPadrao[AJ_FONTE_ESCOPO] == 0);
   { char sn[64]; camelParaSnake(CHAVE[AJ_FONTE_ESCOPO], sn, sizeof sn); assert(!strcmp(sn, "stream_auto_play_source")); }
   assert(dePerfil(AJ_FONTE_ESCOPO) && dePerfil(AJ_FONTE_OUTROS) && dePerfil(AJ_FONTE_REGEX));
@@ -536,6 +536,14 @@ int main(void) {
   assert(AJ_TAM_MAX == AJ_RELOGIO_12H + 1 && AJ_TAM_MIN == AJ_FONTE_ESCOPO - 4 && AJ_TAM_MIN == AJ_TAM_MAX + 1);
   assert(!strcmp(CHAVE[AJ_TAM_MAX], "tamanhoMaxLocal") && !strcmp(CHAVE[AJ_TAM_MIN], "tamanhoMinLocal"));
   assert(valorPadrao[AJ_TAM_MAX] == 0 && valorPadrao[AJ_TAM_MIN] == 0 && OPCOES[AJ_TAM_MAX].n == 7 && OPCOES[AJ_TAM_MIN].n == 7);
+  // Espaco da Home: duas NUM locais depois do Apoiar, padrao 100 %, preso em 50..150.
+  assert(AJ_ESPACO_FILEIRAS == AJ_FONTE_REGEX_MODELO + 1 && AJ_ESPACO_TITULOS == AJ_N - 1 && AJ_ESPACO_TITULOS == AJ_ESPACO_FILEIRAS + 1);
+  assert(!strcmp(CHAVE[AJ_ESPACO_FILEIRAS], "espacoFileirasLocal") && !strcmp(CHAVE[AJ_ESPACO_TITULOS], "espacoTitulosLocal"));
+  assert(valorPadrao[AJ_ESPACO_FILEIRAS] == 100 && valorPadrao[AJ_ESPACO_TITULOS] == 100);
+  assert(somenteDesteAparelho(AJ_ESPACO_FILEIRAS) && somenteDesteAparelho(AJ_ESPACO_TITULOS));
+  assert(ajustes_espaco_fileiras() == 1.0f && ajustes_espaco_titulos() == 1.0f);
+  assert(ajustes_espaco_fator(0) == 0.5f && ajustes_espaco_fator(50) == 0.5f && ajustes_espaco_fator(100) == 1.0f);
+  assert(ajustes_espaco_fator(150) == 1.5f && ajustes_espaco_fator(900) == 1.5f && ajustes_espaco_fator(-5) == 0.5f);
   // Apoiar o projeto (apoio.h): acao no fim, sem valor, uma vez na tela.
   assert(AJ_APOIAR == AJ_FONTE_ESCOPO - 3 && AJ_APOIAR == AJ_TAM_MIN + 1 && !strcmp(CHAVE[AJ_APOIAR], "-apoiar") && valorPadrao[AJ_APOIAR] == 0);
   assert(AJ_PLR_CLASSIF == AJ_LEG_FORCADA + 1 && AJ_PLR_CLASSIF == AJ_FONTE_ESCOPO - 1 && !strcmp(CHAVE[AJ_PLR_CLASSIF], "classifPlayerLocal") && valorPadrao[AJ_PLR_CLASSIF] == 0);

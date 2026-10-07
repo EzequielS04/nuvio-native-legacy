@@ -178,7 +178,7 @@ static int ajCenaSecao(int op) {
   switch (op) {
     case AJ_LANDSCAPE: case AJ_HERO: case AJ_HERO_CHEIO: case AJ_HERO_CATALOGOS: case AJ_HERO_TRANSICAO:
       return AJC_HOME_ESTILO;
-    case AJ_FIL_ORDEM: case AJ_FIL_LIMITE: case AJ_ITENS_FILEIRA: case AJ_OCULTAR_NLANC: case AJ_NOTAS_HOME:
+    case AJ_FIL_ORDEM: case AJ_FIL_LIMITE: case AJ_ITENS_FILEIRA: case AJ_ESPACO_FILEIRAS: case AJ_ESPACO_TITULOS: case AJ_OCULTAR_NLANC: case AJ_NOTAS_HOME:
     case AJ_ROTULOS: case AJ_NOME_ADDON: case AJ_SUFIXO_TIPO: case AJ_SELO_VISTO:
       return AJC_HOME_FILEIRAS;
     case AJ_RAIL_MODERNA: case AJ_RAIL: case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA:
@@ -377,7 +377,7 @@ static void ajcHomeFileiras(int A) {
   ajCenaArte(ajArte(AJA_FUNDO, A), (GfxRect){ ajc.x, ajc.y, 640 * ajc.s, ajc.h }, 22, 0.72f);
   for (i = 0; i < fil_n() && n < 3; i++) if (fil_estado(i) != FIL_FORA) ordem[n++] = i;
   for (i = 0; i < 3; i++) {
-    float by = 22 + i * 112, lx = 70, al = i == 2 && lim <= 2 ? 0.3f : 1.0f;
+    float by = 22 + i * (102 + 10 * ajustes_espaco_fileiras()), lx = 70, al = i == 2 && lim <= 2 ? 0.3f : 1.0f;
     const char *t = i < n ? (fil_titulo(ordem[i])[0] ? fil_titulo(ordem[i]) : fil_chave(ordem[i])) : ajTituloN(i);
     char num[4];
     snprintf(num, sizeof num, "%d", i + 1);
@@ -391,7 +391,8 @@ static void ajcHomeFileiras(int A) {
       CVIDA(lx, by + 2, w2, 18, 9, al); ajcTxt("Filmes", 10, 0, lx + 8, by + 5, 0, 0.7f * al);
       if (i == 0) ajcFoco(AJ_SUFIXO_TIPO, lx, by + 2, w2, 18, 9); }
     for (k = 0; k < 7; k++) {
-      float px = 36 + k * 82, py = by + 30;
+      float px = 36 + k * (70 + 12 * ajustes_espaco_titulos()), py = by + 30;
+      if (px + 70 > 604) break;
       const char *c = i < n && k < 3 ? ajPosterFileira(ordem[i], k) : ajArte(AJA_POSTER, AJ_POS[(i * 5 + k) % 14]);
       int naoLanc = i == 0 && k == 4;
       if (naoLanc && lig(AJ_OCULTAR_NLANC)) { gfx_anel(CR(px, py, 70, 72), 8.0f / 72, 1.5f * ajc.s, 1, 1, 1, 0.25f * al); }

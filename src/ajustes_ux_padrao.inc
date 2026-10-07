@@ -235,3 +235,4 @@
   0, /* use the others when the allowed have none: Ligado (V_LIGA: 0 = Ligado) */
   0, /* regex match: Desligada */
   0, 0, /* regex pattern (action) and preset mirror (Personalizado) */
+  100, 100, /* Home spacing: between rows and between titles, 100% = as measured */
