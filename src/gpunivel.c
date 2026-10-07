@@ -297,7 +297,16 @@ void gpun_preferencia(int p) {
 #if (defined(NV_TPK) || defined(NV_ANDROID) || defined(NV_WEBOS)) && !defined(NV_TPK_NIVEL_FORCADO)
   prefFixa = p == 1 || p == 2;
   if (p == 1) { adaptativo = 0; aplicar(0, "ajuste: efeitos completos"); return; }
-  if (p == 2) { adaptativo = 0; aplicar(1, "ajuste: efeitos leves"); return; }
+  if (p == 2) {
+    // Utgard (Mali-400/450/470, registro 1V5YJY, UA40N5300): level 1 still
+    // ran 9-17 fps with swap 60-230 ms and a 4-6x fill. "Leves" there means
+    // the minimal level, otherwise the setting pins the TV below what the
+    // adaptive measure had already learned (saved level 2).
+    adaptativo = 0;
+    if (strstr(renderer, "Mali-4")) aplicar(2, "ajuste: efeitos leves (Mali-4xx: minimos)");
+    else aplicar(1, "ajuste: efeitos leves");
+    return;
+  }
   adaptativo = 1; decidido = 0; origem = "adaptativo"; nivel = 0;
   ler();
   aplicar(nivel, "ajuste: automatico");
