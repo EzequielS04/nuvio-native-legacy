@@ -340,7 +340,9 @@ static GfxRect aj2MenuR(void) {
   (void)n;   // 2.0.2: o indice e a grade; o menu so aparece como trilho
   return (GfxRect){ aj2X0(), AJ2_TOPO, AJ2_RAIL_W, NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM };
 }
-static int aj2TemInsp(void) { return ajustes_tamanho_ajustes() < 1.19f; }
+// #339: "Lista" tira a coluna da arte: a lista toma a largura e a explicacao
+// da opcao em foco abre embaixo da linha (o caminho de 120%, que ja era assim).
+static int aj2TemInsp(void) { return ajustes_tamanho_ajustes() < 1.19f && !ajustes_layout_lista(); }
 // A LARGURA DA LISTA DA V2 (1000 em 80-100%). Nao desenha mais nada: e a regua
 // de ajSegmentada (quem e segmentado e quem abre editor), mantida para que a
 // A3 nao mude a navegacao de nenhuma opcao.
@@ -358,7 +360,7 @@ static float aj2ListaWRef(void) {
 static float aj2ArteX(void) { return aj2X0(); }
 static float aj2ArteW(void) { return (NV_VTELA_W - AJ2_MARGEM - aj2ArteX()) * 0.44f; }
 static GfxRect aj2ListaR(void) {
-  float x = aj2ArteX() + aj2ArteW() + 36.0f;
+  float x = ajustes_layout_lista() ? aj2ArteX() : aj2ArteX() + aj2ArteW() + 36.0f;
   return (GfxRect){ x, AJ2_CORPO, NV_VTELA_W - AJ2_MARGEM - x, NV_VTELA_H - AJ2_CORPO - AJ2_MARGEM };
 }
 // O "inspetor" da A3 e a coluna da arte (sem ilha).
@@ -431,9 +433,6 @@ static int ajEditandoLinha(int op) {
 #define AJ_REGUA_H (4.0f * AJ_REGUA_FILA + 4.0f)
 #define AJ2_FUNDO_BAIXO 237.75f   // 4 + cartao (10 + 150,75 + 10 + 29 + 10) + 24
 static int aj2FocoNaLista(int i) { return i == focoItem && !focoIndice && uxIndice >= 2; }
-static float aj2AjudaAltura(int op, float w) {
-  return txt_bloco(TXT_V2_28, uxResumo(op), 0, 0, 0, 0, -4000, w, 36.4f, 0, 4);
-}
 // A REGUA EM FILEIRAS: a ordem da TELA (ajustes.c, REGUA_*); o valor gravado
 // continua o indice de V_TEMA. ← → anda na fileira, ↑ ↓ troca de fileira na
 // mesma coluna.
@@ -576,6 +575,46 @@ static float ajBeneficioH(int op) {
   h = txt_bloco(TXT_V3_BEN, uxBeneficio(op), 0, 0, 0, 0, -4000, ajBeneficioLargura(), AJ2_LN_BEN, 0, 2);
   return h < 1.0f ? 0.0f : h > 2 * AJ2_LN_BEN ? 2 * AJ2_LN_BEN : h;
 }
+// SEM INSPETOR (#339 "Lista", ou 120%): o "o que muda" da opcao em foco abre
+// embaixo da propria linha — a ajuda inteira (ate 4 linhas, numa medida de
+// leitura, nao a largura toda) e, quando ha padrao de fabrica, "Recomendado"
+// com o valor e o check no acento, e o custo ao lado.
+#define AJ_AJUDA_META 40.0f
+static float ajAjudaLinhaW(void) { float w = aj2ListaR().w - 36.0f - 44.0f - 80.0f; return w > 1260.0f ? 1260.0f : w; }
+static float ajAjudaLinhaTxtH(int op) {
+  float h = txt_bloco(TXT_V3_BEN, uxResumo(op), 0, 0, 0, 0, -4000, ajAjudaLinhaW(), AJ2_LN_BEN, 0, 4);
+  return h < 1.0f ? 0.0f : h > 4 * AJ2_LN_BEN ? 4 * AJ2_LN_BEN : h;
+}
+static float ajAjudaLinhaH(int op) {
+  return ajAjudaLinhaTxtH(op) + (uxTemPadrao(op) && op != AJ_TEMA ? 10.0f + AJ_AJUDA_META : 0.0f);
+}
+static int ajCusto(int op);
+static const char *ajCustoTexto(int c);
+static void ajAjudaLinhaDesenhar(int op, float x, float y, float a) {
+  float h = ajAjudaLinhaTxtH(op);
+  txt_bloco(TXT_V3_BEN, uxResumo(op), 243, 242, 239, x, y, ajAjudaLinhaW(), AJ2_LN_BEN, 0.70f * a, 4);
+  if (uxTemPadrao(op) && op != AJ_TEMA) {
+    char padrao[160];
+    float yc = y + h + 10.0f + AJ_AJUDA_META * 0.5f, ar, ag, ab, xx = x;
+    TxtLinha lk = ajTxt(TXT_V2_24, "Recomendado"), lv;
+    uxValorTexto(op, uxValorPadrao(op), padrao, sizeof padrao);
+    lv = ajTxtC(TXT_V2_24, padrao, ajAjudaLinhaW() - lk.w - 60.0f);
+    ajustes_acento_marca(&ar, &ag, &ab);
+    gfx_icone((GfxRect){ xx, yc - 11.0f, 22, 22 }, uxDiferente(op) ? "aj_star" : "aj_check", ar, ag, ab, 0.9f * a);
+    xx += 32.0f;
+    txt_desenhar_alpha(lk, xx, yc - lk.h * 0.5f, 0.45f * a);
+    xx += lk.w + 10.0f;
+    txt_desenhar_alpha(lv, xx, yc - lv.h * 0.5f, 0.85f * a);
+    xx += lv.w;
+    if (ajCusto(op)) {
+      TxtLinha lc = ajTxtC(TXT_V2_24, ajCustoTexto(ajCusto(op)), ajAjudaLinhaW() - (xx - x) - 40.0f);
+      if (lc.w > 40.0f) {
+        gfx_cor((GfxRect){ xx + 16.0f, yc - 2.0f, 4, 4 }, 0.5f, 1, 1, 1, 0.35f * a);
+        txt_desenhar_alpha(lc, xx + 32.0f, yc - lc.h * 0.5f, 0.55f * a);
+      }
+    }
+  }
+}
 // --- 2.0.3 (M3): FILHAS RECUADAS, DEPENDENCIA NA LINHA, CUSTO E SELOS ---------------
 // A linha que depende da de cima (ou que so vale quando ela vale) fica recuada
 // com um canto "└", como no mockup v3. Alem do requisito (uxRequisito), umas
@@ -678,7 +717,6 @@ static const char *ajSelo(int op) {
 static float ajLinhaH(int i) {
   int op = TELA[i].op;
   float h = AJ2_LN_H, baixo = 0;
-  GfxRect fr = aj2ListaR();
   // 2.0.3: a linha dependente diz na propria linha o que falta ("Precisa ligar
   // X — OK liga as duas"), no lugar da modal.
   if (op == AJ_GUIA) h = AJ2_LN_SUB;
@@ -687,9 +725,8 @@ static float ajLinhaH(int i) {
   // previa viva e as medidas da cor (aj2PreviaCor).
   if (op == AJ_TEMA && ajEditandoLinha(op) && aj2FocoNaLista(i)) baixo += AJ_REGUA_H;
   if (op == AJ_FUNDO && aj2FocoNaLista(i)) baixo += AJ2_FUNDO_BAIXO;
-  if (!aj2TemInsp() && aj2FocoNaLista(i) && op != AJ_FUNDO && !(op == AJ_TEMA && ajEditandoLinha(op)))
-    baixo += aj2AjudaAltura(op, fr.w - 44.0f - 60.0f) + 20.0f;
   if (baixo > 0) return AJ2_LN_LINHA1 + 20.0f + baixo;
+  if (!aj2TemInsp() && aj2FocoNaLista(i) && op != AJ_GUIA) return AJ2_LN_LINHA1 - 6.0f + ajAjudaLinhaH(op) + 18.0f;
   // 2.0.3: a linha em foco ganha a frase de beneficio embaixo do rotulo.
   if (h == AJ2_LN_H && aj2TemInsp() && aj2FocoNaLista(i) && op != AJ_GUIA) {
     float b = ajBeneficioH(op);
@@ -1043,7 +1080,8 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
   if (aTx <= 0.004f) return;
   // A3: o segmentado da opcao em foco fica sobre a arte (ajDesenharInspetor);
   // a linha mostra o valor, como as outras escolhas.
-  if (tipo == AJL_TOG && ed) {
+  // Sem a arte (#339 "Lista", 120%), o segmentado da escolha em foco fica na linha.
+  if ((tipo == AJL_TOG && ed) || (!aj2TemInsp() && ajSegmentada(op) && !desligada && (ed || emFoco))) {
     int n = nValores(op);
     if (n > 3) n = 3;
     cauda = aj2Seg(op, n, ed ? uxPendente : valor[op], ed, xDir, yc, aTx);
@@ -1195,7 +1233,7 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
     float by = y + AJ2_LN_LINHA1 + 20.0f;
     if (op == AJ_FUNDO && aj2FocoNaLista(item)) aj2CartoesFundo(ln, by, aTx);
     else if (!aj2TemInsp() && aj2FocoNaLista(item) && !(op == AJ_TEMA && ed))
-      ajBloco(TXT_V2_24, uxResumo(op), ln.x + 22.0f, by, ln.w - 44.0f, 32.0f, 0.62f * aTx, 4);
+      ajAjudaLinhaDesenhar(op, ln.x + 22.0f + recuo, y + AJ2_LN_LINHA1 - 8.0f, aTx);
   }
   // A REGUA DA COR DE DESTAQUE (editando): claros, profundos, dinamicas, Textura.
   if (op == AJ_TEMA && abre && ed) aj2Regua(ln, y + AJ2_LN_LINHA1 + 20.0f, a);

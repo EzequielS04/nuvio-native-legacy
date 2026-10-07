@@ -244,6 +244,23 @@ int main(void) {
     uxTopo = AJ2_T_PERFIL; key(SDLK_RETURN); assert(!focoIndice && focoOp == AJ_PERFIL_ATIVO);
     sair = 0; focoIndice = 1; uxTopo = AJ2_T_TOUR; key(SDLK_LEFT); assert(sair); sair = 0;
     uxIndice = 1; focoIndice = 1; uxTopo = -1; }
+  // #339 "Lista": one column. Down walks every category across the groups, Up on
+  // the first climbs to the tour, Down from either discovery card lands on the
+  // first category, Left leaves, Right stays.
+  { valor[AJ_LAYOUT_AJUSTES] = 1; assert(ajustes_layout_lista());
+    focoIndice = 1; uxTopo = AJ2_T_TOUR;
+    key(SDLK_DOWN); assert(uxTopo < 0 && uxIndice == 2);
+    { int k; for (k = 1; k < nSecoes; k++) { key(SDLK_DOWN); assert(uxIndice == 2 + k && focoIndice); } }
+    key(SDLK_DOWN); assert(uxIndice == 2 + nSecoes - 1);                         // last stays
+    key(SDLK_RIGHT); assert(uxIndice == 2 + nSecoes - 1 && focoIndice && uxTopo < 0);
+    { int k; for (k = nSecoes - 1; k > 0; k--) key(SDLK_UP); } assert(uxIndice == 2);
+    key(SDLK_UP); assert(uxTopo == AJ2_T_TOUR);
+    uxTopo = AJ2_T_RESOLVER; key(SDLK_DOWN); assert(uxTopo < 0 && uxIndice == 2);   // one column: the first
+    key(SDLK_RETURN); assert(!focoIndice && secAtual == 0);
+    key(SDLK_LEFT); assert(focoIndice && uxIndice == 2);
+    sair = 0; key(SDLK_LEFT); assert(sair); sair = 0;
+    valor[AJ_LAYOUT_AJUSTES] = 0;
+    uxIndice = 1; focoIndice = 1; uxTopo = -1; }
   // 2.0.3: as listas de addons/plugins voltam para a linha de onde sairam
   // (Fontes e addons), e nao para o indice; Voltar/ESC/Esquerda saem delas.
   { SDL_Event ev = { 0 };

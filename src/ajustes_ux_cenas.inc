@@ -492,6 +492,44 @@ static void ajcCenaTexto(int op) {
   ajc_fim();
   gfx_recorte(ajc_x(0), ajc_y(0), ajc_px(640), ajc_px(360));
 }
+// #339: o arranjo dos Ajustes. Painel = a arte a esquerda e a lista a direita;
+// Lista = as linhas uma embaixo da outra na largura toda, a do foco aberta com
+// a explicacao embaixo.
+static void ajcCenaLayoutAjustes(int op) {
+  int lista = valor[op] == 1, i;
+  float k = ajc_onda(3.0f);
+  ajc_tv(60, 40, 520, 290, 1);
+  gfx_recorte(ajc_x(66), ajc_y(46), ajc_px(508), ajc_px(278));
+  ajc_ret(66, 46, 508, 278, 10, 0.06f, 0.065f, 0.08f, 1);
+  ajc_neutro(82, 60, 476, 34, 9, 0.9f);              // o cabecalho da pagina
+  ajc_acento_ret(92, 68, 18, 18, 5, 1);
+  ajc_barra(120, 72, 90, 0.8f);
+  if (!lista) {
+    ajc_neutro(82, 104, 196, 206, 12, 0.7f);         // a arte da opcao
+    ajc_barra(96, 270, 120, 0.6f); ajc_barra(96, 286, 160, 0.3f);
+    ajc_neutro(290, 104, 268, 206, 12, 0.9f);
+    for (i = 0; i < 6; i++) {
+      float y = 116 + i * 31;
+      if (i == 2) ajc_foco(298, y - 4, 252, 26, 7, 1);
+      ajc_barra(308, y + 6, 110 + (i % 3) * 18, i == 2 ? 0.95f : 0.55f);
+      ajc_ret(510, y + 3, 30, 10, 5, 1, 1, 1, i == 2 ? 0.8f : 0.3f);
+    }
+  } else {
+    float y = 106;
+    ajc_neutro(82, 104, 476, 206, 12, 0.9f);
+    for (i = 0; i < 5; i++) {
+      float h = i == 1 ? 60 + 4 * k : 30;
+      if (i == 1) ajc_foco(90, y, 460, h, 8, 1);
+      ajc_barra(104, y + 11, 150 + (i % 3) * 30, i == 1 ? 0.95f : 0.55f);
+      ajc_ret(500, y + 9, 40, 10, 5, 1, 1, 1, i == 1 ? 0.8f : 0.3f);
+      if (i == 1) { ajc_barra(104, y + 32, 330, 0.4f); ajc_barra(104, y + 44, 240, 0.3f); }
+      else if (i != 0) ajc_ret(100, y + h + 1, 440, 1, 0, 1, 1, 1, 0.07f);
+      y += h + 4;
+    }
+  }
+  ajc_fim();
+  gfx_recorte(ajc_x(0), ajc_y(0), ajc_px(640), ajc_px(360));
+}
 // Movimento, relogio e descanso.
 static void ajcCenaMovimento(int op) {
   if (op == AJ_ANIM) {   // completas: o foco desliza; reduzidas: pula
@@ -814,6 +852,7 @@ static void ajcCenaOpcao(int sec, int op) {
     case AJ_VIDRO: case AJ_VIDRO_CONTORNO: case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO: ajcCenaVidro(op); return;
     case AJ_LOGO_APP: case AJ_ABERTURA: case AJ_ICONE_APP: ajcCenaMarca(op); return;
     case AJ_FONTE_UI: case AJ_TAMANHO_UI: case AJ_TAMANHO_AJUSTES: ajcCenaTexto(op); return;
+    case AJ_LAYOUT_AJUSTES: ajcCenaLayoutAjustes(op); return;
     case AJ_ANIM: case AJ_RELOGIO: case AJ_RELOGIO_12H: case AJ_ESMAECER: case AJ_DESCANSO_ESTILO: case AJ_DESCANSO_FONTE:
       ajcCenaMovimento(op); return;
     case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: case AJ_FONTE_HDR: ajcCenaQualidade(op); return;

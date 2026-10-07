@@ -73,6 +73,7 @@ extern int ajustes_teste_familia_previa(int op);
 extern void ajustes_teste_fonte_interface(int familia);
 extern void ajustes_teste_tema(int tema, int vidro);
 extern void ajustes_teste_vidro_env(void);
+extern void ajustes_teste_layout(int lista);
 extern int ajustes_teste_quadro(const char *id);
 static int quadrosCaptura = 60;
 
@@ -224,6 +225,8 @@ int main(int argc, char **argv) {
   if (getenv("NUVIO_SHOT_AJUSTES_ESCALA"))
     ajustes_teste_escala(atoi(getenv("NUVIO_SHOT_AJUSTES_ESCALA")));
   ajustes_teste_vidro_env();   // NUVIO_SHOT_VIDRO_OPAC / _FOSCO
+  // NUVIO_SHOT_LAYOUT=1: Settings as one stacked list (#339).
+  if (getenv("NUVIO_SHOT_LAYOUT")) ajustes_teste_layout(atoi(getenv("NUVIO_SHOT_LAYOUT")));
   // NUVIO_SHOT_TEMA=<indice> (0 branco, 12 Dinamica) e NUVIO_SHOT_VIDRO=1: o
   // foco no acento claro com e sem vidro (#202).
   if (getenv("NUVIO_SHOT_TEMA") || getenv("NUVIO_SHOT_VIDRO"))
@@ -281,6 +284,7 @@ int main(int argc, char **argv) {
         continue;
       }
       if (!ajustes_teste_quadro(id)) { printf("quadro desconhecido: %s\n", id); continue; }
+      if (getenv("NUVIO_SHOT_LAYOUT")) ajustes_teste_layout(atoi(getenv("NUVIO_SHOT_LAYOUT")));
       // NUVIO_SHOT_FONTE=3 (TXT_FAMILIA_*): the interface font the TV uses
       // (Montserrat on the owner's Android TV), so truncation shows like there.
       if (getenv("NUVIO_SHOT_FONTE")) ajustes_teste_fonte_interface(atoi(getenv("NUVIO_SHOT_FONTE")));

@@ -412,6 +412,8 @@ int   ajustes_relogio_12h(void);   // 1 = 12 h com AM/PM (relogio.h)
 float ajustes_tamanho_ui(void);
 // Settings only: 0.8/0.9/1.0, default 0.9; independent of global UI zoom.
 float ajustes_tamanho_ajustes(void);
+// #339: 1 = Settings as a single stacked list (Ajustes › Aparência › Layout dos Ajustes). LOCAL.
+int   ajustes_layout_lista(void);
 int   ajustes_esconder_logo_trailer(void);   // 1 = hide the corner title logo while a trailer plays
 // R4: second subtitle placement and own style (local). junto: 1 = stacked right above the
 // primary at the bottom, 0 = top band. tamanho: percent (60..160), 0 = automatic (90% of the

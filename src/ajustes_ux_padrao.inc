@@ -248,3 +248,4 @@
   0, /* warm connections when a title opens (2.0.2): Ligado */
   0, /* check several sources at once (2.0.2; only sources ready on the debrid): Ligado */
   1, /* prepare the source when a title opens (2.0.2): Desligado */
+  0, /* Settings layout (#339): Painel = the card grid and the art beside the list */
