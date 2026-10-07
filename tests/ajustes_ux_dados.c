@@ -334,12 +334,12 @@ static void artePorSubmenu(void) {
     }
   }
   // A mesma imagem nao pede troca; submenu ou categoria diferente pede.
-  assert(ajCenaChave(AJS_REPRODUCAO, AJ_DV) == ajCenaChave(AJS_REPRODUCAO, AJ_ATMOS));
+  assert(ajCenaChave(AJS_REPRODUCAO, AJ_DV) != ajCenaChave(AJS_REPRODUCAO, AJ_ATMOS));  /* 2.0.2: one generated scene per option */
   assert(ajCenaChave(AJS_REPRODUCAO, AJ_DV) != ajCenaChave(AJS_REPRODUCAO, AJ_PAUSA_OVERLAY));
   // O primeiro bloco tem cena propria (o que ele controla), diferente da
   // visao geral da categoria; cada bloco com cena tem a sua.
   assert(ajCenaChave(AJS_FONTES, AJ_FONTE_MANUAL) != ajCenaChave(AJS_FONTES, -1));
-  assert(ajCenaChave(AJS_FONTES, AJ_FONTE_MANUAL) == ajCenaChave(AJS_FONTES, AJ_FONTE_PRAZO));
+  assert(ajCenaChave(AJS_FONTES, AJ_FONTE_MANUAL) != ajCenaChave(AJS_FONTES, AJ_FONTE_PRAZO));
   assert(ajCenaChave(AJS_FONTES, AJ_ADDONS) != ajCenaChave(AJS_FONTES, AJ_FONTE_MANUAL));
   { int vistoC[AJC_N] = { 0 }, ultimaC = -1, k2;
     for (k2 = 0; k2 < AJ_N_TELA; k2++) {
@@ -351,7 +351,7 @@ static void artePorSubmenu(void) {
       vistoC[c] = 1; ultimaC = c;
     } }
   assert(ajCenaChave(AJS_CONTAS, -1) != ajCenaChave(AJS_CARTAZES, -1));
-  assert(ajCenaChave(AJS_HOME, AJ_CW_LIGADO) == ajCenaChave(AJS_HOME, AJ_CW_ORDEM));
+  assert(ajCenaChave(AJS_HOME, AJ_CW_LIGADO) != ajCenaChave(AJS_HOME, AJ_CW_ORDEM));
 }
 
 // 2.0.2: a reorganizacao dos Ajustes. Categorias pela tarefa (Fontes e addons
