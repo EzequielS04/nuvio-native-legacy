@@ -23,6 +23,7 @@
 #include "atividade.h"
 #include "avisos.h"
 #include "agenda.h"
+#include "agendaui.h"
 #include "recenviar.h"
 #include "pessoas.h"
 #include "catalogo.h"
@@ -383,7 +384,7 @@ static int nAtv;
 // "Abrir a agenda completa". So entram series com data de estreia de hoje em
 // diante; o resto (sem data, encerradas) e assunto da tela Agenda.
 #define SPAG_MAX 24
-#define SPAG_H   SPI_H
+#define SPAG_H   120.0f   // 116 da linha + 4: a mesma da tela Agenda (agendaui)
 #define SPAG_VAZIO_H 150.0f   // o texto de "nada a caminho", antes do botao
 static int agIdx[SPAG_MAX];
 static int nAg;
@@ -1322,22 +1323,11 @@ static float atvAntes(int i) {
 }
 
 static float agAntes(int i) {
-  const AgItem *a, *b;
   if (i < 0 || i >= nAg) return 0.0f;
-  a = agenda_lista(agIdx[i]);
-  if (i == 0) return SP_SECAO_H1;
-  b = agenda_lista(agIdx[i - 1]);
-  return (a && b && strcmp(a->dataProx, b->dataProx)) ? SP_SECAO_H : 0.0f;
-}
-// "Hoje", "Amanhã" ou "Sex 10 outubro": a primeira letra em caixa alta so
-// quando e ASCII (a traducao pode comecar em outro alfabeto).
-static void agRotuloDia(const char *iso, char *dst, size_t tam) {
-  int d = agenda_dias(iso);
-  if (d == 0) snprintf(dst, tam, "%s", i18n("hoje"));
-  else if (d == 1) snprintf(dst, tam, "%s", i18n("amanh\xc3\xa3"));
-  else snprintf(dst, tam, "%s %d %s", i18n(agenda_semana_nome(agenda_semana(iso))),
-                agenda_dia(iso), i18n(agenda_mes_nome(agenda_mes(iso))));
-  if (dst[0] >= 'a' && dst[0] <= 'z') dst[0] = (char)(dst[0] - 32);
+  if (i == 0 || agendaui_painel_grupo_de(agenda_lista(agIdx[i])) !=
+                agendaui_painel_grupo_de(agenda_lista(agIdx[i - 1])))
+    return 55.0f;   // 51 do cabecalho de grupo + 4, como na tela Agenda
+  return 0.0f;
 }
 
 static void reconstruirAgenda(void) {
@@ -4210,46 +4200,6 @@ static void desenhaAtvLinha(int i, float dx, float y, float a, Uint32 agora) {
     if (linha[0]) txt_desenhar_alpha(txtIlha(TXT_ILHA_HORA_L, linha, larg), tx, ty, a * 0.38f); }
 }
 
-// UMA LINHA DA AGENDA: titulo da serie, "T1E3 · nome do episodio", quando sai
-// ("amanha", "em 3 dias") e a rede, e o cartaz a direita. Os mesmos dados da
-// tela Agenda (agenda.h): nada de pedido novo, e campo vazio some da linha.
-#define SPAG_CAP_W 56.0f
-#define SPAG_CAP_H 84.0f
-static void desenhaAgLinha(int i, float dx, float y, float a) {
-  const AgItem *it = agenda_lista(agIdx[i]);
-  float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f, v = focoVisual(f);
-  float tx = SP_X + dx + SP_PAD;
-  float larg = SP_X + dx + SP_LINHA_X + SP_LINHA_W - SP_LINHA_PADX - SPAG_CAP_W - 18.0f - tx;
-  char l2[220], l3[120], falta[48], ep[24];
-  float bloco = 29.0f + 4.0f + 23.0f + 4.0f + 18.0f, ty = y + (SPAG_H - bloco) * 0.5f;
-  TxtLinha n, nb;
-  if (!it) return;
-  { GfxRect r = linhaIlhaRet(dx, y, SPAG_H);
-    superficieItem(r, SP_LINHA_RAIO / r.h, f, a); }
-  { GfxRect c = { SP_X + dx + SP_LINHA_X + SP_LINHA_W - SP_LINHA_PADX - SPAG_CAP_W,
-                  y + (SPAG_H - SPAG_CAP_H) * 0.5f, SPAG_CAP_W, SPAG_CAP_H };
-    capaArte(c, it->poster, 10.0f, a); }
-  n = txtIlha(TXT_ILHA_NOME, it->titulo, larg);
-  nb = txt_linha_corta(TXT_ILHA_NOME, it->titulo, 255, 255, 255, 255, larg);
-  txt_desenhar_alpha(n, tx, ty, a * 0.88f * (1.0f - v));
-  txt_desenhar_alpha(nb, tx, ty, a * v);
-  ty += 29.0f + 4.0f;
-  l2[0] = 0;
-  if (it->temporada > 0 && it->episodio > 0) {
-    snprintf(ep, sizeof ep, i18n("T%dE%d"), it->temporada, it->episodio);
-    snprintf(l2, sizeof l2, "%s", ep);
-  }
-  juntar(l2, sizeof l2, it->nomeEp);
-  if (l2[0]) txt_desenhar_alpha(txtIlha(TXT_ILHA_SUB, l2, larg), tx, ty, a * 0.62f);
-  ty += 23.0f + 4.0f;
-  // O cabecalho do dia ja diz "Hoje"/"Amanha"; so as datas longe levam a contagem.
-  agenda_falta(it->dataProx, falta, sizeof falta);
-  if (agenda_dias(it->dataProx) <= 1) falta[0] = 0;
-  snprintf(l3, sizeof l3, "%s", falta);
-  juntar(l3, sizeof l3, it->rede);
-  if (l3[0]) txt_desenhar_alpha(txtIlha(TXT_ILHA_HORA, l3, larg), tx, ty, a * 0.38f);
-}
-
 static void desenhaAgendaVazia(float dx, float y, float a) {
   float cx = SP_X + dx + SP_W * 0.5f;
   TxtLinha t1 = txt_linha(TXT_ILHA_NOME, i18n("Nada a caminho"), 243, 242, 239, 255);
@@ -4631,18 +4581,25 @@ static void desenharPainel(Uint32 agora) {
     gfx_recorte(SP_X + x, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
     y = listaTopo() + SP_FOCO_AR - scrollY;
     if (nAg == 0) desenhaAgendaVazia(x, y, a);
-    for (i = 0; i < nAg; i++) {
-      float cab = agAntes(i);
-      if (cab > 0.0f) {
-        if (y + cab >= listaTopo() && y <= SP_LISTA_BASE) {
-          char rot[64];
-          agRotuloDia(agenda_lista(agIdx[i])->dataProx, rot, sizeof rot);
-          desenhaSecao(SP_X + x, y, rot, a, i == 0);
+    // AS PECAS DA TELA AGENDA (agendaui.c): fio do tempo com um ponto por
+    // episodio, cabecalho de grupo (Hoje / Esta semana / Mais tarde), linha com
+    // arte, nome, "Qui 17 · T2 E4 · rede" e o sino. Mesmo codigo, uma lista so.
+    if (nAg > 0) {
+      float lsX = SP_X + x + SP_LINHA_X;
+      agendaui_painel_fio(lsX, listaTopo(), SP_LISTA_BASE - listaTopo(), y + 10.0f,
+                          y + topoDe(nAg) - 10.0f - 10.0f);
+      for (i = 0; i < nAg; i++) {
+        float cab = agAntes(i);
+        if (cab > 0.0f) {
+          if (y + cab >= listaTopo() && y <= SP_LISTA_BASE)
+            agendaui_painel_grupo(lsX, SP_LINHA_W, agendaui_painel_grupo_de(agenda_lista(agIdx[i])), y);
+          y += cab;
         }
-        y += cab;
+        if (y + SPAG_H >= listaTopo() && y <= SP_LISTA_BASE)
+          agendaui_painel_linha(lsX, SP_LINHA_W, agenda_lista(agIdx[i]), y,
+                                (i < SP_MAX) ? focoVisual(animFoco[i]) : 0.0f);
+        y += SPAG_H;
       }
-      if (y + SPAG_H >= listaTopo() && y <= SP_LISTA_BASE) desenhaAgLinha(i, x, y, a);
-      y += SPAG_H;
     }
     y = listaTopo() + SP_FOCO_AR - scrollY + topoDe(nAg);
     if (y + SPS_H_ACAO >= listaTopo() && y <= SP_LISTA_BASE)

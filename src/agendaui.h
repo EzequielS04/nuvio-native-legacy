@@ -12,6 +12,7 @@
 #include <SDL2/SDL.h>
 #include "gfx.h"
 #include "text.h"
+#include "agenda.h"
 
 int  agendaui_iniciar(void);
 void agendaui_evento(const SDL_Event *e);
@@ -103,4 +104,13 @@ int agendaui_sinopse(TxtEstilo estilo, const char *s, float x, float y,
 int agendaui_sinopse_linhas(TxtEstilo estilo, const char *s, float larg,
                             int maxLinhas, int r, int g, int b);
 
+// A lista C1 desta tela, desenhada pelo painel Social (aba Agenda) com as mesmas
+// pecas: linha (com o ponto no fio), cabecalho de grupo e o fio. Unidade = pixel
+// de 1920x1080. A linha do painel desenha o proprio realce de foco (`f` 0..1).
+float agendaui_painel_linha_h(void);
+float agendaui_painel_grupo_h(void);
+int   agendaui_painel_grupo_de(const AgItem *it);
+void  agendaui_painel_grupo(float lsX, float lsW, int g, float y);
+void  agendaui_painel_linha(float lsX, float lsW, const AgItem *it, float y, float f);
+void  agendaui_painel_fio(float lsX, float clipY, float clipH, float y0, float y1);
 #endif

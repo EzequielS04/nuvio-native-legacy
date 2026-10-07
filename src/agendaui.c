@@ -185,7 +185,11 @@
 // 1080/s, na medida, no evento e no desenho, e e so o desenho publico que liga
 // a escala (AG_ESC_INI/FIM), como escala.h manda.
 #define AG_ESCALA_MIN 1.2f
-static float agEscala(void) { return escala_min(AG_ESCALA_MIN); }
+// Escala forcada so enquanto o painel Social desenha a lista da Agenda com as
+// MESMAS pecas desta tela (agendaui_painel_*): ali a unidade ja e o pixel da
+// tela virtual do painel, e P() tem de ser a identidade.
+static float escForcada;
+static float agEscala(void) { return escForcada > 0.0f ? escForcada : escala_min(AG_ESCALA_MIN); }
 #define AG_ESC_INI() ESCALA_MIN_INI(AG_ESCALA_MIN)
 #define AG_ESC_FIM() ESCALA_MIN_FIM()
 #undef NV_TELA_W
@@ -2568,4 +2572,40 @@ void agendaui_desenhar(Uint32 agora) {
   AG_ESC_INI();
   desenharNaEscala(agora);
   AG_ESC_FIM();
+}
+
+
+// --- A LISTA DA AGENDA NO PAINEL SOCIAL ---------------------------------------
+//
+// A aba Agenda do painel desenha EXATAMENTE as pecas da lista C1 desta tela (a
+// linha, o cabecalho de grupo, o fio e o ponto), por estas portas, para que as
+// duas fiquem iguais por construcao. O painel mede em pixel de 1920x1080, entao
+// a escala vale 1. `lsX`/`lsW` sao a esquerda e a largura da lista.
+static AgC1 lPainel(float lsX, float lsW, float clipY, float clipH) {
+  AgC1 L;
+  memset(&L, 0, sizeof L);
+  L.lsX = lsX; L.lsW = lsW; L.lsY = clipY; L.lsH = clipH;
+  return L;
+}
+float agendaui_painel_linha_h(void)  { return AG_ROW_H + AG_GAP; }
+float agendaui_painel_grupo_h(void)  { return AG_GRP_H + AG_GAP; }
+int   agendaui_painel_grupo_de(const AgItem *it) { return grupoDe(it); }
+void agendaui_painel_grupo(float lsX, float lsW, int g, float y) {
+  AgC1 L = lPainel(lsX, lsW, 0, 0);
+  escForcada = 1.0f;
+  grupoC1(&L, g, 0, y);
+  escForcada = 0.0f;
+}
+void agendaui_painel_linha(float lsX, float lsW, const AgItem *it, float y, float f) {
+  AgC1 L = lPainel(lsX, lsW, 0, 0);
+  escForcada = 1.0f;
+  linhaC1(&L, it, y, f);
+  pontoC1(lsX + 18.0f, y + AG_ROW_H * 0.5f, f);
+  escForcada = 0.0f;
+}
+void agendaui_painel_fio(float lsX, float clipY, float clipH, float y0, float y1) {
+  AgC1 L = lPainel(lsX, 0, clipY, clipH);
+  escForcada = 1.0f;
+  fioC1(&L, y0, y1);
+  escForcada = 0.0f;
 }
