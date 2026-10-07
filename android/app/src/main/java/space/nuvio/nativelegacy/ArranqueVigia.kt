@@ -30,7 +30,7 @@ class ArranqueVigia(private val act: NuvioActivity) {
     companion object {
         const val ARRANQUE_MS = 25_000L
         const val PARADO_MS = 30_000L
-        const val VOLTAR_PARADO_MS = 4_000L
+        const val VOLTAR_PARADO_MS = 5_000L
         private const val TAG = "Nuvio"
     }
 
@@ -55,7 +55,7 @@ class ArranqueVigia(private val act: NuvioActivity) {
         }
     }
 
-    fun iniciar() { h.postDelayed(tique, 1000) }
+    fun iniciar() { if (!desligado) h.postDelayed(tique, 1000) }
     fun parar() { h.removeCallbacksAndMessages(null); dialogo?.dismiss(); dialogo = null }
     fun frente(sim: Boolean) {
         naFrente = sim
@@ -69,6 +69,9 @@ class ArranqueVigia(private val act: NuvioActivity) {
     private fun verificar() {
         val agora = SystemClock.elapsedRealtime()
         val q = quadros()
+        // Um quadro apresentado prova que o app abriu: o vigia se desliga para
+        // sempre (falso positivo na TCL: o seletor de perfil ja estava na tela).
+        if (q > 0 || etapa() == "pronto") { desligar(); return }
         if (q != ultQuadros) { ultQuadros = q; ultMudou = agora }
         if (dialogo != null || !naFrente || agora < adiadoAte) return
         val travou = if (q <= 0) agora - maxOf(nascido, naFrenteDesde) >= ARRANQUE_MS
@@ -76,13 +79,19 @@ class ArranqueVigia(private val act: NuvioActivity) {
         if (travou) mostrar(if (q <= 0) "sem-quadro" else "laco-parado")
     }
 
-    // Voltar: true = o vigia cuidou (o C nao esta respondendo).
+    private var desligado = false
+    private fun desligar() {
+        desligado = true
+        h.removeCallbacksAndMessages(null)
+    }
+
+    // Voltar: true = o vigia cuidou (o C nao esta respondendo). So com ZERO
+    // quadros apresentados e mais de VOLTAR_PARADO_MS desde o inicio do processo.
     fun voltar(): Boolean {
+        if (desligado) return false
         val agora = SystemClock.elapsedRealtime()
-        val q = quadros()
-        if (q != ultQuadros) { ultQuadros = q; ultMudou = agora }
-        val parado = q <= 0 || agora - ultMudou >= VOLTAR_PARADO_MS
-        if (!parado) return false
+        if (quadros() > 0 || etapa() == "pronto") { desligar(); return false }
+        if (agora - nascido < VOLTAR_PARADO_MS) return false
         if (dialogo == null) mostrar("voltar")
         return true
     }

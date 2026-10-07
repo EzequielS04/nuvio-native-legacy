@@ -1668,6 +1668,9 @@ int main(int argc, char **argv) {
     gputempo_quadro_fim();
     t0 = NV_T0();
     SDL_GL_SwapWindow(win);
+#ifdef NV_ANDROID
+    android_quadro();   // todo quadro apresentado, de qualquer tela (vigia #266)
+#endif
 #ifdef __EMSCRIPTEN__
     { Uint64 c0 = SDL_GetPerformanceCounter();
       double c = (double)(c0 - fimCeder) * 1000.0 / perFreq, fora;
@@ -1690,16 +1693,13 @@ int main(int argc, char **argv) {
     // de 3 s, entao aquilo carimbaria "primeiro quadro" tres vezes por minuto.
     { static int jaCarimbou;
       if (!jaCarimbou) { jaCarimbou = 1; nvPrimeiroQuadroFeito = 1; marco("primeiro quadro na tela");
-        NV_ETAPA("laco");
+        NV_ETAPA("pronto");
 #ifdef __EMSCRIPTEN__
         // Chegou: zera o contador de arranques falhados (tizen-shell.html).
         EM_ASM({ try { localStorage.setItem('nv-boot-falhas', '0'); } catch (e) {} });
 #endif
       } }
     quadros++;
-#ifdef NV_ANDROID
-    android_quadro();
-#endif
 
     if (agora - ultRelato >= 3000) {
       int itens, pend, quentes; long bytes, bytesQ;
