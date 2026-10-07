@@ -246,3 +246,4 @@
   0, 0, /* add-on order (action; list lives in fonteregra.c) and use of it: Nao */
   0, /* play while verifying the first auto source (2.0.2): Ligado */
   0, /* warm connections when a title opens (2.0.2): Ligado */
+  1, /* check several sources at once (2.0.2): Desligado */

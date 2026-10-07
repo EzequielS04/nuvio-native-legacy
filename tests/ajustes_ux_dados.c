@@ -598,6 +598,13 @@ int main(void) {
   assert(somenteDesteAparelho(AJ_FONTE_AQUECER) && !dePerfil(AJ_FONTE_AQUECER));
   { int vz = 0, k; for (k = 0; k < AJ_N_TELA; k++) if (TELA[k].tipo == IT_OPC && TELA[k].op == AJ_FONTE_AQUECER) vz++; assert(vz == 1); }
   assert(indiceResultado(AJ_FONTE_AQUECER, ajustes_buscar("aquecer conexoes", resultados, AJ_N)) >= 0);
+  // Check several sources at once: default OFF (a file per source may reach the debrid panel).
+  assert(AJ_FONTE_CONFERIR_VARIAS == AJ_FONTE_ESCOPO + 20 && AJ_FONTE_CONFERIR_VARIAS == AJ_FONTE_AQUECER + 1);
+  assert(!strcmp(CHAVE[AJ_FONTE_CONFERIR_VARIAS], "fonteConferirVariasLocal") && OPCOES[AJ_FONTE_CONFERIR_VARIAS].n == 2);
+  assert(valorPadrao[AJ_FONTE_CONFERIR_VARIAS] == 1 && !ajustes_fonte_conferir_varias());
+  assert(somenteDesteAparelho(AJ_FONTE_CONFERIR_VARIAS) && !dePerfil(AJ_FONTE_CONFERIR_VARIAS));
+  { int vz = 0, k; for (k = 0; k < AJ_N_TELA; k++) if (TELA[k].tipo == IT_OPC && TELA[k].op == AJ_FONTE_CONFERIR_VARIAS) vz++; assert(vz == 1); }
+  assert(indiceResultado(AJ_FONTE_CONFERIR_VARIAS, ajustes_buscar("conferir varias fontes", resultados, AJ_N)) >= 0);
   // #303: "Continuar na escolha de perfil". Local, last, default ON (= today), once on screen, findable.
   assert(AJ_PS_CONTINUAR == AJ_CW_RETIDO_TAMBEM + 1 && AJ_PS_CONTINUAR == AJ_FONTE_ESCOPO + 11);
   assert(!strcmp(CHAVE[AJ_PS_CONTINUAR], "psContinuarLocal") && OPCOES[AJ_PS_CONTINUAR].n == 2 && valorPadrao[AJ_PS_CONTINUAR] == 0 && ajustes_ps_continuar());

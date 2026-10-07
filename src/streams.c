@@ -3,6 +3,7 @@
 #include "ondever.h"
 #include "naovideo.h"
 #include "fonteantecipa.h"
+#include "fonteparalela.h"
 #include "tex_cache.h"
 #include "livetv_regras.h"
 #include "idioma.h"
@@ -16,6 +17,7 @@
 #include <ctype.h>
 #include <strings.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include "rede.h"
 #include "gfx.h"
 #include "text.h"
@@ -977,7 +979,7 @@ static int playlistVazia(const char *url, const char *cabecalhos) {
 // conferida fora da trava. A geracao diz se o indice ainda e da mesma lista;
 // sem ela, a url resolvida de um episodio ia parar na linha de mesmo numero
 // do episodio seguinte.
-typedef struct { unsigned geracao; int abortou; unsigned rodada; int antecipada; } Conferencia;
+typedef struct { unsigned geracao; _Atomic int abortou; unsigned rodada; int antecipada; } Conferencia;
 
 static int resolverUrl(const char *url, const char *cabecalhos, int segundos,
                         char *fim, unsigned tam, char *mime, unsigned mimeTam, long *corpo) {
@@ -1346,6 +1348,21 @@ int stream_primeira_boa(int tentativas) {
   }
   marco("fonte: verificacao inicio");
   tVerif = SDL_GetTicks();
+  // CONFERIR VARIAS AO MESMO TEMPO (opcional, desligado de fabrica): as 3
+  // primeiras da fila juntas, escolhida a primeira que serve NA ORDEM DA FILA
+  // (fonteparalela.h). Troca arquivos extras no painel do debrid por velocidade;
+  // o resto da fila, se nenhuma das 3 servir, segue em serie como sempre.
+  if (ajustes_fonte_conferir_varias() && nf >= 2 && modo == FONTEAUTO_MELHOR) {
+    int kk = nf < 3 ? nf : 3, t1 = 0, t2 = 0;
+    printf("[fonte] conferencia paralela %d\n", kk);
+    fflush(stdout);
+    escolhida = fonteparalela(fila, nf, kk, verificarOuParar, falhouUma, &c, &t1, 20000);
+    tocadas = t1;
+    if (escolhida < 0 && !c.abortou && nf > kk) {
+      escolhida = fonteauto_primeira(fila + kk, nf - kk, verificarOuParar, falhouUma, &c, &t2);
+      tocadas += t2;
+    }
+  } else
   escolhida = fonteauto_primeira(fila, nf, verificarOuParar, falhouUma, &c, &tocadas);
   if (c.abortou) escolhida = -1;
   marco(escolhida >= 0 ? "fonte: verificacao ok" : "fonte: verificacao sem resultado");

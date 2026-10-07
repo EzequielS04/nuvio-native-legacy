@@ -10,7 +10,9 @@ cc -O1 -g -Wall -Wextra -Isrc src/fonteauto.c tests/fonteauto.c -o "${TMPDIR:-/t
 # CONTRATO: a verificacao de filme nao volta a abrir fios. O lote paralelo de
 # 4 fios era a causa dos 6 arquivos no TorBox; quem trouxer o paralelismo de
 # volta por velocidade tem de passar por este teste e pelo comentario de
-# streams.c antes.
+# streams.c antes. (O paralelismo OPCIONAL de 2.0.2, desligado de fabrica, mora em
+# fonteparalela.c e e chamado por stream_primeira_boa atras do ajuste; ver
+# tests/fonteparalela.sh.)
 corpo=$(awk '/^int stream_primeira_boa\(/,/^}/' src/streams.c)
 if [ -z "$corpo" ]; then echo "fonteauto: stream_primeira_boa sumiu de streams.c"; exit 1; fi
 if printf '%s' "$corpo" | grep -q 'pthread_create'; then

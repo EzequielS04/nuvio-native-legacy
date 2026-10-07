@@ -145,6 +145,7 @@ int ajustes_fonte_prazo_ms(void);
 // "Usar os outros se nao houver" (1 = ligado).
 int ajustes_fonte_tocar_conferindo(void);
 int ajustes_fonte_aquecer(void);
+int ajustes_fonte_conferir_varias(void);
 int ajustes_fonte_escopo(void);
 int ajustes_fonte_regex_modo(void);
 // "Usar a ordem" dos add-ons (FR_ORDEM_*); 0 tambem quando nao ha ordem.
