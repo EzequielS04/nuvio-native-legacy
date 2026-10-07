@@ -46,6 +46,9 @@ A visual refresh, a lot more control over playback, and faster starts.
 - **Skip credits** button hides itself after 10 s.
 - **Live TV** reconnects when a channel stops playing (#302).
 - **Samsung Tizen 4 with Mali-400:** the "Light" effects level now drops to minimal (#286).
+- **Home** drops rows of removed or disabled add-ons right away, and they no longer take Home slots (#319).
+- **MStar Android boxes:** no more flicker from the video surface switching, and the remote stays bound to the app (#318).
+- **LG:** startup breadcrumbs and a crash report even before the first frame (#317).
 - Smoother and lighter on slower TVs.
 - Home trailer fade matches the still art (#290), plus fixes for #294, #295 and #289.
 - More audio and video details in the logs on TCL.
