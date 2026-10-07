@@ -43,6 +43,7 @@
 #include "escala.h"
 #include "extras.h"
 #include "perfis.h"
+#include "dados.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -86,8 +87,11 @@
 // ABAS. Elas so existem quando o servico de recomendacoes foi compilado
 // (recomenda_ativo); sem ele o painel e exatamente o que era, sem uma linha a
 // mais de cromo para uma funcao que nao existe naquele pacote.
-#define SP_ABAS_Y      (SP_Y + 136.0f)
-#define SP_ABAS_H        55.0f
+// A FAIXA DE ABAS MORA NA LINHA DO TITULO (pedido do dono, 07/10): o titulo grande
+// diz a aba aberta e as abas, compactas (icone + contagem), ficam a direita dele.
+// Era uma segunda fileira de 55 px abaixo do titulo; a lista subiu esses 77 px.
+#define SP_ABAS_Y      (SP_Y + 60.0f)
+#define SP_ABAS_H        52.0f
 #define SP_ABAS_X       42.0f
 // AR DO FOCO entre o recorte da lista e a primeira linha. A superficie da linha
 // focada comeca no `y` da linha, e a lista comecava exatamente no topo do
@@ -98,7 +102,7 @@
 // da linha focada. O recorte fica 12 px abaixo das abas, e o conteudo nasce
 // em 217 do topo do painel, onde o mockup poe a lista.
 #define SP_FOCO_AR      14.0f
-#define SP_LISTA_Y     (SP_Y + 217.0f - SP_FOCO_AR)
+#define SP_LISTA_Y     (SP_Y + 140.0f - SP_FOCO_AR)
 #define SP_LISTA_BASE  (SP_Y + SP_H - 24.0f)
 // A LINHA DE SALVOS: cartaz 2:3 de 64x96 com 18 px de recuo em cima e
 // embaixo, a mesma altura de ritmo das linhas do feed (capa 52x76 e 114). O
@@ -247,8 +251,11 @@ static int nCont;            // quantas das primeiras linhas sao "Continuar"
 // agrupado por dia, entre Salvos e a antiga Social — que passou a se chamar
 // AMIGOS, porque e isso que ela lista (recomendacoes recebidas, sugestoes e a
 // lista de amigos). O nome interno SP_ABA_SOCIAL ficou: e o mesmo conteudo.
+// AGENDA (07/10): os proximos episodios das series seguidas, do mesmo modulo
+// (agenda.h) da tela Agenda. O id e o numero que vai para o arquivo de abas do
+// perfil: nunca renumerar, so acrescentar.
 enum { SP_ABA_SALVOS = 0, SP_ABA_ATIVIDADE = 1, SP_ABA_SOCIAL = 2, SP_ABA_AVISOS = 3,
-       SP_ABA_N = 4 };
+       SP_ABA_AGENDA = 4, SP_ABA_N = 5 };
 #define SP_FOCO_ABAS (-1)
 static int aba;
 static RecItem recs[REC_MAX];
@@ -372,6 +379,21 @@ static unsigned svRevSocial = ~0u;
 // primeira linha de cada dia. Os rotulos sao montados aqui, uma vez por
 // mudanca do modelo, e nao por quadro.
 static int nAtv;
+// AGENDA: indices em agenda_lista() dos proximos episodios, mais a linha final
+// "Abrir a agenda completa". So entram series com data de estreia de hoje em
+// diante; o resto (sem data, encerradas) e assunto da tela Agenda.
+#define SPAG_MAX 24
+#define SPAG_H   SPI_H
+#define SPAG_VAZIO_H 150.0f   // o texto de "nada a caminho", antes do botao
+static int agIdx[SPAG_MAX];
+static int nAg;
+static int agVer = -1;
+static int temPedidoAgenda;
+// EDITAR ABAS: `editando` troca a lista por uma folha com uma linha por aba
+// (ligar/desligar, subir, descer). `editLin` = linha, `editCol` = botao.
+static int editando, editLin, editCol;
+// O lapis da faixa tem foco proprio (foco == SP_FOCO_ABAS e editLapis).
+static int editLapis;
 static unsigned char atvDia[SV_EVENTOS_MAX];
 static char atvRot[SV_EVENTOS_MAX][32];
 static unsigned atvRev = ~0u;
@@ -511,6 +533,11 @@ int spainel_pediu_perfil(char *id, size_t tam) {
   if (!temPedidoPerfil) return 0;
   temPedidoPerfil = 0;
   if (id && tam) snprintf(id, tam, "%s", pedidoPerfil);
+  return 1;
+}
+int spainel_pediu_agenda(void) {
+  if (!temPedidoAgenda) return 0;
+  temPedidoAgenda = 0;
   return 1;
 }
 int spainel_visivel(void) { return aberto || entrada > 0.002f; }
@@ -914,24 +941,104 @@ static void organizar(void) {
 // 1 quando o pacote tem o servico de recomendacoes. Com 0 nao ha aba, nao ha
 // selo e nao ha uma linha de rede: o dono publica builds sem NUVIO_REC_URL.
 static int temAbas(void) { return 1; }
+// "RECURSOS SOCIAIS" (opcao dos Ajustes que desliga o lado social do app): com
+// ela desligada as abas Atividade e Amigos NAO EXISTEM — somem da faixa e nem
+// aparecem em Editar, para ninguem ligar o que nao funciona. Um unico ponto de
+// decisao; hoje o recurso nao tem chave propria e vale sempre 1.
+static int recursosSociais(void) { return 1; }
 // A Social so existe com o servico; sem ele as abas sao Salvos e Avisos.
-static int temSocial(void) { return recomenda_ativo(); }
+static int temSocial(void) { return recursosSociais() && recomenda_ativo(); }
 // A Atividade existe quando ha de onde ela vir: o servico, ou o Trakt ja ter
 // trazido gente (socialvis.h).
 static int temAtividade(void) {
-  return temSocial() || socialvis_n_eventos() > 0 || socialvis_n_amigos() > 0;
+  return recursosSociais() &&
+         (temSocial() || socialvis_n_eventos() > 0 || socialvis_n_amigos() > 0);
 }
+// A aba PODE existir neste pacote/estado (nao e o que a pessoa escolheu ver).
 static int abaExiste(int a) {
   if (a == SP_ABA_SOCIAL) return temSocial();
   if (a == SP_ABA_ATIVIDADE) return temAtividade();
   return a >= SP_ABA_SALVOS && a < SP_ABA_N;
 }
+
+// AS ABAS DE CADA PERFIL (07/10, "Editar"): quais aparecem e em que ordem,
+// guardado por perfil em salvos-abas-p<N>.txt, uma linha "aba<TAB>id<TAB>0|1"
+// por aba, na ordem da faixa. Id de aba que o arquivo nao conhece (uma versao
+// futura acrescentou uma) entra no fim, ligada; id repetido ou invalido e
+// ignorado. O arquivo e por TV de proposito: perfil e quem decide, nao a conta.
+static int abaOrdem[SP_ABA_N] = { 0, 1, 2, 3, 4 };
+static unsigned char abaLiga[SP_ABA_N] = { 1, 1, 1, 1, 1 };
+static int abaPerfil = -1;
+static const char *abasArquivo(void) {
+  static char nome[40];
+  int p = perfis_ativo();
+  snprintf(nome, sizeof nome, "salvos-abas-p%d.txt", p > 0 ? p : 1);
+  return nome;
+}
+static void abasPadrao(void) {
+  int i;
+  for (i = 0; i < SP_ABA_N; i++) { abaOrdem[i] = i; abaLiga[i] = 1; }
+}
+static void abasCarregar(void) {
+  int p = perfis_ativo(), n = 0, i;
+  int visto[SP_ABA_N] = { 0 };
+  char *b, *linha, *prox;
+  if (p == abaPerfil) return;
+  abaPerfil = p;
+  abasPadrao();
+  b = dados_ler(abasArquivo());
+  if (!b) return;
+  for (linha = b; linha && *linha; linha = prox) {
+    char *fim = strchr(linha, '\n');
+    int id, on;
+    prox = fim ? fim + 1 : NULL;
+    if (fim) *fim = 0;
+    if (sscanf(linha, "aba\t%d\t%d", &id, &on) != 2) continue;
+    if (id < 0 || id >= SP_ABA_N || visto[id]) continue;
+    visto[id] = 1;
+    abaOrdem[n++] = id;
+    abaLiga[id] = on != 0;
+  }
+  for (i = 0; i < SP_ABA_N; i++)
+    if (!visto[i]) { abaOrdem[n++] = i; abaLiga[i] = 1; }
+  free(b);
+}
+static void abasGravar(void) {
+  char b[256];
+  size_t k = (size_t)snprintf(b, sizeof b, "# nuvio salvos-abas v1\n");
+  int i;
+  for (i = 0; i < SP_ABA_N; i++)
+    k += (size_t)snprintf(b + k, sizeof b - k, "aba\t%d\t%d\n", abaOrdem[i], abaLiga[abaOrdem[i]] ? 1 : 0);
+  dados_gravar(abasArquivo(), b);
+}
+// Ligada: existe e a pessoa quer ver.
+static int abaLigada(int a) { return a >= 0 && a < SP_ABA_N && abaExiste(a) && abaLiga[a]; }
+static int algumaLigada(void) {
+  int i;
+  for (i = 0; i < SP_ABA_N; i++) if (abaLigada(i)) return 1;
+  return 0;
+}
+// Na faixa: ligada, a aba aberta (uma notificacao pode abrir uma que a pessoa
+// escondeu, e a faixa nao pode perder a aba em que ela esta) ou, se nada esta
+// ligado (a social caiu e era tudo o que havia), Salvos.
+static int abaNaFaixa(int a) {
+  return abaLigada(a) || (a == aba && abaExiste(a)) || (!algumaLigada() && a == SP_ABA_SALVOS);
+}
+static int abaPos(int a) {
+  int i;
+  for (i = 0; i < SP_ABA_N; i++) if (abaOrdem[i] == a) return i;
+  return 0;
+}
 static int proximaAba(int de, int dir) {
-  int a = de + dir;
-  while (a > SP_ABA_SALVOS && a < SP_ABA_AVISOS && !abaExiste(a)) a += dir;
-  if (a < SP_ABA_SALVOS) return de;
-  if (a > SP_ABA_AVISOS) return de;
-  return a;
+  int i = abaPos(de) + dir;
+  for (; i >= 0 && i < SP_ABA_N; i += dir)
+    if (abaNaFaixa(abaOrdem[i])) return abaOrdem[i];
+  return de;
+}
+static int primeiraAba(void) {
+  int i;
+  for (i = 0; i < SP_ABA_N; i++) if (abaLigada(abaOrdem[i])) return abaOrdem[i];
+  return SP_ABA_SALVOS;
 }
 
 // Quantas linhas a aba corrente desenha. Uma funcao so para as duas, senao a
@@ -947,6 +1054,7 @@ static int nVisiveis(void) {
   if (aba == SP_ABA_SOCIAL) return nSocial;
   if (aba == SP_ABA_AVISOS) return avisos_lista_linhas();   // + "Dispensar todos"
   if (aba == SP_ABA_ATIVIDADE) return nAtv;
+  if (aba == SP_ABA_AGENDA) return nAg + 1;   // + "Abrir a agenda completa"
   return nLinhas;
 }
 
@@ -1210,6 +1318,22 @@ static float atvAntes(int i) {
   return (atvDia[i] != atvDia[i - 1] || strcmp(atvRot[i], atvRot[i - 1])) ? SP_SECAO_H : 0.0f;
 }
 
+static void reconstruirAgenda(void) {
+  int i, n;
+  agenda_montar();
+  n = agenda_n();
+  nAg = 0;
+  for (i = 0; i < n && nAg < SPAG_MAX; i++) {
+    const AgItem *it = agenda_lista(i);
+    int d;
+    if (!it || !it->dataProx[0]) continue;
+    d = agenda_dias(it->dataProx);
+    if (d == AG_SEM_DATA || d < 0) continue;
+    agIdx[nAg++] = i;
+  }
+  agVer = agenda_versao();
+}
+
 static void trocarAba(int nova) {
   if (!temAbas() || nova == aba) return;
   if (aba == SP_ABA_AVISOS) avisos_marcar_lidos();
@@ -1217,6 +1341,8 @@ static void trocarAba(int nova) {
   foco = SP_FOCO_ABAS;
   scrollY = 0.0f; velY = 0.0f;
   memset(animFoco, 0, sizeof animFoco);
+  editLapis = 0;
+  if (aba == SP_ABA_AGENDA) { agenda_atualizar_seguidas(); reconstruirAgenda(); }
   if (aba == SP_ABA_ATIVIDADE) { socialvis_atualizar(); reconstruirAtividade(); }
   if (aba == SP_ABA_SOCIAL) {
     // CONSULTA IMEDIATA ao entrar, para nao mostrar lista velha; e o selo some
@@ -1576,6 +1702,8 @@ void spainel_abrir(void) {
   pop = POP_NADA;
   barraFoco = 0;
   memset(animBarra, 0, sizeof animBarra);
+  abasCarregar();
+  editando = 0; editLapis = 0;
   aba = SP_ABA_SALVOS;
   scrollY = 0.0f; velY = 0.0f;
   memset(animFoco, 0, sizeof animFoco);
@@ -1586,6 +1714,13 @@ void spainel_abrir(void) {
   animSw = -1.0f;
   reconstruir();
   reconstruirSocial();
+  reconstruirAgenda();
+  // A PRIMEIRA ABA DA FAIXA DO PERFIL, nao sempre Salvos.
+  { int primeira = primeiraAba();
+    if (primeira != SP_ABA_SALVOS) {
+      trocarAba(primeira);
+      foco = nVisiveis() > 0 ? 0 : SP_FOCO_ABAS;
+    } }
 }
 
 void spainel_fechar(void) {
@@ -1619,6 +1754,7 @@ static float topoDe(int i) {
     for (k = 0; k < i && k < nAtv; k++) y += atvAntes(k) + SPA_H + SPS_GAP;
     return y + atvAntes(i);
   }
+  if (aba == SP_ABA_AGENDA) return i < nAg ? (float)i * SPAG_H : (nAg > 0 ? (float)nAg * SPAG_H + 10.0f : SPAG_VAZIO_H);
   // Rotulo da primeira secao, sempre; mais o de "Não começados" para quem vem
   // depois dele. Com nCont == 0 nao existe segunda secao — a unica que aparece
   // e "Sua lista", e o segundo termo tem de ser zero para todo mundo.
@@ -2019,6 +2155,62 @@ static int teclaOk(SDL_Keycode k) {
   return k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE;
 }
 
+// --- EDITAR ABAS -----------------------------------------------------------
+//
+// Uma linha por aba que existe agora (a social fora do ar nem aparece), na
+// ordem da faixa. Tres botoes por linha: ligar/desligar (o olho), subir e
+// descer; ← → andam entre eles e OK age. Uma aba tem de ficar ligada, sempre:
+// o olho da ultima nao desliga. Cada mudanca ja grava (por perfil).
+static int editIds(int *ids) {
+  int i, n = 0;
+  for (i = 0; i < SP_ABA_N; i++) if (abaExiste(abaOrdem[i])) ids[n++] = abaOrdem[i];
+  return n;
+}
+static int nLigadas(void) {
+  int i, n = 0;
+  for (i = 0; i < SP_ABA_N; i++) if (abaLigada(i)) n++;
+  return n;
+}
+static void abrirEditar(void) {
+  editando = 1; editLin = 0; editCol = 0; editLapis = 0;
+}
+static void fecharEditar(void) {
+  editando = 0;
+  foco = SP_FOCO_ABAS; editLapis = 1;
+  // Se a aba aberta foi desligada, a faixa vai para uma que sobrou.
+  if (!abaLigada(aba) && algumaLigada()) trocarAba(primeiraAba());
+  editLapis = 1;
+  scrollY = 0.0f; velY = 0.0f;
+}
+static void editarTecla(SDL_Keycode k) {
+  int ids[SP_ABA_N], n = editIds(ids);
+  if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE || k == SDLK_DELETE) {
+    fecharEditar(); return;
+  }
+  if (k == SDLK_UP) { if (editLin > 0) editLin--; if (editLin >= n) editCol = 0; return; }
+  if (k == SDLK_DOWN) { if (editLin < n) editLin++; if (editLin >= n) editCol = 0; return; }
+  if (k == SDLK_LEFT) { if (editCol > 0) editCol--; return; }
+  if (k == SDLK_RIGHT) { if (editLin < n && editCol < 2) editCol++; return; }
+  if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) {
+    int id;
+    if (editLin >= n) { fecharEditar(); return; }
+    id = ids[editLin];
+    if (editCol == 0) {
+      if (abaLiga[id] && nLigadas() <= 1) return;   // a ultima fica
+      abaLiga[id] = !abaLiga[id];
+      abasGravar();
+    } else {
+      int viz = editLin + (editCol == 1 ? -1 : 1);
+      if (viz >= 0 && viz < n) {
+        int pa = abaPos(id), pb = abaPos(ids[viz]), t = abaOrdem[pa];
+        abaOrdem[pa] = abaOrdem[pb]; abaOrdem[pb] = t;
+        editLin = viz;
+        abasGravar();
+      }
+    }
+  }
+}
+
 void spainel_evento(const SDL_Event *e) {
   SDL_Keycode k;
   if (!aberto) return;
@@ -2043,6 +2235,7 @@ void spainel_evento(const SDL_Event *e) {
   }
   if (e->type != SDL_KEYDOWN) return;
   k = e->key.keysym.sym;
+  if (editando) { editarTecla(k); return; }
   // Qualquer outra tecla no meio desfaz o gesto, como na home (observarHold).
   if (!teclaOk(k)) okDesde = 0;
   // Mesmo conjunto de "voltar" que o menu lateral aceita, mais a ESQUERDA: o
@@ -2080,7 +2273,8 @@ void spainel_evento(const SDL_Event *e) {
     if (k == SDLK_RIGHT) return;
   }
   if (k == SDLK_LEFT) {
-    if (temAbas() && foco == SP_FOCO_ABAS && aba != SP_ABA_SALVOS) {
+    if (temAbas() && foco == SP_FOCO_ABAS && editLapis) { editLapis = 0; return; }
+    if (temAbas() && foco == SP_FOCO_ABAS && proximaAba(aba, -1) != aba) {
       trocarAba(proximaAba(aba, -1)); return;
     }
     // Na barra e na grade a esquerda anda; so na primeira coluna ela sai.
@@ -2090,9 +2284,11 @@ void spainel_evento(const SDL_Event *e) {
     spainel_fechar(); return;
   }
   if (k == SDLK_RIGHT) {
+    if (temAbas() && foco == SP_FOCO_ABAS && editLapis) return;
     if (temAbas() && foco == SP_FOCO_ABAS) {
       int p = proximaAba(aba, 1);
-      if (p != aba) trocarAba(p);   // da ultima aba nao ha para onde ir
+      if (p != aba) trocarAba(p);
+      else editLapis = 1;           // da ultima aba o D-pad vai para o lapis (Editar)
     }
     else if (foco == SP_FOCO_BARRA) { if (barraFoco + 1 < nChips()) barraFoco++; }
     else if (aba == SP_ABA_SALVOS && foco >= 0 && foco + 1 < nLinhas &&
@@ -2109,6 +2305,7 @@ void spainel_evento(const SDL_Event *e) {
   }
   if (k == SDLK_DOWN) {
     if (foco == SP_FOCO_ABAS) {
+      editLapis = 0;
       if (temBarra()) { foco = SP_FOCO_BARRA; if (barraFoco >= nChips()) barraFoco = 0; }
       else if (nVisiveis() > 0) foco = 0;
       return;
@@ -2144,7 +2341,8 @@ void spainel_evento(const SDL_Event *e) {
     if (foco == SP_FOCO_BARRA) { if (!e->key.repeat) chipOk(); return; }
     if (foco == SP_FOCO_ABAS) {
       // OK na linha de abas alterna, para quem nao descobriu a seta.
-      { int p = proximaAba(aba, 1); trocarAba(p == aba ? SP_ABA_SALVOS : p); }
+      if (editLapis) { abrirEditar(); return; }
+      { int p = proximaAba(aba, 1); trocarAba(p == aba ? primeiraAba() : p); }
       return;
     }
     if (aba == SP_ABA_AVISOS) {
@@ -2156,6 +2354,18 @@ void spainel_evento(const SDL_Event *e) {
       }
       if (!e->key.repeat && avisos_lista_ok(foco) == 1) spainel_fechar();
       focoAvisosValido();
+      return;
+    }
+    if (aba == SP_ABA_AGENDA) {
+      if (e->key.repeat) return;
+      if (foco >= 0 && foco < nAg) {
+        const AgItem *it = agenda_lista(agIdx[foco]);
+        if (it && it->imdb[0]) {
+          snprintf(pedido, sizeof pedido, "%s", it->imdb);
+          temPedido = 1;
+          aberto = 0;
+        }
+      } else if (foco == nAg) { temPedidoAgenda = 1; aberto = 0; }
       return;
     }
     // ATIVIDADE E AMIGOS: titulo e amigo tem menu (OK longo); o resto decide
@@ -2185,7 +2395,8 @@ void spainel_atualizar(float dt, Uint32 agora) {
   // A barra de "Segure OK" do menu do cartaz, centrada no painel enquanto ele e
   // dono do D-pad; fora dele, no centro da tela como sempre.
   ctx_centro_dica(aberto && (aba == SP_ABA_SALVOS || aba == SP_ABA_ATIVIDADE || aba == SP_ABA_SOCIAL ||
-                             aba == SP_ABA_AVISOS)
+                             aba == SP_ABA_AVISOS ||
+                             aba == SP_ABA_AGENDA)
                   ? SP_X + SP_W * 0.5f : -1.0f);
   reacao_painel_atualizar(dt, agora);
   if (!aberto && reacao_painel_aberta()) reacao_fechar();
@@ -2239,6 +2450,10 @@ void spainel_atualizar(float dt, Uint32 agora) {
   // pessoa respondeu SIM em outra TV e o registro deste aparelho adotou a
   // resposta. Sem ela a pergunta continuaria na tela ja respondida.
   if (aberto && (aba == SP_ABA_SOCIAL || aba == SP_ABA_ATIVIDADE)) socialvis_atualizar();
+  if (aberto && agVer != agenda_versao()) {
+    reconstruirAgenda();
+    if (aba == SP_ABA_AGENDA && foco >= nVisiveis()) foco = nVisiveis() > 0 ? nVisiveis() - 1 : SP_FOCO_ABAS;
+  }
   if (aberto && aba == SP_ABA_ATIVIDADE && atvRev != socialvis_revisao()) {
     reconstruirAtividade();
     if (foco >= nAtv) foco = nAtv > 0 ? nAtv - 1 : SP_FOCO_ABAS;
@@ -2314,6 +2529,7 @@ void spainel_atualizar(float dt, Uint32 agora) {
     // do necessario num interruptor de 104.
     base = topo + (aba == SP_ABA_SOCIAL ? (spsConta(social[foco].tipo) ? SPS_H_CONTAS : socialAlt(foco))
                  : aba == SP_ABA_ATIVIDADE ? SPA_H
+                 : aba == SP_ABA_AGENDA ? (foco < nAg ? SPAG_H : SPS_H_ACAO)
                  : aba == SP_ABA_AVISOS ? avisos_lista_altura_linha(foco, foco)
                  : linhas[foco].lh);
     // A linha aberta (acordeao) cresce para baixo: ela inteira tem de caber.
@@ -2913,17 +3129,20 @@ static void desenhaRecLinha(int linha, int idx, float dx, float y, float a, Uint
 // superficie ja diz.
 #define SP_SEG_PAD   5.0f
 #define SP_SEG_VAO   4.0f
-#define SP_SEG_TXT  20.0f
-#define SP_SEG_NUM   9.0f
+#define SP_SEG_ICO  26.0f   // o icone Lucide da aba
+#define SP_SEG_PX   16.0f   // recuo lateral de cada segmento
+#define SP_SEG_NUM   8.0f
 static const char *rotuloAba(int i) {
   return i == SP_ABA_SALVOS ? "Salvos" : i == SP_ABA_ATIVIDADE ? "Atividade"
-       : i == SP_ABA_SOCIAL ? "Amigos" : "Avisos";
+       : i == SP_ABA_SOCIAL ? "Amigos" : i == SP_ABA_AGENDA ? "Agenda" : "Avisos";
 }
-// A CONTAGEM AO LADO DO ROTULO (".sg .n" do mockup: "Salvos 12", "Amigos 4",
-// "Avisos 3"), 16 px a 35 %. O que ha de NOVO (recomendacao recebida, aviso
-// nao lido) e estado: o numero passa a ser o das novidades e vai no acento —
-// era um disco de acento com o numeral dentro, e o mockup nao tem disco.
-// `*novo` diz qual dos dois. 0 = sem numero (Atividade, ou lista vazia).
+static const char *iconeAba(int i) {
+  return i == SP_ABA_SALVOS ? "aj_bookmark" : i == SP_ABA_ATIVIDADE ? "aj_activity"
+       : i == SP_ABA_SOCIAL ? "aj_users" : i == SP_ABA_AGENDA ? "aj_calendar" : "aj_bell";
+}
+// A CONTAGEM AO LADO DO ICONE (".sg .n" do mockup), 16 px a 35 %. O que ha de
+// NOVO (recomendacao recebida, aviso nao lido) e estado: o numero passa a ser o
+// das novidades e vai no acento. `*novo` diz qual dos dois. 0 = sem numero.
 static int contaDaAba(int i, int *novo) {
   int n;
   *novo = 0;
@@ -2938,58 +3157,68 @@ static int contaDaAba(int i, int *novo) {
     if ((n = avisos_n_novos()) > 0) { *novo = 1; return n; }
     return avisos_lista_n();
   }
+  if (i == SP_ABA_AGENDA) return nAg;
   return 0;
 }
-static float segLargura(int i, TxtLinha *t, TxtLinha *num, int cor) {
-  int novo, n = contaDaAba(i, &novo);
+static float segLargura(int i, TxtLinha *num, int cor, int comNum) {
+  int novo, n = comNum ? contaDaAba(i, &novo) : 0;
   char b[16];
-  *t = txt_linha(TXT_ILHA_SEG, i18n(rotuloAba(i)), cor, cor, cor, 255);
   num->w = 0; num->h = 0; num->tex = 0;
   if (n > 0) {
     float ar, ag, ab;
     snprintf(b, sizeof b, "%d", n > 99 ? 99 : n);
     ajustes_acento(&ar, &ag, &ab);
     *num = novo ? txt_linha(TXT_ILHA_NUM, b, (int)(ar * 255), (int)(ag * 255), (int)(ab * 255), 255)
-                : txt_linha(TXT_ILHA_NUM, b, SPI_FG_R, SPI_FG_G, SPI_FG_B, 255);
+                : txt_linha(TXT_ILHA_NUM, b, cor, cor, cor, 255);
   }
-  return (float)t->w + SP_SEG_TXT * 2.0f + (num->w > 0 ? SP_SEG_NUM + (float)num->w : 0.0f);
+  return SP_SEG_ICO + SP_SEG_PX * 2.0f + (num->w > 0 ? SP_SEG_NUM + (float)num->w : 0.0f);
 }
-static float abasLargura(void) {
-  float w = SP_SEG_PAD * 2.0f - SP_SEG_VAO;
+#define SP_SEG_LAPIS (SP_SEG_ICO + SP_SEG_PX * 2.0f)
+// Largura da faixa. Com o titulo grande ao lado, o que sobra e o painel menos o
+// titulo: se nao cabe com todas as contagens, so a aba aberta mostra a dela.
+static float abasLargura(int todasContagens) {
+  float w = SP_SEG_PAD * 2.0f - SP_SEG_VAO + SP_SEG_LAPIS + SP_SEG_VAO;
   int i;
   for (i = 0; i < SP_ABA_N; i++) {
-    TxtLinha t, n;
-    if (!abaExiste(i)) continue;
-    w += segLargura(i, &t, &n, 176) + SP_SEG_VAO;
+    TxtLinha n;
+    int id = abaOrdem[i];
+    if (!abaNaFaixa(id)) continue;
+    w += segLargura(id, &n, 255, todasContagens || id == aba) + SP_SEG_VAO;
   }
   return w;
 }
 
-// AS ABAS SAO UM SELETOR SEGMENTADO (".seg" do mockup): conteiner pilula em
-// branco a 6 % (solido #1d1e23), a aba aberta num segmento a 14 % (#34363e)
-// em branco, as outras a 55 %. Com o D-pad na faixa o segmento aberto vira a
-// pilula cheia no acento — e foco de botao, como os chips da folha de Fontes.
-// Sem animacao de cor de proposito: a cor faz parte da chave do cache de
-// linhas de text.c, e uma cor por quadro cria uma rasterizacao TTF por quadro.
-// Por isso o rotulo e branco e o 55 % e ALFA, e nao um cinza.
-static void desenhaAbas(float dx, float a) {
-  float x = SP_X + dx + SP_ABAS_X, ar, ag, ab;
-  int i;
-  GfxRect caixa = { x, SP_ABAS_Y, abasLargura(), SP_ABAS_H };
+// A FAIXA DE ABAS na linha do titulo, a direita dele: um seletor segmentado
+// compacto (icone + contagem), a aba aberta num segmento um degrau mais claro
+// e, com o D-pad na faixa, esse segmento vira a pilula cheia no acento (foco
+// de botao). O NOME da aba aberta e o titulo grande; as outras se leem pelo
+// icone e pela posicao. No fim, o lapis (Editar). Sem animacao de cor de
+// proposito: a cor faz parte da chave do cache de linhas de text.c.
+static void desenhaAbas(float dx, float a, float larguraDisp) {
+  float ar, ag, ab, w0;
+  int pos, todas = 1;
+  float x;
+  if (abasLargura(1) > larguraDisp) todas = 0;
+  w0 = abasLargura(todas);
+  x = SP_X + dx + SP_W - SP_ABAS_X - w0;
   ajustes_acento(&ar, &ag, &ab);
-  if (ajustes_vidro()) gfx_cor(caixa, 0.5f, 1, 1, 1, .06f * a);
-  else gfx_cor(caixa, 0.5f, .113f, .118f, .137f, a);
+  { GfxRect caixa = { x, SP_ABAS_Y, w0, SP_ABAS_H };
+    if (ajustes_vidro()) gfx_cor(caixa, 0.5f, 1, 1, 1, .06f * a);
+    else gfx_cor(caixa, 0.5f, .113f, .118f, .137f, a); }
   x += SP_SEG_PAD;
-  for (i = 0; i < SP_ABA_N; i++) {
-    int ativa = (i == aba);
-    int focada = ativa && foco == SP_FOCO_ABAS;
+  for (pos = 0; pos <= SP_ABA_N; pos++) {
+    int lapis = (pos == SP_ABA_N);
+    int i = lapis ? -1 : abaOrdem[pos];
+    int ativa = !lapis && i == aba;
+    int focada = foco == SP_FOCO_ABAS && (lapis ? editLapis : (ativa && !editLapis));
     int cor = focada ? ajustes_tinta_foco() : 255;
     float alfaTxt = focada || ativa ? 1.0f : 0.55f;
-    TxtLinha t, num;
-    float w;
+    TxtLinha num;
+    float w, ic;
     GfxRect p;
-    if (!abaExiste(i)) continue;
-    w = segLargura(i, &t, &num, cor);
+    if (!lapis && !abaNaFaixa(i)) continue;
+    w = lapis ? SP_SEG_LAPIS : segLargura(i, &num, cor, todas || ativa);
+    if (lapis) num.w = 0;
     p = (GfxRect){ x, SP_ABAS_Y + SP_SEG_PAD, w, SP_ABAS_H - SP_SEG_PAD * 2.0f };
     if (focada) {
       if (ajustes_vidro()) gfx_vidro_pilula_cheia(p, 0.5f, 1.0f, a);
@@ -2998,7 +3227,9 @@ static void desenhaAbas(float dx, float a) {
       if (ajustes_vidro()) gfx_cor(p, 0.5f, 1, 1, 1, .14f * a);
       else gfx_cor(p, 0.5f, .204f, .212f, .243f, a);
     }
-    txt_desenhar_alpha(t, x + SP_SEG_TXT, p.y + (p.h - t.h) * 0.5f, a * alfaTxt);
+    ic = (float)cor / 255.0f;
+    gfx_icone((GfxRect){ x + SP_SEG_PX, p.y + (p.h - SP_SEG_ICO) * 0.5f, SP_SEG_ICO, SP_SEG_ICO },
+              lapis ? "aj_pencil" : iconeAba(i), ic, ic, ic, a * alfaTxt);
     if (num.w > 0) {
       int novo;
       contaDaAba(i, &novo);
@@ -3006,15 +3237,14 @@ static void desenhaAbas(float dx, float a) {
       // ela sumiria justamente na aba em que o dedo esta.
       if (focada) {
         char b[16];
-        snprintf(b, sizeof b, "%d", contaDaAba(i, &novo) > 99 ? 99 : contaDaAba(i, &novo));
+        int n = contaDaAba(i, &novo);
+        snprintf(b, sizeof b, "%d", n > 99 ? 99 : n);
         num = txt_linha(TXT_ILHA_NUM, b, cor, cor, cor, 255);
         novo = 0;
       }
-      // Na base do rotulo, como "align-items:baseline" do mockup: o numeral
-      // de 16 desce 3 px em relacao ao centro do de 19.
-      txt_desenhar_alpha(num, x + SP_SEG_TXT + (float)t.w + SP_SEG_NUM,
-                         p.y + (p.h - t.h) * 0.5f + (float)(t.h - num.h) * 0.78f,
-                         a * (novo ? 1.0f : focada ? 0.7f : 0.35f));
+      txt_desenhar_alpha(num, x + SP_SEG_PX + SP_SEG_ICO + SP_SEG_NUM,
+                         p.y + (p.h - num.h) * 0.5f,
+                         a * (novo ? 1.0f : focada ? 0.7f : 0.45f));
     }
     x += w + SP_SEG_VAO;
   }
@@ -3952,6 +4182,91 @@ static void desenhaAtvLinha(int i, float dx, float y, float a, Uint32 agora) {
     if (linha[0]) txt_desenhar_alpha(txtIlha(TXT_ILHA_HORA_L, linha, larg), tx, ty, a * 0.38f); }
 }
 
+// UMA LINHA DA AGENDA: titulo da serie, "T1E3 · nome do episodio", quando sai
+// ("amanha", "em 3 dias") e a rede, e o cartaz a direita. Os mesmos dados da
+// tela Agenda (agenda.h): nada de pedido novo, e campo vazio some da linha.
+#define SPAG_CAP_W 56.0f
+#define SPAG_CAP_H 84.0f
+static void desenhaAgLinha(int i, float dx, float y, float a) {
+  const AgItem *it = agenda_lista(agIdx[i]);
+  float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f, v = focoVisual(f);
+  float tx = SP_X + dx + SP_PAD;
+  float larg = SP_X + dx + SP_LINHA_X + SP_LINHA_W - SP_LINHA_PADX - SPAG_CAP_W - 18.0f - tx;
+  char l2[220], l3[120], falta[48], ep[24];
+  float bloco = 29.0f + 4.0f + 23.0f + 4.0f + 18.0f, ty = y + (SPAG_H - bloco) * 0.5f;
+  TxtLinha n, nb;
+  if (!it) return;
+  { GfxRect r = linhaIlhaRet(dx, y, SPAG_H);
+    superficieItem(r, SP_LINHA_RAIO / r.h, f, a); }
+  { GfxRect c = { SP_X + dx + SP_LINHA_X + SP_LINHA_W - SP_LINHA_PADX - SPAG_CAP_W,
+                  y + (SPAG_H - SPAG_CAP_H) * 0.5f, SPAG_CAP_W, SPAG_CAP_H };
+    capaArte(c, it->poster, 10.0f, a); }
+  n = txtIlha(TXT_ILHA_NOME, it->titulo, larg);
+  nb = txt_linha_corta(TXT_ILHA_NOME, it->titulo, 255, 255, 255, 255, larg);
+  txt_desenhar_alpha(n, tx, ty, a * 0.88f * (1.0f - v));
+  txt_desenhar_alpha(nb, tx, ty, a * v);
+  ty += 29.0f + 4.0f;
+  l2[0] = 0;
+  if (it->temporada > 0 && it->episodio > 0) {
+    snprintf(ep, sizeof ep, i18n("T%dE%d"), it->temporada, it->episodio);
+    snprintf(l2, sizeof l2, "%s", ep);
+  }
+  juntar(l2, sizeof l2, it->nomeEp);
+  if (l2[0]) txt_desenhar_alpha(txtIlha(TXT_ILHA_SUB, l2, larg), tx, ty, a * 0.62f);
+  ty += 23.0f + 4.0f;
+  agenda_falta(it->dataProx, falta, sizeof falta);
+  snprintf(l3, sizeof l3, "%s", falta);
+  juntar(l3, sizeof l3, it->rede);
+  if (l3[0]) txt_desenhar_alpha(txtIlha(TXT_ILHA_HORA, l3, larg), tx, ty, a * 0.38f);
+}
+
+static void desenhaAgendaVazia(float dx, float y, float a) {
+  float cx = SP_X + dx + SP_W * 0.5f;
+  TxtLinha t1 = txt_linha(TXT_ILHA_NOME, i18n("Nada a caminho"), 243, 242, 239, 255);
+  TxtLinha t2 = txt_linha_corta(TXT_ILHA_SUB, i18n("Siga uma série e os próximos episódios aparecem aqui."),
+                                243, 242, 239, 255, SP_INTERNO);
+  txt_desenhar_alpha(t1, cx - t1.w * 0.5f, y + 28.0f, a);
+  txt_desenhar_alpha(t2, cx - t2.w * 0.5f, y + 74.0f, a * 0.42f);
+}
+
+// A FOLHA DE EDITAR ABAS: uma linha por aba que existe, com o olho (liga e
+// desliga) e as setas de subir e descer. O foco e o de botao (pilula cheia no
+// acento); aba desligada fica a 40 %. Sem mola: a folha tem cinco linhas.
+#define SPE_LIN_H 82.0f
+#define SPE_BTN   56.0f
+static void desenhaEditar(float dx, float a) {
+  int ids[SP_ABA_N], n = editIds(ids), i, c;
+  float y = SP_LISTA_Y + SP_FOCO_AR + 6.0f, tinta = ajustes_acento_tinta(NULL, NULL, NULL);
+  int tf = ajustes_tinta_foco();
+  for (i = 0; i < n; i++) {
+    int id = ids[i], lig = abaLiga[id];
+    float x0 = SP_X + dx + SP_PAD, xb = SP_X + dx + SP_W - SP_PAD - SPE_BTN * 3.0f - 16.0f;
+    float al = lig ? 1.0f : 0.4f;
+    TxtLinha t = txt_linha_corta(TXT_ILHA_NOME, i18n(rotuloAba(id)), SPI_FG_R, SPI_FG_G, SPI_FG_B, 255,
+                                 xb - x0 - 60.0f);
+    gfx_icone((GfxRect){ x0, y + (SPE_LIN_H - 28.0f) * 0.5f, 28.0f, 28.0f }, iconeAba(id), .9f, .9f, .9f, a * al);
+    txt_desenhar_alpha(t, x0 + 48.0f, y + (SPE_LIN_H - t.h) * 0.5f, a * al);
+    for (c = 0; c < 3; c++) {
+      GfxRect r = { xb + (float)c * (SPE_BTN + 8.0f), y + (SPE_LIN_H - SPE_BTN) * 0.5f, SPE_BTN, SPE_BTN };
+      int foc = (i == editLin && c == editCol);
+      float ic = foc ? (float)tf / 255.0f : tinta;
+      int sem = (c == 1 && i == 0) || (c == 2 && i == n - 1) || (c == 0 && lig && nLigadas() <= 1);
+      botaoSup(r, 0.5f, foc ? 1.0f : 0.0f, a);
+      gfx_icone((GfxRect){ r.x + 14.0f, r.y + 14.0f, 28.0f, 28.0f },
+                c == 0 ? (lig ? "aj_eye" : "aj_eye-off") : c == 1 ? "aj_arrow-up" : "aj_arrow-down",
+                ic, ic, ic, a * (sem ? 0.3f : 1.0f));
+    }
+    y += SPE_LIN_H;
+  }
+  { TxtLinha t = txt_linha(TXT_ILHA_SEG, i18n("Concluir"), SPI_FG_R, SPI_FG_G, SPI_FG_B, 255);
+    TxtLinha tb = txt_linha(TXT_ILHA_SEG, i18n("Concluir"), tf, tf, tf, 255);
+    int foc = editLin >= n;
+    float w = (float)t.w + 44.0f;
+    GfxRect r = { SP_X + dx + SP_PAD, y + 18.0f, w, NV_CTRL_H };
+    botaoSup(r, 0.5f, foc ? 1.0f : 0.0f, a);
+    txt_desenhar_alpha(foc ? tb : t, r.x + 22.0f, r.y + (r.h - (float)t.h) * 0.5f, a * (foc ? 1.0f : 0.85f)); }
+}
+
 static void desenhaVazio(float dx, float a) {
   float cx = SP_X + dx + SP_W * 0.5f;
   // DESTINO SIMKL SEM VINCULO (issue #110): a lista vazia muda seria lida como
@@ -4240,17 +4555,28 @@ static void desenharPainel(Uint32 agora) {
     if (nv > 0) snprintf(buf, sizeof buf, i18n("%d avisos · %d novos"), n, nv);
     else snprintf(buf, sizeof buf, "%d %s", n, i18n(n == 1 ? "aviso" : "avisos"));
   }
+  else if (aba == SP_ABA_AGENDA) {
+    if (nAg == 0) snprintf(buf, sizeof buf, "%s", i18n("Agenda"));
+    else if (nAg == 1) snprintf(buf, sizeof buf, "%s", i18n("1 próximo episódio"));
+    else snprintf(buf, sizeof buf, i18n("%d próximos episódios"), nAg);
+  }
   else if (nCont > 0) {
     snprintf(buf, sizeof buf, "%d %s \xc2\xb7 %d %s", nLinhas,
              i18n(nLinhas == 1 ? "título" : "títulos"),
              nCont, i18n("para retomar"));
   }
   else snprintf(buf, sizeof buf, "%d %s", nLinhas, i18n(nLinhas == 1 ? "título" : "títulos"));
+  if (editando) snprintf(buf, sizeof buf, "%s", i18n("Ligue ou desligue as abas e mude a ordem."));
   caixaAltaIlha(buf, SPI_FG_R, SPI_FG_G, SPI_FG_B, SP_X + x + SP_PAD, SP_KICK_Y, a * 0.45f);
-  { TxtLinha t = txt_linha(TXT_ILHA_TITULO, temAbas() ? "Social" : "Salvos",
-                           SPI_FG_R, SPI_FG_G, SPI_FG_B, 255);
-    txt_desenhar_alpha(t, SP_X + x + SP_PAD, SP_TIT_Y, a); }
-  if (temAbas()) desenhaAbas(x, a);
+  // O TITULO GRANDE E A ABA ABERTA (pedido do dono, 07/10); as abas, compactas,
+  // ficam na mesma linha, a direita. O titulo cede se o idioma o faz comprido.
+  { float maxT = SP_W - SP_ABAS_X - SP_PAD - abasLargura(0) - 28.0f;
+    TxtLinha t = txt_linha_corta(TXT_ILHA_TITULO,
+                                 editando ? i18n("Editar abas") : i18n(rotuloAba(aba)),
+                                 SPI_FG_R, SPI_FG_G, SPI_FG_B, 255, editando ? SP_INTERNO : maxT);
+    txt_desenhar_alpha(t, SP_X + x + SP_PAD, SP_TIT_Y, a);
+    if (temAbas() && !editando) desenhaAbas(x, a, SP_W - SP_ABAS_X - SP_PAD - (float)t.w - 28.0f); }
+  if (editando) { desenhaEditar(x, a); gfx_sem_recorte(); return; }
   if (temBarra()) desenhaBarra(x, a);
 
   if (aba == SP_ABA_ATIVIDADE) {
@@ -4268,6 +4594,20 @@ static void desenharPainel(Uint32 agora) {
         desenhaAtvLinha(i, x, y, a, agora);
       y += SPA_H + SPS_GAP;
     }
+    gfx_sem_recorte();
+    return;
+  }
+  if (aba == SP_ABA_AGENDA) {
+    gfx_recorte(SP_X + x, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
+    y = listaTopo() + SP_FOCO_AR - scrollY;
+    if (nAg == 0) desenhaAgendaVazia(x, y, a);
+    for (i = 0; i < nAg; i++) {
+      if (y + SPAG_H >= listaTopo() && y <= SP_LISTA_BASE) desenhaAgLinha(i, x, y, a);
+      y += SPAG_H;
+    }
+    y = listaTopo() + SP_FOCO_AR - scrollY + topoDe(nAg);
+    if (y + SPS_H_ACAO >= listaTopo() && y <= SP_LISTA_BASE)
+      desenhaBotaoLinha(nAg, x, y, SPS_H_ACAO, a, i18n("Abrir a agenda completa"), NULL, "aj_calendar", 1);
     gfx_sem_recorte();
     return;
   }

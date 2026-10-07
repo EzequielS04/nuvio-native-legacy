@@ -3114,6 +3114,11 @@ void app_atualizar(float dt, Uint32 agora) {
       amigoperfil_abrir(pid); trocarTela(TELA_SOCIAL);
       socialDoPerfil = 1;
     } }
+  // "ABRIR A AGENDA COMPLETA" da aba Agenda do painel Social.
+  if (spainel_pediu_agenda()) {
+    if (spainel_aberto()) spainel_fechar();
+    trocarTela(TELA_AGENDA); menu_definir_destino(MENU_AGENDA);
+  }
   if (tela==TELA_HOME && home_pediu_social()) {
     trocarTela(TELA_AJUSTES);menu_definir_destino(MENU_AJUSTES);
   }
