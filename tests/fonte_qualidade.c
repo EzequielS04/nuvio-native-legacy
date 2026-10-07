@@ -250,6 +250,30 @@ int main(void) {
   }
 
   streamfit_limpar();
+  // #284: placeholder do addon nunca e escolhido; 0p real vem depois de 720p.
+  { Stream m[4];
+    deb(&m[0], "Meteor - Not configured", 0, 1, 0);
+    deb(&m[1], "Embed69 - {}", 0, 1, 0);
+    deb(&m[2], "Torrentio AD error", 0, 1, 0);
+    deb(&m[3], "Torrentio 720p", 720, 0, 0);
+    for (int prio = 0; prio < 3; prio++) { cfg(prio, 0, 0); assert(!strcmp(vence(m, 4), "Torrentio 720p")); }
+    { Stream e[2]; deb(&e[0], "Torrentio WEB", 0, 1, 0); deb(&e[1], "Torrentio 480p", 480, 0, 0);
+      for (int prio = 0; prio < 3; prio++) { cfg(prio, 0, 0); assert(!strcmp(vence(e, 2), "Torrentio 480p")); } }
+    { Stream e[1]; deb(&e[0], "Torrentio WEB", 0, 1, 0);   // 0p real e a unica: ainda toca
+      cfg(0, 0, 0); assert(!strcmp(vence(e, 1), "Torrentio WEB")); }
+  }
+  // #203: tela sem Dolby Vision (Samsung): DV de perfil desconhecido fica abaixo do HDR10; perfil 8 nao.
+  { Stream m[3];
+    deb(&m[0], "Torrentio 4k DV", 2160, 1, 1);
+    deb(&m[1], "Torrentio 4k HDR10", 2160, 1, 0);
+    deb(&m[2], "Torrentio 4k DV Profile 8 HDR10", 2160, 1, 1);
+    stream_definir_tela(-1, 0); cfg(1, 0, 0);
+    assert(stream_pontos(&m[0]) < stream_pontos(&m[1]));
+    assert(!strcmp(vence(m, 2), "Torrentio 4k HDR10"));
+    assert(stream_pontos(&m[2]) >= stream_pontos(&m[1]) - 300);   // base HDR10 declarada toca
+    stream_definir_tela(-1, -1);   // desconhecido: DV volta a valer
+    assert(stream_pontos(&m[0]) > stream_pontos(&m[1]));
+  }
   puts("fonte_qualidade: ok");
   return 0;
 }
