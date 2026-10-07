@@ -60,6 +60,7 @@
 #include "layout.h"
 #include "corviva.h"
 #include "trocaarte.h"
+#include "detmais.h"
 #include "catalogo.h"
 #include "artehero.h"
 #include "recomenda.h"
@@ -230,6 +231,7 @@ static int  ratSinc;
 
 static int maisAcoes;
 static int  botao = 0;      // botao em foco no hero
+static GfxRect maisAncora;  // onde o "..." foi desenhado (ilha detmais.h)
 // A ILHA DE AMIGOS (quem assistiu/gostou deste titulo), logo abaixo dos botoes:
 // um alvo focavel do nivel 0, entre os botoes e as secoes. Baixo nos botoes cai
 // nela, baixo nela entra nas secoes, cima volta aos botoes. OK pede ao roteador
@@ -1262,6 +1264,7 @@ static void abrirInterno(const HomeItem *it) {
   item = *it;
   aberto = 1; saindo = 0; nivel = 0; botao = 0; focoAmigos = 0;
   amtui_fechar();
+  detmais_zerar();
   heroReiniciar();
   t = 0.0f; pg = 0.0f; scrollY = 0.0f; velY = 0.0f; abaInfo = 0; pessoaAberta = 0;
   relFoco = 0; colListaAberta = 0; colListaFoco = 0;
@@ -1963,7 +1966,7 @@ static int temInicio(void) {
   { int t0 = 0, e0 = 0, de = 0;
     return episodioAlvo(&t0, &e0, &de) && de == 2; }
 }
-// O QUINTO CIRCULAR: "Recomendar a um amigo".
+// "RECOMENDAR A UM AMIGO" — hoje uma linha da ilha "Mais opcoes" (detmais.h).
 //
 // SO EXISTE SE O PACOTE TEM O SERVICO. Sem NUVIO_REC_URL compilada,
 // recomenda_ativo() e 0 e o botao nao aparece — a mesma regra do item de menu
@@ -2007,7 +2010,7 @@ static const char *rotuloLembrar(void) {
 // Instante em que o dono ligou o lembrete, para o despertador tocar inteiro
 // no quadro seguinte ao OK. 0 = nao houve troca nesta sessao.
 static Uint32 lembreteEm;
-// "TROCAR ARTE" (#142): o ULTIMO circular da linha, depois do recomendar. So
+// "TROCAR ARTE" (#142): linha da ilha "Mais opcoes" (detmais.h). So
 // filme e serie com id — e o id que guarda a escolha (arteescolha.h), e canal
 // e evento nao tem backdrop de fonte nenhuma para escolher.
 static int temArte(void) {
@@ -2015,7 +2018,7 @@ static int temArte(void) {
   if (!ci || (!ci->imdb[0] && ci->tmdb <= 0)) return 0;
   return !strcmp(ci->tipo, "movie") || !strcmp(ci->tipo, "series");
 }
-// "ASSISTIR TRAILER" (#234): circular proprio na linha de acoes, o ULTIMO. So
+// "ASSISTIR TRAILER" (#234): a primeira linha da ilha "Mais opcoes". So
 // existe quando ha trailer para tocar (fonte conhecida na ordem do ajuste, ou
 // um trailer do YouTube onde o navegador e o caminho) — sem fonte o botao some
 // em vez de prometer o que nao toca. Independe do "Trailer automatico": com o
@@ -2026,7 +2029,7 @@ static int temTrailer(void) {
   if (trailer_suportado() && trailerFonte(0, NULL, 1)) return 1;
   return extras_n_trailers() > 0;
 }
-// "EXPLORAR" (Explorar 2.0): o ULTIMO circular, depois do trailer. Abre a toca
+// "EXPLORAR" (Explorar 2.0): linha da ilha "Mais opcoes". Abre a toca
 // do coelho neste titulo (explorar.h); so filme e serie, que sao o que a
 // vizinhanca sabe cruzar.
 static int temExplorar(void) {
@@ -2034,10 +2037,25 @@ static int temExplorar(void) {
   if (!ci || !ci->titulo[0]) return 0;
   return !strcmp(ci->tipo, "movie") || !strcmp(ci->tipo, "series");
 }
+// "MAIS OPCOES" (dono, 06/10/2026: "muitos botoes na pagina de titulos"): o
+// trailer, o Explorar, o Trocar arte e o Recomendar sairam da linha e moram
+// na ilha do circular "..." (detmais.h), o ULTIMO da linha. Ele so existe
+// quando ha ao menos uma delas — senao seria um botao que abre nada.
+static void maisDisponiveis(int d[DMAIS_N]) {
+  d[DMAIS_TRAILER] = temTrailer();
+  d[DMAIS_EXPLORAR] = temExplorar();
+  d[DMAIS_ARTE] = temArte();
+  d[DMAIS_RECOMENDAR] = temRecomendar();
+}
+static int temMais(void) {
+  int d[DMAIS_N], i;
+  maisDisponiveis(d);
+  for (i = 0; i < DMAIS_N; i++) if (d[i]) return 1;
+  return 0;
+}
 static int nBotoesTodos(void) {
   return (ehSerie() ? 3 : 4) + (temInicio() ? 1 : 0) + (temLembrar() ? 1 : 0)
-         + (temRecomendar() ? 1 : 0) + (temArte() ? 1 : 0) + (temTrailer() ? 1 : 0)
-         + (temExplorar() ? 1 : 0);
+         + (temMais() ? 1 : 0);
 }
 
 static int acoesAgrupadas(void) {
@@ -2057,7 +2075,7 @@ static int nBotoes(void) {
 // e os circulares escorregam um para a direita.
 enum { ACAO_PRIMARIO = 0, ACAO_LISTA = 1, ACAO_ASSISTIDO = 2, ACAO_FONTES = 3,
        ACAO_INICIO = 4, ACAO_RECOMENDAR = 5, ACAO_LEMBRAR = 6, ACAO_ARTE = 7,
-       ACAO_TRAILER = 8, ACAO_EXPLORAR = 9 };
+       ACAO_TRAILER = 8, ACAO_EXPLORAR = 9, ACAO_MAIS = 10 };
 static int acaoEm(int n) {
   if (n == 0) return ACAO_PRIMARIO;
   if (temInicio()) {
@@ -2076,21 +2094,10 @@ static int acaoEm(int n) {
     n--;
   }
   if (acoesAgrupadas() && n > 0) n++; // skip the list action already used as group anchor
-  // O RECOMENDAR E O ULTIMO DA LINHA e a conferencia vem ANTES do salto da
-  // serie: com 3 circulares numa serie, a ultima posicao e n == 3, e a regra
-  // de baixo devolveria 4 — que e ACAO_INICIO, o botao de texto. O OK ali
-  // abriria "assistir do comeco" a partir de um circular de enviar.
-  // O "Trocar arte" vem DEPOIS do recomendar, e a conta e a mesma: a ultima
-  // posicao da linha, antes do salto da serie.
-  // O "Assistir trailer" e o ultimo, depois do "Trocar arte".
-  if (temExplorar() && n == (ehSerie() ? 3 : 4) + (temRecomendar() ? 1 : 0) + (temArte() ? 1 : 0)
-                            + (temTrailer() ? 1 : 0))
-    return ACAO_EXPLORAR;
-  if (temTrailer() && n == (ehSerie() ? 3 : 4) + (temRecomendar() ? 1 : 0) + (temArte() ? 1 : 0))
-    return ACAO_TRAILER;
-  if (temArte() && n == (ehSerie() ? 3 : 4) + (temRecomendar() ? 1 : 0))
-    return ACAO_ARTE;
-  if (temRecomendar() && n == (ehSerie() ? 3 : 4)) return ACAO_RECOMENDAR;
+  // O "..." E O ULTIMO DA LINHA e a conferencia vem ANTES do salto da serie:
+  // com 3 circulares numa serie, a ultima posicao e n == 3, e a regra de
+  // baixo devolveria 4 — que e ACAO_INICIO, o botao de texto.
+  if (temMais() && n == (ehSerie() ? 3 : 4)) return ACAO_MAIS;
   if (n >= 2 && ehSerie()) return n + 1;   // serie pula o olho
   return n;
 }
@@ -2194,6 +2201,28 @@ static void abrirCredito(void) {
   }
 }
 
+// O QUE A ILHA "MAIS OPCOES" ESCOLHEU (detmais.h). Eram os ramos dos quatro
+// circulares que sairam da linha; o comportamento de cada um e o mesmo.
+static void executarMais(int dm) {
+  if (dm == DMAIS_TRAILER) {
+    tocarTrailerCheio(0);
+  } else if (dm == DMAIS_EXPLORAR) {
+    // O roteador (app.c) fecha a pagina e abre a toca neste titulo.
+    trailer_fechar();
+    pedExplorar = 1;
+  } else if (dm == DMAIS_ARTE) {
+    // A tela de escolha come o teclado ate fechar (topo de detail_evento).
+    trailer_fechar();
+    trocaarte_abrir(cat_item(idx));
+  } else if (dm == DMAIS_RECOMENDAR) {
+    // A MESMA MODAL DO MENU DO CARTAZ, e nao uma segunda copia dela: ver
+    // recenviar.h. Aberta, ela fica acima desta tela no roteador de app.c e
+    // recebe o D-pad ate fechar.
+    const CatItem *ci = cat_item(idx);
+    if (ci) recenviar_abrir(ci);
+  }
+}
+
 void detail_evento(const SDL_Event *e) {
   if (saindo) return;
   // O CARTAO "O QUE ACHOU?" aberto pela pagina e modal: a tecla e dele.
@@ -2218,6 +2247,12 @@ void detail_evento(const SDL_Event *e) {
   if (trocaarte_aberto()) { trocaarte_evento(e); return; }
   // A LISTA DOS AMIGOS (OK na ilha de amigos) e modal enquanto aberta.
   if (amtui_aberta()) { amtui_evento(e); return; }
+  // "MAIS OPCOES" aberta come o teclado; o OK nela devolve a acao.
+  if (detmais_aberto()) {
+    int dm = detmais_evento(e);
+    if (dm >= 0) executarMais(dm);
+    return;
+  }
   // MODO CINEMA: a primeira tecla so devolve o bloco de texto (o trailer
   // segue); Voltar fecha o trailer e fica na pagina.
   if (trailerCinema.oculta && e->type == SDL_KEYDOWN && !e->key.repeat) {
@@ -2419,22 +2454,10 @@ void detail_evento(const SDL_Event *e) {
         pedMarcar = 1;
       } else if (acao == ACAO_ASSISTIDO) {
         pedAssistido = 1;
-      } else if (acao == ACAO_TRAILER) {
-        tocarTrailerCheio(0);
-      } else if (acao == ACAO_EXPLORAR) {
-        // O roteador (app.c) fecha a pagina e abre a toca neste titulo.
-        trailer_fechar();
-        pedExplorar = 1;
-      } else if (acao == ACAO_ARTE) {
-        // A tela de escolha come o teclado ate fechar (topo de detail_evento).
-        trailer_fechar();
-        trocaarte_abrir(cat_item(idx));
-      } else if (acao == ACAO_RECOMENDAR) {
-        // A MESMA MODAL DO MENU DO CARTAZ, e nao uma segunda copia dela: ver
-        // recenviar.h. Aberta, ela fica acima desta tela no roteador de app.c e
-        // recebe o D-pad ate fechar.
-        const CatItem *ci = cat_item(idx);
-        if (ci) recenviar_abrir(ci);
+      } else if (acao == ACAO_MAIS) {
+        int d[DMAIS_N];
+        maisDisponiveis(d);
+        detmais_abrir(d);
       } else {
         pedFontes = 1;
       }
@@ -3488,22 +3511,9 @@ static void desenhaBotao(GfxRect r, const char *rot, int icone, int focado, floa
       // so `progresso >= 90`, e filme visto em outro aparelho (ou marcado pelo
       // menu do cartaz, que zera o progresso) ficava com o olho riscado.
       gfx_icone(ig, cat_visto(cat_item(idx)) ? "visto" : "naovisto", ic, ic, ic, a);
-    } else if (icone == ACAO_TRAILER) {
-      gfx_icone(ig, "aj_clapperboard", ic, ic, ic, a);
-    } else if (icone == ACAO_EXPLORAR) {
-      // BUSSOLA do Lucide (aj_compass.png, ja no pacote): o mesmo traco dos
-      // vizinhos, e o glifo universal de "explorar".
-      gfx_icone(ig, "aj_compass", ic, ic, ic, a);
-    } else if (icone == ACAO_ARTE) {
-      // MOLDURA COM MONTANHA: o glifo universal de "imagem". PNG de
-      // deploy/app/art/icones como os vizinhos; arte.svg descreve o desenho.
-      gfx_icone(ig, "arte", ic, ic, ic, a);
-    } else if (icone == ACAO_RECOMENDAR) {
-      // AVIAO DE PAPEL — o mesmo vocabulario dos vizinhos: um PNG de
-      // deploy/app/art/icones com a forma na alpha, desenhado com GFX_MARCA e
-      // colorido daqui. Nao e glifo de fonte e nao e forma montada no shader:
-      // o dono ja recusou os desenhados a mao ("usa SVG reais", ver gfx.h).
-      gfx_icone(ig, "recomendar", ic, ic, ic, a);
+    } else if (icone == ACAO_MAIS) {
+      // RETICENCIAS do Lucide: o "tem mais aqui" de qualquer interface.
+      gfx_icone(ig, "aj_ellipsis", ic, ic, ic, a);
     } else {
       gfx_icone(ig, "fontes", ic, ic, ic, a);
     }
@@ -4188,10 +4198,9 @@ static void heroWeb(float a, float desloc) {
         if (action == ACAO_LEMBRAR)
           desenhaLembrete(rc,ci && agenda_lembrete(ci->imdb),selected,a*stagger);
         else desenhaBotao(rc,NULL,action,selected,a*stagger);
-        if (selected && action == ACAO_TRAILER && stagger > .85f)
-          desenhaDicaBotao(rc, i18n("Assistir trailer"), a);
-        if (selected && action == ACAO_EXPLORAR && stagger > .85f)
-          desenhaDicaBotao(rc, i18n("Explorar a partir daqui"), a);
+        if (action == ACAO_MAIS) maisAncora = rc;
+        if (selected && action == ACAO_MAIS && stagger > .85f && !detmais_aberto())
+          desenhaDicaBotao(rc, i18n("Mais opções"), a);
         if (maisAcoes && a > .3f && stagger > .85f)
           ponteiro_alvo(rc.x,rc.y,rc.w,rc.h,ponteiroDetalhe,NULL,-1,j);
       }
@@ -4201,10 +4210,9 @@ static void heroWeb(float a, float desloc) {
       GfxRect rc = { bx, cyBtn - NV_DETW2_CIRC * 0.5f,
                      NV_DETW2_CIRC, NV_DETW2_CIRC };
       desenhaBotao(rc, NULL, acaoEm(nb), nivel == 0 && botao == nb, a);
-      if (nivel == 0 && botao == nb && acaoEm(nb) == ACAO_TRAILER)
-        desenhaDicaBotao(rc, i18n("Assistir trailer"), a);
-      if (nivel == 0 && botao == nb && acaoEm(nb) == ACAO_EXPLORAR)
-        desenhaDicaBotao(rc, i18n("Explorar a partir daqui"), a);
+      if (acaoEm(nb) == ACAO_MAIS) maisAncora = rc;
+      if (nivel == 0 && botao == nb && acaoEm(nb) == ACAO_MAIS && !detmais_aberto())
+        desenhaDicaBotao(rc, i18n("Mais opções"), a);
       if (a > 0.3f) ponteiro_alvo(rc.x, rc.y, rc.w, rc.h, ponteiroDetalhe, NULL, -1, nb);
       bx += NV_DETW2_CIRC + NV_DETW2_BTN_GAP;
     }
@@ -6748,6 +6756,7 @@ static void carFundo(void) {
 // linha de botoes abre o cartao (detail_evento); aberto, ele desenha aqui.
 static void reacaoPendente(float s) {
   int livre = nivel == 0 && scrollY < 1.0f && !pessoaAberta && !colListaAberta && !amtui_aberta() &&
+              !detmais_aberto() &&
               !episodios_menu_aberto() && trocaarte_visivel() < 0.005f;
   if (!livre && !reacao_aberta()) return;
   reacao_detalhe_dica(cat_item(idx), livre ? s : 0.0f);
@@ -6838,6 +6847,13 @@ static void detalheFundo(float s) {
   }
 }
 
+// A ILHA "MAIS OPCOES" por cima da pagina, ancorada no "..." onde ele foi
+// desenhado neste quadro. Rolou a pagina (nivel 1) com ela fechando: some.
+static void maisDesenhar(void) {
+  if (detmais_aberto() && nivel != 0) detmais_fechar();
+  detmais_desenhar(maisAncora, 1.0f - trocaarte_visivel());
+}
+
 void detail_desenhar(Uint32 agora) {
   if (!aberto) return;
   amigostitulo_atualizar();   // barato: so remonta quando o feed social mudou
@@ -6918,6 +6934,7 @@ void detail_desenhar(Uint32 agora) {
     if (colListaAberta) { ponteiro_camada(); desenhaListaColecao(s); }
     if (episodios_menu_aberto()) ponteiro_camada();
     reacaoPendente(s);
+    maisDesenhar();
     if (amtui_aberta()) { ponteiro_camada(); amtui_desenhar(agora); }
     return;
   }
@@ -6937,6 +6954,7 @@ void detail_desenhar(Uint32 agora) {
   if (episodios_menu_aberto()) ponteiro_camada();
   reacaoPendente(s);
   episodios_menu_desenhar();
+  maisDesenhar();
   if (amtui_aberta()) { ponteiro_camada(); amtui_desenhar(agora); }
 }
 
