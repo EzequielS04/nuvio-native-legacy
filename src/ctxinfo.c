@@ -80,8 +80,10 @@ void ctxinfo_geometria(const GfxRect *cartaz, float menuXPadrao, float centroX,
 }
 
 void ctxinfo_cartao_geo(const GfxRect *poster, float h, float menuW, CtxCartaoGeo *g) {
+  ctxinfo_cartao_geo_w(poster, CTXI_CARTAO_W < poster->w ? poster->w : CTXI_CARTAO_W, h, menuW, g);
+}
+void ctxinfo_cartao_geo_w(const GfxRect *poster, float w, float h, float menuW, CtxCartaoGeo *g) {
   const float W = NV_TELA_W, H = NV_TELA_H, B = CTXI_BORDA, G = CTXI_GAP;
-  float w = CTXI_CARTAO_W < poster->w ? poster->w : CTXI_CARTAO_W;
   float total = w + G + menuW, x;
   if (h < poster->h) h = poster->h;
   memset(g, 0, sizeof *g);
@@ -312,7 +314,9 @@ static float fazer(const CatItem *ci, const CtxInfoEstado *st, float x, float y,
       float raio = 22.0f / r.h;
       if (t) {
         gfx_tex_aspect_atual = tex_aspecto(arte);
+        gfx_card_forcar_cover_atual = 1.0f;   // preenche a faixa (sem barras laterais)
         gfx_rect(r, t, GFX_CARD, 0, 0, 0, raio, 0, 0, 0, a);
+        gfx_card_forcar_cover_atual = 0.0f;
         gfx_tex_aspect_atual = 0.0f;
       } else gfx_cor(r, raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G, NV_COR_ESQUELETO_B, a);
       gfx_veu_base(r, raio, 0.62f, 0.78f * a);
@@ -403,7 +407,7 @@ static float fazer(const CatItem *ci, const CtxInfoEstado *st, float x, float y,
     if (m.visto && desenhar) badge_desenhar(bx, y, i18n("Assistido"), BADGE_REALCE, ca);
     y += BADGE_H;
   }
-  y += PAD + 20.0f;
+  y += PAD + 4.0f;
   return y - y0;
 }
 
@@ -472,4 +476,19 @@ float ctxinfo_compacto(const CatItem *ci, const CtxInfoEstado *st, float x, floa
     y += (float)sinCache.n * SIN_LEAD;
   }
   return y - y0;
+}
+
+// SOBRE A ARTE (cartoes grandes, paisagem): a informacao e uma camada em cima da
+// propria foto — degrade na base, logo, meta, notas e sinopse curta.
+#define SOBRE_PAD 22.0f
+float ctxinfo_sobre_altura(const CatItem *ci, const CtxInfoEstado *st, float w) {
+  return SOBRE_PAD + 52.0f + 8.0f + ctxinfo_compacto(ci, st, 0, 0, w - 2.0f * SOBRE_PAD, 0, 0) + SOBRE_PAD * 0.7f;
+}
+void ctxinfo_sobre_arte(const CatItem *ci, const CtxInfoEstado *st, GfxRect r, float raioPx, float ca) {
+  float h = ctxinfo_sobre_altura(ci, st, r.w), y0 = r.y + r.h - h, cw = r.w - 2.0f * SOBRE_PAD;
+  if (ca < 0.01f) return;
+  gfx_veu_base((GfxRect){ r.x, y0 - 50.0f, r.w, h + 50.0f }, raioPx / (h + 50.0f), 0.0f, 0.94f * ca);
+  gfx_veu_base(r, raioPx / r.h, 0.45f, 0.5f * ca);
+  logotitulo_desenhar(ci, ci->titulo, TXT_ILHA_NOME, r.x + SOBRE_PAD, y0 + SOBRE_PAD, LOGO_W, 52.0f, cw, ca);
+  ctxinfo_compacto(ci, st, r.x + SOBRE_PAD, y0 + SOBRE_PAD + 52.0f + 8.0f, cw, ca, 1);
 }
