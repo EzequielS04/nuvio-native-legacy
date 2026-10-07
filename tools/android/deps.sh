@@ -20,7 +20,7 @@ if [ -x "$CMAKE_SDK/cmake" ]; then CMAKE="$CMAKE_SDK/cmake"; NINJA="$CMAKE_SDK/n
 [ -x "$CMAKE" ] && [ -x "$NINJA" ] || { echo "cmake/ninja ausentes" >&2; exit 1; }
 READELF="$TC/bin/llvm-readelf"; NM="$TC/bin/llvm-nm"
 
-CACHE="$HOME/.cache/nuvio-android"
+CACHE="${NUVIO_ANDROID_CACHE:-$HOME/.cache/nuvio-android}"
 SRC="$CACHE/src"; BUILD="$CACHE/build"; PREFIX="$CACHE/prefix"
 mkdir -p "$SRC" "$BUILD"
 JOBS="$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
@@ -77,6 +77,17 @@ for abi in "${ABIS[@]}"; do
   if grep -q '^//#define MBEDTLS_THREADING_C' "$CFG"; then
     sed -i '' -e 's|^//#define MBEDTLS_THREADING_C$|#define MBEDTLS_THREADING_C|' \
               -e 's|^//#define MBEDTLS_THREADING_PTHREAD$|#define MBEDTLS_THREADING_PTHREAD|' "$CFG"
+    rm -f "$PREFIX"/*/lib/libmbedtls.a "$PREFIX"/*/lib/libcurl.so
+  fi
+  # ENTROPIA DE /dev/urandom (#266 Shield, #332 BRAVIA). O mbedTLS 3.6 so usa
+  # getrandom() com __GLIBC__; no bionic cai no MBEDTLS_PLATFORM_DEV_RANDOM, que
+  # por padrao e "/dev/random". Em kernel < 5.6 (Android 9-11 de TV: 3.18/4.4/4.9)
+  # /dev/random BLOQUEIA quando a estimativa de entropia esta baixa, e e la que
+  # psa_crypto_init/ctr_drbg_seed (curl_global_init) leem. /dev/urandom nunca
+  # bloqueia num aparelho ja ligado; e o que o proprio bionic (arc4random) usa.
+  if ! grep -q '^#define MBEDTLS_PLATFORM_DEV_RANDOM "/dev/urandom"$' "$CFG"; then
+    sed -i '' -e 's|^//#define MBEDTLS_PLATFORM_DEV_RANDOM "/dev/random"$|#define MBEDTLS_PLATFORM_DEV_RANDOM "/dev/urandom"|' "$CFG"
+    grep -q '^#define MBEDTLS_PLATFORM_DEV_RANDOM "/dev/urandom"$' "$CFG" || { echo "deps.sh: nao achei MBEDTLS_PLATFORM_DEV_RANDOM em $CFG" >&2; exit 1; }
     rm -f "$PREFIX"/*/lib/libmbedtls.a "$PREFIX"/*/lib/libcurl.so
   fi
 
@@ -152,6 +163,11 @@ conferir() {  # conferir <abi> <lib> <sym...>
 for abi in "${ABIS[@]}"; do
   conferir "$abi" libcurl.so curl_easy_init curl_easy_setopt curl_easy_perform curl_easy_cleanup curl_global_init \
     curl_slist_append curl_slist_free_all curl_easy_getinfo curl_easy_reset curl_easy_strerror
+  # #266/#332: a entropia tem de vir de /dev/urandom (ver MBEDTLS_PLATFORM_DEV_RANDOM acima).
+  dev="$(strings "$PREFIX/$abi/lib/libcurl.so" | grep -E '^/dev/u?random$' || true)"
+  if [ "$dev" != "/dev/urandom" ]; then
+    echo "   $abi libcurl.so le /dev/random (bloqueia em kernel antigo)"; falhou=1
+  fi
   conferir "$abi" libjpeg.so jpeg_std_error jpeg_CreateDecompress jpeg_stdio_src jpeg_read_header jpeg_start_decompress \
     jpeg_read_scanlines jpeg_finish_decompress jpeg_destroy_decompress jpeg_calc_output_dimensions
   conferir "$abi" libwebp.so WebPGetInfo WebPDecodeRGBA WebPFree WebPInitDecoderConfigInternal WebPDecode WebPFreeDecBuffer
