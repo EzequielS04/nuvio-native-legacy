@@ -1364,6 +1364,23 @@ static int corridasDe(TTF_Font *f, TTF_Font *a, TTF_Font *b, const char *s,
   return n;
 }
 
+// #335: negrito SINTETICO sobre arabe estraga a escrita. O Noto Naskh embarcado
+// so tem a face Regular, e o SDL_ttf engorda o bitmap ja rasterizado: as letras
+// ligadas (formas de apresentacao de bidi.c) se fundem e os pontos viram borrao.
+// Texto arabe fica no peso Regular; so o latim da mesma linha recebe o negrito.
+static int txtTemArabe(const char *s) {
+  const unsigned char *p = (const unsigned char *)s;
+  for (; p && *p; p++) {
+    if ((*p >= 0xD8 && *p <= 0xDB) || *p == 0xDD) return 1;               // U+0600-06FF, U+0740-07BF
+    if (*p == 0xEF && ((p[1] >= 0xAD && p[1] <= 0xB7) || (p[1] >= 0xB9 && p[1] <= 0xBB))) return 1; // FB50-FDFF, FE70-FEFF
+  }
+  return 0;
+}
+static int txtTemLatim(const char *s) {
+  for (; s && *s; s++) if ((*s >= 'A' && *s <= 'Z') || (*s >= 'a' && *s <= 'z')) return 1;
+  return 0;
+}
+
 // Estilo TTF somado a uma fonte de corrida (o negrito/italico da legenda), e
 // devolvido depois.
 static int estiloSoma(TTF_Font *g, TTF_Font *f, int extra) {
@@ -1385,7 +1402,7 @@ static int medirCorridas(TTF_Font *f, TTF_Font *a, TTF_Font *b, const char *s,
     int cw = 0, ch = 0, ant, len = c[i].fim - c[i].ini;
     if (len <= 0 || len >= (int)sizeof pedaco) continue;
     memcpy(pedaco, s + c[i].ini, (size_t)len); pedaco[len] = 0;
-    ant = estiloSoma(c[i].f, f, extra);
+    ant = estiloSoma(c[i].f, f, txtTemArabe(pedaco) ? (extra & ~TTF_STYLE_BOLD) : extra);
     if (TTF_SizeUTF8(c[i].f, pedaco, &cw, &ch) == 0) soma += cw;
     estiloVolta(c[i].f, f, ant);
   }
@@ -1405,7 +1422,7 @@ static SDL_Surface *renderCorridas(TTF_Font *f, TTF_Font *a, TTF_Font *b,
     sf[i] = NULL;
     if (len <= 0 || len >= (int)sizeof pedaco) continue;
     memcpy(pedaco, s + c[i].ini, (size_t)len); pedaco[len] = 0;
-    ant = estiloSoma(c[i].f, f, extra);
+    ant = estiloSoma(c[i].f, f, txtTemArabe(pedaco) ? (extra & ~TTF_STYLE_BOLD) : extra);
     sf[i] = TTF_RenderUTF8_Blended(c[i].f, pedaco, cor);
     estiloVolta(c[i].f, f, ant);
     if (!sf[i]) continue;
@@ -1578,6 +1595,7 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
   // reserva nascem com TTF_STYLE_BOLD ligado (ver txt_iniciar); zerar aqui
   // tiraria delas o peso que o app inteiro conta com.
   int estiloAnt, novo = 0;
+  if (enfase && txtTemArabe(v) && !txtTemLatim(v)) enfase &= ~TXT_ENF_NEGRITO;   // #335
   if (enfase) fonte = fonteComEnfase(familia, estilo, fonte, enfase, &novo);
   estiloAnt = TTF_GetFontStyle(fonte);
   if (enfase && novo != estiloAnt) TTF_SetFontStyle(fonte, novo);
@@ -1687,6 +1705,7 @@ static int larguraLinhaMedir(TxtEstilo estilo, const char *s, TxtFamilia familia
   altDe(familia, estilo, fonte, &a1, &a2);
   const char *v = visualDe(fonte, s, vis, sizeof vis);
   int estiloAnt, novo = 0;
+  if (enfase && txtTemArabe(v) && !txtTemLatim(v)) enfase &= ~TXT_ENF_NEGRITO;   // #335
   if (enfase) fonte = fonteComEnfase(familia, estilo, fonte, enfase, &novo);
   estiloAnt = TTF_GetFontStyle(fonte);
   if (enfase && novo != estiloAnt) TTF_SetFontStyle(fonte, novo);

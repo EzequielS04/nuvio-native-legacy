@@ -94,6 +94,7 @@ typedef struct {
   long long ms;          // instante (relogio do video) que este quadro mostra
   long long inicioMax;   // maior Start dos eventos vivos em ms; -1 sem evento
   float ox, oy;          // canto da area do video na tela quando foi renderizado
+  int k;                 // pixels do alvo por unidade de layout: o quadro foi renderizado k vezes maior (#335)
 } AssCpuFrame;
 
 static pthread_mutex_t assTrava = PTHREAD_MUTEX_INITIALIZER;
@@ -139,6 +140,7 @@ static int assFrameW, assFrameH;
 static float layPedX, layPedY;
 static int layPedW = 1920, layPedH = 1080, layPedVW = 1920, layPedVH = 1080;
 static double layPedEscala = 1.0;
+static int layPedK = 1;
 static int layAplW, layAplH, layAplVW, layAplVH;
 static double layAplEscala;
 static unsigned assGeracao;
@@ -350,6 +352,7 @@ static void ass_iniciar_locked(int sistema) {
   ass_set_frame_size(assRenderer, assFrameW, assFrameH);
   ass_set_storage_size(assRenderer, assFrameW, assFrameH);
   ass_set_font_scale(assRenderer, 1.0);
+  ass_set_hinting(assRenderer, ASS_HINTING_LIGHT);   /* explicito: nao depender do padrao da versao */
   layAplW = layAplVW = assFrameW; layAplH = layAplVH = assFrameH; layAplEscala = 1.0;
   clock_gettime(CLOCK_MONOTONIC, &t1);
   /* Uma vez por sessao; na C9 a pasta tem 106 MB de fontes. */
@@ -406,6 +409,28 @@ static int ass_frame_copiar(ASS_Image *im, AssCpuFrame *out) {
   return 1;
 }
 
+/* #335: negrito sintetico do libass (FT_Outline_Embolden) sobre o Noto Naskh,
+ * que so tem Regular, funde as letras ligadas e borra os pontos. Trilha com
+ * texto arabe fica em peso Regular. Detecta por bytes UTF-8: U+0600-06FF
+ * (D8-DB), U+0740-07BF (DD), U+FB50-FDFF e U+FE70-FEFF (EF AD-B7 / B9-BB). */
+static int assArabe;
+static int ass_texto_tem_arabe(const char *t) {
+  const unsigned char *p = (const unsigned char *)t;
+  for (; p && *p; p++) {
+    if ((*p >= 0xD8 && *p <= 0xDB) || *p == 0xDD) return 1;
+    if (*p == 0xEF && ((p[1] >= 0xAD && p[1] <= 0xB7) || (p[1] >= 0xB9 && p[1] <= 0xBB))) return 1;
+  }
+  return 0;
+}
+static void ass_trilha_arabe_sem_negrito(ASS_Track *t) {
+  int i, arabe = 0;
+  for (i = 0; i < t->n_events && !arabe; i++) arabe = ass_texto_tem_arabe(t->events[i].Text);
+  assArabe = arabe;
+  if (!arabe) return;
+  for (i = 0; i < t->n_styles; i++) t->styles[i].Bold = 0;
+  ass_diag("libass: trilha com arabe: negrito sintetico desligado");
+}
+
 static void ass_plain_style_locked(const PlainAssStyle *p) {
   ASS_Style *s;
   if (!assTextoSimples || !assTrack || !assTrack->n_styles) return;
@@ -420,7 +445,7 @@ static void ass_plain_style_locked(const PlainAssStyle *p) {
   s->PrimaryColour = s->SecondaryColour = ((uint32_t)p->rgb << 8);
   s->OutlineColour = 0x00000000u;
   s->BackColour = p->background ? (unsigned)(255 - (p->background * 255 * 16 / 100)) : 46u;
-  s->Bold = p->bold ? 1 : 0;
+  s->Bold = (p->bold && !assArabe) ? 1 : 0;
   s->BorderStyle = p->background ? 4 : 1;
   s->Outline = p->border == 1 ? 2 : 0;
   s->Shadow = p->border == 2 ? 4 : 0;
@@ -471,7 +496,7 @@ static void *ass_worker_loop(void *unused) {
     unsigned generation, serial, epoch;
     double ms, esc;
     float ox, oy;
-    int lw, lh, vw, vh, plainValid;
+    int lw, lh, vw, vh, plainValid, k;
     PlainAssStyle plain;
     struct timespec a, b;
     ASS_Image *images = NULL;
@@ -482,7 +507,8 @@ static void *ass_worker_loop(void *unused) {
       pthread_cond_wait(&assFilaCond, &assFilaTrava);
     if (assWorkerParar) { pthread_mutex_unlock(&assFilaTrava); break; }
     generation = assPedidoGeracao; serial = assPedidoSerial; epoch = assEpoch; ms = assPedidoMs;
-    ox = layPedX; oy = layPedY; lw = layPedW; lh = layPedH;
+    ox = layPedX; oy = layPedY; lw = layPedW; lh = layPedH; k = layPedK;
+    lw *= k; lh *= k;   /* libass renderiza em pixels do alvo, nao em unidades de layout */
     vw = layPedVW; vh = layPedVH; esc = layPedEscala;
     plain = plainPed; plainValid = plainPedValido;
     assPedidoPendente = 0;
@@ -517,7 +543,7 @@ static void *ass_worker_loop(void *unused) {
       if (!igual) {
         pronto = ass_frame_copiar(images, &frame);
         frame.ms = t; frame.inicioMax = -1;
-        frame.ox = ox; frame.oy = oy;
+        frame.ox = ox; frame.oy = oy; frame.k = k;
         { int i;
           for (i = 0; i < assTrack->n_events; i++) {
             long long ini = assTrack->events[i].Start;
@@ -675,6 +701,7 @@ static int ass_carregar(const char *corpo, size_t tamanho, unsigned geracao, int
   }
   if (assTrack) ass_free_track(assTrack);
   assTrack = track;
+  ass_trilha_arabe_sem_negrito(track);
   plainTimingValid = 0;
   /* Authored ASS retains its own margins after a converted plain track. */
   ass_set_selective_style_override_enabled(assRenderer, 0);
@@ -822,17 +849,27 @@ int assrender_adicionar_fonte(const char *nome, const void *dados, size_t tamanh
   { int ok = assLib != NULL; pthread_mutex_unlock(&assTrava); return ok; }
 }
 
+/* #335: o layout do app e sempre 1920x1080. Com a interface em 4K o alvo tem
+ * 3840x2160, e um quadro do libass feito em 1920x1080 era esticado 2x com filtro
+ * linear: a legenda ASS saia mole. Agora o libass renderiza no tamanho REAL do
+ * alvo (k = pixels por unidade, 1 ou 2) e o quadro volta a ser desenhado 1:1.
+ * Quem desenha informa (player.c); sem informar, k = 1. */
+static int layPxUnid = 1;
+static int ass_pixels_por_unidade(void) { return layPxUnid; }
+void assrender_pixels_por_unidade(float f) { layPxUnid = f >= 1.5f ? 2 : 1; }
+
 void assrender_definir_layout(float x, float y, float w, float h,
                               int videoW, int videoH, double escalaFonte) {
-  int lw = (int)lroundf(w), lh = (int)lroundf(h);
+  int lw = (int)lroundf(w), lh = (int)lroundf(h), k;
   if (lw < 16 || lh < 16) return;
   if (videoW < 2 || videoH < 2) { videoW = lw; videoH = lh; }
   if (!(escalaFonte > 0.1 && escalaFonte < 4.0)) escalaFonte = 1.0;
+  k = ass_pixels_por_unidade();
   pthread_mutex_lock(&assFilaTrava);
   if (lw != layPedW || lh != layPedH || videoW != layPedVW || videoH != layPedVH ||
-      escalaFonte != layPedEscala || fabsf(x - layPedX) > 0.5f || fabsf(y - layPedY) > 0.5f) {
+      k != layPedK || escalaFonte != layPedEscala || fabsf(x - layPedX) > 0.5f || fabsf(y - layPedY) > 0.5f) {
     layPedX = x; layPedY = y; layPedW = lw; layPedH = lh;
-    layPedVW = videoW; layPedVH = videoH; layPedEscala = escalaFonte;
+    layPedVW = videoW; layPedVH = videoH; layPedEscala = escalaFonte; layPedK = k;
     /* O quadro em tela fica ate o novo chegar (sem piscar), mas nada
      * renderizado com o layout velho pode ser publicado depois disto, e o
      * proximo desenhar pede um render mesmo com o video pausado. */
@@ -972,9 +1009,12 @@ int assrender_desenhar(double posSeg, int atrasoMs, float alpha,
      * (0,0) e o canto superior esquerdo. A textura contem somente a caixa do
      * glyph e pode ser composta diretamente pelo shader de texto. */
     gfx_tex_aspect_atual = 0.0f;
-    gfx_rect((GfxRect){ x + assAtual.ox + (float)im->x, y + assAtual.oy + (float)im->y,
-                        (float)im->w, (float)im->h }, tex, GFX_TEXTO,
-             0, 0, 0, 0, 1, 1, 1, alpha);
+    { float kk = assAtual.k > 1 ? (float)assAtual.k : 1.0f;
+      /* Origem arredondada ao pixel do alvo: 1:1, sem meio pixel de filtro. */
+      float dx = roundf((x + assAtual.ox) * kk) / kk + (float)im->x / kk;
+      float dy = roundf((y + assAtual.oy) * kk) / kk + (float)im->y / kk;
+      gfx_rect((GfxRect){ dx, dy, (float)im->w / kk, (float)im->h / kk }, tex, GFX_TEXTO,
+               0, 0, 0, 0, 1, 1, 1, alpha); }
   }
   if (reenviar) { assTexSerial = assAtual.serial; assTexCorChave = corChave; }
   gfx_tex_aspect_atual = 0.0f;
@@ -1085,6 +1125,7 @@ void assrender_definir_layout(float x, float y, float w, float h,
                               int videoW, int videoH, double escalaFonte) {
   (void)x; (void)y; (void)w; (void)h; (void)videoW; (void)videoH; (void)escalaFonte;
 }
+void assrender_pixels_por_unidade(float f) { (void)f; }
 int assrender_ativo(void) { return 0; }
 int assrender_quadro_cpu(double posSeg) { (void)posSeg; return -1; }
 const char *assrender_diagnostico(void) { return assDiag; }
