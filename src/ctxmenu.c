@@ -28,6 +28,7 @@
 #include "colecoes.h"
 #include "listas.h"
 #include "home.h"
+#include "ctxinfo.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -68,6 +69,9 @@ enum { CTX_PENDENTE = 1, CTX_CONFIRMADA = 2, CTX_FALHA = 3 };
 #define CTX_LOGO_W   300.0f
 #define CTX_LOGO_H    52.0f
 #define CTX_CAB_LOGO (12.0f + CTX_LOGO_H + 6.0f + 19.0f + 10.0f)
+// COM A EXTENSAO AO LADO (ctxinfo.h) o logo e a meta moram nela, e o menu fica
+// so com uma linha de cabecalho: o nome, ou o estado da escrita em curso.
+#define CTX_CAB_CURTO 44.0f
 #define CTX_LINHA     60.0f
 #define CTX_GAP        4.0f
 #define CTX_AO_LADO   30.0f     // do poster a ilha
@@ -86,7 +90,7 @@ static int tituloSalvo(const CatItem *ci) {
          (simkl_ativo() && simkl_na_plantowatch(ci->imdb));
 }
 
-static int   aberto, idx = -1, foco, pedDetalhes = -1;
+static int   aberto, idx = -1, foco;
 // MODO LISTA (Biblioteca > Listas): o menu e de uma LISTA, nao de um titulo.
 // `cartazFixo`: o retangulo do cartaz veio de quem abriu (biblioteca.c) e nao
 // deve ser refeito a cada quadro a partir do cartaz focado da HOME.
@@ -147,7 +151,6 @@ static int      pendExtra = -1;   // extra a soltar quando o historico confirmar
 // Removeu pelo painel: o menu sai sozinho quando a remocao CONFIRMA — a linha
 // ja nao existe mais atras dele, e o foco do painel foi para a seguinte.
 static int     fecharAoConfirmar;
-static char    pedDetalhesImdb[24];
 static float   dicaCx = -1.0f;   // centro da barra de "Segure OK"; <0 = tela
 // O POSTER DE ONDE O MENU SAIU (home_item_focado): a ilha nasce ao lado dele e
 // ele e redesenhado POR CIMA do veu, como no mockup — a pessoa ve de qual
@@ -156,6 +159,11 @@ static float   dicaCx = -1.0f;   // centro da barra de "Segure OK"; <0 = tela
 static int     temCartaz;
 static GfxRect cartazRect;
 static char    cartazArte[1024];
+// A EXTENSAO DE INFORMACOES (ctxinfo.h): a mola dela (entra depois do menu), a
+// altura suavizada (o resumo chega aos poucos) e a caixa do ultimo quadro.
+static float   infoT, infoH;
+static int     infoDesenhada, infoLadoUlt;
+static GfxRect infoCaixa, menuCaixa;
 
 static int teclaOk(SDL_Keycode k) {
   return k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE;
@@ -221,7 +229,7 @@ static struct { const char *rot; int acao; } ops[CTX_MAX];
 static int nOps;
 static float focoAnim[CTX_MAX];
 static int holdObservador;
-enum { OP_DETALHES, OP_LISTA, OP_ASSISTIDO, OP_TIRAR_CONTINUAR, OP_RECOMENDAR, OP_DISPENSAR,
+enum { OP_LISTA = 1, OP_ASSISTIDO, OP_TIRAR_CONTINUAR, OP_RECOMENDAR, OP_DISPENSAR,
        OP_ESTILO, OP_CATEGORIA, OP_L_ABRIR, OP_L_FIXAR, OP_L_HOME,
        OP_EXTRA = 100 };   // OP_EXTRA + k = extras[k] (modo social)
 // "Mover para categoria" pedido no modo painel: o IMDb do titulo, consumido
@@ -315,6 +323,13 @@ static const CatItem *itemAtual(void) {
   return ci;
 }
 
+// A extensao existe para TITULO: nao para a linha de um amigo (sem IMDb) nem
+// para o menu de lista ou de estilo.
+static int infoPossivel(const CatItem *ci) {
+  return ci && !doLista && !soFileira && ci->imdb[0] && ci->titulo[0] &&
+         strcmp(ci->tipo, "channel") && strcmp(ci->tipo, "tv");
+}
+
 // -1 nao consultado, 0 nao visto, 1 visto. Por id, para valer tambem na copia.
 static int historicoDe(const CatItem *ci) {
   return ci ? cat_historico_estado_id(ci->imdb, ci->tipo) : -1;
@@ -378,9 +393,9 @@ static void montar(void) {
     if (foco < 0) foco = 0;
     return;
   }
-  // "Mais informações" no painel, que e o nome que o dono deu ao pedir; o
-  // efeito e o mesmo "Ver detalhes" do cartaz (a pagina do titulo).
-  juntar(doPainel ? "Mais informações" : "Ver detalhes", OP_DETALHES);
+  // SEM "VER DETALHES" / "MAIS INFORMAÇÕES" (dono, 06/10/2026): o toque no
+  // cartaz ja abre o titulo, e o que a pessoa queria ver de relance agora esta
+  // na extensao ao lado do menu (ctxinfo.h).
   // Sem IMDb nao ha endpoint remoto suportado para esta acao. Nao oferecer
   // um botao que so aparentaria funcionar e inventaria estado local.
   if (ci->imdb[0]) {
@@ -579,20 +594,24 @@ static void abrirComum(int indice) {
   // KEYUP seguinte seja reaproveitado como uma selecao dentro da modal.
   holdPronto = 0;
   esperandoSoltura = 1;   // o OK que abriu ainda esta afundado; ver a nota acima
-  idx = indice; foco = 0; aberto = 1; pedDetalhes = -1;
+  idx = indice; foco = 0; aberto = 1;
   dispensarOp = dispensarPend; dispensarPend = 0;
   temCartaz = 0; cartazFixo = 0;
   pagina = soFileira ? 1 : 0;
   estFoco = -1;               // montar() poe o foco na forma atual
   prevAtual = prevAnt = prevRefAtual = prevRefAnt = -1; prevT = 1.0f;
   memset(estAnim, 0, sizeof estAnim);
-  pedDetalhesImdb[0] = 0;
   fecharAoConfirmar = 0;
   operacao = CTX_OP_NENHUMA; intencao = 0; estadoOperacao = 0;
   espelhoAplicado = 0;
   operacaoImdb[0] = 0;
   memset(focoAnim, 0, sizeof focoAnim);
   montar();
+  infoT = 0.0f; infoH = 0.0f; infoDesenhada = 0;
+  // Sem "Ver detalhes", um titulo sem id nenhum nao tem acao: um menu vazio
+  // seria pior que nenhum (o toque continua abrindo o titulo).
+  if (!doLista && pagina == 0 && nOps == 0) { aberto = 0; return; }
+  if (!doLista && !soFileira) ctxinfo_abrir(itemAtual());
 }
 
 void ctx_abrir_salvo(const CatItem *titulo) {
@@ -642,15 +661,15 @@ int ctx_pediu_extra(void) { int v = extraPedido; extraPedido = -1; return v; }
 int ctx_do_painel(void) { return aberto && doPainel; }
 void ctx_centro_dica(float cx) { dicaCx = cx; }
 
-const char *ctx_pediu_detalhes_imdb(void) {
-  static char s[24];
-  if (!pedDetalhesImdb[0]) return NULL;
-  snprintf(s, sizeof s, "%s", pedDetalhesImdb);
-  pedDetalhesImdb[0] = 0;
-  return s;
-}
-
 int ctx_aberto(void) { return aberto; }
+int ctx_info_caixa(GfxRect *info, GfxRect *menu, int *lado) {
+  if (!infoDesenhada) return 0;
+  if (info) *info = infoCaixa;
+  if (menu) *menu = menuCaixa;
+  if (lado) *lado = infoLadoUlt;
+  return 1;
+}
+const CatItem *ctx_titulo(void) { return aberto && !doLista && !soFileira ? itemAtual() : NULL; }
 const char *ctx_pediu_categoria(void) {
   static char s[24];
   if (!pedCategoriaImdb[0]) return NULL;
@@ -658,7 +677,6 @@ const char *ctx_pediu_categoria(void) {
   pedCategoriaImdb[0] = 0;
   return s;
 }
-int ctx_pediu_detalhes(void) { int v = pedDetalhes; pedDetalhes = -1; return v; }
 
 // O ESPELHO LOCAL DE "ASSISTIDO", separado de quem confirma: com Trakt ele
 // roda depois do 2xx (ctx_atualizar); sem Trakt roda na hora (aplicar), porque
@@ -839,7 +857,7 @@ static void aplicar(void) {
   //
   // Enquanto a requisicao esta no ar continua valendo esperar: duas escritas
   // simultaneas na mesma superficie e que nao podem acontecer.
-  if (acao != OP_DETALHES && estadoOperacao == CTX_PENDENTE) return;
+  if (estadoOperacao == CTX_PENDENTE) return;
   // Tirar so depois da confirmacao: o primeiro OK abre a pagina 2, e e ela
   // que chama aplicar() de novo, com a pagina ainda em 2.
   if (acao == OP_TIRAR_CONTINUAR && pagina != 2) {
@@ -848,12 +866,6 @@ static void aplicar(void) {
     return;
   }
   switch (acao) {
-    case OP_DETALHES:
-      // O painel resolve pelo IMDb (spainel_pediu_abrir -> app.c), porque o
-      // titulo dele pode nao ter indice; a home continua pelo indice.
-      if (doPainel) snprintf(pedDetalhesImdb, sizeof pedDetalhesImdb, "%s", ci->imdb);
-      else pedDetalhes = idx;
-      break;
     case OP_LISTA:
       // Captura a intencao ANTES de qualquer escrita. O mesmo valor segue para
       // o POST e so chega ao espelho local depois de uma resposta 2xx.
@@ -987,7 +999,6 @@ static void aplicar(void) {
       break;
     }
   }
-  if (acao == OP_DETALHES) aberto = 0;
 }
 
 void ctx_evento(const SDL_Event *e) {
@@ -1067,6 +1078,11 @@ void ctx_atualizar(float dt, Uint32 agora) {
     anim = aberto ? 1.0f : 0.0f;
   else
     anim = anim_mola(anim, aberto ? 1.0f : 0.0f, dt, NV_MOLA_TELA);
+  // A extensao sai da borda do menu DEPOIS que ele assentou (meio caminho da
+  // mola): primeiro as opcoes, logo em seguida as informacoes.
+  { float alvo = (aberto && pagina == 0 && infoPossivel(itemAtual()) && anim > 0.5f) ? 1.0f : 0.0f;
+    if (!aberto) alvo = 0.0f;
+    infoT = ajustes_animacoes_reduzidas() ? alvo : anim_mola(infoT, alvo, dt, NV_MOLA_TELA); }
   for (i = 0; i < CTX_MAX; i++)
     focoAnim[i] = ajustes_animacoes_reduzidas()
       ? (aberto && foco == i ? 1.0f : 0.0f)
@@ -1595,9 +1611,12 @@ static int cartaoDaHome(void) {
 static void ctx_desenharCorpo_(Uint32 agora) {
   const CatItem *ci;
   const char *mensagem = NULL;
-  float a = anim, alt, x, y, cab;
-  int i, comLogo;
+  float a = anim, alt, x, y, cab, grupoH;
+  int i, comLogo, infoOn;
+  CtxInfoGeo geo;
+  CtxInfoEstado est;
   (void)agora;
+  infoDesenhada = 0;
   // So no painel de Salvos (dicaCx): na home o cartao pressionado ja tem a
   // propria barra (home.c), e esta, no meio da tela, era a sobra duplicada.
   if (!aberto && holdAtivo && dicaCx >= 0.0f) {
@@ -1653,8 +1672,11 @@ static void ctx_desenharCorpo_(Uint32 agora) {
   { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
     gfx_cor(tela, 0.0f, 0, 0, 0, 0.55f * a); }
 
-  comLogo = logotitulo_url(ci, CTX_LOGO_W) != NULL;
-  cab = comLogo ? CTX_CAB_LOGO : CTX_CAB;
+  infoOn = infoPossivel(ci);
+  est.salvo = tituloSalvo(ci);
+  est.visto = historicoDe(ci);
+  comLogo = !infoOn && logotitulo_url(ci, CTX_LOGO_W) != NULL;
+  cab = infoOn ? CTX_CAB_CURTO : comLogo ? CTX_CAB_LOGO : CTX_CAB;
   alt = CTX_ILHA_PAD * 2.0f + cab + (float)nOps * (CTX_LINHA + CTX_GAP);
   // AO LADO DO CARTAZ, alinhada ao topo: tenta a direita, depois a esquerda.
   // Se ambos os lados forem estreitos, ctxXCartaz escolhe o de maior espaco e
@@ -1670,11 +1692,31 @@ static void ctx_desenharCorpo_(Uint32 agora) {
     float cx = doPainel && dicaCx >= 0.0f ? dicaCx : NV_TELA_W * 0.5f;
     x = cx - CTX_W * 0.5f;
   }
-  if (y + alt > NV_TELA_H - CTX_BORDA) y = NV_TELA_H - CTX_BORDA - alt;
+  // A EXTENSAO muda o lugar do menu: os dois juntos ao lado do cartaz (ou no
+  // meio), e o grupo inteiro dentro da tela. Ver ctxinfo_geometria.
+  memset(&geo, 0, sizeof geo);
+  grupoH = alt;
+  if (infoOn) {
+    float pedido = doPainel && dicaCx >= 0.0f ? dicaCx : -1.0f;
+    ctxinfo_geometria(temCartaz && !doPainel ? &cartazRect : NULL, x, pedido, CTX_W, &geo);
+    x = geo.menuX;
+    if (geo.infoW > 0.0f) {
+      float hAlvo = ctxinfo_altura(ci, &est, geo.infoW);
+      if (hAlvo < alt) hAlvo = alt;          // nunca mais baixa que o menu
+      // A altura anda com o que chega (notas, sinopse), sem pular.
+      if (infoH < 1.0f || ajustes_animacoes_reduzidas()) infoH = hAlvo;
+      else infoH += (hAlvo - infoH) * 0.22f;
+      if (infoH > grupoH) grupoH = infoH;
+      if (!(temCartaz && !doPainel)) y = (NV_TELA_H - grupoH) * 0.5f;
+    }
+  }
+  if (y + grupoH > NV_TELA_H - CTX_BORDA) y = NV_TELA_H - CTX_BORDA - grupoH;
   if (y < CTX_BORDA) y = CTX_BORDA;
   if (aberto && a > 0.5f && ponteiro_ativo()) {
     ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, ponteiroCtxFora, 0, 0);
     ponteiro_alvo(x, y, CTX_W, alt, NULL, NULL, 0, 0);
+    // A extensao e parte do menu: clicar nela nao fecha nada.
+    if (geo.infoW > 0.0f) ponteiro_alvo(geo.infoX, y, geo.infoW, infoH, NULL, NULL, 0, 0);
   }
 
   // O POSTER POR CIMA DO VEU, na mesma caixa e no mesmo raio do cartao da
@@ -1697,12 +1739,28 @@ static void ctx_desenharCorpo_(Uint32 agora) {
     }
   }
 
+  // A EXTENSAO, POR BAIXO DO MENU: sai da borda dele (ou do cartaz, quando
+  // ficou do outro lado) deslizando 40 px e acendendo; o conteudo entra um
+  // pouco depois da superficie. Mesmo vidro do menu (ilhaCtx), sem borrao novo.
+  if (geo.infoW > 0.0f && infoT > 0.01f) {
+    float e = infoT > 1.0f ? 1.0f : infoT;
+    float ix = geo.infoX - (float)geo.lado * (1.0f - e) * 40.0f;
+    float sa = a * (e * 1.6f > 1.0f ? 1.0f : e * 1.6f);
+    float ca = a * anim_clamp((e - 0.3f) / 0.7f, 0.0f, 1.0f);
+    ilhaCtx((GfxRect){ ix, y, geo.infoW, infoH }, CTX_ILHA_RAIO, sa);
+    ctxinfo_desenhar(ci, &est, ix, y, geo.infoW, sa, ca);
+    infoDesenhada = 1; infoLadoUlt = geo.lado;
+    infoCaixa = (GfxRect){ geo.infoX, y, geo.infoW, infoH };
+    menuCaixa = (GfxRect){ geo.menuX, y, CTX_W, alt };
+  }
+
   // Entra deslizando 16 px a partir do lado do poster, como as folhas do app.
   x += (1.0f - a) * (temCartaz && !doPainel && x < cartazRect.x ? 16.0f : -16.0f);
   ilhaCtx((GfxRect){ x, y, CTX_W, alt }, CTX_ILHA_RAIO, a);
 
   // CABECALHO: o nome e, embaixo, o que o titulo e ("Serie · 2024 · ...") —
-  // ou, enquanto ha uma escrita, o estado dela.
+  // ou, enquanto ha uma escrita, o estado dela. Com a extensao ao lado, uma
+  // linha so: o nome (ou o estado), porque o resto esta nela.
   { float hx = x + CTX_ILHA_PAD + 20.0f, hy = y + CTX_ILHA_PAD + 12.0f, hw = CTX_W - 2.0f * (CTX_ILHA_PAD + 20.0f);
     char meta[200];
     const char *tp = !strcmp(ci->tipo, "movie") ? i18n("Filme")
@@ -1711,9 +1769,12 @@ static void ctx_desenharCorpo_(Uint32 agora) {
     float my;
     int falha = estadoOperacao == CTX_FALHA;
     if (mensagem) snprintf(meta, sizeof meta, "%s", i18n(mensagem));
+    else if (infoOn) snprintf(meta, sizeof meta, "%s", ci->titulo);
     else snprintf(meta, sizeof meta, "%s%s%s", tp, tp[0] && ci->meta[0] ? " \xc2\xb7 " : "", ci->meta);
     m = txt_linha_corta(TXT_ILHA_APOIO, meta, falha ? 240 : 243, falha ? 190 : 242, falha ? 130 : 239, 255, hw);
-    if (comLogo) {
+    if (infoOn) {
+      my = hy + (CTX_CAB_CURTO - 22.0f - (float)m.h) * 0.5f;
+    } else if (comLogo) {
       // Logo (ou, enquanto ele chega, o nome) na caixa reservada.
       logotitulo_desenhar(ci, ci->titulo, TXT_ILHA_NOME, hx, hy, CTX_LOGO_W, CTX_LOGO_H, hw, a);
       my = hy + CTX_LOGO_H + 6.0f;
@@ -1722,7 +1783,7 @@ static void ctx_desenharCorpo_(Uint32 agora) {
       txt_desenhar_alpha(n, hx, hy, a);
       my = hy + n.h + 4.0f;
     }
-    txt_desenhar_alpha(m, hx, my, (mensagem ? .8f : .5f) * a); }
+    txt_desenhar_alpha(m, hx, my, (mensagem ? .8f : infoOn ? .62f : .5f) * a); }
 
   for (i = 0; i < nOps; i++) {
     float by = y + CTX_ILHA_PAD + cab + CTX_GAP + (float)i * (CTX_LINHA + CTX_GAP);

@@ -46,6 +46,7 @@
 #include "epg.h"
 #include "posplay.h"
 #include "ctxmenu.h"
+#include "ctxlista.h"
 #include "marco.h"
 #include <string.h>
 #include "home.h"
@@ -2159,6 +2160,9 @@ void app_evento(const SDL_Event *e) {
     if (ctx_aberto()) ctx_evento(e); else spainel_evento(e);
     return;
   }
+  // O MENU DO CARTAZ ABERTO DE DENTRO DA PAGINA DO TITULO (segurar OK nas
+  // Recomendacoes, na filmografia ou na lista da saga): modal, por cima dela.
+  if (detail_aberto() && ctx_aberto()) { ctx_evento(e); return; }
   if (detail_aberto() && menu_aberto()) { menu_evento(e); return; }
   if (detail_aberto()) {
     detail_evento(e);
@@ -2288,6 +2292,8 @@ static void trocaDeTituloSeSolicitada(void) {
     // detalhe abria por baixo do video e ninguem via — "clico e nao faz nada".
     // O caminho do titulo que JA esta no catalogo (posplay_pediu_titulo)
     // encerra o player antes; este faz o mesmo.
+    // Pedido de um MENU (segurar OK numa lista): o titulo chegou, abre o menu.
+    if (novo >= 0 && ctxlista_tomar(novo)) novo = -1;
     if (novo >= 0) {
       if (player_aberto() || player_retido()) player_encerrar();
       detail_volta_notar(novo);
@@ -4031,21 +4037,6 @@ void app_atualizar(float dt, Uint32 agora) {
   guia_atualizar(dt, agora);
   if (player_aberto()) epg_passo();
   ctx_atualizar(dt, agora);
-  { int i = ctx_pediu_detalhes();
-    if (i >= 0) {
-      player_descartar_retido();
-      const CatItem *ci = cat_item(i);
-      HomeItem it;
-      memset(&it, 0, sizeof it);
-      it.indice = i;
-      it.rect = (GfxRect){ NV_TELA_W * 0.5f - 124.0f, NV_TELA_H * 0.5f - 186.0f,
-                           248.0f, 372.0f };
-      it.arte   = ci ? (ci->poster[0] ? ci->poster : ci->backdrop) : NULL;
-      it.titulo = ci ? ci->titulo : NULL;
-      it.genero = ci ? ci->genero : NULL;
-      it.meta   = ci ? ci->meta : NULL;
-      detail_abrir(&it);
-    } }
   // Titulo escolhido na grade: abre o detalhe, como se tivesse vindo da home.
   { int idx = vertudo_pediu_abrir();
     if (idx >= 0) {
@@ -4169,12 +4160,17 @@ static void desenharAtrasDoPainel(void *ctx) {
   if (!detail_cobre_tela()) vertudo_desenhar(agora);
   // Com o painel de Salvos na tela o menu do cartaz e desenhado DEPOIS dele
   // (desenharTelas): e o painel que o abre, e por baixo ele ficaria sob o veu.
-  if (!spainel_visivel()) {
+  if (!spainel_visivel() && !detail_aberto()) {
     CAMADA_SE(ctx_aberto());
     ctx_desenhar(agora);
   }
   CAMADA_SE(detail_aberto());
   detail_desenhar(agora);
+  // Aberto de dentro da pagina do titulo, o menu vai POR CIMA dela.
+  if (!spainel_visivel() && detail_aberto() && ctx_aberto()) {
+    CAMADA_SE(1);
+    ctx_desenhar(agora);
+  }
   // A rail NAO existe na tela de detalhe do app web: ela e full-bleed e a
   // coluna de conteudo comeca em x=72, ou seja, DENTRO do que a rail ocuparia.
   // Com a rail por cima, o logo, o botao "Reproduzir" e a linha de duracao

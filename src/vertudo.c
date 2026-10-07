@@ -18,6 +18,8 @@
 #include "fundo.h"
 #include "focoprof.h"
 #include "corviva.h"
+#include "ctxlista.h"
+#include "ctxmenu.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -212,6 +214,7 @@ void vertudo_abrir(const char *base, const char *tipo, const char *catId,
 }
 
 int vertudo_aberta(void) { return aberta; }
+int vertudo_foco(void) { return foco; }
 void vertudo_fechar_seco(void) { aberta = 0; anim = 0.0f; }
 int vertudo_pediu_abrir(void) { int v = pedAbrir; pedAbrir = -1; return v; }
 // ESQUERDA na coluna 0 da grade (ou na primeira aba da colecao): a barra
@@ -222,9 +225,77 @@ int vertudo_pediu_menu(void) { int v = pedMenu; pedMenu = 0; return v; }
 
 static int nItens(void) { return desc_vertudo_n(); }
 
+// O OK NUM CARTAO: abre a pagina do titulo (o toque curto) ou, SEGURANDO, o menu
+// do cartaz (ctxlista.h). O item da grade NAO esta no catalogo global — ele veio
+// de uma pagina que so esta tela leu. Entra por cat_acrescentar para que a tela
+// de titulo possa abri-lo por indice, que e como todo o app trabalha.
+static CtxHold hold;
+
+static void abrirFocado(void) {
+  CatItem it;
+  if (!viewItem(foco, &it)) return;
+  // Item de fonte TMDB (issue #44): o id e "tmdb:<n>", nao imdb. Quem
+  // resolve e o caminho sob-demanda ja usado pela filmografia de elenco:
+  // external_ids -> imdb -> meta do Cinemeta -> cat_acrescentar, e o
+  // desc_titulo_pronto do loop principal abre o detalhe.
+  if (!strncmp(it.imdb, "tmdb:", 5)) {
+    desc_pedir_titulo_tmdb(atol(it.imdb + 5),
+                           !strcmp(it.tipo, "series") ? "tv" : "movie");
+  } else {
+    int idx = it.imdb[0] ? cat_indice_por_imdb(it.imdb) : -1;
+    if (idx < 0) idx = cat_acrescentar(&it);
+    if (idx >= 0) { pedAbrir = idx; } // conserva a lista e a posição ao voltar
+  }
+}
+
+// Retangulo e arte do cartao em foco, na tela virtual: o menu nasce ao lado e
+// o cartaz volta por cima do veu, como na home. Mesma conta do desenho.
+static GfxRect celulaRect(int i, const CatItem *it, const char **arte) {
+  float x0 = ajustes_conteudo_x();
+  float cy = VT_TOPO + (float)(i / VT_COLS) * (VT_CARD_H + VT_GAP_Y) - scrollY;
+  if (timeline) {
+    *arte = it->backdrop[0] ? it->backdrop : it->poster;
+    return (GfxRect){ x0 + 158.0f + 12.0f, cy + 12.0f, 376.0f, 212.0f };
+  }
+  { const char *pp = posterprov_card_addon(it->origem, it->imdb, it->tmdb, it->tipo, it->poster);
+    *arte = pp[0] ? pp : it->backdrop; }
+  return (GfxRect){ x0 + (float)(i % VT_COLS) * (VT_CARD_W + VT_GAP_X), cy,
+                    VT_CARD_W, VT_CARD_H };
+}
+
+// 1 se o menu abriu. Titulo fora do catalogo e sem como entrar nele (id TMDB
+// que nenhum item conhece) devolve 0 — o KEYUP vira toque, como sempre foi.
+static int menuNoFocado(void) {
+  CatItem it;
+  GfxRect r;
+  const char *arte = "";
+  int idx;
+  if (!viewItem(foco, &it)) return 0;
+  if (!strncmp(it.imdb, "tmdb:", 5)) idx = ctxlista_indice(it.imdb, it.tmdb);
+  else {
+    idx = it.imdb[0] ? cat_indice_por_imdb(it.imdb) : -1;
+    if (idx < 0 && it.imdb[0]) idx = cat_acrescentar(&it);
+  }
+  r = celulaRect(foco, &it, &arte);
+  return ctxlista_abrir(idx, r, arte);
+}
+
+static int celulaAceitaMenu(void) {
+  CatItem it;
+  if (collection && tabFocus) return 0;
+  if (nItens() < 1 || desc_vertudo_erro()) return 0;
+  return viewItem(foco, &it);
+}
+
 void vertudo_evento(const SDL_Event *e) {
   int n = nItens(), k;
-  if (!aberta || e->type != SDL_KEYDOWN) return;
+  if (!aberta) return;
+  switch (ctxhold_evento(&hold, e, celulaAceitaMenu())) {
+    case CTXH_CONSUMIDO: return;
+    case CTXH_TOQUE: abrirFocado(); return;
+    default: break;
+  }
+  if (e->type != SDL_KEYDOWN) return;
   k = e->key.keysym.sym;
   if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE ||
       e->key.keysym.scancode == NV_SCANCODE_BACK) { aberta = 0; return; }
@@ -244,26 +315,7 @@ void vertudo_evento(const SDL_Event *e) {
   else if (k == SDLK_DOWN) { if (foco + VT_COLS < n) foco += VT_COLS;
                              else foco = n - 1; }
   else if (k == SDLK_UP) { if (foco >= VT_COLS) foco -= VT_COLS; }
-  else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
-    // O item da grade NAO esta no catalogo global — ele veio de uma pagina que
-    // so esta tela leu. Entra por cat_acrescentar para que a tela de titulo
-    // possa abri-lo por indice, que e como todo o app trabalha.
-    CatItem it;
-    if (viewItem(foco, &it)) {
-      // Item de fonte TMDB (issue #44): o id e "tmdb:<n>", nao imdb. Quem
-      // resolve e o caminho sob-demanda ja usado pela filmografia de elenco:
-      // external_ids -> imdb -> meta do Cinemeta -> cat_acrescentar, e o
-      // desc_titulo_pronto do loop principal abre o detalhe.
-      if (!strncmp(it.imdb, "tmdb:", 5)) {
-        desc_pedir_titulo_tmdb(atol(it.imdb + 5),
-                               !strcmp(it.tipo, "series") ? "tv" : "movie");
-      } else {
-        int idx = it.imdb[0] ? cat_indice_por_imdb(it.imdb) : -1;
-        if (idx < 0) idx = cat_acrescentar(&it);
-        if (idx >= 0) { pedAbrir = idx; } // conserva a lista e a posição ao voltar
-      }
-    }
-  }
+  else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) abrirFocado();
   // Chegando perto do fim, pede a proxima pagina. Antes de o dono ver o vazio,
   // e nao quando ele ja esta olhando para ele.
   if (foco >= n - VT_COLS * 2) desc_vertudo_mais();
@@ -272,9 +324,11 @@ void vertudo_evento(const SDL_Event *e) {
 void vertudo_atualizar(float dt, Uint32 agora) {
   float alvo, maxY;
   int n = nItens(), linhas;
-  (void)agora;
   anim = anim_mola(anim, aberta ? 1.0f : 0.0f, dt, NV_MOLA_TELA);
-  if (!aberta) return;
+  if (!aberta) { ctxhold_cancelar(&hold); return; }
+  // SEGUROU OK NUM CARTAO ATE O LIMIAR: o menu do cartaz, com o dedo ainda no
+  // botao (ctxlista.h).
+  if (ctxhold_passo(&hold, agora, 1) && menuNoFocado()) ctxhold_cancelar(&hold);
   // A SONDA PODE CHEGAR DEPOIS DA TELA. Enquanto a fonte nao tem endereco,
   // reconferir por quadro custa uma varredura de poucas strings (addons_n e
   // dezenas, nao milhares) e SO acontece no estado de erro — assim a colecao se

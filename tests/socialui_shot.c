@@ -343,7 +343,7 @@ int main(int argc, char **argv) {
     e.type = SDL_KEYUP; ctx_evento(&e);
     e.type = SDL_KEYDOWN;
     e.key.keysym.sym = SDLK_DOWN;
-    for (k = 0; k < 3; k++) ctx_evento(&e);           // "Ja assisti"
+    for (k = 0; k < 2; k++) ctx_evento(&e);           // "Ja assisti" (sem "Mais informações")
     e.key.keysym.sym = SDLK_RETURN; ctx_evento(&e);
     quadros(60, NULL);
     snprintf(bmp, sizeof bmp, "%s-painel-ja-assisti.bmp", saida);
