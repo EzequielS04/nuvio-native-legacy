@@ -201,7 +201,7 @@ static int ajCenaSecao(int op) {
     case AJ_SELOS_PACOTE_REM:
       return AJC_REP_FONTE;
     case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: case AJ_CACHE_SEEK: return AJC_REP_IMAGEM;
-    case AJ_PAUSA_OVERLAY: case AJ_PLR_CLASSIF: case AJ_REACAO_CREDITOS: case AJ_SAIDA_PLAYER: case AJ_MANTER_VIDEO: return AJC_REP_DURANTE;
+    case AJ_PAUSA_OVERLAY: case AJ_PLR_CLASSIF: case AJ_REACAO_CREDITOS: case AJ_SAIDA_PLAYER: case AJ_MANTER_VIDEO: case AJ_PROPORCAO_PADRAO: return AJC_REP_DURANTE;
     case AJ_SEEKR_LIGADO: case AJ_SEEKR_CHAVE: case AJ_SEEKR_TESTAR: case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE:
       return AJC_REP_SEEKR;
     case AJ_IDIOMA: case AJ_TMDB_IDIOMA: return AJC_IDI_INTERFACE;
@@ -853,6 +853,10 @@ static void ajcRepDurante(int A) {
     CVID(36, 280, w2, 28, 14); CICON("aj_corner-up-left", 46, 285, 16, 0.85f);
     ajcTxt(textoValor(AJ_SAIDA_PLAYER), 11, 1, 70, 287, 220, 0.9f);
     ajcFoco(AJ_SAIDA_PLAYER, 36, 280, w2, 28, 14); }
+  { float w3 = ajcTxt(textoValor(AJ_PROPORCAO_PADRAO), 11, 1, 0, 0, 160, 0) + 44;
+    CVID(372, 150, w3, 28, 14); CICON("aj_maximize-2", 382, 155, 16, 0.85f);
+    ajcTxt(textoValor(AJ_PROPORCAO_PADRAO), 11, 1, 406, 157, 160, 0.9f);
+    ajcFoco(AJ_PROPORCAO_PADRAO, 372, 150, w3, 28, 14); }
   (void)i;
 }
 // Seekr: a barra de tempo com a miniatura do ponto e a fita (anterior e

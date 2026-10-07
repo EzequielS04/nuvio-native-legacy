@@ -236,3 +236,4 @@
   0, /* regex match: Desligada */
   0, 0, /* regex pattern (action) and preset mirror (Personalizado) */
   100, 100, /* Home spacing: between rows and between titles, 100% = as measured */
+  0, /* default aspect ratio: Ultimo usado */

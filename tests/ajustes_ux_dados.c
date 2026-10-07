@@ -537,7 +537,7 @@ int main(void) {
   assert(!strcmp(CHAVE[AJ_TAM_MAX], "tamanhoMaxLocal") && !strcmp(CHAVE[AJ_TAM_MIN], "tamanhoMinLocal"));
   assert(valorPadrao[AJ_TAM_MAX] == 0 && valorPadrao[AJ_TAM_MIN] == 0 && OPCOES[AJ_TAM_MAX].n == 7 && OPCOES[AJ_TAM_MIN].n == 7);
   // Espaco da Home: duas NUM locais depois do Apoiar, padrao 100 %, preso em 50..150.
-  assert(AJ_ESPACO_FILEIRAS == AJ_FONTE_REGEX_MODELO + 1 && AJ_ESPACO_TITULOS == AJ_N - 1 && AJ_ESPACO_TITULOS == AJ_ESPACO_FILEIRAS + 1);
+  assert(AJ_ESPACO_FILEIRAS == AJ_FONTE_REGEX_MODELO + 1 && AJ_ESPACO_TITULOS == AJ_N - 2 && AJ_ESPACO_TITULOS == AJ_ESPACO_FILEIRAS + 1);
   assert(!strcmp(CHAVE[AJ_ESPACO_FILEIRAS], "espacoFileirasLocal") && !strcmp(CHAVE[AJ_ESPACO_TITULOS], "espacoTitulosLocal"));
   assert(valorPadrao[AJ_ESPACO_FILEIRAS] == 100 && valorPadrao[AJ_ESPACO_TITULOS] == 100);
   assert(somenteDesteAparelho(AJ_ESPACO_FILEIRAS) && somenteDesteAparelho(AJ_ESPACO_TITULOS));
@@ -547,6 +547,7 @@ int main(void) {
   // Apoiar o projeto (apoio.h): acao no fim, sem valor, uma vez na tela.
   assert(AJ_APOIAR == AJ_FONTE_ESCOPO - 3 && AJ_APOIAR == AJ_TAM_MIN + 1 && !strcmp(CHAVE[AJ_APOIAR], "-apoiar") && valorPadrao[AJ_APOIAR] == 0);
   assert(AJ_PLR_CLASSIF == AJ_LEG_FORCADA + 1 && AJ_PLR_CLASSIF == AJ_FONTE_ESCOPO - 1 && !strcmp(CHAVE[AJ_PLR_CLASSIF], "classifPlayerLocal") && valorPadrao[AJ_PLR_CLASSIF] == 0);
+  assert(AJ_PROPORCAO_PADRAO == AJ_N - 1 && AJ_PROPORCAO_PADRAO == AJ_ESPACO_TITULOS + 1 && !strcmp(CHAVE[AJ_PROPORCAO_PADRAO], "proporcaoPadraoLocal") && valorPadrao[AJ_PROPORCAO_PADRAO] == 0 && OPCOES[AJ_PROPORCAO_PADRAO].n == 9 && ajustes_proporcao_padrao() == -1 && somenteDesteAparelho(AJ_PROPORCAO_PADRAO) && !dePerfil(AJ_PROPORCAO_PADRAO));
   { int vz = 0, k; for (k = 0; k < AJ_N_TELA; k++) if (TELA[k].tipo == IT_OPC && TELA[k].op == AJ_APOIAR) vz++; assert(vz == 1); }
   // #287: forced subtitle when the audio is in your language. Local, last, default ON, once on screen.
   assert(AJ_LEG_FORCADA == AJ_FONTE_ESCOPO - 2 && AJ_LEG_FORCADA == AJ_APOIAR + 1 && !strcmp(CHAVE[AJ_LEG_FORCADA], "legendaForcadaLocal"));

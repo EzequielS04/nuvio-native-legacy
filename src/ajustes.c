@@ -440,6 +440,9 @@ typedef enum {
   // por cento do valor medido (100 = o de sempre). LOCAIS: o web nao tem. No fim:
   // valor[]/CHAVE[] posicionais.
   AJ_ESPACO_FILEIRAS, AJ_ESPACO_TITULOS,
+  // #202: "Proporção padrão" do player (Último usado | os 8 modos de player.h).
+  // LOCAL, desta TV. No fim: valor[]/CHAVE[] posicionais.
+  AJ_PROPORCAO_PADRAO,
   AJ_N
 } OpcaoId;
 
@@ -477,6 +480,8 @@ static const int   TAMANHO_GB[]   = { 0, 1, 2, 4, 8, 15, 30 };
 static const char *V_RELOGIO_12H[] = { "24 horas", "12 horas (AM/PM)" };
 static const char *V_DESCANSO_FONTE[]  = { "Catálogo", "Minha lista e Continuar" };
 static const char *V_BRILHO_PLAYER[] = { "100%", "80%", "65%", "50%" };
+// #202: 0 = o ultimo modo usado (comportamento de sempre); 1..8 = PlrAspecto + 1.
+static const char *V_PROPORCAO[] = { "Último usado", "Original", "Recortar", "Esticar", "Zoom leve", "Zoom cinema", "Zoom ultra", "Ajustar altura", "Ajustar largura" };
 static const char *V_LOGO_APP[] = { "Novo", "Clássico" };
 static const char *V_ABERTURA[] = { "Padrão", "Só esmaece", "Direto" };
 // #202: "Instantâneo" e 15/30 s, como o "Stream Selection Timeout" do
@@ -1228,6 +1233,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Modelo de regex",                 V_FONTE_MODELO, 7),  // espelho de fonteregra_modelo_atual
   NUM("Espaço entre fileiras",           50, 150, 10, "%"),     // local: espacoFileirasLocal
   NUM("Espaço entre títulos",            50, 150, 10, "%"),     // local: espacoTitulosLocal
+  ESC("Proporção padrão",                V_PROPORCAO, 9),        // local: proporcaoPadraoLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1435,6 +1441,7 @@ static const char *CHAVE[] = {
   "streamAutoPlaySource", "-fonteAddonsPermitidos", "-fontePluginsPermitidos",
   "fonteOutrosLocal", "fonteRegexLocal", "-fonteRegexPadrao", "-fonteRegexModelo",
   "espacoFileirasLocal", "espacoTitulosLocal",
+  "proporcaoPadraoLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1721,6 +1728,8 @@ int ajustes_busca_cinemeta(void)   { return lig(AJ_BUSCA_CINEMETA); }
 int ajustes_esmaecer(void)         { int v = valor[AJ_ESMAECER]; return v < 0 || v > 5 ? 3 : v; }
 int ajustes_descanso_estilo(void)  { int v = valor[AJ_DESCANSO_ESTILO]; return v < 0 || v > 2 ? 0 : v; }
 int ajustes_descanso_fonte(void)   { int v = valor[AJ_DESCANSO_FONTE]; return v < 0 || v > 1 ? 0 : v; }
+// #202: -1 = ultimo modo usado; 0..7 = PlrAspecto a aplicar ao abrir o video.
+int ajustes_proporcao_padrao(void) { int v = valor[AJ_PROPORCAO_PADRAO]; return v < 1 || v > 8 ? -1 : v - 1; }
 int ajustes_brilho_player(void)    { int v = valor[AJ_BRILHO_PLAYER]; return v < 0 || v > 3 ? 1 : v; }
 void ajustes_espelhar_enquetes(int ligado) { int n = ligado ? 0 : 1; if (valor[AJ_ENQUETES] != n) { valor[AJ_ENQUETES] = n; gravar(); } }
 int ajustes_fonte_hdr(void)        { int v = valor[AJ_FONTE_HDR]; return v < 0 || v > 2 ? 0 : v; }
@@ -3732,6 +3741,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_GPU_EFEITOS:    /* a GPU e desta TV */
     case AJ_BUSCA_CINEMETA: /* o web nao tem esta escolha */
     case AJ_ESMAECER: case AJ_BRILHO_PLAYER: /* o painel OLED e desta TV */
+    case AJ_PROPORCAO_PADRAO: /* o aspecto e a tela desta TV */
     case AJ_MANTER_VIDEO:   /* a memoria e o decoder sao desta TV */
     case AJ_DESCANSO_ESTILO: case AJ_DESCANSO_FONTE: /* tela de descanso: desta TV */
     case AJ_ENQUETES:       /* o web nao tem a ilha; a conta guarda o opt-out por outro caminho (enquete.c) */
@@ -4971,6 +4981,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_ESMAECER: return "Quanto tempo sem apertar nada até a tela escurecer e entrar o descanso. Qualquer tecla acorda (a primeira só acorda, não faz nada). Nunca com o filme tocando; com ele pausado, a tela só escurece.";
     case AJ_DESCANSO_ESTILO: return "Vitrine mostra títulos do catálogo em tela cheia, um de cada vez; OK abre o que está na tela. Relógio mostra a hora grande e a próxima estreia da Agenda. Só escurecer apaga a tela quase toda, com um relógio pequeno. Nos três nada fica parado no mesmo lugar.";
     case AJ_DESCANSO_FONTE: return "De onde a vitrine tira os títulos: o catálogo inteiro, ou só o que está na sua lista e em Continuar assistindo.";
+    case AJ_PROPORCAO_PADRAO: return "Como a imagem do filme ocupa a tela quando o vídeo começa. Último usado mantém o que você escolheu por último no player. Os outros modos valem em todo vídeo, e você ainda pode trocar durante a reprodução com a tecla 0 ou o botão Proporção. Em TVs que não recortam a imagem, os modos de zoom caem para Original.";
     case AJ_BRILHO_PLAYER: return "Escurece os controles, o título e a barra do player (as legendas não mudam). Com o filme tocando e a barra parada, ela ainda baixa um degrau até você apertar uma tecla.";
     case AJ_BUSCA_CINEMETA: return "Ligado (padrão): a busca consulta o catálogo do Nuvio e, se ele falhar, o Cinemeta; um add-on Cinemeta instalado também responde. Desligado: o Cinemeta fica de fora da busca, e só o catálogo do Nuvio e os seus add-ons respondem. Não muda a ficha do título (veja Usar sempre o Cinemeta).";
     case AJ_ENQUETES: return "Ligado, o Nuvio pode convidar você a votar numa enquete curta na ilha do relógio. Desligado, nenhuma aparece. A escolha fica na sua conta.";
@@ -6667,7 +6678,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_FONTE_PRIORIDADE: case AJ_FONTE_HDR:
     case AJ_SELOS_PACOTE:
     case AJ_REACAO_CREDITOS:
-    case AJ_FONTE_PRAZO: case AJ_TAM_MAX: case AJ_TAM_MIN:
+    case AJ_FONTE_PRAZO: case AJ_TAM_MAX: case AJ_TAM_MIN: case AJ_PROPORCAO_PADRAO:
     case AJ_FONTE_ESCOPO: case AJ_FONTE_ADDONS_PERM: case AJ_FONTE_PLUGINS_PERM: case AJ_FONTE_OUTROS:
     case AJ_FONTE_REGEX: case AJ_FONTE_REGEX_PADRAO: case AJ_FONTE_REGEX_MODELO:
       return AJPV_REPRO;
