@@ -990,6 +990,61 @@ int main(void) {
     assert(fil_estado_chave("d") == FIL_NA_HOME); }
   puts("ok  estado por chave: fila e fora nao entram na home");
 
+  // #319: REMOVER (OU DESLIGAR) UM ADDON TIRA AS FILEIRAS DELE DA HOME. Log
+  // S3R7Q0: Pluto TV desligado na conta e a poda "adiada: 1 addon(s) sem
+  // manifesto lido" para sempre. O desligado nao tem id (nao entra na volta);
+  // so o LIGADO sem id e volta incompleta, e quem decide isso e a descoberta.
+  // Aqui: (1) a poda casa o removido mesmo com um desligado sem id na lista;
+  // (2) a fileira COM escolha de um addon removido/desligado nao ocupa vaga do
+  // limite — as reais depois dela continuam na home.
+  fil_esquecer();
+  { int j;
+    const char *ids[]   = { "addonvivo", "" };               // 2o: desligado, sem id
+    const char *bases[] = { "https://vivo.example", "https://off.example" };
+    const int ativos[]  = { 1, 0 };
+    usaArquivo = 1;
+    { FILE *f = fopen("/tmp/fileirasui-p1.txt", "w");
+      fprintf(f, "limite 3\nordem 1\n");
+      // fantasma com escolha (forma = 2) ANTES das reais: sem o fix ele gasta
+      // uma das 2 vagas e "real2" cai para a fila.
+      fprintf(f, "linha addonmorto_movie_top\t0\t2\t1\tFantasma\n");
+      fprintf(f, "linha addonvivo_movie_real1\t0\t0\t1\tReal1\n");
+      fprintf(f, "linha addonvivo_movie_real2\t0\t0\t1\tReal2\n");
+      fprintf(f, "linha addonvivo_movie_real3\t0\t0\t1\tReal3\n");
+      fprintf(f, "linha addonmorto_movie_solto\t0\t0\t1\tSolto\n");  // sem escolha
+      fclose(f); }
+    fil_definir_perfil(1);
+    fil_teste_recarregar();
+    assert(fil_n() == 5);
+    assert(fil_estado_chave("addonvivo_movie_real3") == FIL_NA_FILA);   // o defeito
+    // a descoberta registra os dois catalogos do addon vivo nesta volta
+    fil_registrar("addonvivo_movie_real1", "Real1", "Vivo", "movie", 5);
+    fil_registrar("addonvivo_movie_real2", "Real2", "Vivo", "movie", 5);
+    fil_registrar("addonvivo_movie_real3", "Real3", "Vivo", "movie", 5);
+    // (1) a linha sem escolha do removido sai; a com escolha fica
+    assert(fil_podar_catalogos(ids, bases, 2, 1) == 1);
+    assert(fil_n() == 4);
+    for (j = 0; j < fil_n(); j++) assert(strcmp(fil_chave(j), "addonmorto_movie_solto") != 0);
+    // (2) a que ficou deixa de contar vaga e aparece como fora
+    assert(fil_marcar_sem_addon(ids, bases, ativos, 2, 1) == 1);
+    assert(fil_estado_chave("addonmorto_movie_top") == FIL_FORA);
+    assert(fil_estado_chave("addonvivo_movie_real1") == FIL_NA_HOME);
+    assert(fil_estado_chave("addonvivo_movie_real3") == FIL_NA_HOME);
+    // lista de outro perfil / do pacote nao marca nada
+    assert(fil_marcar_sem_addon(ids, bases, ativos, 2, 2) == 0);
+    assert(fil_marcar_sem_addon(ids, bases, ativos, 2, 0) == 0);
+    // o addon volta (ligado): a linha volta como estava, com a escolha
+    { const int todos[] = { 1, 1 };
+      const char *ids2[] = { "addonvivo", "addonmorto" };
+      const char *bases2[] = { "https://vivo.example", "https://off.example" };
+      assert(fil_marcar_sem_addon(ids2, bases2, todos, 2, 1) == 1);
+      assert(fil_estado_chave("addonmorto_movie_top") != FIL_FORA);
+      assert(fil_linha_tipo(0) == 2); }
+    remove("/tmp/fileirasui-p1.txt");
+    fil_definir_perfil(0);
+    usaArquivo = 0; }
+  puts("ok  #319: addon removido/desligado nao ocupa vaga da home e a poda nao fica adiada");
+
   puts("fileiras: tudo ok");
   return 0;
 }

@@ -94,6 +94,9 @@ void  fil_gravar_registro(void)            { }
 int   fil_podar_catalogos(const char *const *ids, const char *const *bases, int n,
                           int perfilDaLista) {
   (void)ids; (void)bases; (void)n; (void)perfilDaLista; return 0; }
+int fil_marcar_sem_addon(const char *const *ids, const char *const *bases, const int *ativos, int n, int perfilDaLista) {
+  (void)ids; (void)bases; (void)ativos; (void)n; (void)perfilDaLista; return 0;
+}
 int   fil_addon_novo(const char *id, const char *base) { (void)id; (void)base; return 0; }
 int   addons_perfil_da_lista(void)         { return 0; }
 int   addons_ativo(int i)                  { (void)i; return 1; }
