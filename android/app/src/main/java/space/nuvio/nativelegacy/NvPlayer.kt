@@ -495,6 +495,11 @@ object NvPlayer {
         val c = camada ?: return
         val sv = SurfaceView(act)
         sv.visibility = View.GONE
+        // A superficie de video nunca pega o foco do controle: as teclas chegam
+        // ao app pelo foco da SDLSurface (SDLSurface.onKey), e foco em outra
+        // View deixa o processo vivo e a tela sem resposta (#318).
+        sv.isFocusable = false
+        sv.isFocusableInTouchMode = false
         c.addView(sv, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         superficie = sv
     }
@@ -630,10 +635,25 @@ object NvPlayer {
         val sv = superficie
         if (player != null && sv != null && sv.visibility == View.VISIBLE && sv.holder.surface?.isValid == true) {
             sv.visibility = View.GONE
-            principal.post { if (player != null) sv.visibility = View.VISIBLE }
+            principal.post {
+                if (player != null) sv.visibility = View.VISIBLE
+                (activity as? NuvioActivity)?.devolverFoco()
+            }
         }
     }
+    // MStar (decoder OMX.MS.*, ex.: caixas Shinon): o hwcomposer deles refaz o
+    // overlay de video a cada GONE/VISIBLE ("Overlay 0 size changed") e a tela
+    // pisca/trava. A recriacao existe por causa da TCL; la nao e necessaria.
+    private val mstar: Boolean by lazy {
+        try {
+            val r = android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).codecInfos
+                .any { !it.isEncoder && it.name.startsWith("OMX.MS.") }
+            Log.i(TAG, "[player] decoders MStar (OMX.MS.*): $r")
+            r
+        } catch (e: Throwable) { false }
+    }
     private fun recriarSuperficie(atrasoMs: Long) {
+        if (mstar) return
         principal.removeCallbacks(recriar)
         principal.postDelayed(recriar, atrasoMs)
     }
@@ -820,6 +840,7 @@ object NvPlayer {
             // DV so conta com decoder DV de verdade: OMX.dolby.* / c2.dolby.* e,
             // na MediaTek, c2.mtk.dvhe.* / c2.mtk.dvav.* (TCL Smart TV Pro: o
             // painel engatou Dolby Vision e o selo dizia HDR10, 30/09/2026).
+            Log.i(TAG, "[player] decoder de video: $decoderName")
             val n = decoderName.lowercase()
             decoderDv = n.contains("dolby") || Regex("""\.dv(he|h1|av|a1)""").containsMatchIn(n)
             player?.let { publicarHdr(it.currentTracks) }
