@@ -1757,6 +1757,10 @@ void        sync_sujar_addons(void) {
 #define SY_CRED_RECUSADAS 4
 static char credRecusada[SY_CRED_RECUSADAS][16];
 static int nCredRecusadas;
+// sync_empurrar_credencial roda em fio proprio (credfio.c, #203), trakt e simkl
+// podem estar no ar juntos: a lista e o arquivo de recusas pedem trava. Nunca
+// segurada durante a rede.
+static pthread_mutex_t credTrava = PTHREAD_MUTEX_INITIALIZER;
 
 // A recusa tambem vai para DISCO (cred-recusada.txt, "provedor epoch"), por 7
 // dias: so a memoria da sessao deixava cada arranque repetir o mesmo 400
@@ -1791,11 +1795,13 @@ static void credGravarDisco(void) {
 }
 
 static int credJaRecusada(const char *provider) {
-  int i;
+  int i, r = 0;
+  pthread_mutex_lock(&credTrava);
   credLerDisco();
-  for (i = 0; i < nCredRecusadas; i++)
-    if (!strcmp(credRecusada[i], provider)) return 1;
-  return 0;
+  for (i = 0; i < nCredRecusadas && !r; i++)
+    if (!strcmp(credRecusada[i], provider)) r = 1;
+  pthread_mutex_unlock(&credTrava);
+  return r;
 }
 
 int sync_empurrar_credencial(const char *provider, const char *credJson) {
@@ -1823,10 +1829,16 @@ int sync_empurrar_credencial(const char *provider, const char *credJson) {
   ok = ok2xx(r, st) ? 1 : (st >= 400 && st < 500 ? -1 : 0);
   if (!ok2xx(r, st)) {
     printf("[sync] push de credencial %s falhou (HTTP %d): %.200s\n", provider, st, r ? r : "");
-    if (st == 400 && r && strstr(r, "Unsupported provider") && nCredRecusadas < SY_CRED_RECUSADAS) {
-      snprintf(credRecusada[nCredRecusadas++], sizeof credRecusada[0], "%s", provider);
-      credGravarDisco();
-      printf("[sync] servidor nao aceita credencial %s: nao tento de novo por 7 dias\n", provider);
+    if (st == 400 && r && strstr(r, "Unsupported provider")) {
+      int anotou = 0;
+      pthread_mutex_lock(&credTrava);
+      if (nCredRecusadas < SY_CRED_RECUSADAS) {
+        snprintf(credRecusada[nCredRecusadas++], sizeof credRecusada[0], "%s", provider);
+        credGravarDisco();
+        anotou = 1;
+      }
+      pthread_mutex_unlock(&credTrava);
+      if (anotou) printf("[sync] servidor nao aceita credencial %s: nao tento de novo por 7 dias\n", provider);
     }
   } else printf("[sync] credencial %s guardada na conta\n", provider);
   free(r);
