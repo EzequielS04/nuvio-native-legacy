@@ -213,6 +213,43 @@ const ColFolder *col_folder(int i) {
   pthread_mutex_unlock(&colTrava);
   return &PASTA(i);
 }
+// FNV-1a de 32 bits, igual ao de homeestado.c: o valor tem de bater com o do
+// hashColecoes que morava la, ou todo snapshot da Home ja gravado seria
+// descartado uma vez sem motivo.
+static unsigned colHashBytes(unsigned h, const void *data, size_t n) {
+  const unsigned char *p = (const unsigned char *)data;
+  while (n--) h = (h ^ *p++) * 16777619u;
+  return h;
+}
+static unsigned colHashTexto(unsigned h, const char *s) {
+  if (s) h = colHashBytes(h, s, strlen(s));
+  return (h ^ 0xffu) * 16777619u;
+}
+unsigned col_hash_estrutura(void) {
+  unsigned h = 2166136261u;
+  pthread_mutex_lock(&colTrava);
+  h = colHashBytes(h, &count, sizeof count);
+  for (int i = 0; i < count; i++) {
+    ColFolder *f = &PASTA(i);
+    // Igual a col_folder(): a base de uma fonte de addon e resolvida antes de
+    // entrar no hash.
+    resolverBases(f);
+    h = colHashTexto(h, f->group);
+    h = colHashTexto(h, f->id);
+    h = colHashBytes(h, &f->nSources, sizeof f->nSources);
+    for (int s = 0; s < f->nSources; s++) {
+      const ColSource *src = &f->sources[s];
+      h = colHashTexto(h, src->prov); h = colHashTexto(h, src->addonId);
+      h = colHashTexto(h, src->base); h = colHashTexto(h, src->type);
+      h = colHashTexto(h, src->catId); h = colHashTexto(h, src->tmdbTipo);
+      h = colHashBytes(h, &src->tmdbId, sizeof src->tmdbId);
+      h = colHashTexto(h, src->midia); h = colHashTexto(h, src->ordenar);
+      h = colHashTexto(h, src->ordem); h = colHashBytes(h, &src->traktLista, sizeof src->traktLista);
+    }
+  }
+  pthread_mutex_unlock(&colTrava);
+  return h;
+}
 // O ADDON DE UM GRUPO DE COLECOES, quando ha um so. Um grupo e um conjunto de
 // pastas, cada pasta com fontes de varios addons (ou TMDB/Trakt), entao o
 // "addon da colecao" nao existe em geral — mas na pratica quase toda colecao
