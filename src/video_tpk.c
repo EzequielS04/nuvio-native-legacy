@@ -125,6 +125,16 @@ static volatile int mkvN, mkvEstado, faixasNovas;
 // sonda pela rede voltou sem TrackEntry nenhuma (nao e MKV).
 static volatile int mkvSondarJa, mkvNaoMkv;
 static unsigned mkvGeracao;
+// AUDIO QUE A TV RECUSA (#313). A Samsung nao toca DTS (2018+) nem TrueHD: o
+// player so lista as faixas que decodifica, entao um MKV so com DTS chega com a
+// lista de audio vazia e o filme roda mudo, sem erro nenhum. O cabecalho do MKV
+// (mkvFx) diz o que o arquivo tem; a lista do player (nAudio) diz o que a TV
+// aceitou. audioNaoSup = 1 so quando TODA faixa de audio do arquivo e de um
+// codec que a TV nao toca E a TV nao listou nenhuma (lista com ao menos uma
+// faixa quer dizer que ha audio saindo: nao se avisa). NAO PROVADO em TV: o que
+// o Player devolve exatamente nesse caso; a linha [audio] do log e a prova.
+static volatile int audioNaoSup, faixasLidas;
+static int audioLogado;
 static int fonteMp4;
 static Uint32 mkvOlhou;
 
@@ -192,6 +202,8 @@ void nv_tpk_video_faixas_fim(int selAudio, int selLeg) {
   nAudio = nNovasA;
   nNovasA = nNovasL = 0;
   faixasNovas = 1;   // video_bombear reaplica o cabecalho do MKV, se ja lido
+  faixasLidas = 1;
+  audioLogado = 0; audioNaoSup = 0;   // o host rele o audio em 2 s (#165): decide de novo
   printf("[video] faixas: %d audio, %d legenda\n", nAudio, nLeg);
   fflush(stdout);
   // Recarregar de reconexao: as faixas que a pessoa tinha, e nao a preferencia.
@@ -332,6 +344,7 @@ static int abrirSessao(void) {
   ativo = 1; pronto = falhou = terminou = tocando = 0;
   largura = altura = durMs = 0; bufferando = 1; bufferDesde = SDL_GetTicks();
   nAudio = nLeg = 0; audioAtual = 0; legAtual = -1;
+  audioNaoSup = faixasLidas = audioLogado = 0;
   comecou = 0; comecouEm = 0; audioComecou = 0; audioPend = legPend = -1;
   if (!travaLeg) travaLeg = SDL_CreateMutex();
   legendaLimpar(1);
@@ -390,6 +403,45 @@ static void *fioMkv(void *arg) {
   return NULL;
 }
 
+// Codec de audio do MKV que a Samsung nao toca (DTS em todas as variantes,
+// TrueHD, MLP). Puro: o teste do Mac chama por video_tpk_codec_recusado.
+int video_tpk_codec_recusado(const char *codecId) {
+  return codecId && (!strncmp(codecId, "A_DTS", 5) || !strncmp(codecId, "A_TRUEHD", 8) ||
+                     !strncmp(codecId, "A_MLP", 5));
+}
+
+// Cruza o arquivo com o que a TV listou. Roda a cada tick ate decidir, e loga
+// uma vez por sessao quando ha codec recusado no arquivo.
+static void avaliarAudioTv(void) {
+  int i, nArq = 0, nRec = 0;
+  char lista[128] = "", recusados[48] = "";
+  if (audioLogado || !faixasLidas || mkvN <= 0) return;
+  for (i = 0; i < mkvN; i++) {
+    const char *nome;
+    if (mkvFx[i].tipo != 2) continue;
+    nArq++;
+    nome = faixasmkv_codec(mkvFx[i].codec);
+    if (!nome[0]) nome = mkvFx[i].codec;
+    if (strlen(lista) + strlen(nome) + 2 < sizeof lista) {
+      if (lista[0]) strcat(lista, ",");
+      strcat(lista, nome);
+    }
+    if (video_tpk_codec_recusado(mkvFx[i].codec)) {
+      nRec++;
+      if (!strstr(recusados, nome) && strlen(recusados) + strlen(nome) + 2 < sizeof recusados) {
+        if (recusados[0]) strcat(recusados, "/");
+        strcat(recusados, nome);
+      }
+    }
+  }
+  audioLogado = 1;
+  if (!nRec) return;
+  printf("[audio] TV recusou %s: faixas da TV=%d, no arquivo=%d [%s]%s\n", recusados, nAudio, nArq, lista,
+         nRec == nArq && nAudio == 0 ? " -> sem audio tocavel" : "");
+  fflush(stdout);
+  if (nRec == nArq && nAudio == 0) audioNaoSup = 1;
+}
+
 // Fio do app. Procura o cabecalho e, quando ha faixas novas, reescreve os
 // rotulos. Sem mutex, como o resto deste arquivo: o rotulo sai de uma vez so.
 static void sondaMkv(double pos) {
@@ -429,6 +481,7 @@ static void sondaMkv(double pos) {
     // O idioma pode ter chegado so agora: a preferencia de audio vale de novo.
     if (m && !reconFaixasPend) escolherAudioPreferido();
   }
+  avaliarAudioTv();
 }
 
 // A deferred choice leaves once playback has really started. AUDIO leaves on the
@@ -670,7 +723,7 @@ int  video_tocando(void) { return tocando; }
 int  video_pronto(void) { return pronto; }
 int  video_ativo(void) { return ativo; }
 int  video_falhou(void) { return falhou; }
-int  video_audio_nao_suportado(void) { return 0; }
+int  video_audio_nao_suportado(void) { return audioNaoSup; }
 int  video_terminou(void) { return terminou; }
 int  video_conflito_recurso(void) { return conflito; }
 
@@ -692,6 +745,12 @@ void video_tpk_log_host(const char *linha) {
   if (!linha) return;
   // "erro ConnectionFailed" vem logo antes do evento 5 (Video.cs).
   if (!strncmp(linha, "erro ", 5) && nv_recon_rede_tpk(0, linha)) reconLinhaRede = 1;
+  // O player acusa o codec sem lista vazia: mesmo aviso, com a linha de prova.
+  if (!strncmp(linha, "erro NotSupportedAudioCodec", 27)) {
+    printf("[audio] TV recusou o audio da fonte: player acusou NotSupportedAudioCodec (faixas da TV=%d)\n", nAudio);
+    fflush(stdout);
+    audioNaoSup = 1;
+  }
   if (strstr(linha, "[janela] principal visivel=")) {
     janelaVisivel = strstr(linha, "visivel=True") != NULL;
     return;
