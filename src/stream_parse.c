@@ -247,8 +247,8 @@ int stream_extrair(const char *json, const char *provedor, Stream **saida) {
     if ((s.infoHash[0] || !strncmp(s.url, "http", 4)) &&
         strlen(s.url) < sizeof s.url - 1) {
       js_texto(p, fim, "name", s.rotulo, sizeof s.rotulo);
-      js_texto(p, fim, "description", s.descricao, sizeof s.descricao);
-      js_texto(p, fim, "title", titulo, sizeof titulo);
+      js_texto_linhas(p, fim, "description", s.descricao, sizeof s.descricao);
+      js_texto_linhas(p, fim, "title", titulo, sizeof titulo);
       js_texto(p, fim, "filename", s.arquivo, sizeof s.arquivo);
       // behaviorHints.bingeGroup — ANCORADO NO OBJETO, e nao procurado solto.
       //
@@ -277,6 +277,7 @@ int stream_extrair(const char *json, const char *provedor, Stream **saida) {
       if (!s.rotulo[0]) snprintf(s.rotulo, sizeof s.rotulo, "%s", provedor);
       snprintf(s.provedor, sizeof s.provedor, "%s", provedor);
       snprintf(texto, sizeof texto, "%s %s %s %s", s.rotulo, s.descricao, titulo, s.arquivo);
+      for (char *q = texto; *q; q++) if (*q == '\n') *q = ' ';
       s.altura = contem(texto, "2160") || token(texto, "4k") || token(texto, "uhd") ? 2160 :
                  contem(texto, "1440") ? 1440 : contem(texto, "1080") ? 1080 :
                  contem(texto, "720") ? 720 : contem(texto, "480") ? 480 : 0;

@@ -60,6 +60,7 @@ panel-left list-x bell audio-lines layers type sliders-horizontal book-open user
 alarm-clock badge-check captions chart-column chevrons-down circle-check circle-dot compass droplet feather film funnel globe image image-plus inbox key key-round layout-list life-buoy link list-ordered list-video loader log-in map maximize-2 menu message-square monitor-play mouse-pointer move-horizontal pause picture-in-picture-2 play quote send server settings-2 shield sparkle stethoscope telescope thumbs-up unlink wand sparkles corner-up-left book-open-text
 pipette blend spotlight paint-roller
 ellipsis
+hard-drive volume-2 package tag
 "
 # A linha que comeca em "clock" e da ILHA DO RELOGIO (02/10, mockup aprovado em design/ilha):
 # os icones dos avisos (alerta, wifi, debrid baixando, Trakt desconectado...) e
@@ -76,6 +77,8 @@ ellipsis
 # Gradiente, Imersiva, Textura), que antes mostravam todas a mesma miniatura.
 # A ultima e do "..." da pagina do titulo (06/10): o circular "Mais opcoes" que
 # guarda trailer, Explorar, Trocar arte e Recomendar (src/detmais.h).
+# A de baixo e do TEXTO DO ADDON na folha de fontes (07/10): os emojis do AIOStreams
+# (💾 👤 🎞️ 🔊 🌐 ⚙️ ⚡ 📦 🏷️ ⏱️) viram estes icones — a TV nao tem emoji colorido.
 # Conferencia: todo aj_* citado em src/ tem de estar em NOMES, e todo NOMES
 # tem de ser citado — senao sobra PNG morto no pacote ou falta icone na tela
 # (gfx_icone falha em silencio).

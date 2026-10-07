@@ -1968,7 +1968,12 @@ static int linhaAnt = -1, focoVisto = -1;
 // veio — o AIOStreams do dono manda "11.1 GB | 30.1 Mbps |", o grupo, os
 // idiomas e o arquivo, cada um numa linha. Glifo que a Inter nao tem (o ⚡ e o
 // ⚑ do formatador) cai fora em text.c, sem virar quadrado.
-#define FOLHA_ADDON_LINHAS 4
+#define FOLHA_ADDON_LINHAS 5
+// Fora do foco a linha mostra so as 2 primeiras linhas do addon; a linha em
+// foco abre (mola abreFoco) e mostra todas, ate FOLHA_ADDON_LINHAS. Com 5
+// linhas em todas as fontes a lista caberia em 3 telas; assim ela continua
+// densa e a que se esta lendo abre inteira.
+#define FOLHA_ADDON_FECHADA 2
 #define FOLHA_ADDON_LD     28.0f
 static void linhaLimpa(char *d, size_t tam, const char *ini, size_t n) {
   size_t k = 0;
@@ -1980,18 +1985,66 @@ static void linhaLimpa(char *d, size_t tam, const char *ini, size_t n) {
   }
   d[k] = 0;
 }
-static int linhasAddon(const Stream *s, char out[][192], int max) {
+// Emoji do formatador -> icone Lucide (aj_<nome>.png). A TV nao tem emoji
+// colorido; o que nao esta aqui sai limpo em nv_limpar_texto (sem quadrado).
+// Um emoji pode vir com o seletor de variacao U+FE0F (EF B8 8F) colado.
+static const struct { const char *emoji, *icone; } EMOJI_ICONE[] = {
+  { "\xF0\x9F\x92\xBE", "aj_hard-drive" },   // 💾
+  { "\xF0\x9F\x91\xA4", "aj_users" },        // 👤
+  { "\xF0\x9F\x8E\x9E", "aj_film" },         // 🎞
+  { "\xF0\x9F\x94\x8A", "aj_volume-2" },     // 🔊
+  { "\xF0\x9F\x8C\x90", "aj_globe" },        // 🌐
+  { "\xE2\x9A\x99",     "aj_settings-2" },  // ⚙
+  { "\xE2\x9A\xA1",     "aj_zap" },         // ⚡
+  { "\xF0\x9F\x93\xA6", "aj_package" },      // 📦
+  { "\xF0\x9F\x8F\xB7", "aj_tag" },          // 🏷
+  { "\xE2\x8F\xB1",     "aj_clock" },       // ⏱
+};
+#define ADDON_PECAS 6
+typedef struct { int n; const char *ic[ADDON_PECAS]; char tx[ADDON_PECAS][96]; } LinhaAddon;
+static const char *emojiIcone(const char *p, size_t *len) {
+  for (size_t k = 0; k < sizeof EMOJI_ICONE / sizeof EMOJI_ICONE[0]; k++) {
+    size_t n = strlen(EMOJI_ICONE[k].emoji);
+    if (strncmp(p, EMOJI_ICONE[k].emoji, n)) continue;
+    if (!strncmp(p + n, "\xEF\xB8\x8F", 3)) n += 3;
+    *len = n;
+    return EMOJI_ICONE[k].icone;
+  }
+  return NULL;
+}
+// Uma linha crua do addon vira pecas "[icone] texto". O texto de cada peca
+// passa pelo limpador do #144 (versalete, subscrito, glifo que a fonte nao
+// tem) antes de ir para a tela, como o resto da folha.
+static void pecasAddon(const char *ini, size_t n, LinhaAddon *L) {
+  char cru[1024];
+  const char *p, *ate;
+  size_t len;
+  L->n = 0;
+  linhaLimpa(cru, sizeof cru, ini, n);
+  p = cru;
+  ate = cru + strlen(cru);
+  while (p < ate && L->n < ADDON_PECAS) {
+    const char *ic = NULL, *q = p;
+    char seg[512];
+    size_t k;
+    // O icone (se a peca abre com um) e o texto ate o proximo emoji conhecido.
+    if (!(ic = emojiIcone(p, &len))) len = 0;
+    q = p + len;
+    for (k = 0; q + k < ate; k++) { size_t l2; if (emojiIcone(q + k, &l2)) break; }
+    snprintf(seg, sizeof seg, "%.*s", (int)(k < sizeof seg - 1 ? k : sizeof seg - 1), q);
+    nv_limpar_texto(seg, L->tx[L->n], sizeof L->tx[0], NV_LIMPA_UMA_LINHA);
+    if (ic || L->tx[L->n][0]) L->ic[L->n++] = ic;
+    p = q + k;
+  }
+}
+static int linhasAddon(const Stream *s, LinhaAddon *out, int max) {
   const char *p = s->descricao;
   int nl = 0;
   while (*p && nl < max) {
     const char *f = strchr(p, '\n');
     size_t n = f ? (size_t)(f - p) : strlen(p);
-    { char cru[1024];
-      // A linha passa pelo limpador do #144 (versalete, subscrito, glifo que
-      // a Inter nao tem) antes de ir para a tela, como o resto da folha.
-      linhaLimpa(cru, sizeof cru, p, n);
-      nv_limpar_texto(cru, out[nl], 192, NV_LIMPA_UMA_LINHA); }
-    if (out[nl][0]) nl++;
+    pecasAddon(p, n, &out[nl]);
+    if (out[nl].n) nl++;
     if (!f) break;
     p = f + 1;
   }
@@ -2236,9 +2289,11 @@ static int temMarca(int i, int automatica) {
 static float alturaLinha(int i, int automatica) {
   float h = FOLHA_LINHA_H + (temMarca(i, automatica) ? FOLHA_MARCA_H : 0);
   if (ajustes_fonte_texto_addon()) {
-    char tmp[FOLHA_ADDON_LINHAS][192];
+    LinhaAddon tmp[FOLHA_ADDON_LINHAS];
     int nl = linhasAddon(&lista[i], tmp, FOLHA_ADDON_LINHAS);
-    h = 20 + 40 + nl * FOLHA_ADDON_LD + 18 + (temMarca(i, automatica) ? FOLHA_MARCA_H : 0);
+    float ab = grupo == 1 && nOrdem == foco ? abreFoco : nOrdem == linhaAnt ? abreAnt : 0.0f;
+    float vis = nl > FOLHA_ADDON_FECHADA ? FOLHA_ADDON_FECHADA + (nl - FOLHA_ADDON_FECHADA) * ab : (float)nl;
+    h = 20 + 40 + vis * FOLHA_ADDON_LD + 18 + (temMarca(i, automatica) ? FOLHA_MARCA_H : 0);
     if (h < 96) h = 96;
   } else {
     // The connection line opens with the focused row even without a file name.
@@ -3183,13 +3238,29 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
           if(l.w+14+le.w<=txtW) txt_desenhar_alpha(le,tx+l.w+14,cy+l.h-le.h-3,anim); } } }
     cy+=40;
     if(ajustes_fonte_texto_addon()) {
-      char ls[FOLHA_ADDON_LINHAS][192];
+      LinhaAddon ls[FOLHA_ADDON_LINHAS];
       int nl=linhasAddon(s,ls,FOLHA_ADDON_LINHAS);
+      // abertura da linha: a mesma mola da altura (alturaLinha)
+      float abr = grupo==1 && row==foco ? abreFoco : row==linhaAnt ? abreAnt : 0.0f;
       for(int k=0;k<nl;k++){
+        float ak = anim;
+        if(k>=FOLHA_ADDON_FECHADA){ if(abr<.02f) break; ak = anim*abr; }
         // A primeira linha do addon costuma ser a de numeros (tamanho, taxa):
         // um degrau mais clara. As outras no cinza da especificacao.
         int c = k==0 ? (sel?215:180) : (sel?170:130);
-        txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,ls[k],c,c,c,255,k==0?txtW:tr-tx),tx,cy+k*FOLHA_ADDON_LD,anim);
+        float px=tx, maxw=k==0?txtW:tr-tx, ly=cy+k*FOLHA_ADDON_LD;
+        for(int pc=0;pc<ls[k].n && maxw-(px-tx)>30;pc++){
+          if(ls[k].ic[pc]){
+            // O icone na altura do texto, na mesma tinta; so vale se couber.
+            gfx_icone((GfxRect){px,ly+3,22,22},ls[k].ic[pc],c/255.0f,c/255.0f,c/255.0f,ak);
+            px+=22+8;
+          }
+          if(ls[k].tx[pc][0] && maxw-(px-tx)>30){
+            TxtLinha lp=txt_linha_corta(TXT_PG_FIM,ls[k].tx[pc],c,c,c,255,maxw-(px-tx));
+            txt_desenhar_alpha(lp,px,ly,ak);
+            px+=lp.w+18;
+          }
+        }
       }
       continue;
     }
