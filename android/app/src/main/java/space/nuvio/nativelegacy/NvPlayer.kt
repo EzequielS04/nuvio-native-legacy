@@ -72,6 +72,12 @@ object NvPlayer {
     private var activity: Activity? = null
     private var camada: FrameLayout? = null
     private var superficie: SurfaceView? = null
+    // #202: a TCL segurou o AudioFlinger por 27-38 s ao soltar o audio do filme
+    // anterior; release() no fio principal congelava o app. Cada abertura tem a
+    // sua SurfaceView e o player velho e solto num fio proprio.
+    private val liberacoesEmCurso = AtomicInteger()
+    private var ouvinteAtual: Player.Listener? = null
+    private var analiticoAtual: AnalyticsListener? = null
 
     // Tudo abaixo so no fio principal.
     private var player: ExoPlayer? = null
@@ -195,10 +201,7 @@ object NvPlayer {
         this.camada = camada
         // F07: seek cache folders of a process that died (crash, kill) go now.
         CacheMidia.limparSobras(activity.cacheDir)
-        val sv = SurfaceView(activity)
-        sv.visibility = View.GONE
-        camada.addView(sv, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        superficie = sv
+        novaSuperficie(activity)
         // A camada so tem tamanho depois do layout: reaplica a janela quando mudar.
         camada.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or2, ob ->
             if (r - l != or2 - ol || b - t != ob - ot) aplicarJanela()
@@ -268,6 +271,7 @@ object NvPlayer {
         val act = activity
         if (act == null) { confirmarRetomada(geracao, false); return }
         liberar()
+        novaSuperficie(act)
         pedidoAtivo = pedido
         hdrRecriado = false; hdrRecriadoPara = ""; quadroVisto = false
         principal.removeCallbacks(recriar)
@@ -374,14 +378,25 @@ object NvPlayer {
                     .setDataSourceFactory(DefaultDataSource.Factory(act, origem)))
                 .build()
             player = p
+            semTravaDeFio(p)
+            // Release anterior ainda preso no HAL de audio: sessao de audio nova,
+            // para o AudioTrack deste filme nao esperar o patch do velho.
+            if (liberacoesEmCurso.get() > 0) {
+                try {
+                    p.audioSessionId = androidx.media3.common.util.Util.generateAudioSessionIdV21(act)
+                    Log.i(TAG, "[player] release anterior em curso; sessao de audio nova")
+                } catch (e: Exception) { Log.w(TAG, "sessao de audio nova: $e") }
+            }
             // Foco de audio GAIN; perder o foco pausa (o C ve o evento 3).
             p.setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
             // Legenda desligada ate o app escolher: quem desenha e o C.
             p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
-            p.addListener(ouvinte(minha))
-            p.addAnalyticsListener(analitico(minha))
+            val ouv = ouvinte(minha); val ana = analitico(minha)
+            ouvinteAtual = ouv; analiticoAtual = ana
+            p.addListener(ouv)
+            p.addAnalyticsListener(ana)
 
             val sv = superficie
             if (sv != null) {
@@ -434,10 +449,18 @@ object NvPlayer {
         decoderDv = false
         ultHdr = ""; ultDv = -1; ultAtmos = -1
         avisouSemAudio = false
+        val sv = superficie
+        val ouv = ouvinteAtual; val ana = analiticoAtual
+        ouvinteAtual = null; analiticoAtual = null
         if (p != null) {
-            try { p.stop() } catch (e: Exception) { }
-            try { p.clearVideoSurface() } catch (e: Exception) { }
-            try { p.release() } catch (e: Exception) { Log.w(TAG, "release: $e") }
+            // Listeners fora ja (so mexem em lista local); o resto, no fio de fundo.
+            try { if (ouv != null) p.removeListener(ouv) } catch (e: Exception) { }
+            try { if (ana != null) p.removeAnalyticsListener(ana) } catch (e: Exception) { }
+            // Esconde sem destruir a superficie (destruir acorda o callback do Media3).
+            try { sv?.layoutParams = FrameLayout.LayoutParams(1, 1) } catch (e: Exception) { }
+            liberarEmFundo(p, sv)
+            // A superficie velha fica com o player velho; a proxima abertura cria outra.
+            superficie = null
         }
         // F07: the session cache goes with its player (released and deleted
         // off the main thread, after the canceled loaders unwind).
@@ -449,6 +472,52 @@ object NvPlayer {
         // Depois do release (o fio de reproducao ja parou): sem audio decodificado.
         tap.encerrar()
         superficie?.visibility = View.GONE
+    }
+
+    // O release roda em outro fio (liberarEmFundo) e o Media3 1.8 lanca se um
+    // fio que nao e o da aplicacao toca o player; o seletor e so do pacote, entao
+    // reflexao. Sem ele (outra versao), o release volta ao fio principal.
+    private fun semTravaDeFio(p: ExoPlayer) {
+        try {
+            val m = p.javaClass.getDeclaredMethod("setThrowsWhenUsingWrongThread", Boolean::class.javaPrimitiveType)
+            m.isAccessible = true
+            m.invoke(p, false)
+            fioLivre = true
+        } catch (e: Throwable) {
+            fioLivre = false
+            Log.w(TAG, "[player] sem destravar o fio do release (volta ao fio principal): $e")
+        }
+    }
+    @Volatile private var fioLivre = false
+
+    private fun novaSuperficie(act: Activity) {
+        if (superficie != null) return
+        val c = camada ?: return
+        val sv = SurfaceView(act)
+        sv.visibility = View.GONE
+        c.addView(sv, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        superficie = sv
+    }
+
+    // stop+release do player velho fora do fio principal. A SurfaceView so sai
+    // da tela depois: tirar antes dispararia o callback de superficie do
+    // Media3, que espera o fio de reproducao (justo o que esta preso).
+    private fun liberarEmFundo(p: ExoPlayer, sv: SurfaceView?) {
+        liberacoesEmCurso.incrementAndGet()
+        val corpo = Runnable {
+            val ini = SystemClock.elapsedRealtime()
+            try { p.stop() } catch (e: Exception) { Log.w(TAG, "stop: $e") }
+            try { p.release() } catch (e: Exception) { Log.w(TAG, "release: $e") }
+            val ms = SystemClock.elapsedRealtime() - ini
+            if (ms > 5000) Log.w(TAG, "[player] release anterior levou $ms ms (>5 s: HAL de audio preso?)")
+            else Log.i(TAG, "[player] release anterior levou $ms ms")
+            liberacoesEmCurso.decrementAndGet()
+            principal.post {
+                if (sv != null && sv !== superficie) (sv.parent as? FrameLayout)?.removeView(sv)
+            }
+        }
+        if (fioLivre) { val t = Thread(corpo, "nv-release"); t.isDaemon = true; t.start() }
+        else corpo.run()
     }
 
     // Tique de 250 ms: a posicao que o C le sem esperar ninguem.
