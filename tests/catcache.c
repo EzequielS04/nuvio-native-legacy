@@ -133,6 +133,12 @@ int main(void) {
     estadoItens[0].poster[0] = 'p'; estadoItens[0].poster[1] = 0;
     depois = cat_assinatura_de(estadoItens, 4, &vazio, 1);
     confere("arte alterada no mesmo ID invalida assinatura", antes != depois);
+    // #294: troca de perfil publica catalogo vazio (desc_esquecer_catalogo_perfil).
+    cat_definir_tudo(NULL, 0, NULL, 0);
+    confere("troca de perfil: catalogo e fileiras do perfil anterior saem",
+            cat_n() == 0 && cat_n_fileiras() == 0);
+    estadoItens[0].poster[0] = 0;
+    cat_definir_tudo(estadoItens, 4, &vazio, 1);   // restaura o que os proximos casos usam
   }
 
   // (a2) SEM PASTA GRAVAVEL, VOLTA A SER COMO ERA.

@@ -4865,6 +4865,19 @@ void desc_repetir_addons(void) {
   fflush(stdout);
 }
 
+// #294: TROCA DE PERFIL. O bloco publicado e as janelas montadas (filsMontadas)
+// sao do perfil que saiu: ate a descoberta do novo terminar, a Home mostrava as
+// fileiras do outro perfil (logs 2KGKSE/DSWQTX: "19 fileiras na tela, 40 no
+// catalogo" logo apos "perfil ativo: 1") e a tela registrava essas chaves no
+// arquivo de fileiras do perfil novo. Esvazia os dois; a volta que roda a
+// seguir publica o catalogo certo. catalogo-rede.bin ja e por usuario+perfil
+// (CacheCab) e recusado quando nao bate.
+void desc_esquecer_catalogo_perfil(void) {
+  // Com volta em curso ela e dona de filsMontadas e publica o conjunto novo.
+  if (!buscando) nFileirasMontadas = 0;
+  cat_definir_tudo(NULL, 0, NULL, 0);
+}
+
 // Logout: solta a cache de manifestos (e da conta que saiu) e zera o estado da
 // descoberta para a proxima sessao comecar limpa. A cache de manifestos e a
 // unica alocacao persistente entre ciclos que pertence a este modulo.
