@@ -42,6 +42,7 @@
 #include "livetvdiag.h"
 #include "proxyts.h"
 #include "livetv_regras.h"
+#include "livestall.h"
 #include "guialembrete.h"   /* aviso do lembrete de programa do guia */
 #include "epg.h"
 #include "posplay.h"
@@ -263,6 +264,7 @@ static int    folhaParaTocar;
 #define CANAL_STALKER_TENTATIVAS 3
 static int    stalkerTentativas;
 static int    canalFonteIdx = -1;         // indice na lista de streams, -1 = fora
+static NvLiveStall liveStall;             // vigia de trava do canal (livestall.h)
 // CANAL DE ADDON PELO PROXY DE TS (#283). 1 = a tentativa em curso de
 // canalFonteIdx foi entregue ao player por proxyts; se ela morrer, a MESMA
 // fonte e tentada direto antes de passar para a proxima.
@@ -3634,6 +3636,51 @@ void app_atualizar(float dt, Uint32 agora) {
         (player_carregando() && desde > prazo && video_buffer_fim() <= 0.5) ||
         (player_carregando() && desde > teto) ||
         video_bufferando_ms() > CANAL_TRAVA_MS || semDecoder;
+    // CANAL QUE PAROU DEPOIS DE TOCAR (#302): fim de fluxo (o provedor fechou a
+    // conexao), posicao parada ou buffering por 8 s. Reabre a MESMA fonte, ate
+    // NV_LS_MAX vezes (livestall.h); esgotou, cai no caminho de sempre (proxima
+    // fonte). Pausa da pessoa nunca entra. So roda se o watchdog acima nao ja
+    // declarou a fonte morta (erro de verdade tem o seu proprio caminho).
+    { static int lsIdx = -1;
+      static char lsId[64];
+      int ls;
+      if (lsIdx != canalFonteIdx || strncmp(lsId, player_id_canal(), sizeof lsId - 1)) {
+        nv_ls_zerar(&liveStall);
+        lsIdx = canalFonteIdx;
+        snprintf(lsId, sizeof lsId, "%s", player_id_canal());
+      }
+      ls = nv_ls_passo(&liveStall, SDL_GetTicks(), video_pronto() ? video_pos() : 0.0,
+                       video_pronto(), player_pausado(), video_terminou(),
+                       video_bufferando_ms());
+      if (morta) {
+        nv_ls_zerar(&liveStall);
+      } else if (ls == NV_LS_AGENDOU) {
+        printf("[canal] parou de tocar (fim de fluxo=%d, posicao %.1fs, buffering %u ms): "
+               "reabrindo a fonte %d, tentativa %d/%d em %u ms\n", video_terminou(),
+               video_pos(), video_bufferando_ms(), canalFonteIdx, liveStall.tentativa,
+               NV_LS_MAX, nv_ls_espera_ms(liveStall.tentativa));
+        fflush(stdout);
+        player_toast_ex(i18n("Conexão caiu, reconectando…"), 4000, "aj_wifi-off", 1);
+      } else if (ls == NV_LS_REABRIR) {
+        const Stream *mesma = stream_item(canalFonteIdx);
+        if (mesma) {
+          static char viaProxy[4200];
+          printf("[canal] reabrindo a fonte %d (tentativa %d/%d)\n", canalFonteIdx,
+                 liveStall.tentativa, NV_LS_MAX);
+          fflush(stdout);
+          marco("canal: parou, reabrindo a mesma fonte");
+          canalFonteDesde = SDL_GetTicks();
+          player_definir_fonte(urlCanal(mesma, viaProxy, sizeof viaProxy));
+          nv_ls_reaberto(&liveStall, SDL_GetTicks());
+        } else {
+          morta = 1;
+        }
+      } else if (ls == NV_LS_DESISTIR) {
+        printf("[canal] fonte %d parou %d vezes seguidas: proxima fonte\n", canalFonteIdx, NV_LS_MAX);
+        fflush(stdout);
+        morta = 1;
+      }
+    }
     // O formato que tocou vai na frente nos proximos canais (xtream.h).
     { static char tocouUrl[64];
       if (xt && video_pronto() && strncmp(tocouUrl, player_id_canal(), sizeof tocouUrl - 1)) {
@@ -3736,6 +3783,8 @@ void app_atualizar(float dt, Uint32 agora) {
         if (semDecoder) { video_parar(); sondarCanalXtream(player_id_canal()); }
       }
     }
+  } else {
+    nv_ls_zerar(&liveStall);   // fora de canal / fonte em troca: o vigia recomeca do zero
   }
 
   vigiarFonteGuardada();
