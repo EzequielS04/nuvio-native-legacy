@@ -58,6 +58,21 @@ void servidores_esquecer_todos(void);   // servidores.c: wipe every profile's to
 
 static pthread_t fio;
 static int fioVivo, fioPronto;
+// A ENTREGA DO FIO DE SYNC PARA O PRINCIPAL (#203). `fioPronto` e
+// `addonsCedo` sao porteiras: o fio enche buffers (catHomeBlob, colBlob,
+// addonsRem...) e SO DEPOIS liga a porteira; o principal ve a porteira e
+// consome/libera os buffers. Escrita e leitura simples nao garantem essa ordem
+// no ARM da TV (nem para o compilador): o principal podia ver a porteira antes
+// dos ponteiros e dar free() num valor velho. Release na escrita, acquire na
+// leitura. O TSAN apontava a porteira (sync.c:1249 x 1485) e, por ela, os
+// campos que ela protege (cicloInterrompido em 1499).
+//
+// O que continua sem barreira, de proposito, e documentado: `estado`,
+// `fioVivo` e `perfilAplicado` lidos pelo fio da descoberta
+// (esperaAddonsDaConta -> sync_estado/sync_perfil_pronto) — inteiros de
+// sondagem, relidos a cada volta de espera; nenhum ponteiro sai deles.
+#define PRONTO_PUBLICAR(v, x) __atomic_store_n(&(v), (x), __ATOMIC_RELEASE)
+#define PRONTO_LER(v)         __atomic_load_n(&(v), __ATOMIC_ACQUIRE)
 static SyncEstado estado = SYNC_PARADO;
 static char resumo[220] = "sem sincronizar";
 static unsigned ultimoOk;
@@ -278,7 +293,7 @@ static volatile int addonsDeFora;
 // sync_passo. `volatile` porque quem escreve e o fio de sync e quem le e o fio
 // principal, e a barreira aqui e a mesma que `fioPronto` sempre foi: o valor so
 // e ligado DEPOIS de o buffer estar cheio.
-static volatile int addonsCedo;
+static int addonsCedo;   // PRONTO_PUBLICAR/PRONTO_LER, ver fioPronto
 
 static char traktTok[300];
 static int  temTraktRem;
@@ -1216,7 +1231,7 @@ static void *rodar(void *u) {
   perfis_puxar();
   if (!contaDoCicloAtual()) {
     estado = SYNC_PRONTO;
-    fioPronto = 1;
+    PRONTO_PUBLICAR(fioPronto, 1);
     return NULL;
   }
   // ESCOLHA DE PERFIL PENDENTE: PARA AQUI, e nao adivinha o perfil 1.
@@ -1246,7 +1261,7 @@ static void *rodar(void *u) {
     snprintf(resumo, sizeof resumo, "aguardando escolha de perfil");
     cicloInterrompido = 1;
     estado = SYNC_PRONTO;
-    fioPronto = 1;
+    PRONTO_PUBLICAR(fioPronto, 1);
     return NULL;
   }
   // Lido DEPOIS da porteira: quando a pessoa responde enquanto perfis_puxar
@@ -1254,7 +1269,7 @@ static void *rodar(void *u) {
   perfilDoCiclo = perfis_ativo();
   if (puxarAddons() < 0) {
     char d[32];
-    if (temAddonsRem && !addonsPendentes()) addonsCedo = 1;
+    if (temAddonsRem && !addonsPendentes()) PRONTO_PUBLICAR(addonsCedo, 1);
     soLeituraDaCopia(foraCiclo > 0 ? foraCiclo : 0);
     contacache_data(copiaQuandoCiclo, d, sizeof d);
     if (copiaCiclo)
@@ -1264,7 +1279,7 @@ static void *rodar(void *u) {
       snprintf(resumo, sizeof resumo, i18n("servidor da conta fora do ar (HTTP %d) · sem cópia salva"),
                foraCiclo > 0 ? foraCiclo : 0);
     estado = SYNC_PRONTO;
-    fioPronto = 1;
+    PRONTO_PUBLICAR(fioPronto, 1);
     return NULL;
   }
   // OS ADDONS SAO A SEGUNDA RPC DO CICLO, E ERAM APLICADOS NA ULTIMA LINHA DELE.
@@ -1287,7 +1302,7 @@ static void *rodar(void *u) {
   // addon que a pessoa acabou de ligar, e so depois a lista da conta e
   // aplicada. Antecipar ali sobrescreveria a escolha antes de ela ser enviada,
   // e a pessoa veria o proprio toque desaparecer.
-  if (temAddonsRem && !addonsPendentes()) addonsCedo = 1;
+  if (temAddonsRem && !addonsPendentes()) PRONTO_PUBLICAR(addonsCedo, 1);
   puxarCredenciais();
   syncprog_puxar();
   puxarSoLeitura();
@@ -1307,7 +1322,7 @@ static void *rodar(void *u) {
     fflush(stdout);
     snprintf(resumo, sizeof resumo, "perfil trocado; sincronizando de novo");
     estado = SYNC_PRONTO;
-    fioPronto = 1;
+    PRONTO_PUBLICAR(fioPronto, 1);
     return NULL;
   }
   if (addonsLocalCiclo) empurrarAddons();
@@ -1335,7 +1350,7 @@ static void *rodar(void *u) {
            cBiblio < 0 ? 0 : cBiblio, cColecoes < 0 ? 0 : cColecoes,
            temTraktRem ? " · Trakt" : "", sufixo); }
   estado = SYNC_PRONTO;
-  fioPronto = 1;
+  PRONTO_PUBLICAR(fioPronto, 1);
   return NULL;
 }
 
@@ -1402,7 +1417,7 @@ void sync_iniciar(void) {
   snprintf(usuarioDoCiclo, sizeof usuarioDoCiclo, "%s", sessao_usuario());
   copiaGeracaoDoCiclo = contacache_geracao();
   estado = SYNC_RODANDO;
-  fioPronto = 0;
+  __atomic_store_n(&fioPronto, 0, __ATOMIC_RELAXED);
   if (pthread_create(&fio, NULL, rodar, NULL) == 0) { pthread_detach(fio); fioVivo = 1; }
   else { estado = SYNC_FALHOU; snprintf(resumo, sizeof resumo, "sem fio para sincronizar"); }
 }
@@ -1458,8 +1473,8 @@ void sync_passo(unsigned agoraMs) {
   // ANTES DA PORTEIRA de `fioPronto`: ver o comentario em rodar(). O resto do
   // ciclo continua sendo aplicado de uma vez, no fim — so os addons saem na
   // frente, porque so eles mudam O QUE a descoberta vai buscar.
-  if (addonsCedo) {
-    addonsCedo = 0;
+  if (PRONTO_LER(addonsCedo)) {
+    __atomic_store_n(&addonsCedo, 0, __ATOMIC_RELAXED);
     if (temAddonsRem && perfilDoCicloAtual() && !addonsPendentes()) {
       // _addons: a volta que ainda nao leu a lista (o caso do arranque e da
       // escolha de perfil) atende o pedido sozinha, sem ser jogada fora.
@@ -1482,9 +1497,9 @@ void sync_passo(unsigned agoraMs) {
   // Custo no caso comum: uma comparacao de inteiro (cat_n) e um strcmp de 16
   // bytes. Nada e refeito enquanto o catalogo for o mesmo.
   contalib_reconciliar();
-  if (!fioVivo || !fioPronto) return;
+  if (!fioVivo || !PRONTO_LER(fioPronto)) return;
   fioVivo = 0;
-  fioPronto = 0;
+  __atomic_store_n(&fioPronto, 0, __ATOMIC_RELAXED);
   memset(spMs, 0, sizeof spMs);
   spMarca = syncRelogioMs();
 
@@ -2028,7 +2043,7 @@ void sync_esquecer_usuario(void) {
   // As caixas que o fio preenche tambem: um ciclo que terminou logo antes do
   // logout aplicaria os addons da conta anterior no proximo sync_passo.
   memset(addonsRem, 0, sizeof addonsRem);
-  nAddonsRem = 0; temAddonsRem = 0; addonsCedo = 0;
+  nAddonsRem = 0; temAddonsRem = 0; __atomic_store_n(&addonsCedo, 0, __ATOMIC_RELAXED);
   traktTok[0] = 0; temTraktRem = 0;
   memset(tmdbKey, 0, sizeof tmdbKey); temTmdb = 0;
   memset(mdbKey, 0, sizeof mdbKey);   temMdb = 0;
