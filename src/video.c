@@ -47,6 +47,11 @@ static int dvHabilitado, dtsModoDv, dvRecuoAviso;
 // not start. Consumed once.
 int video_dv_recuo_consumir(void) { int v = dvRecuoAviso; dvRecuoAviso = 0; return v; }
 int video_dv_ativo(void) { return dtsSessao && dtsModoDv; }
+// This source already played (webOS): a later reload of the SAME source
+// (Dolby Vision/DTS path handing back to the TV player, audio switch) is not
+// a source that failed to open. Other targets keep 0.
+static int fonteTocou;
+int video_fonte_tocou(void) { return fonteTocou; }
 static int dvLiberadoNestaTv(void);
 static int dvPronto(void);
 const char *video_dts_saida(void) { return dtsSaida; }
@@ -1984,7 +1989,7 @@ int video_tocar(const char *url) {
   modoLoad = video_modo_live_consumir();
   nv_recon_zerar(&recon);
   reconPermitida = reconProxima; reconProxima = 0;
-  reconIniciou = 0; reconErroPend = 0;
+  reconIniciou = 0; reconErroPend = 0; fonteTocou = 0;
   reconAudio = reconLeg = -1; reconLegUrl[0] = 0;
   falhou = 0; terminou = 0; audioNaoSup = 0;
   // FONTE NOVA, decisao nova: o "sem HDR" era sobre o arquivo anterior.
@@ -2068,7 +2073,7 @@ void video_bombear(void) {
     recarregarMesmaFonte(alvo, audioAoCarregar, legAoCarregar, legUrlAoCarregar);
   }
   // RECONEXAO: ver video_reconexao.h.
-  if (pronto && posSeg > 0.5) reconIniciou = 1;
+  if (pronto && posSeg > 0.5) reconIniciou = fonteTocou = 1;
   if (pronto) nv_recon_progresso(&recon, posSeg);
   if (reconErroPend) {
     int antes = recon.tentativa;

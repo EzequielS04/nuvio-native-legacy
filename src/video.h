@@ -173,6 +173,8 @@ int video_dts_legenda_desenhar(double seconds, int delay_ms, float x, float y, f
 // it handed playback back to the TV player (1 slow source, 2 did not start).
 int video_dv_ativo(void);
 int video_dv_recuo_consumir(void);
+// 1 once the current source has played on webOS (kept across reloads of it).
+int video_fonte_tocou(void);
 const char *video_dts_saida(void);  // actual local conversion output, empty for native playback
 int    video_audio_nao_suportado(void);  // uMS errorCode 200: video segue sem som
 int    video_terminou(void); // 1 depois do fim de fluxo (endOfStream) da fonte atual

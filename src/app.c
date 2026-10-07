@@ -1460,7 +1460,11 @@ static void tentarProximaFonteVOD(void) {
   if (video_reconectando()) return;
   desde = SDL_GetTicks() - fonteVODDesde;
   if (video_falhou() || player_fonte_falhou()) motivo = 1;
-  else if (player_carregando() && desde > VOD_FONTE_PRAZO_MS) motivo = 2;
+  // Reloading a source that already played (Dolby Vision path handing back
+  // to the TV player, track switch) is not a source that never opened: on
+  // the C9 the 30 s deadline, counted from the first open, swapped a playing
+  // film to another source and lost the position.
+  else if (player_carregando() && desde > VOD_FONTE_PRAZO_MS && !video_fonte_tocou()) motivo = 2;
   else if (video_bufferando_ms() > VOD_FONTE_BUFFER_MS) motivo = 3;
   if (!motivo) return;
 
@@ -2409,9 +2413,15 @@ void app_atualizar(float dt, Uint32 agora) {
   video_bombear();
   // Dolby Vision in MKV handed playback back to the TV player (HDR10).
   { int dvr = video_dv_recuo_consumir();
-    if (dvr) ilha_avisar("dv-mkv", ILHA_INFO, NULL, dvr == 1
+    if (dvr) {
+      const char *t = dvr == 1
         ? i18n("A conexão não acompanhou o Dolby Vision. Continuando em HDR10.")
-        : i18n("Dolby Vision não abriu nesta fonte. Continuando em HDR10."), 6000u, 0); }
+        : i18n("Dolby Vision não abriu nesta fonte. Continuando em HDR10.");
+      // The island is hidden while a film plays: the player's own toast is
+      // what the person sees there (the island alone showed it after exit).
+      if (player_aberto()) player_toast(t, 6000u);
+      else ilha_avisar("dv-mkv", ILHA_INFO, NULL, t, 6000u, 0);
+    } }
   player_validar_retido(agora);
   if (tela == TELA_LOGIN) {
     login_atualizar(dt, agora);
