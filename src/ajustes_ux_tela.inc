@@ -79,7 +79,7 @@ static const Item TELA[] = {
       OPC(AJ_ESMAECER), OPC(AJ_DESCANSO_ESTILO), OPC(AJ_DESCANSO_FONTE),
 
   SEC("Reprodução", "Qualidade, som e o que o player faz", "aj_circle-play"),
-    ROT("Imagem e som"), OPC(AJ_QUALIDADE), OPC(AJ_DV), OPC(AJ_ATMOS), OPC(AJ_CACHE_SEEK),
+    ROT("Imagem e som"), OPC(AJ_QUALIDADE), OPC(AJ_DV), OPC(AJ_ATMOS), OPC(AJ_DTS_AC3), OPC(AJ_CACHE_SEEK),
     ROT("Durante e depois"),
       OPC(AJ_PAUSA_OVERLAY), OPC(AJ_PLR_CLASSIF), OPC(AJ_REACAO_CREDITOS), OPC(AJ_CW_CONCLUIDO), OPC(AJ_SAIDA_PLAYER),
       OPC(AJ_PROPORCAO_PADRAO), OPC(AJ_MANTER_VIDEO), OPC(AJ_BRILHO_PLAYER),

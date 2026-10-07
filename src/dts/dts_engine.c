@@ -5,6 +5,10 @@
 #include <math.h>
 #include <time.h>
 struct DtsEngine;
+/* Output mode for the NEXT open: 0 = stereo AAC (default, the proven path),
+ * 1 = AC3 5.1 at 640 kbps (falls back to AAC when the encoder is absent). */
+static volatile int g_surround_ac3;
+void dts_engine_set_ac3(int on) { g_surround_ac3 = on ? 1 : 0; }
 #ifndef NV_DTS_FFMPEG
 struct DtsEngine { DtsMediaInfo info; };
 DtsEngine *dts_engine_create(void) { return calloc(1, sizeof(DtsEngine)); }
@@ -314,8 +318,8 @@ static int reset_encoder(DtsEngine *e) {
   av_channel_layout_copy(&e->enc->ch_layout,&layout); av_channel_layout_uninit(&layout);
   e->enc->sample_rate=48000; e->enc->time_base=(AVRational){1,48000};
   e->enc->sample_fmt=AV_SAMPLE_FMT_FLTP;
-  e->enc->bit_rate=192000;
-  e->enc->profile=AV_PROFILE_AAC_LOW;
+  if(id==AV_CODEC_ID_AC3) e->enc->bit_rate=e->enc->ch_layout.nb_channels>2?640000:192000;
+  else { e->enc->bit_rate=192000; e->enc->profile=AV_PROFILE_AAC_LOW; }
   int r=avcodec_open2(e->enc,codec,NULL);
   return r<0?fail(e,"Audio encoder open",r):0;
 }
@@ -414,12 +418,18 @@ int dts_engine_open(DtsEngine *e,const char *url,const char *headers,int audio,i
   e->dec->err_recognition=AV_EF_EXPLODE;
   if(core && av_opt_set_int(e->dec->priv_data,"core_only",1,0)<0) return fail(e,"DTS core-only unavailable",0);
   if((r=avcodec_open2(e->dec,decoder,NULL))<0) return fail(e,"DTS decoder open",r);
-  const AVCodec *encoder=avcodec_find_encoder(AV_CODEC_ID_AAC);
+  /* AC3 5.1 only when asked and the build has the encoder; else stereo AAC. */
+  const AVCodec *encoder=g_surround_ac3?avcodec_find_encoder(AV_CODEC_ID_AC3):NULL;
+  int out_channels=2;
+  if(encoder) {
+    int in_channels=ap->ch_layout.nb_channels;
+    out_channels=(in_channels==0 || in_channels>2)?6:2;
+  } else encoder=avcodec_find_encoder(AV_CODEC_ID_AAC);
   if(!encoder) return fail(e,"Audio encoder absent",0);
   e->enc=avcodec_alloc_context3(encoder);
   if(!e->enc) return fail(e,"Audio encoder absent",0);
   e->enc->codec_id=encoder->id;
-  av_channel_layout_default(&e->enc->ch_layout,2);
+  av_channel_layout_default(&e->enc->ch_layout,out_channels);
   if(reset_encoder(e)<0) return -1;
   e->fifo=av_audio_fifo_alloc(e->enc->sample_fmt,e->enc->ch_layout.nb_channels,4096);
   e->in=av_packet_alloc(); e->out=av_packet_alloc(); e->decoded=av_frame_alloc(); e->encoded=av_frame_alloc();

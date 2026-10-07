@@ -16,6 +16,7 @@
 #include "velocidade.h"
 #include "cacheboost.h"
 #include "dts/dts_playback.h"
+#include "dts/dts_engine.h"
 #include "ajustes.h"
 #include "dts/dts_overlay.h"
 #include "legenda.h"
@@ -2473,6 +2474,7 @@ static int iniciarDts(int stream) {
     return 0;
   }
   dtsMarcarAbertas(dtsAbertasSemFechar() + 1);
+  dts_engine_set_ac3(ajustes_dts_ac3());
   dtsSessao = dts_playback_start(urlAtual, cabsHttp, stream, alvo,
                                paused, expWin, 0, a ? &selected : NULL, ordinal, count);
   if (!dtsSessao) {
