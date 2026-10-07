@@ -5,6 +5,7 @@
 #include "extras.h"
 #include "svdesenho.h"
 #include "notasui.h"
+#include "plrui.h"
 #include "gfx.h"
 #include "text.h"
 #include "layout.h"
@@ -25,10 +26,6 @@
 #define TG_PAD       32.0f
 #define TG_AMG_W    540.0f
 #define TG_STAT_W   300.0f
-#define TG_SLOT_MAX 128.0f
-#define TG_BARRA_MAX 56.0f
-#define TG_BARRA_MIN 12.0f
-#define TG_ROSTO     30.0f
 #define TG_LIN_H     54.0f
 #define TG_LIN_AV    42.0f
 #define TG_ANIM_MS  750u
@@ -209,13 +206,6 @@ void tgraf_reiniciar(void) { animImdb[0] = 0; animIni = 0; }
 
 float tgraf_altura(void) { return TG_CAB + TG_CARD_H; }
 
-// raio em PIXELS -> o normalizado pela altura do gfx (teto: pilula).
-static float raioPx(GfxRect r, float px) {
-  float m = r.w < r.h ? r.w : r.h;
-  if (px > m * 0.5f) px = m * 0.5f;
-  return r.h > 0.0f ? px / r.h : 0.0f;
-}
-
 static float suaveSaida(float x) {
   if (x <= 0.0f) return 0.0f;
   if (x >= 1.0f) return 1.0f;
@@ -236,275 +226,180 @@ static void textoTemp(int numero, char *dst, size_t tam) {
   snprintf(dst, tam, i18n("T%d"), numero);
 }
 
-static void reacaoTexto(const TgAmigo *g, char *dst, size_t tam) {
-  dst[0] = 0;
-  if (g->agora) snprintf(dst, tam, "%s", i18n("Vendo agora"));
-  else if (g->reacao == SV_REAC_GOSTOU) snprintf(dst, tam, "%s", i18n("Gostou"));
-  else if (g->reacao == SV_REAC_NAO) snprintf(dst, tam, "%s", i18n("Não gostou"));
-  else if (g->reacao == SV_REAC_MEIO) snprintf(dst, tam, "%s", i18n("Mais ou menos"));
-  else if (g->nota > 0) snprintf(dst, tam, i18n("Nota %d/10"), (g->nota + 5) / 10);
-}
-
-// A COLUNA NUMERICA a esquerda do grafico: a serie inteira em repouso, a
-// temporada focada quando o foco anda pelas colunas.
+// A COLUNA DA SERIE a esquerda (dono, 06/10: "as barras nao dao a visao de
+// completou a serie"): o numero grande e a FRACAO DA SERIE ("62% da série")
+// com a barra de progresso do app (plrui_trilho, a do player e dos Ajustes);
+// a 100% vira "Série completa" com o check. Com o foco numa temporada, os
+// numeros dela.
 static void colunaNumeros(const TgDados *d, float x, float y, float w, int foco, float a) {
-  char grande[24], l1[96], l2[96], l3[96];
+  char grande[24], sufixo[48], l1[96], l2[96], l3[96];
   TxtLinha lg, ls1, ls2, ls3;
-  float ar, ag, ab;
+  float ar, ag, ab, frac = 0.0f;
+  int completa = 0;
   ajustes_acento(&ar, &ag, &ab);
-  l1[0] = l2[0] = l3[0] = 0;
+  sufixo[0] = l1[0] = l2[0] = l3[0] = 0;
   if (foco >= 0 && foco < d->n) {
     const TgTemp *t = &d->t[foco];
-    char tt[32];
-    if (t->numero == 0) snprintf(tt, sizeof tt, "%s", i18n("Especiais"));
-    else snprintf(tt, sizeof tt, i18n("Temporada %d"), t->numero);
+    size_t k;
     if (d->sabe) snprintf(grande, sizeof grande, "%d/%d", t->vistos, t->exibidos);
     else snprintf(grande, sizeof grande, "%d", t->exibidos);
-    snprintf(l1, sizeof l1, "%s", tt);
-    { size_t k;
-      if (t->completa) snprintf(l2, sizeof l2, "%s", i18n("Temporada completa"));
-      else if (d->sabe) snprintf(l2, sizeof l2, i18n("%d de %d assistidos"), t->vistos, t->exibidos);
-      else snprintf(l2, sizeof l2, i18n(t->exibidos == 1 ? "%d episódio" : "%d episódios"), t->exibidos);
-      k = strlen(l2);
-      // A mesma clausula do resumo acima das pilulas (detail.c).
-      if (t->total > t->exibidos)
-        snprintf(l2 + k, sizeof l2 - k, i18n(t->total - t->exibidos == 1 ? " · %d ainda não exibido"
-                                                                         : " · %d ainda não exibidos"),
-                 t->total - t->exibidos); }
+    snprintf(sufixo, sizeof sufixo, "%s", i18n("eps"));
+    if (t->numero == 0) snprintf(l1, sizeof l1, "%s", i18n("Especiais"));
+    else snprintf(l1, sizeof l1, i18n("Temporada %d"), t->numero);
+    if (t->completa) snprintf(l2, sizeof l2, "%s", i18n("Temporada completa"));
+    else if (d->sabe) snprintf(l2, sizeof l2, i18n("%d de %d assistidos"), t->vistos, t->exibidos);
+    else snprintf(l2, sizeof l2, i18n(t->exibidos == 1 ? "%d episódio" : "%d episódios"), t->exibidos);
+    k = strlen(l2);
+    // A mesma clausula do resumo acima das pilulas (detail.c).
+    if (t->total > t->exibidos)
+      snprintf(l2 + k, sizeof l2 - k, i18n(t->total - t->exibidos == 1 ? " · %d ainda não exibido"
+                                                                       : " · %d ainda não exibidos"),
+               t->total - t->exibidos);
     snprintf(l3, sizeof l3, "%s", i18n("OK abre a temporada"));
+    frac = t->exibidos > 0 && d->sabe ? (float)t->vistos / (float)t->exibidos : 0.0f;
+    completa = d->sabe && t->completa;
   } else {
     int pct = d->exibidos > 0 ? (int)((d->vistos * 100L + d->exibidos / 2) / d->exibidos) : 0;
-    if (d->sabe) snprintf(grande, sizeof grande, "%d%%", pct);
-    else snprintf(grande, sizeof grande, "%d", d->exibidos);
+    completa = d->sabe && d->exibidos > 0 && d->vistos >= d->exibidos;
+    if (completa) snprintf(grande, sizeof grande, "%s", i18n("Série completa"));
+    else if (d->sabe) {
+      snprintf(grande, sizeof grande, "%d%%", pct);
+      snprintf(sufixo, sizeof sufixo, "%s", i18n("da série"));
+    } else snprintf(grande, sizeof grande, "%d", d->exibidos);
     if (d->sabe) snprintf(l1, sizeof l1, i18n("%d de %d episódios"), d->vistos, d->exibidos);
     else snprintf(l1, sizeof l1, "%s", i18n("Episódios"));
-    if (d->sabe && d->completas > 0)
-      snprintf(l2, sizeof l2, i18n("Temporadas completas: %d de %d"), d->completas, d->n);
-    else snprintf(l2, sizeof l2, i18n(d->n == 1 ? "%d temporada" : "%d temporadas"), d->n);
-    if (d->sabe && d->exibidos > 0 && d->vistos >= d->exibidos)
-      snprintf(l3, sizeof l3, "%s", i18n("Você está em dia"));
+    snprintf(l2, sizeof l2, i18n("Temporadas completas: %d de %d"), d->sabe ? d->completas : 0, d->n);
+    if (completa) snprintf(l3, sizeof l3, "%s", i18n("Você está em dia"));
     else if (d->sabe && d->meuT > 0)
       snprintf(l3, sizeof l3, i18n("Último visto: T%dE%d"), d->meuT, d->meuE);
+    frac = d->exibidos > 0 && d->sabe ? (float)d->vistos / (float)d->exibidos : 0.0f;
   }
-  lg = txt_linha(TXT_V2_NUM, grande, 245, 246, 248, 255);
+  { float gx = x;
+    // Completa: o check do app (aj_circle-check) no realce, antes do titulo.
+    if (completa) {
+      gfx_icone((GfxRect){ x, y + 4.0f, 40.0f, 40.0f }, "aj_circle-check", ar, ag, ab, a);
+      gx += 52.0f;
+    }
+    lg = txt_linha_corta(completa && !(foco >= 0) ? TXT_G28B : TXT_V2_NUM, grande,
+                         245, 246, 248, 255, w - (gx - x));
+    txt_desenhar_alpha(lg, gx, completa && !(foco >= 0) ? y + 9.0f : y, a);
+    if (sufixo[0]) {
+      TxtLinha lsf = txt_linha(TXT_ILHA_SUB, sufixo, 243, 242, 239, 255);
+      txt_desenhar_alpha(lsf, gx + (float)lg.w + 10.0f, y + (float)lg.h - (float)lsf.h - 8.0f, a * 0.6f);
+    } }
+  y += 66.0f;
+  // A barra da serie (ou da temporada focada): a mesma do app.
+  plrui_trilho((GfxRect){ x, y, w, 10.0f }, frac, -1.0f, 0, 0, a);
+  y += 30.0f;
   ls1 = txt_linha_corta(TXT_ILHA_NOME, l1, 243, 242, 239, 255, w);
   ls2 = txt_linha_corta(TXT_ILHA_SUB, l2, 243, 242, 239, 255, w);
   ls3 = txt_linha_corta(TXT_ILHA_SUB, l3, 243, 242, 239, 255, w);
-  txt_desenhar_alpha(lg, x, y, a);
-  // O fio de realce sob o numero grande: a assinatura do bloco.
-  gfx_cor((GfxRect){ x, y + (float)lg.h + 6.0f, 44.0f, 4.0f }, 0.5f, ar, ag, ab, a);
-  y += (float)lg.h + 26.0f;
   txt_desenhar_alpha(ls1, x, y, a); y += (float)ls1.h + 8.0f;
   if (l2[0]) { txt_desenhar_alpha(ls2, x, y, a * 0.72f); y += (float)ls2.h + 6.0f; }
   if (l3[0]) txt_desenhar_alpha(ls3, x, y, a * 0.55f);
 }
 
-// Rostinho de um amigo na coluna: cheio e com aro de realce quando esta na
-// frente, apagado quando esta atras.
-static void rostoNaColuna(const TgAmigo *g, float cx, float cy, float a) {
-  GfxRect r = { cx - TG_ROSTO * 0.5f, cy - TG_ROSTO * 0.5f, TG_ROSTO, TG_ROSTO };
-  float ar, ag, ab;
-  ajustes_acento(&ar, &ag, &ab);
-  // Disco escuro por baixo separa o rosto da barra clara.
-  gfx_cor((GfxRect){ r.x - 3.0f, r.y - 3.0f, r.w + 6.0f, r.h + 6.0f }, 0.5f, 0.05f, 0.05f, 0.07f, a * 0.85f);
-  if (g->frente) gfx_anel_fora(r, 0.5f, 1.0f, 2.5f, ar, ag, ab, a);
-  svd_avatar(r, g->avatar, g->nome, g->id, g->frente ? a : a * 0.5f);
-}
-
+// AS TEMPORADAS EM LINHAS, na gramatica das listas do app: rotulo "T3", a
+// barra de progresso (plrui_trilho, realce), "6/10 eps" a direita e o check
+// quando completa. A linha focada leva o fundo de foco das listas
+// (plrui_linha_foco). Muitas temporadas: ate 4 colunas de linhas.
+#define TG_LIN_TEMP_H 46.0f
 static void desenhaGrafico(const TgDados *d, GfxRect card, int foco, int selNumero,
                            float a, Uint32 agora) {
-  float bx = card.x + TG_PAD + TG_STAT_W + TG_PAD, bw = card.x + card.w - TG_PAD - bx;
-  float topo = card.y + 30.0f, contY = topo, colTopo = topo + 36.0f;
-  float colBase = card.y + card.h - 30.0f - 36.0f, colH = colBase - colTopo;
-  float slot, barW, ar, ag, ab;
-  int i, passoRot, vidro = ajustes_vidro();
+  float ax = card.x + TG_PAD + TG_STAT_W + TG_PAD, aw = card.x + card.w - TG_PAD - ax;
+  float ay = card.y + 26.0f, ah = card.h - 52.0f;
+  float ar, ag, ab, colW, linH;
+  int i, nCol, porCol;
   if (d->n <= 0) return;
   ajustes_acento(&ar, &ag, &ab);
-  slot = bw / (float)d->n;
-  if (slot > TG_SLOT_MAX) slot = TG_SLOT_MAX;
-  // Poucas temporadas: o grupo fica no meio da area, nao encostado a esquerda.
-  bx += (bw - slot * (float)d->n) * 0.5f;
-  barW = slot * 0.46f;
-  if (barW > TG_BARRA_MAX) barW = TG_BARRA_MAX;
-  if (barW < TG_BARRA_MIN) barW = TG_BARRA_MIN;
-  // Rotulo de temporada a cada `passoRot` colunas quando apertado ("T12" mede
-  // ~44 px); o focado e o escolhido sempre levam o seu.
-  passoRot = (int)ceilf(52.0f / slot);
-  if (passoRot < 1) passoRot = 1;
-  // Fio separador da coluna de numeros.
-  gfx_cor((GfxRect){ card.x + TG_PAD + TG_STAT_W + TG_PAD * 0.5f - 1.0f, card.y + 28.0f, 1.0f, card.h - 56.0f }, 0.0f,
+  // Fio separador da coluna da serie.
+  gfx_cor((GfxRect){ ax - TG_PAD * 0.5f - 1.0f, card.y + 28.0f, 1.0f, card.h - 56.0f }, 0.0f,
           1.0f, 1.0f, 1.0f, a * 0.08f);
-  // Linha de base.
-  gfx_cor((GfxRect){ bx, colBase + 1.0f, slot * (float)d->n, 1.0f }, 0.0f, 1.0f, 1.0f, 1.0f, a * 0.10f);
-
+  porCol = (int)(ah / TG_LIN_TEMP_H);
+  if (porCol < 1) porCol = 1;
+  nCol = (d->n + porCol - 1) / porCol;
+  if (nCol > 4) { nCol = 4; porCol = (d->n + 3) / 4; }
+  linH = ah / (float)porCol;
+  if (linH > TG_LIN_TEMP_H + 8.0f) linH = TG_LIN_TEMP_H + 8.0f;
+  colW = (aw - (float)(nCol - 1) * 24.0f) / (float)nCol;
   for (i = 0; i < d->n; i++) {
     const TgTemp *t = &d->t[i];
-    float cx = bx + slot * ((float)i + 0.5f), x0 = cx - barW * 0.5f;
-    float g = crescer(i, agora);
-    int focado = (i == foco), escolhida = (t->numero == selNumero);
-    float fTot = t->total > 0 ? 1.0f : 0.0f;
-    float fExib = t->total > 0 ? (float)t->exibidos / (float)t->total : 0.0f;
-    float fVisto = t->total > 0 ? (float)t->vistos / (float)t->total : 0.0f;
-    float hExib = colH * fExib, hVisto = colH * fVisto * g;
-    GfxRect trilho = { x0, colBase - hExib, barW, hExib };
-    char rot[16], cont[24];
-    (void)fTot;
-    // Foco: um halo de realce atras da coluna inteira e a coluna um tom acima.
-    if (focado) {
-      GfxRect halo = { cx - slot * 0.5f + 4.0f, colTopo - 34.0f, slot - 8.0f, colH + 34.0f + 40.0f };
-      gfx_cor(halo, raioPx(halo, 18.0f), ar, ag, ab, a * 0.14f);
-      gfx_anel(halo, raioPx(halo, 18.0f), 2.0f, ar, ag, ab, a * 0.65f);
-    } else if (escolhida) {
-      GfxRect halo = { cx - slot * 0.5f + 4.0f, colTopo - 34.0f, slot - 8.0f, colH + 34.0f + 40.0f };
-      gfx_cor(halo, raioPx(halo, 18.0f), 1.0f, 1.0f, 1.0f, a * 0.045f);
-    }
-    // Trilho (o que ja foi ao ar e voce nao viu).
-    if (hExib > 0.5f) {
-      if (vidro) gfx_cor(trilho, raioPx(trilho, barW * 0.5f), 1.0f, 1.0f, 1.0f, a * (focado ? 0.16f : 0.09f));
-      else gfx_cor(trilho, raioPx(trilho, barW * 0.5f), 0.17f, 0.18f, 0.21f, a * (focado ? 1.0f : 0.85f));
-    }
-    // O que ainda vai ao ar: tracejado acima do trilho.
-    if (t->total > t->exibidos) {
-      GfxRect fut = { x0, colTopo, barW, colH - hExib - (hExib > 0.5f ? 4.0f : 0.0f) };
-      if (fut.h > 6.0f) {
-        float esp = 2.0f;
-        int tracos = (int)((fut.w + fut.h) * 2.0f / 14.0f);
-        if (tracos < 6) tracos = 6;
-        gfx_rect(fut, 0, GFX_ANEL, 0, esp / fut.h, (float)tracos, raioPx(fut, barW * 0.5f),
-                 1.0f, 1.0f, 1.0f, a * 0.38f);
-      }
-    }
-    // O que voce viu.
-    if (d->sabe && hVisto > 0.5f) {
-      GfxRect ch = { x0, colBase - hVisto, barW, hVisto };
-      if (t->completa) gfx_cor(ch, raioPx(ch, barW * 0.5f), ar, ag, ab, a);
-      // Pela metade: o mesmo branco, mais baixo — completa e o unico cheio
-      // (com realce branco, o degrau ainda separa as duas).
-      else gfx_cor(ch, raioPx(ch, barW * 0.5f), 0.93f, 0.94f, 0.96f, a * (focado ? 0.62f : 0.46f));
-    }
-    // Contagem acima da coluna: em todas quando cabe, senao so na focada/escolhida.
-    if (slot >= 72.0f || focado || escolhida) {
-      TxtLinha lc;
-      if (d->sabe) snprintf(cont, sizeof cont, "%d/%d", t->vistos, t->exibidos);
-      else snprintf(cont, sizeof cont, "%d", t->exibidos);
-      lc = txt_linha(focado || t->completa ? TXT_G20B : TXT_ILHA_SUB, cont,
-                     t->completa && !focado ? (int)(ar * 255) : 243,
-                     t->completa && !focado ? (int)(ag * 255) : 242,
-                     t->completa && !focado ? (int)(ab * 255) : 239, 255);
-      txt_desenhar_alpha(lc, cx - (float)lc.w * 0.5f, contY, a * (focado ? 1.0f : 0.72f) * (0.35f + 0.65f * g));
-    }
-    // Rotulo da temporada abaixo.
-    if (i % passoRot == 0 || focado || escolhida) {
-      TxtLinha lr;
-      textoTemp(t->numero, rot, sizeof rot);
-      lr = txt_linha(focado || escolhida ? TXT_G20B : TXT_ILHA_SUB, rot, 243, 242, 239, 255);
-      txt_desenhar_alpha(lr, cx - (float)lr.w * 0.5f, colBase + 14.0f,
-                         a * (focado ? 1.0f : escolhida ? 0.9f : 0.55f));
-      if (escolhida && !focado)
-        gfx_cor((GfxRect){ cx - 3.0f, colBase + 14.0f + (float)lr.h + 5.0f, 6.0f, 6.0f }, 0.5f,
-                ar, ag, ab, a);
+    int col = i / porCol, lin = i % porCol, focado = (i == foco), escolhida = (t->numero == selNumero);
+    float x = ax + (float)col * (colW + 24.0f), y = ay + (float)lin * linH;
+    float g = crescer(i, agora), yc = y + linH * 0.5f;
+    char rot[16], cont[32];
+    TxtLinha lr, lc;
+    float tx, tw, fExib, fVisto, ck = t->completa && d->sabe ? 26.0f : 0.0f;
+    GfxRect tr;
+    if (focado) plrui_linha_foco((GfxRect){ x - 12.0f, y + 2.0f, colW + 24.0f, linH - 4.0f }, 14.0f, a);
+    textoTemp(t->numero, rot, sizeof rot);
+    lr = txt_linha(TXT_G20B, rot, escolhida && !focado ? (int)(ar * 255) : 243,
+                   escolhida && !focado ? (int)(ag * 255) : 242,
+                   escolhida && !focado ? (int)(ab * 255) : 239, 255);
+    txt_desenhar_alpha(lr, x, yc - (float)lr.h * 0.5f, a * (focado || escolhida ? 1.0f : 0.8f));
+    if (d->sabe) snprintf(cont, sizeof cont, i18n("%d/%d eps"), t->vistos, t->exibidos);
+    else snprintf(cont, sizeof cont, i18n(t->exibidos == 1 ? "%d episódio" : "%d episódios"), t->exibidos);
+    lc = txt_linha(TXT_ILHA_SUB, cont, 243, 242, 239, 255);
+    tx = x + 58.0f;
+    tw = colW - 58.0f - (float)lc.w - 18.0f - ck;
+    if (tw < 40.0f) tw = 40.0f;
+    txt_desenhar_alpha(lc, x + colW - ck - (float)lc.w, yc - (float)lc.h * 0.5f,
+                       a * (focado ? 1.0f : 0.72f));
+    if (ck > 0.0f)
+      gfx_icone((GfxRect){ x + colW - 20.0f, yc - 10.0f, 20.0f, 20.0f }, "aj_check", ar, ag, ab, a);
+    // A barra: o que foi ao ar no trilho do app; o que nao estreou e um
+    // trecho mais apagado no fim (sem preenchimento possivel).
+    fExib = t->total > 0 ? (float)t->exibidos / (float)t->total : 0.0f;
+    fVisto = t->exibidos > 0 && d->sabe ? (float)t->vistos / (float)t->exibidos : 0.0f;
+    tr = (GfxRect){ tx, yc - 4.0f, tw * fExib, 8.0f };
+    if (tr.w > 0.5f) plrui_trilho(tr, fVisto * g, -1.0f, 0, 0, a);
+    if (fExib < 1.0f) {
+      GfxRect fut = { tx + tw * fExib + (fExib > 0.0f ? 4.0f : 0.0f), yc - 4.0f, 0, 8.0f };
+      fut.w = tx + tw - fut.x;
+      if (fut.w > 2.0f) gfx_cor(fut, 0.5f, 1.0f, 1.0f, 1.0f, a * 0.06f);
     }
   }
-
-  // Os amigos na coluna e na altura do episodio. Os de tras primeiro, para os
-  // da frente ficarem por cima quando se sobrepoem.
-  { int passo;
-    for (passo = 0; passo < 2; passo++) {
-      int k;
-      for (k = d->nAmg - 1; k >= 0; k--) {
-        const TgAmigo *g = &d->amg[k];
-        const TgTemp *t;
-        float cx, cy, fr, al;
-        int m = 0, pos = 0, q;
-        if (g->col < 0 || g->frente != passo) continue;
-        t = &d->t[g->col];
-        if (t->total <= 0) continue;
-        // Varios amigos na mesma temporada: lado a lado, centrados na coluna.
-        for (q = 0; q < d->nAmg; q++)
-          if (d->amg[q].col == g->col) { if (q < k) pos++; m++; }
-        fr = (float)g->episodio / (float)t->total;
-        if (fr > 1.0f) fr = 1.0f;
-        cx = bx + slot * ((float)g->col + 0.5f) + ((float)pos - (float)(m - 1) * 0.5f) * (TG_ROSTO * 0.72f);
-        cy = colBase - colH * fr;
-        if (cy < colTopo + TG_ROSTO * 0.5f) cy = colTopo + TG_ROSTO * 0.5f;
-        al = crescer(g->col, agora);
-        al = al > 0.6f ? (al - 0.6f) / 0.4f : 0.0f;
-        rostoNaColuna(g, cx, cy, a * al);
-      }
-    } }
 }
 
-static void desenhaAmigos(const TgDados *d, GfxRect card, int foco, float a, Uint32 agora) {
+// OS AMIGOS FICAM FORA DO GRAFICO (dono, 06/10: "so as barras; pessoas/social
+// algo separado, menos poluido"): um cartao calmo ao lado, sem aro nem rosto
+// apagado — ate tres linhas (rosto, nome, "Na sua frente"/"Atrás de você" e a
+// posicao T5E3) e "+N".
+static void desenhaAmigos(const TgDados *d, GfxRect card, float a, Uint32 agora) {
   char frase[160];
   float x = card.x + TG_PAD, w = card.w - 2.0f * TG_PAD, y = card.y + 28.0f;
   TxtLinha lf;
-  int i, mostra;
+  int i, mostra = d->nAmg < 3 ? d->nAmg : 3;
   tgraf_frase_amigos(d, frase, sizeof frase);
   lf = txt_linha_corta(TXT_ILHA_NOME, frase, 243, 242, 239, 255, w);
   txt_desenhar_alpha(lf, x, y, a);
   y += (float)lf.h + 18.0f;
-  if (foco < 0) {
-    // EM REPOUSO: os rostos em fila e quem esta mais adiante, em uma linha.
-    float rx = x;
-    char l[128];
-    mostra = d->nAmg < 6 ? d->nAmg : 6;
-    for (i = 0; i < mostra; i++) {
-      const TgAmigo *g = &d->amg[i];
-      GfxRect r = { rx, y, 56.0f, 56.0f };
-      gfx_cor((GfxRect){ r.x - 3.0f, r.y - 3.0f, r.w + 6.0f, r.h + 6.0f }, 0.5f, 0.06f, 0.06f, 0.08f, a);
-      svd_avatar(r, g->avatar, g->nome, g->id, g->frente || !d->sabe ? a : a * 0.55f);
-      if (g->agora) svd_ponto_vivo(r.x + r.w - 9.0f, r.y + r.h - 9.0f, 16.0f, 3.0f, a, agora);
-      rx += 44.0f;
-    }
-    if (d->nAmg > mostra) {
-      char b[16];
-      TxtLinha lb;
-      snprintf(b, sizeof b, "+%d", d->nAmg - mostra);
-      lb = txt_linha(TXT_ILHA_SUB, b, 243, 242, 239, 255);
-      txt_desenhar_alpha(lb, rx + 22.0f, y + (56.0f - (float)lb.h) * 0.5f, a * 0.7f);
-    }
-    y += 56.0f + 22.0f;
-    { char n1[64];
-      const TgAmigo *g = &d->amg[0];
-      amigostitulo_primeiro_nome(g->nome, n1, sizeof n1);
-      snprintf(l, sizeof l, i18n("%s está no T%dE%d"), n1, g->temporada, g->episodio);
-      { TxtLinha ll = txt_linha_corta(TXT_ILHA_SUB, l, 243, 242, 239, 255, w);
-        txt_desenhar_alpha(ll, x, y, a * 0.72f); y += (float)ll.h + 8.0f; }
-      { TxtLinha lh = txt_linha_corta(TXT_ILHA_HORA, i18n("Navegue no gráfico para ver todos"),
-                                      243, 242, 239, 255, w);
-        txt_desenhar_alpha(lh, x, y, a * 0.45f); } }
-    return;
-  }
-  // COM O FOCO: a lista. Ate quatro linhas; com mais, a quarta vira "+N".
-  mostra = d->nAmg;
-  if (mostra > 4) mostra = 3;
   for (i = 0; i < mostra; i++) {
     const TgAmigo *g = &d->amg[i];
-    char ep[24], rea[48];
-    TxtLinha ln, le, lr;
-    float tx = x + TG_LIN_AV + 16.0f, alfa = g->frente || !d->sabe ? a : a * 0.6f;
+    char ep[24];
+    const char *st = !d->sabe ? "" : g->frente ? i18n("Na sua frente") : i18n("Atrás de você");
+    TxtLinha ln, le, ls;
+    float tx = x + TG_LIN_AV + 16.0f;
     GfxRect av = { x, y + (TG_LIN_H - TG_LIN_AV) * 0.5f, TG_LIN_AV, TG_LIN_AV };
-    svd_avatar(av, g->avatar, g->nome, g->id, alfa);
+    svd_avatar(av, g->avatar, g->nome, g->id, a);
     if (g->agora) svd_ponto_vivo(av.x + av.w - 8.0f, av.y + av.h - 8.0f, 14.0f, 3.0f, a, agora);
     snprintf(ep, sizeof ep, i18n("T%dE%d"), g->temporada, g->episodio);
-    reacaoTexto(g, rea, sizeof rea);
     le = txt_linha(TXT_G20B, ep, 243, 242, 239, 255);
     ln = txt_linha_corta(TXT_ILHA_NOME, g->nome, 243, 242, 239, 255, w - TG_LIN_AV - 16.0f - (float)le.w - 20.0f);
-    lr = txt_linha_corta(TXT_ILHA_HORA, rea, 243, 242, 239, 255, w - TG_LIN_AV - 16.0f);
-    { float bloco = (float)ln.h + (rea[0] ? 2.0f + (float)lr.h : 0.0f);
+    ls = txt_linha_corta(TXT_ILHA_HORA, st, 243, 242, 239, 255, w - TG_LIN_AV - 16.0f);
+    { float bloco = (float)ln.h + (st[0] ? 2.0f + (float)ls.h : 0.0f);
       float ty = y + (TG_LIN_H - bloco) * 0.5f;
-      txt_desenhar_alpha(ln, tx, ty, alfa);
-      if (rea[0]) txt_desenhar_alpha(lr, tx, ty + (float)ln.h + 2.0f, alfa * 0.6f); }
-    txt_desenhar_alpha(le, x + w - (float)le.w, y + (TG_LIN_H - (float)le.h) * 0.5f,
-                       g->frente ? a : a * 0.6f);
+      txt_desenhar_alpha(ln, tx, ty, a);
+      if (st[0]) txt_desenhar_alpha(ls, tx, ty + (float)ln.h + 2.0f, a * 0.55f); }
+    txt_desenhar_alpha(le, x + w - (float)le.w, y + (TG_LIN_H - (float)le.h) * 0.5f, a * 0.8f);
     y += TG_LIN_H;
   }
   if (d->nAmg > mostra) {
-    char b[48];
+    char b[16];
     TxtLinha lb;
     snprintf(b, sizeof b, "+%d", d->nAmg - mostra);
     lb = txt_linha(TXT_ILHA_SUB, b, 243, 242, 239, 255);
-    txt_desenhar_alpha(lb, x + TG_LIN_AV + 16.0f, y + (TG_LIN_H - (float)lb.h) * 0.5f, a * 0.6f);
+    txt_desenhar_alpha(lb, x + TG_LIN_AV + 16.0f, y + 6.0f, a * 0.55f);
   }
 }
 
@@ -530,6 +425,6 @@ void tgraf_desenhar(const TgDados *d, float x, float y, float w, int foco,
   if (temAmg) {
     ca = (GfxRect){ x + w - TG_AMG_W, y + TG_CAB, TG_AMG_W, TG_CARD_H };
     notasui_painel(ca, TG_RAIO, a);
-    desenhaAmigos(d, ca, foco, a, agora);
+    desenhaAmigos(d, ca, a, agora);
   }
 }

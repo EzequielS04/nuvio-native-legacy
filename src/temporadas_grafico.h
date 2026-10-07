@@ -4,11 +4,9 @@
 //
 // Uma coluna por temporada, cheia na proporcao do que voce viu dos episodios
 // que JA FORAM AO AR; o que ainda vai estrear aparece tracejado no alto da
-// coluna. Temporada completa fica na cor de realce. Os amigos com progresso
-// conhecido aparecem como rostinhos na coluna e na altura do episodio em que
-// estao — os da frente cheios, os de tras apagados —, e o cartao ao lado diz
-// "Ana e mais 2 estão na sua frente" e, com o foco, a lista (nome, T3E2,
-// reacao).
+// coluna. Temporada completa fica na cor de realce. Os amigos NAO entram nas
+// barras (dono: "menos poluido"): um cartao separado ao lado diz "Ana e mais
+// 2 estão na sua frente" e lista ate tres (rosto, nome, frente/atras, T3E2).
 //
 // NADA E PEDIDO DAQUI. Tudo ja esta na memoria quando a pagina abre:
 //   - os episodios e as temporadas: a lista do meta (catalogo.h);
