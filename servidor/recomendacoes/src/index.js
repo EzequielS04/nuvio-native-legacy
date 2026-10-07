@@ -627,10 +627,21 @@ async function rotaVisto(env, quem, corpo) {
 // pessoa aperta "Enviar registro": o app nunca manda sozinho. O texto ja vem
 // sem credencial (rede_url_publica no cliente) e e cortado aqui em 200 KB de
 // qualquer jeito; fica 30 dias e sai na limpeza diaria.
-const REGISTRO_MAX = 200 * 1024;
+// #203: tetos por origem. Automatico ("(auto)", "(anterior)") 64 KB; manual
+// 256 KB (a pessoa apertou "Enviar", e quem le e o dono). Acima do teto o texto
+// NAO e recusado: fica a cabeca e a cauda, com uma linha dizendo quanto saiu.
+const REGISTRO_MAX_AUTO = 64 * 1024;
+const REGISTRO_MAX = 256 * 1024;
+const REGISTRO_CORPO_MAX = 2 * 1024 * 1024;   // corpo cru acima disto: 413
+const REGISTRO_DEDUP_JANELA = 24 * 3600;
 // codigoRegistro (o codigo de seis caracteres do recibo): ver src/codigo.js.
-// 14 dias (eram 30): o D1 chegou a 8,5 GB de 10 GB com ~2 GB/dia de logs (#203).
-const REGISTRO_RETENCAO = 14 * 24 * 3600;
+// RETENCAO (#203): o D1 chegou a 6 GB de 10 GB com logs de 150 KB. Logs comuns
+// ficam 4 dias; so o registro de arranque (pessoa 'arranque:%', o vigia do APK
+// sem conta, poucos e pequenos) fica 30.
+const REGISTRO_RETENCAO = 4 * 24 * 3600;
+const REGISTRO_RETENCAO_ARRANQUE = 30 * 24 * 3600;
+const REGISTRO_LOTE = 200;
+const REGISTRO_LOTES_MAX = 40;
 // ENVIO AUTOMATICO NAO EMPILHA (#203). A TV manda o log "(auto)" a cada 1-5 min
 // e cada envio virava uma linha nova de ate 200 KB: 13,7 mil linhas e 2 GB por
 // dia, quase tudo o mesmo trecho repetido. Um "(auto)" da MESMA pessoa/versao/
@@ -638,15 +649,33 @@ const REGISTRO_RETENCAO = 14 * 24 * 3600;
 // recente) substitui o anterior. "(anterior)", manual e crash continuam
 // inserindo, que sao os que o dono le.
 const REGISTRO_AUTO_JANELA = 15 * 60;
+// Cabeca + cauda: o comeco do log (versao, identidade, arranque) e o fim (o que
+// deu errado) valem mais que o meio. Corta em quebra de linha para nao deixar
+// meia linha.
+export function cortarRegistro(texto, max) {
+  if (texto.length <= max) return texto;
+  const cab = Math.floor(max / 4), cau = max - cab - 64;
+  let a = texto.lastIndexOf("\n", cab);
+  if (a < cab / 2) a = cab;
+  let b = texto.indexOf("\n", texto.length - cau);
+  if (b < 0 || b > texto.length - cau / 2) b = texto.length - cau;
+  return texto.slice(0, a) + "\n... " + (b - a) + " bytes omitidos ...\n" + texto.slice(b + 1);
+}
 async function rotaRegistro(env, quem, corpo) {
   const versao = String(corpo?.versao || "").slice(0, 32);
   const plataforma = String(corpo?.plataforma || "").slice(0, 16);
   const quando = String(corpo?.quando || "").slice(0, 40);
-  let texto = String(corpo?.texto || "");
-  if (texto.length > REGISTRO_MAX) texto = texto.slice(texto.length - REGISTRO_MAX);
+  const automatico = /\((auto|anterior)\)$/.test(quando);
+  const texto = cortarRegistro(String(corpo?.texto || ""), automatico ? REGISTRO_MAX_AUTO : REGISTRO_MAX);
   const t = agora();
   let res = null;
-  if (/\(auto\)$/.test(quando)) {
+  // IGUAL AO QUE JA ESTA NO D1 = NADA A GRAVAR (#203): devolve o recibo da linha
+  // existente. Comparacao exata do texto (mais forte que um hash e sem coluna nova).
+  const igual = await env.DB.prepare(
+    "SELECT id FROM registro WHERE criado > ? AND pessoa = ? AND length(texto) = ? AND texto = ? LIMIT 1"
+  ).bind(t - REGISTRO_DEDUP_JANELA, quem.id, texto.length, texto).first();
+  if (igual?.id) res = { meta: { last_row_id: igual.id } };
+  if (!res && /\(auto\)$/.test(quando)) {
     const ant = await env.DB.prepare(
       "SELECT id FROM registro WHERE criado > ? AND pessoa = ? AND plataforma = ? AND versao = ? " +
       "AND quando LIKE '%(auto)' ORDER BY criado DESC LIMIT 1"
@@ -704,6 +733,23 @@ async function rotaApagar(env, quem, corpo) {
   return json({ ok: 1 });
 }
 
+export async function limparRegistro(env, t) {
+  const passos = [
+    ["DELETE FROM registro WHERE id IN (SELECT id FROM registro WHERE criado < ? AND pessoa NOT LIKE 'arranque:%' LIMIT ?)",
+      t - REGISTRO_RETENCAO],
+    ["DELETE FROM registro WHERE id IN (SELECT id FROM registro WHERE criado < ? AND pessoa LIKE 'arranque:%' LIMIT ?)",
+      t - REGISTRO_RETENCAO_ARRANQUE],
+  ];
+  let n = 0;
+  for (const [sql, limite] of passos) {
+    while (n < REGISTRO_LOTES_MAX) {
+      n++;
+      const r = await env.DB.prepare(sql).bind(limite, REGISTRO_LOTE).run();
+      if ((r.meta?.changes || 0) < REGISTRO_LOTE) break;
+    }
+  }
+}
+
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
@@ -742,7 +788,9 @@ export default {
       const token = aut.startsWith("Bearer ") ? aut.slice(7).trim() : "";
       if (!env.DIAG_TOKEN || !token || token !== env.DIAG_TOKEN) return erro("nao autenticado", 401);
       let corpo = {};
-      try { corpo = JSON.parse((await req.text()).trim() || "{}"); } catch { return erro("json invalido", 400); }
+      const bruto = (await req.text()).trim();
+      if (bruto.length > REGISTRO_CORPO_MAX) return erro("corpo grande", 413);
+      try { corpo = JSON.parse(bruto || "{}"); } catch { return erro("json invalido", 400); }
       const tv = String(corpo?.tv || "?").replace(/[^\w.:-]/g, "").slice(0, 64);
       return rotaRegistro(env, { id: "diag:" + tv }, corpo);
     }
@@ -820,6 +868,7 @@ export default {
     let corpo = {};
     if (req.method === "POST") {
       const cru = (await req.text()).trim();
+      if (rota === "/v1/registro" && cru.length > REGISTRO_CORPO_MAX) return erro("corpo grande", 413);
       // Diario: corpo limitado (64 KB; 128 KB so na importacao do Letterboxd).
       if (rota.startsWith("/v1/diario") &&
           cru.length > (rota === "/v1/diario/letterboxd" ? DIARIO_CORPO_MAX_LB : DIARIO_CORPO_MAX))
@@ -910,14 +959,10 @@ export default {
       ...limpezaAmigos(env, t),
       ...limpezaSocial(env, t),
     ]);
-    // `registro` em pedacos: um DELETE unico de milhares de linhas de 150 KB
-    // segura o unico escritor do D1 por muito tempo (#203).
-    for (let i = 0; i < 40; i++) {
-      const r = await env.DB.prepare(
-        "DELETE FROM registro WHERE id IN (SELECT id FROM registro WHERE criado < ? LIMIT 200)"
-      ).bind(t - REGISTRO_RETENCAO).run();
-      if ((r.meta?.changes || 0) < 200) break;
-    }
+    // `registro` em pedacos (#203): um DELETE unico de milhares de linhas de
+    // 150 KB segura o unico escritor do D1. 4 dias para o comum, 30 para
+    // 'arranque:%'; cada passo apaga ate 200 por id, com teto de passos.
+    await limparRegistro(env, t);
     // Separado de proposito: sem a migracao 010 aplicada, a tabela `sala` nao
     // existe e o lote inteiro (90 dias de retencao) falharia junto.
     try { await env.DB.batch(limpezaSala(env, t)); } catch {}
