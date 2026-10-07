@@ -39,6 +39,7 @@ int   ajustes_cw_concluido(void)         { return 90; }  // factory "watched" th
 unsigned recomenda_geracao(void)         { return 0; }   // social generation: no social layer here
 int   ajustes_cw_ordem(void)               { return 0; }   // Padrao (issue #127)
 int   ajustes_cw_mostrar_nao_exibidos(void) { return 1; }
+int   ajustes_cw_proximo(void) { return 1; }
 const char *i18n(const char *s)         { return s; }
 const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 static const char *fakeDados = "";

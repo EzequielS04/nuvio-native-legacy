@@ -28,6 +28,7 @@ int ajustes_idioma(void) { return 0; }
 int   ajustes_cw_ordem(void)               { return 0; }   // Padrao (issue #127)
 int   ajustes_cw_concluido(void)           { return 90; }  // Percentual assistido de fabrica
 int   ajustes_cw_mostrar_nao_exibidos(void) { return 1; }
+int   ajustes_cw_proximo(void) { return 1; }
 const char *i18n(const char *s)         { return s; }
 const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 const char *dados_dir(void)             { return ""; }
@@ -109,6 +110,7 @@ int   trakt_lista(const char *q, CatItem *s, int m) { (void)q; (void)s; (void)m;
 int   recomenda_social_mesclar(CatItem *i, int nTrakt, int max) { (void)i; (void)max; return nTrakt; }
 int   trakt_social(CatItem *s, int m)      { (void)s; (void)m; return 0; }
 int   trakt_e_a_seguir(const char *id)     { (void)id; return 0; }
+int   trakt_progresso_ocultar(const char *i, int o) { (void)i; (void)o; return 0; }
 // "A seguir" da conta (#199): sem vistos aqui, e com o Trakt "no ar" o caminho
 // nem roda. So para linkar.
 int   trakt_ativo(void)                    { return traktLigado; }

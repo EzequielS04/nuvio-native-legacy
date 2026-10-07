@@ -853,6 +853,48 @@ int trakt_playback_remover(const char *imdb) {
   return todos;
 }
 
+// OCULTA (ou desfaz) A SERIE NO "PROGRESS WATCHED" DO TRAKT (#203). E o que faz o
+// "a seguir" nao voltar do Trakt em outro aparelho: /sync/playback so tem o
+// pausado; o proximo episodio vem do progresso da serie, que o Trakt deixa
+// esconder em /users/hidden/progress_watched. Um POST, sincrono: chamar de fio
+// de trabalho. Limite do Trakt para POST: 1/s, e aqui sai um por gesto.
+// So obra com IMDb (tt...); id de outro catalogo nao existe no Trakt.
+int trakt_progresso_ocultar(const char *imdb, int ocultar) {
+  const char *cab[5];
+  char aut[200], chaveCab[140], id[24], url[96];
+  Jsw w;
+  char *r;
+  int i, st = 0, ok;
+  if (!ligado || !imdb || imdb[0] != 't' || imdb[1] != 't') return 0;
+  for (i = 0; imdb[i] && imdb[i] != ':' && i < (int)sizeof id - 1; i++) id[i] = imdb[i];
+  id[i] = 0;
+  jsw_iniciar(&w);
+  jsw_obj_ini(&w);
+  jsw_chave(&w, "shows");
+  jsw_arr_ini(&w);
+  jsw_obj_ini(&w);
+  jsw_chave(&w, "ids");
+  jsw_obj_ini(&w);
+  jsw_cs(&w, "imdb", id);
+  jsw_obj_fim(&w);
+  jsw_obj_fim(&w);
+  jsw_arr_fim(&w);
+  jsw_obj_fim(&w);
+  snprintf(aut, sizeof aut, "Authorization: Bearer %s", token);
+  snprintf(chaveCab, sizeof chaveCab, "trakt-api-key: %s", cliente);
+  cab[0] = aut; cab[1] = "trakt-api-version: 2"; cab[2] = chaveCab; cab[3] = NULL;
+  snprintf(url, sizeof url, "https://api.trakt.tv/users/hidden/progress_watched%s",
+           ocultar ? "" : "/remove");
+  r = rede_postar_st(url, 20, cab, jsw_texto_final(&w), &st);
+  jsw_livre(&w);
+  ok = st >= 200 && st < 300;
+  free(r);
+  printf("[trakt] %s %s do progresso -> %s (HTTP %d)\n",
+         ocultar ? "ocultar" : "reexibir", id, ok ? "ok" : "falhou", st);
+  fflush(stdout);
+  return ok;
+}
+
 // MARCA OU DESMARCA UM LOTE DE EPISODIOS NO TRAKT.
 //
 // Um POST, nao um por episodio: /sync/history e /sync/history/remove aceitam

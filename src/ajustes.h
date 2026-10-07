@@ -459,6 +459,7 @@ int   ajustes_cw_thumb_episodio(void);  // useEpisodeThumbnailsInCw
 int   ajustes_cw_fonte(void);
 int   ajustes_cw_desfocar_proximo(void);// blurContinueWatchingNextUp
 int   ajustes_cw_do_episodio_mais_alto(void); // nextUpFromFurthestEpisode
+int   ajustes_cw_proximo(void);   // 1 = 'a seguir' entra em Continuar assistindo (padrao)
 int   ajustes_cw_mostrar_nao_exibidos(void);  // showUnairedNextUp
 // continueWatchingSortMode: 0 default, 1 streaming_style, 2 split_upcoming
 int   ajustes_cw_ordem(void);

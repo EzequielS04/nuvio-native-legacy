@@ -2734,6 +2734,12 @@ static int contaASeguir(CatItem *lista, int n, int max) {
   return n;
 }
 
+static void *fioReexibirTrakt(void *u) {
+  trakt_progresso_ocultar((const char *)u, 0);
+  free(u);
+  return NULL;
+}
+
 static int montarContinuar(CatItem *saida, int max) {
   // static: dois lotes de 12 CatItem passam de 350 KB e montar() roda uma vez,
   // num fio so — a mesma razao do vetor de Decl mais abaixo.
@@ -2863,6 +2869,27 @@ static int montarContinuar(CatItem *saida, int max) {
       printf("[desc] continuar assistindo: %d tirado(s) pela pessoa, remoto ainda nao refletiu\n",
              tirados); }
 
+  // OCULTO PELA PESSOA, EM DISCO (#203): o "Tirar de Continuar assistindo" num
+  // item "A seguir". Vale para as tres fontes e sobrevive ao reinicio; a obra
+  // VOLTA SOZINHA quando ha episodio novo (instante mais novo que o carimbo, ou
+  // registro local mais novo) — para a pessoa nunca ficar presa fora. Ao voltar,
+  // desfaz tambem o oculto do Trakt, senao o proximo episodio nao viria de la.
+  { int w = 0, ocultos = 0;
+    for (i = 0; i < nJ; i++) {
+      if (prog_oculto_vence(juntos[i].item->imdb, juntos[i].ms)) { ocultos++; continue; }
+      if (prog_oculto_soltar(juntos[i].item->imdb, juntos[i].ms)) {
+        char *id = strdup(juntos[i].item->imdb);
+        pthread_t t;
+        printf("[desc] continuar assistindo: %s voltou (episodio novo)\n", juntos[i].item->imdb);
+        if (id && pthread_create(&t, NULL, fioReexibirTrakt, id) == 0) pthread_detach(t);
+        else free(id);
+      }
+      juntos[w++] = juntos[i];
+    }
+    nJ = w;
+    if (ocultos)
+      printf("[desc] continuar assistindo: %d oculto(s) pela pessoa\n", ocultos); }
+
   // Insercao: estavel, nJ <= 36, e roda uma vez por ciclo de descoberta.
   for (i = 1; i < nJ; i++) {
     int k = i;
@@ -2890,13 +2917,22 @@ static int montarContinuar(CatItem *saida, int max) {
     static const char *futIds[CONT_MAX * 3];
     long long agora = (long long)time(NULL) * 1000LL;
     int modo = ajustes_cw_ordem(), naoExibidos = ajustes_cw_mostrar_nao_exibidos();
-    int escondidos = 0, semData = 0, principal, nFut = 0, mp, mf, w = 0;
+    int proxFora = 0, escondidos = 0, semData = 0, principal, nFut = 0, mp, mf, w = 0;
     for (i = 0; i < nJ; i++) {
       const CatItem *c = juntos[i].item;
       CwoItem x;
       x.aSeguir = c->progresso == 0 &&
                   (trakt_e_a_seguir(c->imdb) || simkl_e_a_seguir(c->imdb) ||
                    cwo_conta_a_seguir(c->imdb));
+      // "PROXIMO EPISODIO NO CONTINUAR" desligado (#203): sai todo item que e o
+      // PROXIMO — o "a seguir" e o episodio terminado que o card trocaria pelo
+      // seguinte (continuar_desenhar). Fica so o que esta em andamento.
+      if (!ajustes_cw_proximo() &&
+          (x.aSeguir || (!strcmp(c->tipo, "series") && c->temporada > 0 && c->episodio > 0 &&
+                         c->progresso >= ajustes_cw_concluido()))) {
+        proxFora++;
+        continue;
+      }
       x.estreiaMs = x.aSeguir ? cwo_estreia(c->imdb) : CWO_SEM_DATA;
       // POR ITEM, para o log de campo dizer POR QUE um "a seguir" nao virou
       // futuro: sem data ele conta como exibido (como o `hasAired !== false`
@@ -2916,6 +2952,8 @@ static int montarContinuar(CatItem *saida, int max) {
       cwo[w++] = x;
     }
     nJ = w;
+    if (proxFora)
+      printf("[desc] continuar assistindo: %d proximo(s) fora (Proximo episodio no Continuar desligado)\n", proxFora);
     principal = cwo_ordenar(cwo, nJ, modo, agora, perm);
     for (i = 0; i < nJ; i++) ordenados[i] = juntos[perm[i]];
     // O CORTE DE `max` COM RESERVA PARA OS FUTUROS (cwo_corte, cwordem.h).

@@ -442,11 +442,130 @@ static int removidoVenceDe(int perfil, const char *imdb, long long instanteMs) {
   return 1;
 }
 
+// --- "OCULTO DE CONTINUAR ASSISTINDO" (#203), PERSISTIDO ----------------------
+//
+// O "Tirar de Continuar assistindo" nao fazia nada num item "A seguir": ele nao
+// tem ponto de retomada para apagar, e o proximo episodio e RECALCULADO a cada
+// ciclo (Trakt/Simkl/conta). A lista abaixo guarda "esta obra, neste perfil,
+// foi tirada em <instante>" EM DISCO (cwoculto.txt) e vale para todas as fontes
+// (descoberta.c aplica em montarContinuar).
+//
+// VOLTA SOZINHA quando a pessoa assiste um episodio NOVO da obra: o item da
+// fonte remota (ou o registro local) com instante MAIS NOVO que o carimbo vence
+// a ocultacao. O "a seguir" velho tem o instante do ultimo episodio visto, que
+// e anterior ao carimbo, e por isso continua fora. Sem esta regra a serie
+// ficaria presa fora da fileira para sempre.
+#define ARQ_OCULTO "cwoculto.txt"
+#define OCULTOS_MAX 64
+static struct { int perfil; char obra[24]; long long ms; } ocultos[OCULTOS_MAX];
+static int nOcultos, ocultosCarregado;
+
+static void ocultosCarregar(void) {
+  char *buf, *linha, *ctx;
+  if (ocultosCarregado) return;
+  ocultosCarregado = 1;
+  nOcultos = 0;
+  buf = dados_ler(ARQ_OCULTO);
+  if (!buf) return;
+  for (linha = strtok_r(buf, "\n", &ctx); linha && nOcultos < OCULTOS_MAX;
+       linha = strtok_r(NULL, "\n", &ctx)) {
+    int perfil = 0, n = 0; long long ms = 0; char obra[24];
+    if (sscanf(linha, "%d\t%23[^\t]\t%lld%n", &perfil, obra, &ms, &n) < 3) continue;
+    ocultos[nOcultos].perfil = perfil;
+    snprintf(ocultos[nOcultos].obra, sizeof ocultos[nOcultos].obra, "%s", obra);
+    ocultos[nOcultos].ms = ms;
+    nOcultos++;
+  }
+  free(buf);
+}
+
+static void ocultosGravar(void) {
+  char *buf = (char *)malloc((size_t)nOcultos * 64 + 8), *p;
+  int i;
+  if (!buf) return;
+  p = buf; *p = 0;
+  for (i = 0; i < nOcultos; i++)
+    p += sprintf(p, "%d\t%s\t%lld\n", ocultos[i].perfil, ocultos[i].obra, ocultos[i].ms);
+  dados_gravar(ARQ_OCULTO, buf);
+  free(buf);
+}
+
+static int ocultoIndice(int perfil, const char *obra) {
+  int i;
+  for (i = 0; i < nOcultos; i++)
+    if (ocultos[i].perfil == perfil && !strcmp(ocultos[i].obra, obra)) return i;
+  return -1;
+}
+
+void prog_ocultar_continuar(const char *imdb) {
+  char obra[24];
+  int i, perfil = perfis_ativo();
+  long long agora = prog_agora_ms();
+  prog_content_id(obra, sizeof obra, imdb, NULL, NULL);
+  if (!obra[0]) return;
+  TRANCAR();
+  ocultosCarregar();
+  i = ocultoIndice(perfil, obra);
+  if (i < 0 && nOcultos < OCULTOS_MAX) i = nOcultos++;
+  if (i < 0) {   // cheio: a vaga mais velha
+    int k; i = 0;
+    for (k = 1; k < nOcultos; k++) if (ocultos[k].ms < ocultos[i].ms) i = k;
+  }
+  ocultos[i].perfil = perfil;
+  snprintf(ocultos[i].obra, sizeof ocultos[i].obra, "%s", obra);
+  ocultos[i].ms = agora;
+  ocultosGravar();
+  DESTRANCAR();
+}
+
+// Chamar com a trava tomada. 1 = continua oculto.
+static int ocultoVence(int perfil, const char *obra, long long instanteMs) {
+  int i = ocultoIndice(perfil, obra), k;
+  if (i < 0) return 0;
+  if (instanteMs > ocultos[i].ms) return 0;
+  carregar();
+  for (k = 0; k < nRegs; k++)
+    if (regs[k].perfil == perfil && !strcmp(regs[k].contentId, obra) &&
+        regs[k].lastWatchedMs > ocultos[i].ms) return 0;
+  return 1;
+}
+
+int prog_oculto_vence(const char *imdb, long long instanteMs) {
+  char obra[24];
+  int r;
+  prog_content_id(obra, sizeof obra, imdb, NULL, NULL);
+  if (!obra[0]) return 0;
+  TRANCAR();
+  ocultosCarregar();
+  r = ocultoVence(perfis_ativo(), obra, instanteMs);
+  DESTRANCAR();
+  return r;
+}
+
+int prog_oculto_soltar(const char *imdb, long long instanteMs) {
+  char obra[24];
+  int i, r = 0, perfil = perfis_ativo();
+  prog_content_id(obra, sizeof obra, imdb, NULL, NULL);
+  if (!obra[0]) return 0;
+  TRANCAR();
+  ocultosCarregar();
+  i = ocultoIndice(perfil, obra);
+  if (i >= 0 && !ocultoVence(perfil, obra, instanteMs)) {
+    ocultos[i] = ocultos[--nOcultos];
+    ocultosGravar();
+    r = 1;
+  }
+  DESTRANCAR();
+  return r;
+}
+
 void prog_esquecer_tudo(void) {
   TRANCAR();
   dados_apagar(ARQ);
+  dados_apagar(ARQ_OCULTO);
   carregado = 0;
   nRegs = 0;
+  nOcultos = 0; ocultosCarregado = 0;
   // Logout: as remocoes eram da conta que saiu.
   nRemovidos = 0;
   DESTRANCAR();

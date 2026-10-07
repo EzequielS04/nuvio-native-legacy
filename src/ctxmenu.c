@@ -5,6 +5,7 @@
 #include "syncprog.h"
 #include "visto.h"
 #include "trakt.h"
+#include "cwordem.h"
 #include "simkl.h"
 #include "extras.h"
 #include "gfx.h"
@@ -294,6 +295,9 @@ typedef struct { char imdb[64]; char chave[192]; } TirarRemoto;
 static void *fioTirarRemoto(void *u) {
   TirarRemoto *tr = (TirarRemoto *)u;
   trakt_playback_remover(tr->imdb);
+  // O "a seguir" vem do progresso da serie, nao do playback: esconde la tambem
+  // (#203), senao outro aparelho o traz de volta. Sem Trakt/IMDb nao faz nada.
+  trakt_progresso_ocultar(tr->imdb, 1);
   syncprog_remover(tr->chave);
   free(tr);
   return NULL;
@@ -334,6 +338,13 @@ static int infoPossivel(const CatItem *ci) {
 // -1 nao consultado, 0 nao visto, 1 visto. Por id, para valer tambem na copia.
 static int historicoDe(const CatItem *ci) {
   return ci ? cat_historico_estado_id(ci->imdb, ci->tipo) : -1;
+}
+
+// O card e um "A seguir" (proximo episodio, sem ponto de retomada)? Mesma
+// pergunta de continuar.c/home.c.
+static int itemASeguir(const CatItem *ci) {
+  return ci && ci->progresso == 0 &&
+         (trakt_e_a_seguir(ci->imdb) || simkl_e_a_seguir(ci->imdb) || cwo_conta_a_seguir(ci->imdb));
 }
 
 // O UNICO CAMINHO PARA DENTRO DE ops[]. Ver a nota em CTX_MAX.
@@ -446,7 +457,9 @@ static void montar(void) {
   // desistiu no meio quer so esta.
   // O menu do painel e o curto que o dono pediu (remover, mais informacoes,
   // assistido): esta e a de baixo sao acoes do cartaz da home.
-  if (!doPainel && ci->progresso > 0 && ci->imdb[0]) {
+  // "A SEGUIR" TAMBEM (#203): o proximo episodio tem progresso 0 e a condicao
+  // antiga nunca o oferecia; sem a opcao ele nao saia da fileira.
+  if (!doPainel && (ci->progresso > 0 || itemASeguir(ci)) && ci->imdb[0]) {
     juntar("Tirar de Continuar assistindo", OP_TIRAR_CONTINUAR);
   }
   // SO EXISTE SE O PACOTE TEM O SERVICO. Sem NUVIO_REC_URL compilada,
@@ -968,6 +981,7 @@ static void aplicar(void) {
       // (medido em tests/cwremover.sh; ver tirarDaJanela em catalogo.c).
       cat_zerar_progresso(atual);
       desc_tirar_continuar(imdb, temp, ep);
+      prog_ocultar_continuar(imdb);   // em disco; volta com episodio novo (progresso.c)
       // AS TRES FONTES, e nao so a local — issue #22.
       //
       // A fileira de retomada e a fusao do registro local, do /sync/playback
@@ -1415,7 +1429,9 @@ static float botaoConf(int i, float x, float y, const char *rot, float f, float 
 
 static void desenhaConfirmar(const CatItem *ci, float a) {
   char pergunta[240];
-  const char *texto = i18n("O ponto onde você parou é apagado. O título volta para a fileira se você assistir de novo.");
+  const char *texto = itemASeguir(ci)
+    ? i18n("A série sai da fileira. Ela volta quando você assistir um episódio novo.")
+    : i18n("O ponto onde você parou é apagado. O título volta para a fileira se você assistir de novo.");
   const char *kicker = "Continuar assistindo", *botao = "Tirar da fileira";
   float tw = CONF_W - 2.0f * CONF_PAD, hTit, hTxt, alt, x, y, bx;
   snprintf(pergunta, sizeof pergunta, i18n("Tirar %s da fileira?"), ci->titulo);
