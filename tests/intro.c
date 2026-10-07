@@ -104,6 +104,51 @@ int main(void) {
   assert(intro_extrair("{\"credits\":[{\"start_ms\":1000,\"end_ms\":2000}]}", v, 0) == 0);
   puts("ok  404, vazio, lixo e max=0 devolvem zero sem estourar");
 
+  // JANELA RECUSADA / ACEITA (#202): creditos "ate o fim" com inicio cedo
+  // demais deixavam o botao 25-30 min na tela.
+  {
+    const char *m;
+    assert(intro_janela_ok(INTRO_CREDITOS, 8300, 0, 8520, 1, &m) == 1);       // Shawshank
+    assert(intro_janela_ok(INTRO_CREDITOS, 5400, 0, 8400, 1, &m) == 0);       // 50 min de janela
+    assert(intro_janela_ok(INTRO_CREDITOS, 3000, 0, 8400, 1, &m) == 0);       // antes de 50%
+    assert(intro_janela_ok(INTRO_CREDITOS, 7300, 7900, 8400, 1, &m) == 1);    // 10 min, depois de 50%
+    assert(intro_janela_ok(INTRO_CREDITOS, 3503, 0, 3600, 0, &m) == 1);       // serie
+    assert(intro_janela_ok(INTRO_ABERTURA, 60, 400, 3600, 0, &m) == 0);       // > 3 min
+    assert(intro_janela_ok(INTRO_ABERTURA, 272, 366, 3600, 0, &m) == 1);
+    assert(intro_janela_ok(INTRO_CREDITOS, 100, 0, 0, 1, &m) == 1);           // sem duracao: nao chuta
+    puts("ok  guarda de janela");
+  }
+#ifdef NV_SHOT_HOOKS
+  {
+    // AUTO-HIDE: aparece sozinho, some em 10 s, volta so com os controles, e
+    // nao reaparece sozinho. Creditos de filme: 7700 s ate o fim (dur 8400).
+    IntroTrecho t[1] = {{7700, 0, INTRO_CREDITOS}};
+    double fim; int tipo;
+    intro_shot_definir(t, 1);
+    intro_definir_duracao(8400, 1);
+    assert(!intro_botao(7000, 100.0, 0, 0, &fim, &tipo));      // fora da janela
+    assert(intro_botao(7701, 101.0, 0, 0, &fim, &tipo) && tipo == INTRO_CREDITOS);
+    assert(intro_botao(7705, 105.0, 0, 0, &fim, &tipo));       // ainda 4 s
+    assert(!intro_botao(7712, 112.0, 0, 0, &fim, &tipo));      // 11 s: sumiu
+    assert(!intro_botao_visivel(NULL, NULL));                  // tecla nao pula as cegas
+    assert(!intro_botao(8000, 700.0, 0, 0, &fim, &tipo));      // 25 min depois: nada
+    assert(intro_botao(8000, 701.0, 1, 0, &fim, &tipo));       // controles: volta
+    assert(intro_botao_visivel(&fim, &tipo));
+    assert(!intro_botao(8001, 702.0, 0, 0, &fim, &tipo));      // controles somem: some
+    // focado nao expira
+    assert(intro_botao(8002, 900.0, 0, 1, &fim, &tipo));
+    assert(intro_botao(8003, 905.0, 0, 1, &fim, &tipo));
+    // creditos recusados (inicio cedo): botao nunca aparece, nem com controles
+    {
+      IntroTrecho r[1] = {{3000, 0, INTRO_CREDITOS}};
+      intro_shot_definir(r, 1);
+      assert(!intro_botao(3500, 1000.0, 1, 0, &fim, &tipo));
+      assert(!intro_ativo(3500, &fim, &tipo));
+    }
+    puts("ok  botao some em 10 s, volta com controles, janela recusada nao aparece");
+  }
+#endif
+
   puts("intro: tudo ok");
   return 0;
 }

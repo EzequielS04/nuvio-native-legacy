@@ -39,6 +39,16 @@ int  intro_ativo(double posSeg,double *fim,int *tipo);
 // Segundo em que os creditos comecam, ou 0 quando nao ha marcador. Serve ao
 // posplay.c, que precisa do INSTANTE e nao de "estou dentro".
 double intro_creditos_seg(void);
+// Duracao real da midia (0 = desconhecida) e se e filme: base da guarda de janela.
+void intro_definir_duracao(double dur,int filme);
+// Janela aceitavel? Creditos <= 900 s, abertura/resumo <= 180 s, creditos de
+// filme so a partir de 50% da duracao. `motivo` (opcional) diz o porque.
+int  intro_janela_ok(int tipo,double ini,double fim,double dur,int filme,const char **motivo);
+// Botao de pular com tempo: some em INTRO_BOTAO_SEG sem foco, uma aparicao
+// automatica por trecho, volta so com os controles (osd) de pe.
+#define INTRO_BOTAO_SEG 10.0
+int  intro_botao(double posSeg,double agora,int osd,int focado,double *fim,int *tipo);
+int  intro_botao_visivel(double *fim,int *tipo);
 int  intro_extrair(const char *json,IntroTrecho *saida,int max);
 // Copia ate `max` trechos conhecidos; devolve quantos.
 int  intro_trechos(IntroTrecho *saida,int max);

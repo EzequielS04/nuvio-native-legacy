@@ -10,6 +10,9 @@
 
 static pthread_mutex_t trava=PTHREAD_MUTEX_INITIALIZER;
 static IntroTrecho trechos[8];static int nTrechos;static unsigned geracao;
+static int botaoIdx=-1;static double botaoDesde;
+static int botaoVis;static double botaoFim;static int botaoTipo;
+
 
 // AS TRES CHAVES QUE A API DEVOLVE, e o tipo de cada uma. "preview" existe no
 // servico e fica de fora de proposito: e o trecho do PROXIMO episodio, que este
@@ -127,7 +130,46 @@ void intro_pedir_vizinhos(const char *imdb,int t,int e,double durAnt,double durP
 
 void intro_pedir(const char *imdb,int t,int e){intro_pedir_vizinhos(imdb,t,e,0.0,0.0);}
 
-void intro_desligar(void){pthread_mutex_lock(&trava);geracao++;nTrechos=0;pthread_mutex_unlock(&trava);}
+void intro_desligar(void){pthread_mutex_lock(&trava);geracao++;nTrechos=0;botaoVis=0;botaoIdx=-1;pthread_mutex_unlock(&trava);}
+
+// DURACAO DA MIDIA E O TIPO (filme/serie), para recusar janelas absurdas.
+static double durMidia;static int ehFilme;
+void intro_definir_duracao(double dur,int filme){
+  pthread_mutex_lock(&trava);durMidia=dur>1.0?dur:0.0;ehFilme=filme;pthread_mutex_unlock(&trava);
+}
+
+// JANELA ACEITA? Um marcador de creditos com inicio errado (ou `end_ms` nulo =
+// "ate o fim") fazia o botao "Pular creditos" ficar de pe por 25-30 min num
+// filme. Limites: creditos <= 15 min, abertura/resumo <= 3 min, e creditos de
+// FILME nao comecam antes de 50% da duracao. Sem duracao conhecida (dur<=0) so
+// vale o que da para medir (fim explicito); o auto-hide do botao cobre o resto.
+int intro_janela_ok(int tipo,double ini,double fim,double dur,int filme,const char **motivo){
+  double fimEf=fim>0.0?fim:dur,jan=fimEf>0.0?fimEf-ini:0.0;
+  double max=tipo==INTRO_CREDITOS?900.0:180.0;
+  if(motivo)*motivo="ok";
+  if(jan>max){if(motivo)*motivo="janela longa";return 0;}
+  if(dur>0.0&&ini>=dur){if(motivo)*motivo="inicio alem da duracao";return 0;}
+  if(tipo==INTRO_CREDITOS&&filme&&dur>0.0&&ini<dur*0.5){if(motivo)*motivo="inicio antes de 50% do filme";return 0;}
+  return 1;
+}
+
+static signed char veredito[8];   // 0 nao avaliado, 1 aceito, -1 recusado (por geracao)
+static unsigned verGer;
+static char mostrado[8];          // o botao deste trecho ja apareceu sozinho
+
+static int valido(int i){
+  const char *m;int ok;
+  if(verGer!=geracao){memset(veredito,0,sizeof veredito);memset(mostrado,0,sizeof mostrado);verGer=geracao;botaoIdx=-1;botaoVis=0;}
+  ok=intro_janela_ok(trechos[i].tipo,trechos[i].inicio,trechos[i].fim,durMidia,ehFilme,&m);
+  // Loga uma vez por veredito (muda se a duracao real chegar depois).
+  if(veredito[i]!=(ok?1:-1)){
+    veredito[i]=(signed char)(ok?1:-1);
+    printf("[marcador] janela %s tipo=%d ini=%.0fs fim=%.0fs dur=%.0fs (%s)\n",ok?"aceita":"recusada",
+           trechos[i].tipo,trechos[i].inicio,trechos[i].fim,durMidia,m);
+    fflush(stdout);
+  }
+  return ok;
+}
 
 int intro_ativo(double pos,double*fim,int*tipo){
   int ok=0;pthread_mutex_lock(&trava);
@@ -136,9 +178,36 @@ int intro_ativo(double pos,double*fim,int*tipo){
     int dentro=trechos[i].fim>0.0
                ? (pos>=trechos[i].inicio&&pos<trechos[i].fim)
                : (pos>=trechos[i].inicio);
-    if(dentro){if(fim)*fim=trechos[i].fim;if(tipo)*tipo=trechos[i].tipo;ok=1;break;}
+    if(dentro&&valido(i)){if(fim)*fim=trechos[i].fim;if(tipo)*tipo=trechos[i].tipo;ok=1;break;}
   }
   pthread_mutex_unlock(&trava);return ok;
+}
+
+// O BOTAO DE PULAR, com tempo: aparece sozinho UMA vez por trecho, some em
+// 10 s se nao estiver focado, e so volta enquanto os controles (osd) estao de
+// pe dentro da janela. Chamado a cada quadro; `agora` em segundos monotonicos.
+int intro_botao(double pos,double agora,int osd,int focado,double*fim,int*tipo){
+  int i,idx=-1,vis=0;
+  pthread_mutex_lock(&trava);
+  for(i=0;i<nTrechos;i++){
+    int dentro=trechos[i].fim>0.0?(pos>=trechos[i].inicio&&pos<trechos[i].fim):(pos>=trechos[i].inicio);
+    if(dentro&&valido(i)){idx=i;break;}
+  }
+  if(idx<0){botaoIdx=-1;botaoVis=0;pthread_mutex_unlock(&trava);return 0;}
+  if(idx!=botaoIdx){botaoIdx=idx;botaoDesde=agora;}
+  if(!mostrado[idx]){mostrado[idx]=1;botaoDesde=agora;}
+  if(focado)botaoDesde=agora;                 // nao some debaixo do foco
+  vis=(agora-botaoDesde<INTRO_BOTAO_SEG)||osd;
+  botaoVis=vis;botaoFim=trechos[idx].fim;botaoTipo=trechos[idx].tipo;
+  if(vis){if(fim)*fim=botaoFim;if(tipo)*tipo=botaoTipo;}
+  pthread_mutex_unlock(&trava);return vis;
+}
+
+// O que o ultimo intro_botao decidiu: as teclas pulam so o que esta na tela.
+int intro_botao_visivel(double*fim,int*tipo){
+  int v;pthread_mutex_lock(&trava);v=botaoVis;
+  if(v){if(fim)*fim=botaoFim;if(tipo)*tipo=botaoTipo;}
+  pthread_mutex_unlock(&trava);return v;
 }
 
 // O trecho de creditos que comeca POR ULTIMO, e nao o primeiro da lista
