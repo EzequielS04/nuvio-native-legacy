@@ -39,7 +39,9 @@ static int ajDicasDe(int op, AjDica *d) {
     return 3;
   }
   { int n = 0;
-    if (op >= 0 && inativa(op) && uxRequisito(op) >= 0) d[n++] = (AjDica){ "OK", "Mostrar" };
+    if (op < 0 && focoItem >= 0 && TELA[focoItem].tipo == IT_MAIS)
+      d[n++] = (AjDica){ "OK", maisAberto[secAtual] ? "Esconder" : "Abrir" };
+    else if (op >= 0 && inativa(op) && uxRequisito(op) >= 0) d[n++] = (AjDica){ "OK", "Mostrar" };
     else if (op == AJ_ENVIAR_LOG && !inativa(op)) d[n++] = (AjDica){ "OK", "Enviar" };
     else if (op >= 0 && !inativa(op)) switch (ajTipo(op)) {
       case AJL_TOG: d[n++] = (AjDica){ "OK", "Mudar" }; break;
@@ -94,7 +96,10 @@ static float aj2Previa(int op, float x, float y, float w) {
 static void ajDesenharInspetor(void) {
   GfxRect ir = aj2InspR();
   float x = ir.x, w = ir.w, y = ir.y + 4.0f, fim = ir.y + ir.h - 8.0f;
-  int categoria = focoIndice;
+  // Na linha "Mais opcoes" (focoOp -1) o inspetor fala da categoria: a cena
+  // dela e o que ha dentro do bloco.
+  int naMais = !focoIndice && focoOp < 0 && TELA[focoItem].tipo == IT_MAIS;
+  int categoria = focoIndice || focoOp < 0;
   int op = categoria ? -1 : focoOp;
   if (!aj2TemInsp()) return;
   { int opPv = op >= 0 ? op : -1;
@@ -128,7 +133,7 @@ static void ajDesenharInspetor(void) {
   y += 22.0f + 12.0f;
   // Cor de destaque: o titulo e o NOME da cor (a pendente, editando), como
   // no acentos-mockup.html; a opcao ja esta no rotulo da linha.
-  { const char *t = categoria ? TELA[secIni[secAtual]].titulo
+  { const char *t = naMais ? "Mais opções" : categoria ? TELA[secIni[secAtual]].titulo
                   : op == AJ_TEMA ? V_TEMA[ajEditandoLinha(op) ? uxPendente : valor[AJ_TEMA]]
                   : rotuloOpcao(op);
     y += ajBloco(TXT_V2_A3TIT, t, x, y, w, 56.0f, 1, 2); }
@@ -136,6 +141,11 @@ static void ajDesenharInspetor(void) {
   { int maxL = (int)((fim - y) / 32.0f);
     if (maxL > 5) maxL = 5;   // a descricao inteira: cortar no meio da frase nao serve
     if (maxL < 1) maxL = 1;
+    if (naMais) {
+      char resumo[400];
+      maisContar(secAtual, resumo, sizeof resumo);
+      y += ajBloco(TXT_V2_24, resumo, x, y, w, 32.0f, 0.68f, maxL);
+    } else
     y += ajBloco(TXT_V2_24, categoria ? SECAO_AJUDA[secAtual] : uxResumo(op), x, y, w, 32.0f, 0.68f, maxL);
     if (op == AJ_TEMA) {   // a cor PENDENTE, como a previa
       int salvo = valor[AJ_TEMA];
@@ -190,12 +200,40 @@ static void ajDesenharInspetor(void) {
   } }
 }
 
+// "MAIS OPCOES · N" (mockup v3, telas 02 e 07): a linha fechada no fim da
+// categoria, com contorno fino em vez de superficie, o icone de controles, a
+// contagem e, a direita, o que ha dentro ("DTS, Dolby Vision em MKV, ...").
+// Aberta, a direita diz "Esconder" e as avancadas aparecem logo abaixo.
+static void ajDesenharMais(int item, float y, float f, float a) {
+  GfxRect fr = aj2ListaR();
+  GfxRect ln = { fr.x + 18.0f, y, fr.w - 36.0f, AJ2_LN_H };
+  int sec = secDoItem[item], aberto = maisAberto[sec];
+  char resumo[300], rot[96];
+  int n = maisContar(sec, resumo, sizeof resumo);
+  float yc = y + AJ2_LN_H * 0.5f, xDir = ln.x + ln.w - 22.0f, aTx = a * aj2TextoLista, x;
+  TxtLinha r, v;
+  if (a <= 0.004f) return;
+  ajFocoLinha(ln, 14.0f, f, aTx);
+  if (f > 0.01f) { float ar, ag, ab; ajustes_acento(&ar, &ag, &ab); gfx_cor(ln, 14.0f / ln.h, ar, ag, ab, 0.14f * f * aTx); }
+  if (f < 0.99f) gfx_anel(ln, 14.0f / ln.h, 1.5f, 1, 1, 1, 0.16f * (1.0f - f) * aTx);
+  if (aTx <= 0.004f) return;
+  ajIcone("aj_sliders-horizontal", ln.x + 20.0f, yc - 12.0f, 24.0f, (f > 0.5f ? 0.9f : 0.6f) * aTx);
+  snprintf(rot, sizeof rot, "%s · %d", i18n("Mais opções"), n);
+  r = ajTxt(f > 0.5f ? TXT_V2_LN_B : TXT_V2_LN, rot);
+  txt_desenhar_alpha(r, ln.x + 58.0f, yc - r.h * 0.5f, (f > 0.5f ? 1.0f : 0.85f) * aTx);
+  aj2Chevron(xDir, yc, (f > 0.5f ? 0.7f : 0.32f) * aTx);
+  x = xDir - 22.0f - 12.0f;
+  v = ajTxtC(TXT_V2_24, aberto ? i18n("Esconder") : resumo, x - (ln.x + 58.0f + r.w + 40.0f));
+  txt_desenhar_alpha(v, x - v.w, yc - v.h * 0.5f, (f > 0.5f ? 0.75f : 0.45f) * aTx);
+}
+
 static float ajAlturaItem(int i) {
   if (!visivel(i)) return 0.0f;
   switch (TELA[i].tipo) {
     case IT_SEC: return 0.0f;
     case IT_ROT: return AJ2_GRUPO_H;
     case IT_GRP: return AJ2_LN_GAP + AJ2_LN_H;
+    case IT_MAIS: return 14.0f + AJ2_LN_GAP + AJ2_LN_H + 4.0f;
     default: return AJ2_LN_GAP + ajLinhaH(i);
   }
 }
@@ -269,6 +307,9 @@ static void ajDesenharFolha(void) {
     if (y + h >= topo - 4 && y <= base + 4) {
       if (TELA[i].tipo == IT_ROT) {
         ajDesenharGrupo(i, y, ajMascara(y + 20.0f + 15.6f, topo, base) * aPag);
+      } else if (TELA[i].tipo == IT_MAIS) {
+        float yy = y + 14.0f + AJ2_LN_GAP;
+        ajDesenharMais(i, yy, animItem[i], ajMascara(yy + AJ2_LN_H * 0.5f, topo, base) * anim_suave(paginaA));
       } else if (TELA[i].tipo == IT_OPC) {
         float lh = ajLinhaH(i), yy = y + AJ2_LN_GAP;
         // A superficie de foco nao some com o texto (editor por cima): o

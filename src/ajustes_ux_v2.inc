@@ -198,12 +198,12 @@ static float aj2MenuAberta(int j) {
 }
 static int aj2MenuFocado(void) { return focoIndice ? uxIndice : -1; }
 // Os tres grupos do indice: so a apresentacao. As categorias seguem a ordem de
-// TELA[] (reordenada em ajustes_ux_tela.inc: Telas = 0-4, Assistir = 5-8, o
-// resto em Conta e sistema); nada aqui mexe em valor[] nem em CHAVE[].
-static int aj2Grupo(int s) { return s < AJS_REPRODUCAO ? 0 : s < AJS_CONTAS ? 1 : 2; }
+// TELA[] (ajustes_ux_tela.inc, 2.0.3: Assistir = 0-3, Telas = 4-7, o resto em
+// Conta e sistema); nada aqui mexe em valor[] nem em CHAVE[].
+static int aj2Grupo(int s) { return s < AJS_HOME ? 0 : s < AJS_CONTAS ? 1 : 2; }
 static int aj2GrupoDe(int s) { return aj2Grupo(s); }
 static int aj2GrupoIni(int s) { return s == 0 || aj2Grupo(s) != aj2Grupo(s - 1); }
-static const char *aj2GrupoNome(int g) { return g == 0 ? "Telas" : g == 1 ? "Assistir" : "Conta e sistema"; }
+static const char *aj2GrupoNome(int g) { return g == 0 ? "Assistir" : g == 1 ? "Telas" : "Conta e sistema"; }
 // O VALOR VIVO DE CADA CATEGORIA no indice (2.0.2), como o Ajustes de um
 // celular: o que a pessoa mais quer saber dela sem abrir ("Moderna",
 // "Automatica", "Portugues", "3 de 5"). So valores que a tela ja mostra nas
@@ -225,16 +225,36 @@ static void aj2MenuValor(int sec, char *b, size_t n) {
         q++;
       }
       return; }
-    case AJS_TRAILERS: {   // quantos dos quatro lugares tocam trailer
-      int q = lig(AJ_HERO_TRAILER) + lig(AJ_FOCO_TRAILER) + lig(AJ_DET_TRAILER_AUTO) + lig(AJ_DET_TRAILER);
-      snprintf(b, n, i18n("%d de %d"), q, 4);
+    case AJS_CARTAZES: {   // onde o trailer toca (mockup: "Trailer: so na pagina")
+      int home = lig(AJ_HERO_TRAILER) || lig(AJ_FOCO_TRAILER), pag = lig(AJ_DET_TRAILER_AUTO);
+      snprintf(b, n, "%s", i18n(home && pag ? "Trailer na home e na página" : pag ? "Trailer: só na página"
+                                : home ? "Trailer: só na home" : "Trailer automático desligado"));
       return; }
-    case AJS_APARENCIA: op = AJ_TEMA; break;
-    case AJS_REPRODUCAO: op = AJ_QUALIDADE; break;
+    case AJS_APARENCIA:   // "Frost · Vidro ligado"
+      snprintf(b, n, "%s · %s", i18n(textoValor(AJ_FUNDO)), i18n(lig(AJ_VIDRO) ? "Vidro ligado" : "Sem vidro"));
+      return;
+    case AJS_REPRODUCAO:   // "4K · Fonte: o Nuvio escolhe"
+      snprintf(b, n, "%s · %s", i18n(textoValor(AJ_QUALIDADE)),
+               i18n(lig(AJ_FONTE_MANUAL) ? "Fonte: você escolhe" : "Fonte: o Nuvio escolhe"));
+      return;
     case AJS_FONTES: snprintf(b, n, "%s", ajEstadoAcao(AJ_ADDONS)); return;
-    case AJS_IDIOMAS: op = AJ_IDIOMA; break;
-    case AJS_CONTAS: op = AJ_PERFIL_ATIVO; break;
-    case AJS_DESEMPENHO: op = AJ_RESOLUCAO; break;
+    case AJS_IDIOMAS: {   // "Portugues · Audio: Original do titulo"
+      char a[120];
+      snprintf(a, sizeof a, i18n("Áudio: %s"), i18n(textoValor(AJ_AUD_LINGUA)));
+      snprintf(b, n, "%s · %s", i18n(textoValor(AJ_IDIOMA)), a);
+      return; }
+    case AJS_TVAOVIVO:
+      snprintf(b, n, "%s", xtream_configurado() ? textoLeitura(AJ_XTREAM_SERVIDOR)
+                         : stalker_configurado() ? textoLeitura(AJ_STALKER_PORTAL) : i18n("Não configurado"));
+      return;
+    case AJS_CONTAS: {   // "Henrique · Trakt"
+      size_t u = (size_t)snprintf(b, n, "%s", textoLeitura(AJ_PERFIL_ATIVO));
+      if (u < n && traktauth_estado() == TRA_LIGADO) u += (size_t)snprintf(b + u, n - u, " · Trakt");
+      if (u < n && simklauth_estado() == SMK_LIGADO) snprintf(b + u, n - u, " · Simkl");
+      return; }
+    case AJS_DESEMPENHO:   // "1080p · Padrao"
+      snprintf(b, n, "%s · %s", i18n(textoValor(AJ_RESOLUCAO)), i18n(textoValor(AJ_QUALIDADE_IMG)));
+      return;
     case AJS_SOBRE: op = AJ_VERSAO_I; break;
     default: return;
   }
@@ -548,133 +568,193 @@ static float aj2CorMedidas(float x, float y, float w, float fim, float a) {
   return y - y0;
 }
 
-// --- A ANIMACAO ---------------------------------------------------------------------
-// --- A GRADE (degrau 0, 2.0.2) -------------------------------------------------------
-// O dono (06/10): "o menu principal dos ajustes ta igual e ele era o principal
-// a mudar". O indice deixou de ser a lista estreita a esquerda com a cena
-// grande a direita: e uma ilha so, de ponta a ponta, com a busca e as duas
-// pilulas no alto e as categorias em CARTOES GRANDES, uma coluna por grupo
-// (Telas, Assistir, Conta e sistema). Cada cartao: o icone num ladrilho, o
-// nome em 33/700 e o valor que importa ("Moderna", "Portugues", "1080p").
-// Foco = o cartao cresce, enche no acento com o halo dele e o texto vai para a
-// tinta do acento — le do sofa. Custo: UMA ilha (antes eram duas) e cartoes de
-// cor chapada; nenhum fosco novo. Ao abrir, a grade cresce em torno do cartao
-// e some, e a lista nasce da altura dele.
+// --- A GRADE (degrau 0, 2.0.3) -------------------------------------------------------
+// Mockup v3, tela 01 (aprovado pelo dono em 07/10). Uma ilha so, de ponta a
+// ponta. No alto, TRES PILULAS NEUTRAS (o mesmo cinza translucido, sem cor
+// propria): Buscar, "Avancadas · Escondidas/Visiveis" (o estado escrito, nao um
+// interruptor) e "Perfil: <nome>". Embaixo, os dois cartoes de descoberta: "O
+// que o Nuvio faz?" (o guia, por funcao) e "Resolver um problema" (o capitulo
+// de problemas comuns). Depois as categorias em tres colunas, pela tarefa:
+// Assistir, Telas, Conta e sistema. Cada cartao: o icone num ladrilho de 60, o
+// nome e o valor que importa ("4K · Fonte: o Nuvio escolhe"). Foco = o cartao
+// cresce, enche no acento com o halo dele e o texto vai para a tinta do acento.
+// Custo: UMA ilha e cartoes de cor chapada; nenhum fosco novo.
+// Medidas em unidades da camada dos Ajustes (o mockup a 1920 dividido por 0,8,
+// o tamanho padrao): pilula 56, cartao de descoberta 88, cartao 136, vaos 24/16.
 #define AJ2_G_PAD    40.0f
-#define AJ2_G_TOPO   80.0f   // altura da busca e das pilulas
-#define AJ2_G_VAO    28.0f   // entre colunas
-#define AJ2_G_VAO_V  16.0f   // entre cartoes
-#define AJ2_G_CAB    56.0f   // cabecalho do grupo
-#define AJ2_G_MAXH  172.0f
-static float aj2GF[AJ2_NMENU + 1];   // foco animado de cada alvo (o ultimo: Avancadas)
+#define AJ2_G_CHIP   70.0f   // altura das pilulas
+#define AJ2_G_DESC  110.0f   // altura dos cartoes de descoberta
+#define AJ2_G_VAO    30.0f   // entre colunas
+#define AJ2_G_VAO_V  20.0f   // entre cartoes
+#define AJ2_G_CAB    71.0f   // cabecalho do grupo (Assistir, Telas, ...)
+#define AJ2_G_MAXH  170.0f
+static int guiaNovos(void);
+static float aj2GF[AJ2_NMENU + 1];   // foco animado de cada categoria (indice uxIndice)
+static float aj2TF[AJ2_T_N];         // foco animado de cada alvo do alto
 static GfxRect aj2GradeR(void) {
   float x = aj2X0();
   return (GfxRect){ x, AJ2_TOPO, NV_VTELA_W - AJ2_MARGEM - x, NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM };
 }
 static float aj2GradeColW(void) { return (aj2GradeR().w - 2 * AJ2_G_PAD - 2 * AJ2_G_VAO) / 3.0f; }
 static int aj2GradeLinha(int s) { int k = 0; while (s - k > 0 && aj2Grupo(s - k - 1) == aj2Grupo(s)) k++; return k; }
+static float aj2GradeChipY(void) { return aj2GradeR().y + 45.0f; }
+static float aj2GradeDescY(void) { return aj2GradeChipY() + AJ2_G_CHIP + 32.0f; }
+static float aj2GradeCabY(void) { return aj2GradeDescY() + AJ2_G_DESC + 22.0f; }
 static float aj2GradeCartaoH(void) {
   GfxRect g = aj2GradeR();
-  float util = g.y + g.h - AJ2_G_PAD - (g.y + AJ2_G_PAD + AJ2_G_TOPO + 30.0f + AJ2_G_CAB), h;
-  h = (util - 4 * AJ2_G_VAO_V) / 5.0f;
+  float util = g.y + g.h - 57.0f - (aj2GradeCabY() + AJ2_G_CAB), h;
+  h = (util - 3 * AJ2_G_VAO_V) / 4.0f;
   return h > AJ2_G_MAXH ? AJ2_G_MAXH : h;
 }
 static GfxRect aj2GradeCartao(int s) {
   GfxRect g = aj2GradeR();
   float cw = aj2GradeColW(), ch = aj2GradeCartaoH();
-  float y0 = g.y + AJ2_G_PAD + AJ2_G_TOPO + 30.0f + AJ2_G_CAB;
+  float y0 = aj2GradeCabY() + AJ2_G_CAB;
   return (GfxRect){ g.x + AJ2_G_PAD + (float)aj2Grupo(s) * (cw + AJ2_G_VAO), y0 + (float)aj2GradeLinha(s) * (ch + AJ2_G_VAO_V), cw, ch };
 }
-// O alvo em foco na grade: 0 Buscar, 1 Diferentes, 2.. categorias, AJ2_NMENU Avancadas.
-static int aj2GradeFoco(void) {
-  if (!focoIndice) return -1;
-  return uxChipAv ? AJ2_NMENU : uxIndice;
+// O texto de cada pilula; a da Avancadas e "Avancadas" + " · Escondidas".
+static void aj2TopoTexto(int t, char *b, size_t n, char *det, size_t nd) {
+  det[0] = 0;
+  if (t == AJ2_T_BUSCA) snprintf(b, n, "%s", i18n("Buscar"));
+  else if (t == AJ2_T_AV) {
+    snprintf(b, n, "%s", i18n("Avançadas"));
+    snprintf(det, nd, " · %s", i18n(lig(AJ_AVANCADAS) ? "Visíveis" : "Escondidas"));
+  } else snprintf(b, n, i18n("Perfil: %s"), textoLeitura(AJ_PERFIL_ATIVO));
+}
+static const char *aj2TopoIcone(int t) {
+  return t == AJ2_T_BUSCA ? "aj_search" : t == AJ2_T_AV ? (lig(AJ_AVANCADAS) ? "aj_eye" : "aj_eye-off")
+       : t == AJ2_T_PERFIL ? "aj_user-round" : t == AJ2_T_TOUR ? "aj_sparkles" : "aj_life-buoy";
+}
+static float aj2TopoLargura(int t) {
+  char b[160], d[96];
+  aj2TopoTexto(t, b, sizeof b, d, sizeof d);
+  return 30 + 34 + 16 + (float)txt_largura(t == AJ2_T_BUSCA ? TXT_V3_CHIP_R : TXT_V3_CHIP, b) + (d[0] ? 8 + (float)txt_largura(TXT_V3_CHIP_R, d) : 0) + 32;
+}
+static GfxRect aj2TopoR(int t) {
+  GfxRect g = aj2GradeR();
+  float cw = aj2GradeColW(), x = g.x + AJ2_G_PAD, y = aj2GradeChipY(), fim = g.x + g.w - AJ2_G_PAD;
+  float wb = cw + (cw + AJ2_G_VAO) / 3.0f, wa = aj2TopoLargura(AJ2_T_AV), wp = aj2TopoLargura(AJ2_T_PERFIL);
+  // Em alemao/russo as tres podem nao caber numa fileira: a busca cede primeiro.
+  if (wb + 20 + wa + 20 + wp > fim - x) { wb = fim - x - 40 - wa - wp; if (wb < 300) wb = 300; }
+  if (wb + 20 + wa + 20 + wp > fim - x) { float k = (fim - x - 40 - wb) / (wa + wp); wa *= k; wp *= k; }
+  if (t == AJ2_T_BUSCA) return (GfxRect){ x, y, wb, AJ2_G_CHIP };
+  if (t == AJ2_T_AV) return (GfxRect){ x + wb + 20, y, wa, AJ2_G_CHIP };
+  if (t == AJ2_T_PERFIL) return (GfxRect){ x + wb + 20 + wa + 20, y, wp, AJ2_G_CHIP };
+  if (t == AJ2_T_TOUR) return (GfxRect){ x, aj2GradeDescY(), 2 * cw + AJ2_G_VAO, AJ2_G_DESC };
+  return (GfxRect){ x + 2 * (cw + AJ2_G_VAO), aj2GradeDescY(), cw, AJ2_G_DESC };
 }
 static void aj2GradeAtualizar(float dt) {
-  int j, f = aj2GradeFoco(), red = ajustes_animacoes_reduzidas();
+  int j, red = ajustes_animacoes_reduzidas();
   for (j = 0; j <= AJ2_NMENU; j++) {
-    float alvo = j == f ? 1.0f : 0.0f;
+    float alvo = focoIndice && uxTopo < 0 && j == uxIndice ? 1.0f : 0.0f;
     aj2GF[j] = red ? alvo : aj2Rampa(aj2GF[j], alvo, dt, 140.0f);
+  }
+  for (j = 0; j < AJ2_T_N; j++) {
+    float alvo = focoIndice && uxTopo == j ? 1.0f : 0.0f;
+    aj2TF[j] = red ? alvo : aj2Rampa(aj2TF[j], alvo, dt, 140.0f);
   }
 }
 static float aj2Suave(float t) { return t * t * (3.0f - 2.0f * t); }
-// Uma pilula do alto (busca, diferentes, avancadas): cor propria do tema
-// (como antes), cheia e com halo em foco.
-static void aj2GradePilula(GfxRect r, int c, float f, const char *rot, TxtEstilo e, int ligAv) {
-  const AcentoFixo *cor = &TEMA_ACENTO[AJ2_CHIP_TEMA[c]];
-  float fr = ((cor->fill >> 16) & 255) / 255.0f, fg = ((cor->fill >> 8) & 255) / 255.0f, fb = (cor->fill & 255) / 255.0f;
-  float mr = ((cor->marca >> 16) & 255) / 255.0f, mg = ((cor->marca >> 8) & 255) / 255.0f, mb = (cor->marca & 255) / 255.0f;
-  float raio = r.h * 0.5f, ico = 34.0f, k = aj2Suave(f), cresce = 5.0f * k;
-  const char *ic = c == 0 ? "aj_search" : c == 1 ? "aj_rotate-ccw-clock" : ligAv ? "aj_eye" : "aj_eye-off";
-  TxtLinha t;
-  r = (GfxRect){ r.x - cresce, r.y - cresce, r.w + 2 * cresce, r.h + 2 * cresce };
-  if (k > 0.01f) gfx_rect((GfxRect){ r.x - 14, r.y - 2, r.w + 28, r.h + 34 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, fr, fg, fb, 0.40f * k);
-  ajNeutro(r, raio, 0.08f, AJ_CHIP_SOL, 1);
-  gfx_cor(r, raio / r.h, fr, fg, fb, 0.22f + 0.70f * k);
-  gfx_icone((GfxRect){ r.x + 26, r.y + (r.h - ico) * 0.5f, ico, ico }, ic,
-            mr + (1 - mr) * k, mg + (1 - mg) * k, mb + (1 - mb) * k, 1);
-  { float livre = r.w - 26 - ico - 16 - 26 - (c == 2 ? 64 + 18 : 0);
-    t = ajTxtC(e, rot, livre);
-    txt_desenhar_alpha(t, r.x + 26 + ico + 16, r.y + (r.h - t.h) * 0.5f, 0.82f + 0.18f * k); }
-  if (c == 2) aj2ChipLiga(AJ_AVANCADAS, r.x + r.w - 24, r.y + r.h * 0.5f, ligAv, 1);
-}
-static void aj2GradeCartaoDesenhar(int s, float f) {
-  GfxRect r = aj2GradeCartao(s);
-  float ar, ag, ab, k = aj2Suave(f), cresce = 7.0f * k, tinta = ajTinta() / 255.0f;
-  float tile, tx, tw, nomeH, valH = 0, bloco, y;
-  int j = s + 2, ti = ajTinta();
-  char vb[160];
-  const char *nome = aj2MenuTitulo(j);
-  TxtEstilo en = TXT_V2_MENU_B;
+// A superficie de uma peca da grade: o cinza neutro e, em foco, o acento com o
+// halo dele por baixo. Devolve a peca ja crescida.
+static GfxRect aj2GradeSuperficie(GfxRect r, float raio, float k, float cresce, float halo) {
+  float ar, ag, ab;
   ajustes_acento(&ar, &ag, &ab);
-  r = (GfxRect){ r.x - cresce, r.y - cresce, r.w + 2 * cresce, r.h + 2 * cresce };
-  // O cartao: chapado (vidro: branco 7%; solido: #1E2025) e, em foco, o acento
-  // com o halo dele por baixo.
-  if (k > 0.01f) gfx_rect((GfxRect){ r.x - 18, r.y - 4, r.w + 36, r.h + 44 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.45f * k);
-  ajNeutro(r, 30.0f, s == uxIndice - 2 ? 0.11f : 0.07f, 0.118f, 0.125f, 0.145f, 1);
-  if (k > 0.01f) gfx_cor(r, 30.0f / r.h, ar, ag, ab, k);
-  // O ladrilho do icone.
-  tile = r.h - 44.0f > 80.0f ? 80.0f : r.h - 44.0f;
-  { GfxRect tr = { r.x + 24.0f, r.y + (r.h - tile) * 0.5f, tile, tile };
-    float ico = tile * 0.5f;
-    gfx_cor(tr, 22.0f / tile, 1, 1, 1, 0.08f + 0.14f * k);
-    if (k < 0.99f) ajIcone(aj2MenuIcone(j), tr.x + (tile - ico) * 0.5f, tr.y + (tile - ico) * 0.5f, ico, 1.0f - k);
-    if (k > 0.01f) gfx_icone((GfxRect){ tr.x + (tile - ico) * 0.5f, tr.y + (tile - ico) * 0.5f, ico, ico }, aj2MenuIcone(j), tinta, tinta, tinta, k); }
-  tx = r.x + 24.0f + tile + 22.0f;
-  tw = r.x + r.w - 24.0f - tx;
-  // O nome inteiro, sempre: numa linha no corpo grande; senao em duas (alemao,
-  // russo), no mesmo corpo. So o valor cede lugar.
-  { int linhas = (float)txt_largura(en, nome) > tw ? 2 : 1;
-    aj2MenuValor(s, vb, sizeof vb);
-    nomeH = linhas == 1 ? 40.0f : txt_bloco(en, nome, 0, 0, 0, tx, -4000, tw, 35.0f, 0, 2);
-    if (vb[0] && nomeH + 2.0f + 32.0f <= r.h - 8.0f) valH = linhas == 1 ? 34.0f : 32.0f;
-    bloco = nomeH + (valH > 0 ? (linhas == 1 ? 4.0f : 2.0f) + valH : 0);
-    y = r.y + (r.h - bloco) * 0.5f;
-    if (linhas == 1) {
-      TxtLinha a = ajTxt(en, nome), b = txt_linha(en, nome, ti, ti, ti, 255);
-      if (k < 0.99f) txt_desenhar_alpha(a, tx, y + (40.0f - a.h) * 0.5f, 1.0f - k);
-      if (k > 0.01f) txt_desenhar_alpha(b, tx, y + (40.0f - b.h) * 0.5f, k);
-    } else {
-      if (k < 0.99f) txt_bloco(en, nome, 243, 242, 239, tx, y, tw, 35.0f, 1.0f - k, 2);
-      if (k > 0.01f) txt_bloco(en, nome, ti, ti, ti, tx, y, tw, 35.0f, k, 2);
+  r = (GfxRect){ r.x - cresce * k, r.y - cresce * k, r.w + 2 * cresce * k, r.h + 2 * cresce * k };
+  if (k > 0.01f) gfx_rect((GfxRect){ r.x - 16, r.y - 4, r.w + 32, r.h + 40 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, halo * k);
+  ajNeutro(r, raio, 0.075f, 0.125f, 0.129f, 0.141f, 1);
+  if (k > 0.01f) gfx_cor(r, raio / r.h, ar, ag, ab, k);
+  return r;
+}
+// Texto que troca para a tinta do acento conforme o foco.
+static void aj2GradeTexto(TxtEstilo e, const char *s, float x, float yc, float maxW, float alNormal, float k) {
+  int ti = ajTinta();
+  TxtLinha a = ajTxtC(e, s, maxW), b = txt_linha_corta(e, s, ti, ti, ti, 255, maxW);
+  if (k < 0.99f) txt_desenhar_alpha(a, x, yc - a.h * 0.5f, alNormal * (1.0f - k));
+  if (k > 0.01f) txt_desenhar_alpha(b, x, yc - b.h * 0.5f, (alNormal > 0.9f ? 1.0f : 0.80f) * k);
+}
+static void aj2GradeIcone(const char *ic, float x, float y, float lado, float k) {
+  float tinta = ajTinta() / 255.0f;
+  if (k < 0.99f) ajIcone(ic, x, y, lado, 0.9f * (1.0f - k));
+  if (k > 0.01f) gfx_icone((GfxRect){ x, y, lado, lado }, ic, tinta, tinta, tinta, k);
+}
+static void aj2GradePilula(int t) {
+  float k = aj2Suave(aj2TF[t]);
+  GfxRect r = aj2GradeSuperficie(aj2TopoR(t), AJ2_G_CHIP * 0.5f, k, 3.0f, 0.35f);
+  char b[160], d[96];
+  float x = r.x + 30, yc = r.y + r.h * 0.5f, livre;
+  aj2TopoTexto(t, b, sizeof b, d, sizeof d);
+  aj2GradeIcone(aj2TopoIcone(t), x, yc - 17, 34, k);
+  x += 34 + 16;
+  livre = r.x + r.w - 28 - x;
+  { TxtEstilo e = t == AJ2_T_BUSCA ? TXT_V3_CHIP_R : TXT_V3_CHIP;
+    float wb = (float)txt_largura(e, b);
+    if (wb > livre) wb = livre;
+    aj2GradeTexto(e, b, x, yc, livre, t == AJ2_T_BUSCA ? 0.62f : 1.0f, k);
+    if (d[0] && livre - wb > 40) aj2GradeTexto(TXT_V3_CHIP_R, d, x + wb + 8, yc, livre - wb - 8, 0.55f, k); }
+}
+// "O que o Nuvio faz?" e "Resolver um problema": ladrilho, titulo (com o selo
+// vermelho de novidades no do guia) e a frase.
+static void aj2GradeDescoberta(int t) {
+  float k = aj2Suave(aj2TF[t]);
+  GfxRect r = aj2GradeSuperficie(aj2TopoR(t), 22.0f, k, 6.0f, 0.42f);
+  const char *tit = t == AJ2_T_TOUR ? "O que o Nuvio faz?" : "Resolver um problema";
+  const char *sub = t == AJ2_T_TOUR ? "Tour pelas funções, com atalho para ligar cada uma" : "TV lenta, sem som, legenda errada";
+  float tile = 65.0f, x = r.x + 25, tw;
+  GfxRect tr = { x, r.y + (r.h - tile) * 0.5f, tile, tile };
+  gfx_cor(tr, 17.0f / tile, 1, 1, 1, 0.08f + 0.10f * k);
+  aj2GradeIcone(aj2TopoIcone(t), tr.x + 16, tr.y + 16, 33, k);
+  x += tile + 25;
+  tw = r.x + r.w - 28 - x;
+  { TxtLinha l = ajTxtC(TXT_V3_DESC, tit, tw);
+    float yc = r.y + r.h * 0.5f - 19.0f;
+    aj2GradeTexto(TXT_V3_DESC, tit, x, yc, tw, 1.0f, k);
+    if (t == AJ2_T_TOUR && guiaNovos() > 0) {
+      char nb[48], up[64];
+      float bw;
+      snprintf(nb, sizeof nb, i18n("%d novas"), guiaNovos());
+      idioma_maiusc_em(ajustes_idioma(), up, sizeof up, nb);
+      bw = txt_tracking(TXT_V2_KICK, up, 255, 255, 255, -1, 0, 1, 2.0f) + 22;
+      if (x + l.w + 18 + bw < r.x + r.w - 20) {
+        GfxRect br = { x + l.w + 18, yc - 16, bw, 32 };
+        gfx_cor(br, 6.0f / 32.0f, 0.86f, 0.20f, 0.22f, 1);
+        txt_tracking(TXT_V2_KICK, up, 255, 255, 255, br.x + 11, br.y + (32 - 23) * 0.5f, 1, 2.0f);
+      }
+    } }
+  aj2GradeTexto(TXT_V3_SUB, sub, x, r.y + r.h * 0.5f + 21.0f, tw, 0.62f, k);
+}
+// O valor vivo de cada categoria (aj2MenuValor) com a tinta do foco.
+static void aj2GradeCartaoDesenhar(int s, float f) {
+  float k = aj2Suave(f), tile, tx, tw, y;
+  int j = s + 2;
+  char vb[200];
+  const char *nome = aj2MenuTitulo(j);
+  TxtEstilo en = TXT_V3_NOME;
+  GfxRect r = aj2GradeSuperficie(aj2GradeCartao(s), 20.0f, k, 7.0f, 0.45f);
+  // O ladrilho do icone (60 x 60 no mockup, raio 14).
+  tile = r.h - 50.0f > 75.0f ? 75.0f : r.h - 50.0f;
+  { GfxRect tr = { r.x + 25.0f, r.y + (r.h - tile) * 0.5f, tile, tile };
+    float ico = tile * 0.50f;
+    gfx_cor(tr, 17.0f / tile, 1, 1, 1, 0.07f + 0.12f * k);
+    aj2GradeIcone(aj2MenuIcone(j), tr.x + (tile - ico) * 0.5f, tr.y + (tile - ico) * 0.5f, ico, k); }
+  tx = r.x + 25.0f + tile + 25.0f;
+  tw = r.x + r.w - 25.0f - tx;
+  aj2MenuValor(s, vb, sizeof vb);
+  // O nome inteiro, sempre: numa linha; em duas (alemao, russo) no mesmo corpo.
+  { int linhas = (float)txt_largura(en, nome) > tw ? 2 : 1, ti = ajTinta();
+    float nomeH = linhas == 1 ? 50.0f : 88.0f, valH = vb[0] && linhas == 1 ? 40.0f : 0.0f;
+    y = r.y + (r.h - nomeH - (valH > 0 ? 4.0f + valH : 0)) * 0.5f;
+    if (linhas == 1) aj2GradeTexto(en, nome, tx, y + 25.0f, tw, 1.0f, k);
+    else {
+      if (k < 0.99f) txt_bloco(en, nome, 243, 242, 239, tx, y, tw, 44.0f, 1.0f - k, 2);
+      if (k > 0.01f) txt_bloco(en, nome, ti, ti, ti, tx, y, tw, 44.0f, k, 2);
     }
-    y += nomeH + (linhas == 1 ? 4.0f : 2.0f); }
-  if (valH > 0) {
-    float vx = tx, dot = s == AJS_APARENCIA ? 22.0f : 0.0f;
-    TxtLinha a = ajTxtC(TXT_V2_28, vb, tw - dot), b = txt_linha_corta(TXT_V2_28, vb, ti, ti, ti, 255, tw - dot);
-    if (dot > 0) {   // a cor de destaque, do lado do nome dela
-      gfx_cor((GfxRect){ vx, y + valH * 0.5f - 8.0f, 16, 16 }, 0.5f, ar, ag, ab, 1.0f - k);
-      gfx_cor((GfxRect){ vx, y + valH * 0.5f - 8.0f, 16, 16 }, 0.5f, tinta, tinta, tinta, k);
-      vx += dot;
-    }
-    if (k < 0.99f) txt_desenhar_alpha(a, vx, y + (valH - a.h) * 0.5f, 0.62f * (1.0f - k));
-    if (k > 0.01f) txt_desenhar_alpha(b, vx, y + (valH - b.h) * 0.5f, 0.85f * k);
-  }
+    if (valH > 0) aj2GradeTexto(TXT_V3_VALOR, vb, tx, y + nomeH + 4.0f + valH * 0.5f, tw, 0.62f, k); }
 }
 static void aj2DesenharGrade(float a) {
   GfxRect g = aj2GradeR();
-  float grupo = gfx_opacidade_grupo, cw = aj2GradeColW(), x = g.x + AJ2_G_PAD, y = g.y + AJ2_G_PAD;
-  int s, gr, red = ajustes_animacoes_reduzidas(), n = nSecoes;
+  float grupo = gfx_opacidade_grupo, cw = aj2GradeColW(), x = g.x + AJ2_G_PAD;
+  int s, gr, t, red = ajustes_animacoes_reduzidas(), n = nSecoes;
   if (a <= 0.003f) return;
   if (n > AJ2_NMENU - 2) n = AJ2_NMENU - 2;
   gfx_opacidade_grupo = grupo * a;
@@ -684,38 +764,38 @@ static void aj2DesenharGrade(float a) {
     gfx_transformar(c.x + c.w * 0.5f, c.y + c.h * 0.5f, 1.0f + 0.08f * (1.0f - a), 0, 0);
   }
   ajIlha(g, 40.0f, 1, 0);
-  // A busca (a largura de uma coluna) e as duas pilulas, alinhadas as colunas.
-  aj2GradePilula((GfxRect){ x, y, cw, AJ2_G_TOPO }, 0, aj2GF[0], aj2ChipRotulo(0), TXT_V2_MENU_B, 0);
-  { float px = x + cw + AJ2_G_VAO, livre = g.x + g.w - AJ2_G_PAD - px, w1, w2;
-    TxtEstilo e = TXT_V2_SEG;
-    w1 = 26 + 34 + 16 + (float)txt_largura(e, aj2ChipRotulo(1)) + 26 + 8;
-    w2 = 26 + 34 + 16 + (float)txt_largura(e, aj2ChipRotulo(2)) + 26 + 64 + 18 + 8;
-    if (w1 + 16 + w2 > livre) { w1 = (livre - 16) * w1 / (w1 + w2); w2 = livre - 16 - w1; }
-    aj2GradePilula((GfxRect){ px, y + 6, w1, AJ2_G_TOPO - 12 }, 1, aj2GF[1], aj2ChipRotulo(1), e, 0);
-    aj2GradePilula((GfxRect){ px + w1 + 16, y + 6, w2, AJ2_G_TOPO - 12 }, 2, aj2GF[AJ2_NMENU], aj2ChipRotulo(2), e, lig(AJ_AVANCADAS)); }
+  // As pilulas e os cartoes de descoberta; o em foco por ultimo (halo por cima).
+  for (t = 0; t < AJ2_T_N; t++) if (t != uxTopo || !focoIndice) { if (t <= AJ2_T_PERFIL) aj2GradePilula(t); else aj2GradeDescoberta(t); }
+  if (focoIndice && uxTopo >= 0) { if (uxTopo <= AJ2_T_PERFIL) aj2GradePilula(uxTopo); else aj2GradeDescoberta(uxTopo); }
   // Os grupos: o nome em cima de cada coluna.
   for (gr = 0; gr < 3; gr++) {
-    TxtLinha t = ajTxtC(TXT_V2_GRUPO, aj2GrupoNome(gr), cw);
-    float cy = y + AJ2_G_TOPO + 30.0f;
-    txt_desenhar_alpha(t, x + gr * (cw + AJ2_G_VAO) + 4.0f, cy + (AJ2_G_CAB - 12.0f - t.h) * 0.5f, 0.62f);
+    TxtLinha l = ajTxtC(TXT_V3_SUB, aj2GrupoNome(gr), cw);
+    txt_desenhar_alpha(l, x + gr * (cw + AJ2_G_VAO), aj2GradeCabY() + 36.0f - l.h * 0.5f, 0.62f);
   }
   // Os cartoes; o em foco por ultimo (o halo e o crescimento por cima dos vizinhos).
-  for (s = 0; s < n; s++) if (s + 2 != uxIndice || !focoIndice) aj2GradeCartaoDesenhar(s, aj2GF[s + 2]);
-  if (focoIndice && uxIndice >= 2 && uxIndice - 2 < n) aj2GradeCartaoDesenhar(uxIndice - 2, aj2GF[uxIndice]);
-  // No pe da coluna mais curta: o que a categoria em foco tem, e as teclas.
+  for (s = 0; s < n; s++) if (s + 2 != uxIndice || !focoIndice || uxTopo >= 0) aj2GradeCartaoDesenhar(s, aj2GF[s + 2]);
+  if (focoIndice && uxTopo < 0 && uxIndice >= 2 && uxIndice - 2 < n) aj2GradeCartaoDesenhar(uxIndice - 2, aj2GF[uxIndice]);
+  // No pe da coluna mais curta: o que o alvo em foco faz, e as teclas.
   { int ult = n - 1, linhas = aj2GradeLinha(ult) + 1;
     GfxRect c = aj2GradeCartao(ult);
-    float topo = c.y + c.h + 34.0f, fim = g.y + g.h - AJ2_G_PAD, ch = aj2GradeCartaoH();
-    if (linhas < 5 && fim - topo > ch * 0.8f) {
+    float topo = c.y + c.h + 34.0f, fim = g.y + g.h - 34.0f, ch = aj2GradeCartaoH();
+    if (linhas < 4 && fim - topo > ch * 0.6f) {
       AjDica d[2] = { { "OK", "Abrir" }, { "Voltar", "Sair dos ajustes" } };
-      if (uxIndice >= 2) {
+      const char *desc = NULL;
+      if (uxTopo == AJ2_T_BUSCA) desc = "Pelo nome ou pelo que quer mudar";
+      else if (uxTopo == AJ2_T_AV) desc = ajudaOpcao(AJ_AVANCADAS);
+      else if (uxTopo == AJ2_T_PERFIL) desc = "Perfil em uso nesta TV e o que vale para cada perfil.";
+      else if (uxTopo == AJ2_T_TOUR) desc = "Funções que pouca gente conhece, com OK para ligar cada uma dali mesmo.";
+      else if (uxTopo == AJ2_T_RESOLVER) desc = "O que fazer quando algo não funciona, com o ajuste que resolve.";
+      else if (uxIndice >= 2) {
         int sec = uxIndice - 2;
-        const char *desc = sec < (int)(sizeof SECAO_AJUDA / sizeof *SECAO_AJUDA) ? SECAO_AJUDA[sec] : TELA[secIni[sec]].sub;
-        ajBloco(TXT_V2_28, desc, c.x + 4.0f, topo, c.w - 8.0f, 37.0f, 0.62f, (int)((fim - 60.0f - topo) / 37.0f));
+        desc = sec < (int)(sizeof SECAO_AJUDA / sizeof *SECAO_AJUDA) ? SECAO_AJUDA[sec] : TELA[secIni[sec]].sub;
       }
+      if (desc) ajBloco(TXT_V3_SUB, desc, c.x, topo, c.w, 39.0f, 0.70f, (int)((fim - 64.0f - topo) / 39.0f));
       // as duas teclas; so o OK quando a coluna nao comporta as duas (alemao a 100%)
-      { int nd = aj2DicasLinha(d, 2, 0, 0, TXT_V2_KBD20, 40, 44, 9, TXT_V2_26, 10, 28, 0, 1) > c.w - 8.0f ? 1 : 2;
-        aj2DicasLinha(d, nd, c.x + 4.0f, fim - 22.0f, TXT_V2_KBD20, 40, 44, 9, TXT_V2_26, 10, 28, 1, 1); }
+      { int nd = aj2DicasLinha(d, 2, 0, 0, TXT_V2_KBD20, 40, 44, 9, TXT_V2_26, 10, 28, 0, 1) > c.w ? 1 : 2;
+        float wd = aj2DicasLinha(d, nd, 0, 0, TXT_V2_KBD20, 40, 44, 9, TXT_V2_26, 10, 28, 0, 1);
+        aj2DicasLinha(d, nd, c.x + c.w - wd, fim - 16.0f, TXT_V2_KBD20, 40, 44, 9, TXT_V2_26, 10, 28, 1, 1); }
     }
   }
   if (!red && a < 0.999f && uxIndice >= 2) gfx_sem_transformar();
@@ -724,7 +804,7 @@ static void aj2DesenharGrade(float a) {
 // A lista nasce da altura do cartao aberto.
 static float aj2GradeOrigemY(int idx) {
   GfxRect c;
-  if (idx < 2) return aj2GradeR().y + AJ2_G_PAD + AJ2_G_TOPO * 0.5f;
+  if (idx < 2) return aj2GradeChipY() + AJ2_G_CHIP * 0.5f;
   c = aj2GradeCartao(idx - 2);
   return c.y + c.h * 0.5f;
 }
@@ -742,7 +822,7 @@ static GfxRect aj2PaginaR(void) {
   return (GfxRect){ x, AJ2_TOPO, NV_VTELA_W - AJ2_MARGEM - x, AJ_CAB_PAGINA - 22.0f };
 }
 static void aj2DesenharPagina(float t) {
-  GfxRect h = aj2PaginaR(), c = uxIndice >= 2 ? aj2GradeCartao(uxIndice - 2) : (GfxRect){ h.x + AJ2_G_PAD + aj2GradeColW() + AJ2_G_VAO, h.y + AJ2_G_PAD, 300, AJ2_G_TOPO };
+  GfxRect h = aj2PaginaR(), c = uxIndice >= 2 ? aj2GradeCartao(uxIndice - 2) : aj2TopoR(AJ2_T_AV);
   float k = aj2Suave(t < 0 ? 0 : t > 1 ? 1 : t), ar, ag, ab, tinta = ajTinta() / 255.0f;
   float conteudo = k * k, grupo = gfx_opacidade_grupo, x, tile = 76.0f, direita;
   GfxRect r;
@@ -760,12 +840,21 @@ static void aj2DesenharPagina(float t) {
   if (uxIndice >= 2) {
     nome = aj2MenuTitulo(uxIndice); ic = aj2MenuIcone(uxIndice); kick = aj2GrupoNome(aj2Grupo(sec));
     aj2MenuValor(sec, vb, sizeof vb);
+    // No cabecalho so o valor principal (mockup: "4K", "Portugues").
+    if (sec == AJS_REPRODUCAO) snprintf(vb, sizeof vb, "%s", i18n(textoValor(AJ_QUALIDADE)));
+    else if (sec == AJS_IDIOMAS) snprintf(vb, sizeof vb, "%s", i18n(textoValor(AJ_IDIOMA)));
     { int i, nOp = 0, nAv = 0;
       for (i = secIni[sec] + 1; i < secFim(sec); i++)
         if (TELA[i].tipo == IT_OPC) { nOp++; if (uxAvancada(TELA[i].op)) nAv++; }
+      // 2.0.3 (mockup v3): "19 opcoes · 11 em Mais opcoes"; com a pilula
+      // Avancadas ligada, "19 opcoes · 11 avancadas" e o valor vira o estado.
       { char tmp[80];
-        snprintf(tmp, sizeof tmp, i18n(nAv == 1 ? "opções · %d avançada" : "opções · %d avançadas"), nAv);
-        snprintf(q, sizeof q, "%d %s", nOp, tmp); } }
+        if (!nAv) tmp[0] = 0;
+        else if (lig(AJ_AVANCADAS)) snprintf(tmp, sizeof tmp, i18n(nAv == 1 ? "opções · %d avançada" : "opções · %d avançadas"), nAv);
+        else snprintf(tmp, sizeof tmp, i18n("opções · %d em Mais opções"), nAv);
+        if (!nAv) snprintf(q, sizeof q, i18n("%d opções"), nOp);
+        else snprintf(q, sizeof q, "%d %s", nOp, tmp); }
+      if (nAv && lig(AJ_AVANCADAS)) snprintf(vb, sizeof vb, "%s", i18n("Avançadas ligadas")); }
   } else {
     nome = aj2ChipRotulo(1); ic = "aj_rotate-ccw-clock"; kick = "Ajustes";
     snprintf(vb, sizeof vb, "%d", uxNDifs); q[0] = 0;

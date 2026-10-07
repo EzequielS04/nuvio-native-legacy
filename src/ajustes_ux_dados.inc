@@ -241,10 +241,27 @@ static const char *uxCaminhoAntigo(int op) {
     case AJ_FONTE_REGEX: case AJ_FONTE_REGEX_PADRAO: case AJ_FONTE_REGEX_MODELO:
     case AJ_FONTE_ORDEM: case AJ_FONTE_ORDEM_USO:
     case AJ_SELOS_CORES: case AJ_SELOS_PACOTE: case AJ_SELOS_PACOTE_ADD: case AJ_SELOS_PACOTE_REM:
-      return "Reprodução";
+      return "Fontes e addons";   // 2.0.2; desde a 2.0.3 a escolha da fonte mora em Reproducao
     case AJ_BUSCA_CINEMETA: return "Busca";
     case AJ_AVANCADAS: return "Aparência";
     case AJ_IDIOMA: return "Idioma";
+    // 2.0.3: Cartazes e arte + Trailers viraram Cartazes e trailers; Desempenho
+    // desta TV virou Esta TV; Conta e perfis virou Conta e servicos.
+    case AJ_HERO_TRAILER: case AJ_FOCO_TRAILER: case AJ_DET_TRAILER_AUTO: case AJ_DET_TRAILER:
+    case AJ_HERO_TRAILER_SOM: case AJ_DET_TRAILER_SOM: case AJ_TRAILER_FONTE: case AJ_HERO_TRAILER_ESPERA:
+    case AJ_TRAILER_QUAL: case AJ_TRAILER_ASPECTO: case AJ_TRAILER_ZOOM_TPK: case AJ_LOGO_TRAILER:
+      return "Trailers";
+    case AJ_EXPANDIR: case AJ_EXPANDIR_ATRASO: case AJ_BORDA_FOCO: case AJ_GRAD_CLASSICO:
+    case AJ_LARGURA_DP: case AJ_RAIO_DP: case AJ_PROF: case AJ_PROF_BORDA: case AJ_PROF_BRILHO:
+    case AJ_PROF_COBERTURA: case AJ_PROF_POSTERS: case AJ_PROF_CW: case AJ_PROF_EPS: case AJ_PROF_ELENCO:
+    case AJ_PROF_TRAILERS: case AJ_HERO_FUNDO: case AJ_HERO_ARTE_DIF: case AJ_POSTER_PROV:
+    case AJ_ADDON_POSTER: case AJ_ADDON_FUNDO: case AJ_ADDON_LOGO: case AJ_COL_ARTE_CONTA:
+    case AJ_POSTER_INST: case AJ_POSTER_TOKEN: case AJ_POSTER_EXTRA: case AJ_POSTER_CHAVE:
+    case AJ_POSTER_MODELO: case AJ_POSTER_TESTAR:
+      return "Cartazes e arte";
+    case AJ_RESOLUCAO: case AJ_QUALIDADE_IMG: case AJ_GPU_EFEITOS: case AJ_NAV_RAPIDA: case AJ_MEDIDOR:
+    case AJ_DIAGNOSTICO: case AJ_VELOCIDADE: case AJ_ESPACO: case AJ_TEX_MB:
+      return "Desempenho desta TV";
     default: return "";
   }
 }

@@ -405,6 +405,21 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { 124, PESO_BOLD   },   // TXT_W20_HERO (mockup 120/800)
   { 24, PESO_BOLD    },   // TXT_W20_24B (24/600)
   { 230, PESO_FINO   },   // TXT_DESC_HORA: numeral do relogio da tela de descanso
+  { 41, PESO_BOLD    },   // TXT_V3_NOME
+  { 33, PESO_REGULAR },   // TXT_V3_VALOR
+  { 29, PESO_BOLD    },   // TXT_V3_CHIP
+  { 29, PESO_REGULAR },   // TXT_V3_CHIP_R
+  { 36, PESO_BOLD    },   // TXT_V3_DESC
+  { 29, PESO_REGULAR },   // TXT_V3_SUB
+  { 32, PESO_MEDIUM  },   // TXT_V3_LN
+  { 32, PESO_BOLD    },   // TXT_V3_LN_B
+  { 32, PESO_BOLD    },   // TXT_V3_GRP
+  { 32, PESO_REGULAR },   // TXT_V3_VAL
+  { 25, PESO_REGULAR },   // TXT_V3_BEN
+  { 26, PESO_BOLD    },   // TXT_V3_PILL
+  { 18, PESO_BOLD    },   // TXT_V3_SELO
+  { 28, PESO_REGULAR },   // TXT_V3_INSP
+  { 28, PESO_BOLD    },   // TXT_V3_INSP_B
 };
 
 // RESERVA PARA O QUE A INTER NAO TEM.

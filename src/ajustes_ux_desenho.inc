@@ -1053,7 +1053,13 @@ static void ajDesenharGrupo(int item, float y, float a) {
   TxtLinha t;
   a *= aj2TextoLista;
   if (a <= 0.004f) return;
-  t = ajTxt(TXT_V2_GRUPO, TELA[item].titulo);
+  { int sec = secDoItem[item];
+    // Depois do MAIS(): "Mais opcoes · Escolha da fonte" (mockup v3, tela 07).
+    if (maisItem[sec] >= 0 && item > maisItem[sec]) {
+      char b[200];
+      snprintf(b, sizeof b, i18n("Mais opções · %s"), i18n(TELA[item].titulo));
+      t = ajTxtC(TXT_V2_GRUPO, b, w - 44.0f);
+    } else t = ajTxt(TXT_V2_GRUPO, TELA[item].titulo); }
   txt_desenhar_alpha(t, x + 22, yc - t.h * 0.5f, a);
   if (TELA[item].sub && TELA[item].sub[0]) {
     TxtLinha c = ajTxtC(TXT_V2_24, TELA[item].sub, w - 44.0f - t.w - 24.0f);

@@ -832,6 +832,14 @@ static void ajcCenaOpcao(int sec, int op) {
       ajcCenaServico(op, "aj_tv-minimal-play"); return;
     default: break;
   }
+  // As opcoes de trailer moram em Cartazes e trailers, mas a cena e a do trailer.
+  if (sec == AJS_CARTAZES) switch (op) {
+    case AJ_HERO_TRAILER: case AJ_FOCO_TRAILER: case AJ_DET_TRAILER_AUTO: case AJ_DET_TRAILER:
+    case AJ_HERO_TRAILER_SOM: case AJ_DET_TRAILER_SOM: case AJ_TRAILER_FONTE: case AJ_HERO_TRAILER_ESPERA:
+    case AJ_TRAILER_QUAL: case AJ_TRAILER_ASPECTO: case AJ_TRAILER_ZOOM_TPK: case AJ_LOGO_TRAILER:
+      sec = AJS_TRAILERS; break;
+    default: break;
+  }
   switch (sec) {
     case AJS_HOME: ajcCenaHome(op); return;
     case AJS_TITULO: ajcCenaTitulo(op); return;

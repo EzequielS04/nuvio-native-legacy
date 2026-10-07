@@ -33,7 +33,7 @@ static void prazoDosAddonsIntegrado(void) {
     if (TELA[i].tipo == IT_ROT) grupo = TELA[i].titulo;
     if (TELA[i].tipo == IT_OPC && TELA[i].op == AJ_FONTE_PRAZO) {
       vezes++;
-      assert(!strcmp(categoria, "Fontes e addons"));
+      assert(!strcmp(categoria, "Reprodução"));   // 2.0.3: a escolha da fonte mora em Reproducao
       assert(!strcmp(grupo, "Escolha da fonte"));
     }
   }
@@ -43,7 +43,7 @@ static void prazoDosAddonsIntegrado(void) {
   n = ajustes_buscar("Espera pelos add-ons", resultados, AJ_N);
   indice = indiceResultado(AJ_FONTE_PRAZO, n);
   assert(indice >= 0 && !resultados[indice].bloqueado);
-  assert(strstr(resultados[indice].caminho, "Fontes e addons"));
+  assert(strstr(resultados[indice].caminho, "Reprodução"));
   assert(!strcmp(resultados[indice].valor, "5 s"));
   vezes = 0;
   for (int i = 0; i < n; i++) if (resultados[i].op == AJ_FONTE_PRAZO) vezes++;
@@ -171,7 +171,7 @@ static void buscaECaminhos(void) {
   n = ajustes_buscar("MEMÓRIA PARA IMAGENS", resultados, AJ_N);
   assert(n > 0 && resultados[0].op == AJ_TEX_MB);
   assert(resultados[0].avancado);
-  assert(strstr(resultados[0].caminho, "Desempenho desta TV"));
+  assert(strstr(resultados[0].caminho, "Esta TV"));
   primeiro = resultados[0];
   n = ajustes_buscar("memo\xCC\x81ria para imagens", resultados, AJ_N);
   assert(n > 0 && !memcmp(&primeiro, &resultados[0], sizeof primeiro));
@@ -220,7 +220,7 @@ static void bloqueadosESegredos(void) {
   n = ajustes_buscar("som do trailer no destaque", resultados, AJ_N);
   i = indiceResultado(AJ_HERO_TRAILER_SOM, n);
   assert(i >= 0 && resultados[i].bloqueado);
-  assert(strstr(resultados[i].caminho, "Trailers"));
+  assert(strstr(resultados[i].caminho, "Cartazes e trailers"));
   n = ajustes_buscar("idioma dos metadados", resultados, AJ_N);
   i = indiceResultado(AJ_TMDB_IDIOMA, n);
   assert(i >= 0 && resultados[i].bloqueado);
@@ -314,11 +314,14 @@ static void cacheSeek(void) {
 static void artePorSubmenu(void) {
   int visto[40] = { 0 }, s, g, i;
   montarTela();
-  assert(nSecoes == AJS_N && nSecoes == 12);
+  assert(nSecoes == AJS_N && nSecoes == 11);
   for (s = 0; s < AJS_N; s++) {
-    int blocos = 0, ultimo = -1;
+    int blocos = 0, ultimo = -1, basicos = 0;
     assert(AJ_ARTE_SEC[s][0] >= 0);
-    for (g = 0; g < AJ_ARTE_BLOCOS; g++) {
+    // 2.0.3: so os blocos basicos (antes do MAIS) tem arte unica; os de
+    // "Mais opcoes" repetem a do bloco basico de mesmo nome.
+    for (i = secIni[s] + 1; i < secFim(s) && TELA[i].tipo != IT_MAIS; i++) if (TELA[i].tipo == IT_ROT) basicos++;
+    for (g = 0; g < AJ_ARTE_BLOCOS && g < (basicos ? basicos : 1); g++) {
       int n = AJ_ARTE_SEC[s][g];
       if (n < 0) continue;
       assert(n < 40 && !visto[n]);
@@ -344,7 +347,7 @@ static void artePorSubmenu(void) {
   { int vistoC[AJC_N] = { 0 }, ultimaC = -1, k2;
     for (k2 = 0; k2 < AJ_N_TELA; k2++) {
       int c;
-      if (TELA[k2].tipo != IT_OPC) continue;
+      if (TELA[k2].tipo != IT_OPC || uxAvancada(TELA[k2].op)) continue;   // "Mais opcoes" repete as cenas do bloco basico
       c = ajCenaSecao(TELA[k2].op);
       if (c < 0 || c == ultimaC) continue;
       assert(c < AJC_N && (!vistoC[c] || TELA[k2].op == AJ_TMDB_IDIOMA));   // um bloco, uma cena: nada repetido em outro lugar
@@ -369,32 +372,32 @@ static const char *secaoDe(int op, const char **grupo) {
   return NULL;
 }
 static void reorganizacao202(void) {
-  static const char *const ORDEM[12] = {
-    "Tela inicial", "Página do título", "Cartazes e arte", "Trailers", "Aparência",
-    "Reprodução", "Fontes e addons", "Idiomas e legendas", "TV ao vivo",
-    "Conta e perfis", "Desempenho desta TV", "Sobre e ajuda" };
+  static const char *const ORDEM[11] = {
+    "Reprodução", "Idiomas e legendas", "Fontes e addons", "TV ao vivo",
+    "Tela inicial", "Aparência", "Página do título", "Cartazes e trailers",
+    "Conta e serviços", "Esta TV", "Sobre e ajuda" };
   static const struct { int op; const char *sec; } COMUNS[] = {
     { AJ_HOME_LAYOUT, "Tela inicial" }, { AJ_FIL_ORDEM, "Tela inicial" },
-    { AJ_HERO_TRAILER, "Trailers" }, { AJ_TEMA, "Aparência" }, { AJ_TAMANHO_UI, "Aparência" },
+    { AJ_HERO_TRAILER, "Cartazes e trailers" }, { AJ_TEMA, "Aparência" }, { AJ_TAMANHO_UI, "Aparência" },
     { AJ_QUALIDADE, "Reprodução" }, { AJ_DV, "Reprodução" }, { AJ_PAUSA_OVERLAY, "Reprodução" },
-    { AJ_ADDONS, "Fontes e addons" }, { AJ_FONTE_MANUAL, "Fontes e addons" }, { AJ_FONTE_AUTO, "Fontes e addons" },
+    { AJ_ADDONS, "Fontes e addons" }, { AJ_FONTE_MANUAL, "Reprodução" }, { AJ_FONTE_PRIORIDADE, "Reprodução" },
     { AJ_IDIOMA, "Idiomas e legendas" }, { AJ_AUD_LINGUA, "Idiomas e legendas" }, { AJ_LEG_LINGUA, "Idiomas e legendas" },
-    { AJ_TRAKT, "Conta e perfis" }, { AJ_PERFIL_ATIVO, "Conta e perfis" }, { AJ_SYNC, "Conta e perfis" },
+    { AJ_TRAKT, "Conta e serviços" }, { AJ_PERFIL_ATIVO, "Conta e serviços" }, { AJ_SYNC, "Conta e serviços" },
     { AJ_ATUALIZAR, "Sobre e ajuda" },
   };
   static const struct { int op; const char *sec, *grp; } MUDARAM[] = {
     { AJ_PLUGINS, "Fontes e addons", "Addons" }, { AJ_ADDONS_PRINCIPAL, "Fontes e addons", "Addons" },
-    { AJ_BUSCA_CINEMETA, "Fontes e addons", "Addons" }, { AJ_TAM_MAX, "Fontes e addons", "Escolha da fonte" },
-    { AJ_DEBRID_RD, "Fontes e addons", "Debrid" }, { AJ_P2P_LIGADO, "Fontes e addons", "P2P" },
+    { AJ_BUSCA_CINEMETA, "Fontes e addons", "Addons" }, { AJ_TAM_MAX, "Reprodução", "Escolha da fonte" },
+    { AJ_DEBRID_RD, "Fontes e addons", "Debrid" }, { AJ_P2P_LIGADO, "Reprodução", "P2P" },
     { AJ_JF_LIGADO, "Fontes e addons", "Servidores pessoais" },
-    { AJ_MDB_CHAVE, "Página do título", "Notas" }, { AJ_FANART_CHAVE, "Cartazes e arte", "De onde vem a arte" },
+    { AJ_MDB_CHAVE, "Página do título", "Notas" }, { AJ_FANART_CHAVE, "Cartazes e trailers", "De onde vem a arte" },
     { AJ_LEG_LINGUA2, "Idiomas e legendas", "Segunda legenda" },
   };
   int i, s = 0, n, idiomaAntes = valor[AJ_IDIOMA];
   const char *g;
   montarTela();
   for (i = 0; i < AJ_N_TELA; i++) if (TELA[i].tipo == IT_SEC) assert(!strcmp(TELA[i].titulo, ORDEM[s++]));
-  assert(s == 12);
+  assert(s == 11);
   for (i = 0; i < (int)(sizeof COMUNS / sizeof *COMUNS); i++) {
     const char *sec = secaoDe(COMUNS[i].op, NULL);
     assert(sec && !strcmp(sec, COMUNS[i].sec));
@@ -412,8 +415,12 @@ static void reorganizacao202(void) {
   assert(indiceResultado(AJ_DEBRID_RD, n) >= 0 && indiceResultado(AJ_MDB_CHAVE, n) >= 0);
   n = ajustes_buscar("addons", resultados, AJ_N);
   assert(indiceResultado(AJ_ADDONS, n) >= 0);
-  i = indiceResultado(AJ_FONTE_MANUAL, ajustes_buscar("reprodução", resultados, AJ_N));
-  assert(i >= 0 && strstr(resultados[i].caminho, "Fontes e addons"));
+  // 2.0.3: a escolha da fonte voltou para Reproducao; acha pelo lugar da 2.0.2.
+  i = indiceResultado(AJ_FONTE_MANUAL, ajustes_buscar("fontes e addons", resultados, AJ_N));
+  assert(i >= 0 && strstr(resultados[i].caminho, "Reprodução"));
+  assert(indiceResultado(AJ_HERO_TRAILER, ajustes_buscar("cartazes e arte trailer", resultados, AJ_N)) < 0 ||
+         indiceResultado(AJ_TRAILER_QUAL, ajustes_buscar("trailers qualidade", resultados, AJ_N)) >= 0);
+  assert(indiceResultado(AJ_RESOLUCAO, ajustes_buscar("desempenho desta tv", resultados, AJ_N)) >= 0);
   n = ajustes_buscar("idioma", resultados, AJ_N);
   assert(n > 0 && resultados[0].op == AJ_IDIOMA);
   assert(!strcmp(rotuloOpcao(AJ_IDIOMA), "Idioma do app"));
@@ -453,7 +460,7 @@ static void autoplay202(const char *dir) {
     for (k = 0; k < AJ_N_TELA; k++) {
       if (TELA[k].tipo == IT_SEC) cat = TELA[k].titulo;
       if (TELA[k].tipo == IT_ROT) grp = TELA[k].titulo;
-      if (TELA[k].tipo == IT_OPC && TELA[k].op == u) { vz++; assert(!strcmp(cat, "Fontes e addons") && !strcmp(grp, "Escolha da fonte")); }
+      if (TELA[k].tipo == IT_OPC && TELA[k].op == u) { vz++; assert(!strcmp(cat, "Reprodução") && !strcmp(grp, "Escolha da fonte")); }
     }
     assert(vz == 1 && familiaPreviaOpcao(u) == AJPV_REPRO && ajudaOpcao(u)[0]);
   }

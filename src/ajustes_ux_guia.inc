@@ -154,6 +154,7 @@ static void guiaAbrir(int daNov) {
 }
 static void guiaFechar(void) {
   guiaAberto = 0;
+  guiaDoIndice = 0;
   guiaExemplo = 0;
   gfx_mini_liberar(&guiaMiniVis);
   gfx_mini_liberar(&guiaMiniEx);
@@ -161,10 +162,21 @@ static void guiaFechar(void) {
 // Sai pelo Voltar: para o cartao, se veio dele; senao, a linha do guia em
 // Sobre e ajuda.
 static void guiaSair(void) {
-  int nov = gv.daNov;
+  int nov = gv.daNov, doIndice = guiaDoIndice;
   guiaFechar();
   if (nov) pediuNovidades = 1;
+  else if (doIndice) focoIndice = 1;   // volta ao cartao da grade (uxTopo ficou nele)
   else focarOpcao(AJ_GUIA);
+}
+// "Resolver um problema" (grade, 2.0.3): o guia ja no capitulo cujo icone e
+// este, com a primeira entrada em foco.
+static void guiaIrCapitulo(const char *icone) {
+  int c;
+  for (c = 0; c < GUIA_NCAPS; c++)
+    if (!strcmp(GUIA_CAPS[c].icone, icone)) {
+      gv.idx = GI_CAP0 + c; gv.col = GC_LISTA; gv.ent = guiaPrimeira(gv.idx);
+      return;
+    }
 }
 
 // --- GEOMETRIA --------------------------------------------------------------------

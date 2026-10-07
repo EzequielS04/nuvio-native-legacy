@@ -1556,7 +1556,9 @@ typedef char conferi_uma_chave_por_opcao[
 //   OPC  uma opcao do enum.
 // Toda opcao do enum aparece aqui UMA vez: conferirTela() grita no log no
 // arranque e tests/ajustes_secoes.sh falha na suite.
-typedef enum { IT_SEC, IT_GRP, IT_ROT, IT_OPC } ItemTipo;
+// IT_MAIS (2.0.3): a linha "Mais opcoes · N" no fim da categoria. Tudo o que
+// vem depois dela, na mesma categoria, e avancado (uxAvancada).
+typedef enum { IT_SEC, IT_GRP, IT_ROT, IT_OPC, IT_MAIS } ItemTipo;
 typedef struct {
   ItemTipo    tipo;
   int         op;               // IT_OPC
@@ -1569,6 +1571,7 @@ typedef struct {
 // Rotulo com a nota a direita no lugar da contagem ("para quem faz o app").
 #define ROTS(t, s)    { IT_ROT, -1, t, s, NULL }
 #define OPC(o)        { IT_OPC, o, NULL, NULL, NULL }
+#define MAIS()        { IT_MAIS, -1, "Mais opções", NULL, "aj_sliders-horizontal" }
 
 #include "ajustes_ux_tela.inc"
 
@@ -1585,17 +1588,25 @@ static int telaMontada;
 // para resolver. Dura a sessao do app, para voltar a uma categoria e achar o
 // bloco onde estava.
 static int grupoAberto[AJ_MAX_SECOES];
+// "Mais opcoes" aberto em cada categoria (OK na linha IT_MAIS, ou um atalho que
+// leva a uma avancada). Dura a sessao; nao vai para o disco.
+static int maisAberto[AJ_MAX_SECOES];
+static int maisItem[AJ_MAX_SECOES];   // indice em TELA do IT_MAIS da categoria (-1 = nao tem)
 
 static void montarTela(void) {
-  int i, s = -1, g = -1;
+  int i, s = -1, g = -1, depois = 0;
   if (telaMontada) return;
+  memset(uxAvancadaTab, 0, sizeof uxAvancadaTab);
+  for (i = 0; i < AJ_MAX_SECOES; i++) maisItem[i] = -1;
   for (i = 0; i < AJ_N_TELA; i++) {
     const Item *it = &TELA[i];
     if (it->tipo == IT_SEC) {
       if (s + 1 < AJ_MAX_SECOES) secIni[++s] = i;
-      g = -1;
+      g = -1; depois = 0;
     } else if (it->tipo == IT_GRP) g = i;
     else if (it->tipo == IT_ROT) g = -1;   // rotulo fecha o grupo anterior
+    else if (it->tipo == IT_MAIS) { depois = 1; if (s >= 0) maisItem[s] = i; }
+    else if (it->tipo == IT_OPC && depois && it->op >= 0 && it->op < AJ_N) uxAvancadaTab[it->op] = 1;
     secDoItem[i] = s < 0 ? 0 : s;
     grupoDoItem[i] = it->tipo == IT_OPC ? g : -1;
   }
@@ -1739,7 +1750,11 @@ static int sair = 0;
 
 // Rascunho e navegação separados dos valores persistentes.
 static int uxIndice = 2;
-static int uxChipAv;   // foco no chip "Avancadas" do alto do indice (liga/desliga global)
+static int uxChipAv;   // (menu antigo) foco no chip "Avancadas"; a grade da 2.0.3 usa uxTopo
+// 2.0.3: o alvo em foco no ALTO da grade (AJ2_T_*: Buscar, Avancadas, Perfil,
+// O que o Nuvio faz?, Resolver um problema), -1 = uma categoria (uxIndice).
+static int uxTopo = -1;
+static int guiaDoIndice;   // o guia foi aberto por um cartao da grade: Voltar volta para ele
 // A fileira de cada pilula do alto (0 Buscar, 1 Diferentes, 2 Avancadas): quem
 // mede e o desenho (aj2ChipsMedir, pelo texto traduzido); a navegacao so le.
 static int uxChipLinha[3];
@@ -4143,6 +4158,10 @@ static void focarOpcao(int op);
 // trailer" 86, P2P no .wgt 6), escondendo o aviso que importa.
 static int foraDestaPlataforma(int op) {
   if (op == AJ_RELOGIO_POS) return 1;   // saiu da tela em 7d69643a: a ilha e sempre no canto direito
+  // 2.0.3: o Descobrir do web nao existe na TV; "Avancadas" e a pilula do alto
+  // do indice; os oito AJ_MDB_* seguem as "Notas no titulo" (notaLigarPar).
+  if (op == AJ_DESCOBRIR || op == AJ_AVANCADAS) return 1;
+  if (op >= AJ_MDB_TRAKT && op <= AJ_MDB_MAL) return 1;
 #ifndef NV_TPK
   if (op == AJ_TRAILER_ZOOM_TPK) return 1;
 #endif
@@ -4239,6 +4258,7 @@ int ajustes_iniciar(void) {
   if (secAtual < 0 || secAtual >= nSecoes) secAtual = 0;
   focoIndice = 1; uxChipAv = 0;
   focarSecao(secAtual);
+  uxTopo = -1;
   // "Experimentar a cor viva" (cartao de novidades): abre em Aparencia com o
   // foco JA na linha da cor, e nao no indice — quem apertou o botao quer
   // trocar a cor, nao achar onde ela mora.
@@ -4743,7 +4763,9 @@ static int inativa(int op) {
     case AJ_TMDB_REDES: case AJ_TMDB_EPS: case AJ_TMDB_TRAILERS:
     case AJ_TMDB_MAIS: case AJ_TMDB_COL: case AJ_TMDB_CW:
       return !ajustes_tmdb_ligado();
-    case AJ_MDB_CHAVE:
+    // A chave e so leitura (vem da conta): nunca apagada; o MDBList desligado
+    // esta em Mais opcoes e as notas o religam (notaLigarPar).
+    case AJ_MDB_CHAVE: return 0;
     case AJ_MDB_TRAKT: case AJ_MDB_IMDB: case AJ_MDB_TMDB:
     case AJ_MDB_LETTER: case AJ_MDB_TOMATES: case AJ_MDB_AUDIENCIA:
     case AJ_MDB_META: case AJ_MDB_MAL:
@@ -4754,7 +4776,7 @@ static int inativa(int op) {
     case AJ_NT_TOMATES: case AJ_NT_AUDIENCIA: case AJ_NT_META:
     case AJ_NT_METAUSER: case AJ_NT_TMDB: case AJ_NT_LETTER: case AJ_NT_MAL:
     case AJ_NT_EBERT: case AJ_NT_SCORE:
-      return !ajustes_mdblist_ligado() || !extras_mdblist_tem_chave();
+      return !extras_mdblist_tem_chave();
     // Cada campo so vale para o provedor dele; o teste, para qualquer um ligado.
     case AJ_POSTER_INST: case AJ_POSTER_TOKEN: case AJ_POSTER_EXTRA:
       return valor[AJ_POSTER_PROV] != PP_SPATIAL;
@@ -4776,6 +4798,29 @@ static int soLeitura(int op) { return OPCOES[op].tipo == OP_LEITURA; }
 static int mutavel(int op)   { return OPCOES[op].tipo != OP_LEITURA &&
                                       OPCOES[op].tipo != OP_ACAO && !inativa(op); }
 
+// "MAIS OPCOES" DA CATEGORIA (2.0.3): quantas avancadas ela tem neste build e,
+// se `resumo`, os primeiros rotulos ("DTS, Dolby Vision em MKV, ..."), ja
+// traduzidos, para a linha fechada dizer o que ha dentro.
+static int maisContar(int sec, char *resumo, size_t n) {
+  int i, k = 0;
+  size_t u = 0;
+  if (resumo && n) resumo[0] = 0;
+  if (sec < 0 || sec >= nSecoes || maisItem[sec] < 0) return 0;
+  for (i = maisItem[sec] + 1; i < secFim(sec); i++) {
+    int op = TELA[i].op;
+    if (TELA[i].tipo != IT_OPC) continue;
+    if ((op == AJ_PERFIL_PESQ || op == AJ_PERFIL_EDITAR) && !recomenda_ativo()) continue;
+    if (op == AJ_ICONE_APP && !apoiador_ativo()) continue;
+    if (resumo && u + 4 < n && k < 6) {
+      const char *r = i18n(rotuloOpcao(op));
+      u += (size_t)snprintf(resumo + u, n - u, "%s%s", k ? ", " : "", r);
+      if (u >= n) u = n - 1;
+    }
+    k++;
+  }
+  return k;
+}
+
 // --- NAVEGACAO SOBRE TELA[] ---------------------------------------------------
 // Item desenhado agora? Opcao de grupo fechado nao e — nem desenhada, nem
 // alcancada pelo cima/baixo.
@@ -4792,19 +4837,21 @@ static int visivel(int i) {
   if (TELA[i].tipo == IT_OPC) {
     int op = TELA[i].op;
     if ((op == AJ_PERFIL_PESQ || op == AJ_PERFIL_EDITAR) && !recomenda_ativo()) return 0;
-    if (uxAvancada(op) && !lig(AJ_AVANCADAS)) return 0;
+    if (uxAvancada(op) && !lig(AJ_AVANCADAS) && !maisAberto[secDoItem[i]]) return 0;
   }
+  // A linha "Mais opcoes" some com a pilula Avancadas ligada (ja esta tudo a vista).
+  if (TELA[i].tipo == IT_MAIS) return !lig(AJ_AVANCADAS) && maisContar(secDoItem[i], NULL, 0) > 0;
   return 1;
 }
 static int focavel(int i) {
-  return (TELA[i].tipo == IT_GRP || TELA[i].tipo == IT_OPC) && visivel(i);
+  return (TELA[i].tipo == IT_GRP || TELA[i].tipo == IT_OPC || TELA[i].tipo == IT_MAIS) && visivel(i);
 }
 static void focar(int i) {
   if (i < 0 || i >= AJ_N_TELA) return;
   focoItem = i;
   focoOp = TELA[i].tipo == IT_OPC ? TELA[i].op : -1;
   secAtual = secDoItem[i];
-  uxIndice = secAtual + 2; uxChipAv = 0;
+  uxIndice = secAtual + 2; uxChipAv = 0; uxTopo = -1;
   uxUltimoItem[secAtual] = i;
   emEdicao = 0;
   sairArmado = 0;
@@ -4831,9 +4878,9 @@ static void focarOpcao(int op) {
   int i;
   for (i = 0; i < AJ_N_TELA; i++) {
     if (TELA[i].tipo != IT_OPC || TELA[i].op != op) continue;
-    // Busca/atalho para uma avancada: liga o interruptor global (so na memoria;
-    // grava junto com o proximo ajuste salvo) em vez de esconder o destino.
-    if (uxAvancada(op) && !lig(AJ_AVANCADAS)) valor[AJ_AVANCADAS] = 0;
+    // Busca/atalho para uma avancada: abre o "Mais opcoes" da categoria dela
+    // (so nesta sessao) em vez de esconder o destino.
+    if (uxAvancada(op) && !lig(AJ_AVANCADAS)) maisAberto[secDoItem[i]] = 1;
     focar(i);
     focoIndice = 0;
     return;
@@ -5311,7 +5358,7 @@ static float yDoItem(int item) {
   for (i = secIni[s]; i < item && i < secFim(s); i++) y += alturaItem(i);
   return y;
 }
-static float alturaFoco(int i) { return TELA[i].tipo == IT_GRP ? AJ_GRUPO_H : ajLinhaH(i); }
+static float alturaFoco(int i) { return TELA[i].tipo == IT_GRP ? AJ_GRUPO_H : TELA[i].tipo == IT_MAIS ? alturaItem(i) : ajLinhaH(i); }
 
 // Tecla dentro da folha de fileiras.
 //
@@ -6010,6 +6057,27 @@ static const char *FR_ALFA_REGEX =
 // de efeitos colaterais para manter iguais.
 // Uma escolha final: persiste uma vez antes dos efeitos externos. Navegar no
 // seletor nunca passa por aqui, inclusive para idiomas e limite de fileiras.
+// NOTAS NO TITULO (decisao do dono, 07/10): os oito "qual nota o MDBList baixa"
+// (AJ_MDB_*) sairam da tela. Ligar uma nota liga o par dela na conta e, se a
+// nota vem do MDBList, o MDBList tambem — senao a linha ligada nao mostraria
+// nada. Desligar nao mexe no par (outro aparelho pode usar).
+static void notaLigarPar(int op) {
+  int par = -1, mdb = 1;
+  switch (op) {
+    case AJ_NT_IMDB: par = AJ_MDB_IMDB; mdb = 0; break;
+    case AJ_NT_TRAKT: par = AJ_MDB_TRAKT; mdb = 0; break;
+    case AJ_NT_TMDB: par = AJ_MDB_TMDB; break;
+    case AJ_NT_TOMATES: par = AJ_MDB_TOMATES; break;
+    case AJ_NT_AUDIENCIA: par = AJ_MDB_AUDIENCIA; break;
+    case AJ_NT_META: case AJ_NT_METAUSER: par = AJ_MDB_META; break;
+    case AJ_NT_LETTER: par = AJ_MDB_LETTER; break;
+    case AJ_NT_MAL: par = AJ_MDB_MAL; break;
+    case AJ_NT_EBERT: case AJ_NT_SCORE: break;
+    default: return;
+  }
+  if (par >= 0) valor[par] = 0;      // 0 = Ligado
+  if (mdb) valor[AJ_MDB_LIGADO] = 0;
+}
 static int definirValorDireto(int op, int novo) {
   int antes;
   if (op < 0 || op >= AJ_N ||
@@ -6022,6 +6090,7 @@ static int definirValorDireto(int op, int novo) {
   antes = valor[op];
   if (novo == antes) return 1;
   valor[op] = novo;
+  if (novo == 0) notaLigarPar(op);
   if (!gravar()) { valor[op] = antes; return 0; }
   if (op == AJ_FIL_LIMITE) {
     fil_ajustar_limite(novo);
@@ -6137,7 +6206,13 @@ static void eventoTela(const SDL_Event *e) {
   if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
     // OK NUM GRUPO abre ou fecha (sanfona: abrir um fecha o outro). O foco
     // fica no cabecalho; baixo entra nas opcoes.
-    if (focoOp < 0) { if (TELA[focoItem].tipo == IT_GRP) abrirGrupo(focoItem); return; }
+    if (focoOp < 0) {
+      if (TELA[focoItem].tipo == IT_GRP) abrirGrupo(focoItem);
+      // "Mais opcoes": abre (ou fecha) no lugar; o foco fica na linha e o
+      // Baixo entra nas avancadas.
+      if (TELA[focoItem].tipo == IT_MAIS) maisAberto[secAtual] = !maisAberto[secAtual];
+      return;
+    }
     if (OPCOES[focoOp].tipo != OP_ACAO) { uxAbrirEditor(focoOp); return; }
     // O contexto da modal de digitacao, se esta acao abrir uma: "Secao · Bloco".
     { char kc[200]; const char *b = uxBloco(focoOp);
@@ -6397,6 +6472,12 @@ void ajustes_atualizar(float dt, Uint32 agora) {
   // UM GRUPO ABERTO QUER SER VISTO INTEIRO, ou quanto couber: com o foco no
   // cabecalho, a rolagem estica a base ate a ultima opcao dele. Sem isto o OK
   // abria o grupo abaixo da borda e parecia nao ter feito nada.
+  // "Mais opcoes" aberto: o mesmo, ate o fim da categoria (o que coube).
+  if (TELA[focoItem].tipo == IT_MAIS && maisAberto[secAtual]) {
+    float fim = yDoItem(secFim(secAtual) - 1) + alturaItem(secFim(secAtual) - 1);
+    if (fim - topo > AJ_BASE - AJ_TOPO) fim = topo + (AJ_BASE - AJ_TOPO);
+    if (fim > base) base = fim;
+  }
   if (TELA[focoItem].tipo == IT_GRP && grupoAberto[secAtual] == focoItem) {
     int i = focoItem + 1;
     while (i < secFim(secAtual) && grupoDoItem[i] == focoItem) i++;
@@ -7166,6 +7247,7 @@ int ajustes_teste_quadro(const char *id) {
   // NUVIO_SHOT_AVANCADAS=1: opcoes avancadas a mostra (a pilula ligada no indice).
   if (getenv("NUVIO_SHOT_AVANCADAS")) valor[AJ_AVANCADAS] = 0;
   uxCancelar(); uxAviso[0] = 0; uxRetornarOp = -1;
+  memset(maisAberto, 0, sizeof maisAberto);
   scrollY = velY = 0; paginaA = 1;
   filAberta = 0; riscoFolha = 0;
   focarSecao(0); focoIndice = 1;
@@ -7187,6 +7269,16 @@ int ajustes_teste_quadro(const char *id) {
       if (sN >= nSecoes) return 0;
       focar(primeiroDaSecao(sN)); focoIndice = 0;
     }
+    // 2.0.3: "v2-mais-N" = a linha "Mais opcoes" da categoria N em foco;
+    // "v2-mais-aberto-N" = a mesma, aberta (as avancadas logo abaixo).
+    else if (!strncmp(id, "v2-mais-", 8)) {
+      int ab = !strncmp(id + 8, "aberto-", 7), sN = atoi(id + 8 + (ab ? 7 : 0));
+      if (sN < 0 || sN >= nSecoes || maisItem[sN] < 0) return 0;
+      maisAberto[sN] = ab;
+      focar(maisItem[sN]); focoIndice = 0;
+    }
+    // "v2-topo-T" = o alvo T do alto da grade (0 Buscar ... 4 Resolver).
+    else if (!strncmp(id, "v2-topo-", 8)) { focarSecao(0); focoIndice = 1; uxTopo = atoi(id + 8); }
     else if (!strcmp(id, "v2-menu-passando")) { ajArteFundoN = 13; focarSecao(1); uxIndice = 3; focoIndice = 1; }
     else if (!strcmp(id, "v2-aberto") || !strcmp(id, "v2-130")) focarOpcao(AJ_HOME_LAYOUT);
     else if (!strcmp(id, "v2-transicao")) {
