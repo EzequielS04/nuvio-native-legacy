@@ -26,6 +26,7 @@
 #include "sessao.h"
 #include "perfis.h"
 #include "fontevolta.h"
+#include "fonteantecipa.h"
 #include "addonstats.h"
 #include "inicio.h"
 #include "perfilsel.h"
@@ -300,6 +301,12 @@ static int    voltaAtiva;
 static Uint32 voltaDesde;
 static Uint32 fonteVODDesde;
 static Uint32 fonteManualDesde;   // OK na folha de Fontes: prazo ate o primeiro quadro
+// TOCAR ENQUANTO CONFERE (fonteantecipa.h): a candidata que o player abriu antes
+// do veredito da conferencia (-1 = nenhuma) e o que valia antes de abrir, para
+// desfazer sem perder a conta das tentativas.
+static int    antAberta = -1;
+static int    antPreAuto, antPreTent;
+static Uint32 antPreDesde;
 static void limparFonteVOD(void);
 #define CANAL_FONTE_PRAZO_MS 25000
 // PRAZO CURTO para fonte que JA PROVOU estar ruim. A conferencia de playlist
@@ -431,6 +438,7 @@ static void limparFontePendente(void) {
   fontePendenteId[0] = 0;
 }
 static void limparFonteVOD(void) {
+  antAberta = -1;
   fonteVODAutomatica = 0;
   voltaAtiva = 0;
   fonteVODTentativas = 0;
@@ -465,6 +473,8 @@ static int iniciarFonteJob(int tipo, unsigned geracao, const char *id, int renov
   return 0;
 }
 static int pedirFonteJob(int tipo, unsigned geracao, const char *id, int renovando) {
+  // Toda escolha de VOD abre uma rodada nova da fonte aberta antes do veredito.
+  if (tipo == FJOB_ADDON) fa_nova_rodada();
   int r = iniciarFonteJob(tipo, geracao, id, renovando);
   if (r == 1) {
     fontePendenteTipo = tipo;
@@ -1425,6 +1435,61 @@ static void processarTorrentJob(void) {
 // alguns links respondem HTTP 200 e o uMS fica em load sem erro. Se o
 // automatico caiu nesse caso, tira a candidata da fila e verifica a proxima;
 // escolha manual fica intacta.
+// TOCAR ENQUANTO CONFERE. O fio que confere publica a primeira candidata da
+// fila (streams.c); aqui ela entra no player na hora, SEM esperar o veredito.
+// Mesmo estado de uma fonte automatica aberta (fonteVODAutomatica, a contagem
+// de tentativas e o relogio dos 15 s sem sinal), so que aguardandoFonte fica em
+// 2 ate o veredito: e ele que impede o resto do app de trocar a fonte por baixo.
+static void abrirAntecipada(int i) {
+  const Stream *s = stream_item(i);
+  if (!s || !s->url[0]) return;
+  antPreAuto = fonteVODAutomatica; antPreTent = fonteVODTentativas; antPreDesde = fonteVODDesde;
+  antAberta = i;
+  printf("[fonte] tocando enquanto confere: \"%s\" (%d)\n", s->rotulo, i);
+  fflush(stdout);
+  marco("fonte: tocando enquanto confere");
+  stream_definir_atual(i);
+  video_definir_dv(s->dolbyVision);
+  video_definir_cabecalhos(s->cabecalhos);
+  video_definir_mp4(s->mp4 || strstr(s->url, ".mp4") != NULL);
+  player_definir_fonte(s->url);
+  fonteVODAutomatica = 1;
+  fonteVODTentativas++;
+  fonteVODDesde = SDL_GetTicks();
+  player_definir_tentativa(fonteVODTentativas, VOD_FONTE_MAX_TENTATIVAS);
+}
+// A candidata aberta nao serve (veredito, erro do player ou outra escolhida):
+// o player volta a "abrindo fonte" e a conta volta ao que era. A fila segue.
+static void desfazerAntecipada(const char *porque) {
+  if (antAberta < 0) return;
+  printf("[fonte] aberta antes do veredito e descartada: %s (%d)\n", porque, antAberta);
+  fflush(stdout);
+  antAberta = -1;
+  if (player_aberto()) player_voltar_a_esperar();
+  fonteVODAutomatica = antPreAuto; fonteVODTentativas = antPreTent; fonteVODDesde = antPreDesde;
+  player_definir_tentativa(antPreTent, antPreTent ? VOD_FONTE_MAX_TENTATIVAS : 0);
+}
+static void vigiarAntecipada(void) {
+  int est = FA_NADA, i;
+  if (aguardandoFonte != 2 || fonteEscolhida != -2 || player_id_canal()[0] ||
+      !player_aberto() || player_quer_sair()) {
+    if (antAberta >= 0 && aguardandoFonte != 2) antAberta = -1;
+    return;
+  }
+  i = stream_antecipada(&est);
+  switch (fa_acao(antAberta, i, est, video_falhou() || player_fonte_falhou())) {
+    case FA_ACAO_ABRIR: abrirAntecipada(i); break;
+    case FA_ACAO_DESFAZER_VEREDITO: desfazerAntecipada("a conferencia reprovou"); break;
+    case FA_ACAO_DESFAZER_PLAYER:
+      printf("[fonte] erro do player antes do veredito: %s\n", video_erro_texto());
+      fa_player_falhou(antAberta);
+      stream_automatico_excluir(antAberta);
+      stream_automatico_excluir_irmas(antAberta);
+      desfazerAntecipada("o player errou primeiro");
+      break;
+    default: break;
+  }
+}
 // Pede a verificacao da proxima candidata automatica, com a sessao do player
 // aberta. 0 quando nem deu para pedir (ja mostrou o erro).
 static int pedirProximaFonteVOD(void) {
@@ -1529,7 +1594,10 @@ static void atualizarMotivoInicio(void) {
   }
   memset(&sn, 0, sizeof sn);
   memset(&ai, 0, sizeof ai);
-  sn.fase = aguardandoFonte == 1 ? INI_FASE_BUSCA : aguardandoFonte == 2 ? INI_FASE_VERIFICA : INI_FASE_ABRE;
+  // Com a candidata ja aberta antes do veredito (antAberta) a espera e de ABRIR:
+  // a conferencia corre por tras e nao e o que a pessoa esta esperando.
+  sn.fase = aguardandoFonte == 1 ? INI_FASE_BUSCA
+          : aguardandoFonte == 2 && antAberta < 0 ? INI_FASE_VERIFICA : INI_FASE_ABRE;
   sn.desdeMs = sn.fase == INI_FASE_ABRE && fonteVODDesde ? SDL_GetTicks() - fonteVODDesde
                                                           : player_aberto_ha_ms();
   sn.tentativa = fonteVODAutomatica ? fonteVODTentativas : 1;
@@ -3638,8 +3706,13 @@ void app_atualizar(float dt, Uint32 agora) {
       }
     }
   }
+  vigiarAntecipada();
   if (aguardandoFonte == 2 && fonteEscolhida != -2) {
     const Stream *s = fonteEscolhida >= 0 ? stream_item(fonteEscolhida) : NULL;
+    // O player ja esta tocando a escolhida (aberta antes do veredito)?
+    int jaTocando = fa_ja_tocando(antAberta, fonteEscolhida) && s != NULL;
+    if (antAberta >= 0 && !jaTocando) desfazerAntecipada("outra fonte foi a escolhida");
+    antAberta = -1;
     aguardandoFonte = 0;
     printf("automatico (verificado): %s\n", s ? s->rotulo : "(nenhuma fonte serve)");
     // A afirmacao de HDR/DV vai ANTES do tocar: e ela que o bind do ACB
@@ -3679,6 +3752,10 @@ void app_atualizar(float dt, Uint32 agora) {
         if (player_id_canal()[0]) {
           static char viaProxy[4200];
           player_definir_fonte(urlCanal(s, viaProxy, sizeof viaProxy));
+        } else if (jaTocando) {
+          printf("[fonte] conferencia confirmou a fonte que ja tocava (%u ms)\n",
+                 (unsigned)(SDL_GetTicks() - fonteVODDesde));
+          fflush(stdout);
         } else player_definir_fonte(s->url);
         // Tocou por outra fonte, mas um servico de debrid ficou de fora por
         // conta sem plano: diz uma vez por sessao, sem bloquear nada.
@@ -3686,10 +3763,14 @@ void app_atualizar(float dt, Uint32 agora) {
           if (novo) player_toast_ex(i18n(debrid_sem_plano_frase(novo)), 7000, "aj_triangle-alert", 1); }
         if (!player_id_canal()[0]) {
           fonteVODAutomatica = 1;
-          fonteVODTentativas++;
-          fonteVODDesde = SDL_GetTicks();
-          // "Fonte 2 de 3" na ilha do player: a troca deixa de ser muda.
-          player_definir_tentativa(fonteVODTentativas, VOD_FONTE_MAX_TENTATIVAS);
+          // Aberta antes do veredito: a contagem e o relogio dos 15 s sem sinal
+          // ja correm desde a abertura (abrirAntecipada), e nao recomecam.
+          if (!jaTocando) {
+            fonteVODTentativas++;
+            fonteVODDesde = SDL_GetTicks();
+            // "Fonte 2 de 3" na ilha do player: a troca deixa de ser muda.
+            player_definir_tentativa(fonteVODTentativas, VOD_FONTE_MAX_TENTATIVAS);
+          }
         }
         // Armado so em sessao de canal: o indice passa a responder ao
         // watchdog de fonte morta ate a lista acabar ou o canal trocar.

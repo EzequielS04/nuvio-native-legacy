@@ -582,6 +582,15 @@ int main(void) {
     fonteregra_ordem_definir(NULL, 0);
     valor[AJ_FONTE_ORDEM_USO] = antes; }
   assert(indiceResultado(AJ_FONTE_ORDEM, ajustes_buscar("ordem add-ons", resultados, AJ_N)) >= 0);
+  // 2.0.2: start-up speed of a stream, under Escolha da fonte. Local, after the add-on order
+  // options, once on screen, findable.
+  // Play while checking the first source: default ON.
+  assert(AJ_FONTE_TOCAR_CONFERINDO == AJ_FONTE_ESCOPO + 18 && AJ_FONTE_TOCAR_CONFERINDO == AJ_FONTE_ORDEM_USO + 1);
+  assert(!strcmp(CHAVE[AJ_FONTE_TOCAR_CONFERINDO], "fonteTocarConferindoLocal") && OPCOES[AJ_FONTE_TOCAR_CONFERINDO].n == 2);
+  assert(valorPadrao[AJ_FONTE_TOCAR_CONFERINDO] == 0 && ajustes_fonte_tocar_conferindo());
+  assert(somenteDesteAparelho(AJ_FONTE_TOCAR_CONFERINDO) && !dePerfil(AJ_FONTE_TOCAR_CONFERINDO));
+  { int vz = 0, k; for (k = 0; k < AJ_N_TELA; k++) if (TELA[k].tipo == IT_OPC && TELA[k].op == AJ_FONTE_TOCAR_CONFERINDO) vz++; assert(vz == 1); }
+  assert(indiceResultado(AJ_FONTE_TOCAR_CONFERINDO, ajustes_buscar("tocar enquanto confere", resultados, AJ_N)) >= 0);
   // #303: "Continuar na escolha de perfil". Local, last, default ON (= today), once on screen, findable.
   assert(AJ_PS_CONTINUAR == AJ_CW_RETIDO_TAMBEM + 1 && AJ_PS_CONTINUAR == AJ_FONTE_ESCOPO + 11);
   assert(!strcmp(CHAVE[AJ_PS_CONTINUAR], "psContinuarLocal") && OPCOES[AJ_PS_CONTINUAR].n == 2 && valorPadrao[AJ_PS_CONTINUAR] == 0 && ajustes_ps_continuar());

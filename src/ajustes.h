@@ -143,6 +143,7 @@ int ajustes_fonte_repor(void);
 int ajustes_fonte_prazo_ms(void);
 // Auto-play como no oficial (#202, fonteregra.h): FR_ESCOPO_*, FR_REGEX_* e
 // "Usar os outros se nao houver" (1 = ligado).
+int ajustes_fonte_tocar_conferindo(void);
 int ajustes_fonte_escopo(void);
 int ajustes_fonte_regex_modo(void);
 // "Usar a ordem" dos add-ons (FR_ORDEM_*); 0 tambem quando nao ha ordem.

@@ -221,6 +221,9 @@ Uint32 stream_idade_ms(void);
 // que vai tocar e conferida. As que falham saem da fila desta lista
 // (stream_automatico_excluir) e nao sao conferidas de novo.
 int  stream_primeira_boa(int tentativas);
+// TOCAR ENQUANTO CONFERE (fonteantecipa.h): o indice da candidata que o player
+// ja pode abrir enquanto a conferencia dela roda, e o estado (FA_*). -1 = nada.
+int  stream_antecipada(int *estado);
 // Conferencia de uma URL avulsa, sem lista (bloqueia; chamar de fio proprio).
 int  stream_url_serve(const char *url, const char *cabecalhos);
 

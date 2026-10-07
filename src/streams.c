@@ -2,6 +2,7 @@
 #include "plrui.h"
 #include "ondever.h"
 #include "naovideo.h"
+#include "fonteantecipa.h"
 #include "tex_cache.h"
 #include "livetv_regras.h"
 #include "idioma.h"
@@ -976,7 +977,7 @@ static int playlistVazia(const char *url, const char *cabecalhos) {
 // conferida fora da trava. A geracao diz se o indice ainda e da mesma lista;
 // sem ela, a url resolvida de um episodio ia parar na linha de mesmo numero
 // do episodio seguinte.
-typedef struct { unsigned geracao; int abortou; } Conferencia;
+typedef struct { unsigned geracao; int abortou; unsigned rodada; int antecipada; } Conferencia;
 
 static int resolverUrl(const char *url, const char *cabecalhos, int segundos,
                         char *fim, unsigned tam, char *mime, unsigned mimeTam, long *corpo) {
@@ -1086,7 +1087,19 @@ int stream_url_serve(const char *url, const char *cabecalhos) {
 // abortada, as candidatas seguintes "falham" sem tocar a rede.
 static int verificarOuParar(int i, void *u) {
   Conferencia *c = u;
-  return c->abortou ? 0 : verificarUma(i, c);
+  int ok;
+  if (c->abortou) return 0;
+  ok = verificarUma(i, c);
+  // A candidata que o player ja abriu (fonteantecipa.h): o veredito vai para o
+  // fio principal, e um erro do player ANTES dele vale como "nao serviu".
+  if (i == c->antecipada) {
+    if (ok && fa_player_falhou_foi(c->rodada, i)) {
+      ok = 0;
+      printf("[fonte] %d ja tinha falhado no player; descartada\n", i);
+    }
+    fa_concluir(c->rodada, i, ok);
+  }
+  return ok;
 }
 // Candidata que nao serviu sai da fila DESTA lista: a proxima escolha (o
 // reenvio de tentarProximaFonteVOD em app.c) nao a confere de novo — seria
@@ -1094,6 +1107,18 @@ static int verificarOuParar(int i, void *u) {
 static void falhouUma(int i, void *u) {
   Conferencia *c = u;
   if (!c->abortou) stream_automatico_excluir(i);
+}
+
+// A candidata que o player pode abrir ja (fonteantecipa.h), so se ainda for da
+// lista em memoria. -1 = nenhuma.
+int stream_antecipada(int *estado) {
+  unsigned ger;
+  int e = FA_NADA, i = fa_ver(&e, &ger);
+  pthread_mutex_lock(&verTrava);
+  if (i < 0 || i >= n || ger != listaGeracao) { i = -1; e = FA_NADA; }
+  pthread_mutex_unlock(&verTrava);
+  if (estado) *estado = e;
+  return i;
 }
 
 int stream_qtd_torrents(void) {
@@ -1229,7 +1254,7 @@ int stream_primeira_boa(int tentativas) {
   unsigned char *acima, *excl;
   signed char *grp;
   int *rk, ordemUso = ajustes_fonte_ordem_uso();
-  Conferencia c = { 0, 0 };
+  Conferencia c = { 0, 0, 0, -1 };
   Uint32 tVerif = 0;
   tentativas = fonteauto_tentativas(modo, tentativas);
   pthread_mutex_lock(&verTrava);
@@ -1284,6 +1309,18 @@ int stream_primeira_boa(int tentativas) {
     return -1;
   }
 
+  // TOCAR ENQUANTO CONFERE: a primeira da fila so e aberta no player desde ja
+  // quando ja tem link tocavel (nada de torrent a resolver no debrid antes) e
+  // o ajuste esta ligado. A conferencia dela segue logo abaixo, a mesma.
+  c.rodada = fa_rodada_atual();
+  if (ajustes_fonte_tocar_conferindo()) {
+    pthread_mutex_lock(&verTrava);
+    if (listaGeracao == c.geracao && fila[0] < n && lista[fila[0]].url[0] &&
+        !soP2P(&lista[fila[0]]))
+      c.antecipada = fila[0];
+    pthread_mutex_unlock(&verTrava);
+    if (c.antecipada >= 0) fa_publicar(c.rodada, c.antecipada, c.geracao);
+  }
   marco("fonte: verificacao inicio");
   tVerif = SDL_GetTicks();
   escolhida = fonteauto_primeira(fila, nf, verificarOuParar, falhouUma, &c, &tocadas);
