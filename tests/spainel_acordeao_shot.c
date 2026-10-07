@@ -5,6 +5,7 @@
 #include "../src/recomenda.c"
 #include "salvospainel.h"
 #include "ctxmenu.h"
+#include "salvosorg.h"
 #include "ctxinfo.h"
 #include "extras.h"
 #include "salvos.h"
@@ -163,6 +164,7 @@ int main(int argc, char **argv) {
   snprintf(contatos[0].nome, sizeof contatos[0].nome, "%s", "Pedro");
 
   for (vidro = 1; vidro >= 0; vidro--) {
+    int est;
     const char *v = vidro ? "vidro" : "solido";
     SDL_Event e;
     ajustes_definir_vidro(vidro);
@@ -187,6 +189,20 @@ int main(int argc, char **argv) {
     snprintf(nome, sizeof nome, "%s-%s-5-fechando.bmp", saida, v);
     captura(nome, w, 6);
     printf("depois do Voltar: aberto=%d\n", ctx_aberto());
+    if (vidro) for (est = 1; est <= 2; est++) {
+      SDL_Event k;
+      sorg_definir_estilo(est);
+      spainel_fechar(); spainel_abrir();
+      tecla(SDLK_DOWN);
+      memset(&k, 0, sizeof k);
+      k.type = SDL_KEYDOWN; k.key.keysym.sym = SDLK_RETURN; spainel_evento(&k);
+      SDL_Delay(NV_HOLD_MS + 150);
+      spainel_atualizar(1.0f / 60.0f, SDL_GetTicks());
+      k.type = SDL_KEYUP; ctx_evento(&k);
+      snprintf(nome, sizeof nome, "%s-estilo%d-aberta.bmp", saida, est);
+      captura(nome, w, 90);
+      k.type = SDL_KEYDOWN; k.key.keysym.sym = SDLK_ESCAPE; ctx_evento(&k);
+    }
   }
   SDL_GL_DeleteContext(gl);
   SDL_DestroyWindow(w);

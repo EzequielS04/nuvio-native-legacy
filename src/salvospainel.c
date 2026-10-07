@@ -834,6 +834,9 @@ static int novaSecao(float y, int g, int vazia) {
   return 1;
 }
 
+static int expIdx(void);
+static float expExtra(void);
+static float expExtraBloco(void);
 // Poe cada linha no lugar: secoes, filas, colunas.
 static void montarLayout(void) {
   int estilo = sorg_estilo(), cols = 1, i, col = 0, fila = -1, gAnt = -999;
@@ -1803,7 +1806,7 @@ static void abrirMenu(void) {
   menuProximo[0] = 0;
   if (foco + 1 < nLinhas) snprintf(menuProximo, sizeof menuProximo, "%s", linhas[foco + 1].id);
   else if (foco > 0) snprintf(menuProximo, sizeof menuProximo, "%s", linhas[foco - 1].id);
-  ctx_inline_pedir(sorg_estilo() == SORG_ESTILO_LISTA);
+  ctx_inline_pedir(1);
   ctx_abrir_salvo(&c);
 }
 
@@ -2295,6 +2298,11 @@ void spainel_atualizar(float dt, Uint32 agora) {
                  : aba == SP_ABA_ATIVIDADE ? SPA_H
                  : aba == SP_ABA_AVISOS ? avisos_lista_altura_linha(foco, foco)
                  : linhas[foco].lh);
+    // A linha aberta (acordeao) cresce para baixo: ela inteira tem de caber.
+    if (aba == SP_ABA_SALVOS && expIdx() == foco) {
+      if (sorg_estilo() == SORG_ESTILO_LISTA) base += expExtra();
+      else base = topo + (sorg_estilo() == SORG_ESTILO_GRADE ? SPG_PASSO : SPP_PASSO) - 12.0f + expExtraBloco();
+    }
     // O ar do foco nas duas pontas: o conteudo ja nasce SP_FOCO_AR abaixo do
     // recorte (ver SP_FOCO_AR), entao em cima basta `topo` e embaixo sao dois.
     if (base + 2.0f * SP_FOCO_AR - alvo > janela) alvo = base + 2.0f * SP_FOCO_AR - janela;
@@ -2620,6 +2628,24 @@ static float expExtra(void) {
   float h = ctx_inline_altura(SP_LINHA_W, SP_FAIXA_H);
   return (h > SP_LINHA_SALVO ? h - SP_LINHA_SALVO : 0.0f) * ctx_inline_t();
 }
+static float expExtraBloco(void) {
+  return (ctx_inline_altura(SP_LINHA_W, SP_FAIXA_H) + 8.0f) * ctx_inline_t();
+}
+// Grade e paisagem: o bloco se abre logo abaixo da fila do cartao em foco (que
+// continua la, aceso), com a faixa de arte, as informacoes e as pilulas.
+static void desenhaBlocoAberto(int i, float dx, float y, float a) {
+  const SPLinha *l = &linhas[i];
+  float e = ctx_inline_t(), hc = ctx_inline_altura(SP_LINHA_W, SP_FAIXA_H);
+  float lx = SP_X + dx + SP_LINHA_X, ca = e < 0.6f ? 0.0f : (e - 0.6f) / 0.4f;
+  GfxRect row = { lx, y, SP_LINHA_W, hc * e }, faixa = { lx + 18.0f, y + 18.0f, SP_LINHA_W - 36.0f, SP_FAIXA_H };
+  superficieItem(row, SP_LINHA_RAIO / row.h, 1.0f, a * (e < 0.3f ? e / 0.3f : 1.0f));
+  if (ca > 0.0f) {
+    capaArte(faixa, l->fundo[0] ? l->fundo : l->poster, 22.0f, a * ca);
+    gfx_veu_base(faixa, 22.0f / faixa.h, 0.62f, 0.7f * a * ca);
+    ctx_inline_desenhar(lx, y, SP_LINHA_W, SP_FAIXA_H, a * ca);
+  }
+}
+
 // A linha em foco aberta DENTRO do painel: a capa cresce numa faixa de arte (com
 // o logo) no topo e, embaixo, meta, notas, sinopse e as pilulas de acao.
 static void desenhaLinhaAberta(int i, float dx, float y, float a) {
@@ -2702,6 +2728,7 @@ static void desenhaCelulaPaisagem(int i, float dx, float y, float a) {
 // (tipo, ano, IMDb amarelo) sairam: o mockup escreve qualidade como texto, e
 // tres pilulas por linha eram o "menos polido" que o dono apontou.
 static void desenhaLinhaAberta(int i, float dx, float y, float a);
+static void desenhaBlocoAberto(int i, float dx, float y, float a);
 static void desenhaLinha(int i, float dx, float y, float a) {
   const SPLinha *l = &linhas[i];
   float f = animFoco[i], v = focoVisual(f);
@@ -4323,10 +4350,12 @@ static void desenharPainel(Uint32 agora) {
     }
   }
   { int estilo = sorg_estilo();
-    int ex = estilo == SORG_ESTILO_LISTA ? expIdx() : -1;
-    float extra = ex >= 0 ? expExtra() : 0.0f;
+    int ex = expIdx();
+    int lista = estilo == SORG_ESTILO_LISTA;
+    float extra = ex >= 0 ? (lista ? expExtra() : expExtraBloco()) : 0.0f;
     for (i = 0; i < nLinhas; i++) {
-      float cy = y + linhas[i].ly + (ex >= 0 && i > ex ? extra : 0.0f);
+      float cy = y + linhas[i].ly +
+                 (ex >= 0 && (lista ? i > ex : linhas[i].fila > linhas[ex].fila) ? extra : 0.0f);
       // Fora da janela nao custa texto nem textura: numa lista de 200 titulos
       // rasterizar as 195 invisiveis estouraria o orcamento de linhas por
       // quadro de text.c e as visiveis sairiam EM BRANCO (ver ctxmenu.c).
@@ -4334,6 +4363,10 @@ static void desenharPainel(Uint32 agora) {
       if (estilo == SORG_ESTILO_GRADE) desenhaCelulaGrade(i, x, cy, a);
       else if (estilo == SORG_ESTILO_PAISAGEM) desenhaCelulaPaisagem(i, x, cy, a);
       else desenhaLinha(i, x, cy, a);
+    }
+    if (ex >= 0 && !lista) {
+      float passo = estilo == SORG_ESTILO_GRADE ? SPG_PASSO : SPP_PASSO;
+      desenhaBlocoAberto(ex, x, y + linhas[ex].ly + passo - 12.0f, a);
     } }
 
   gfx_sem_recorte();

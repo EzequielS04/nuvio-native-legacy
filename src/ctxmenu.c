@@ -1609,6 +1609,15 @@ float ctx_inline_t(void) { return modoInline() ? (anim < 0.0f ? 0.0f : anim > 1.
 static CtxInfoEstado estInline(const CatItem *ci) {
   CtxInfoEstado e; e.salvo = tituloSalvo(ci); e.visto = historicoDe(ci); return e;
 }
+// Rotulo CURTO da pilula (o menu flutuante usa o longo): cabe sem reticencias.
+static const char *pilulaRot(int i, const CatItem *ci) {
+  switch (ops[i].acao) {
+    case OP_LISTA:     return tituloSalvo(ci) ? "Remover" : "Salvar";
+    case OP_ASSISTIDO: return historicoDe(ci) == 1 ? "Não assistido" : "Assistido";
+    case OP_CATEGORIA: return "Categoria";
+    default:           return ops[i].rot;
+  }
+}
 float ctx_inline_altura(float w, float faixaH) {
   const CatItem *ci = itemAtual();
   CtxInfoEstado e;
@@ -1632,7 +1641,7 @@ void ctx_inline_desenhar(float x, float y, float w, float faixaH, float a) {
   ajustes_acento(&ar, &ag, &ab);
   { float nat[CTX_MAX], tot = 0.0f, k = 1.0f, px = cx;
     for (i = 0; i < nOps; i++) {
-      nat[i] = 20.0f + 10.0f + (float)txt_linha(TXT_CAPTION2, ops[i].rot, 255, 255, 255, 255).w + 22.0f;
+      nat[i] = 20.0f + 10.0f + (float)txt_linha(TXT_CAPTION2, pilulaRot(i, ci), 255, 255, 255, 255).w + 22.0f;
       tot += nat[i];
     }
     tot += gap * (float)(nOps > 1 ? nOps - 1 : 0);
@@ -1653,7 +1662,7 @@ void ctx_inline_desenhar(float x, float y, float w, float faixaH, float a) {
       gfx_cor(r, 0.5f, 1, 1, 1, (.07f + .05f * f) * a);
       if (f > 0.01f) gfx_cor(r, 0.5f, ar, ag, ab, .30f * f * a);
       if (aberto && a > 0.5f) ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroCtxOpcao, NULL, i, 0);
-      t = txt_linha_corta(TXT_CAPTION2, ops[i].rot, 243, 242, 239, 255, r.w - 22.0f - 30.0f);
+      t = txt_linha_corta(TXT_CAPTION2, pilulaRot(i, ci), 243, 242, 239, 255, r.w - 22.0f - 30.0f);
       tw = 30.0f + (float)t.w;
       gfx_icone((GfxRect){ r.x + (r.w - tw) * 0.5f, r.y + (r.h - 20.0f) * 0.5f, 20.0f, 20.0f },
                 icone, .953f, .949f, .937f, (.7f + .3f * f) * a);
