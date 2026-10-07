@@ -9,6 +9,9 @@ A visual refresh, a lot more control over playback, and faster starts.
 - **Title page "..." button** with Trailer, Explore and Change artwork.
 - **Season progress chart** on series pages, with how far your friends are.
 - **Settings previews** are now generated and animated, in every scene.
+- **Social panel header.** Tabs beside the title, an Edit sheet per profile, and an Agenda tab that lists upcoming episodes by date.
+- **Watch history target per profile**, with "Send history to the Nuvio account", and a **Social features** switch to turn Social off.
+- **What's New 2.0.2** card.
 - **Friends tab simplified.** A single "Add people" button and your linked accounts in one row.
 - **Row and title spacing** on Home, in Settings.
 - **Default aspect ratio** applied when playback starts (#300).
@@ -17,12 +20,13 @@ A visual refresh, a lot more control over playback, and faster starts.
 - **Also in Continue watching:** keep a held title in the row as well.
 - **Continue on profile picker** (#303).
 - **Search:** a switch to turn Cinemeta results off (#311).
-- **Interface resolution: Automatic.** The 4K interface is only used when the TV can handle it.
+- **Interface resolution: Automatic.** The 4K interface is only used when the TV can handle it. Everyone is moved to Automatic once.
 - **DTS on LG** can now be converted to stereo or to 5.1.
-- **Dolby Vision in MKV on LG** (experimental, off by default).
+- **Dolby Vision in MKV on LG only** (experimental, off by default).
 - **Player:** audio codec shown (#293), forced subtitles (#287), resolution in the sources list, Arabic subtitles (#273).
 - **Samsung** warns when the TV can't play DTS or TrueHD, and prefers Dolby sources.
-- **LG:** add-on live channels work (#283).
+- **LG:** add-on live channels work (#283). CH+ opens Salvos, like on the other platforms.
+- The account sync summary and the Trakt/Simkl link screen are translated.
 
 ## Fixed
 
@@ -32,6 +36,9 @@ A visual refresh, a lot more control over playback, and faster starts.
 - **Android 11:** a black screen at launch now shows a rescue screen, and the log is sent even without login (#266).
 - **Android TV:** the app froze when opening a second movie.
 - **LG:** DTS audio hidden by the TV is recovered (#301).
+- **Auto-play skips sources that aren't video.** They show dimmed as "Not a video" in the list.
+- **Samsung:** embedded SRT subtitles are drawn by the app. Less log noise.
+- **LG:** subtitles engine only warms up when a track needs it.
 - **Skip credits** button hides itself after 10 s.
 - **Live TV** reconnects when a channel stops playing (#302).
 - **Samsung Tizen 4 with Mali-400:** the "Light" effects level now drops to minimal (#286).
