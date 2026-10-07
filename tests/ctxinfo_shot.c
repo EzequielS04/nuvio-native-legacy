@@ -23,6 +23,7 @@
 #include "ctxmenu.h"
 #include "dados.h"
 #include "extras.h"
+#include "fileiras.h"
 #include "gfx.h"
 #include "home.h"
 #include "layout.h"
@@ -340,6 +341,18 @@ int main(int argc, char **argv) {
     int dir = home_item_focado(&hi) && hi.rect.x + hi.rect.w > 1920.0f - 900.0f;
     if (dir) conferir("em alta", -1, "Filme");
     else { printf("  (cartaz em foco em x=%.0f: nao ficou na direita)\n", hi.rect.x); conferir("em alta", 1, "Filme"); } }
+  fechar();
+
+  printf("\nDestaque 4:3 (info sobre a arte):\n");
+  fil_definir_tipo("pop_movie", FIL_TIPO_DESTAQUE_QUADRADO);
+  quadros(90, NULL);
+  for (i = 0; i < 8; i++) { tecla(SDLK_LEFT); quadros(20, NULL); }
+  quadros(60, NULL);
+  segurar();
+  confere("4:3: o menu abriu", ctx_aberto());
+  quadros(60, NULL);
+  snprintf(png, sizeof png, "%s/home-menu-destaque43.png", saida);
+  quadros(1, png);
   fechar();
 
   (void)gl;

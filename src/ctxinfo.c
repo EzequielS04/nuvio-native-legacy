@@ -439,9 +439,10 @@ void ctxinfo_texto(const CatItem *ci, const CtxInfoEstado *st, char *dst, size_t
 
 // A VERSAO COMPACTA, para dentro da linha expandida do painel de Salvos: meta +
 // classificacao, notas e sinopse em duas linhas. Sem arte (a faixa e de quem
-// chama). Devolve a altura.
-float ctxinfo_compacto(const CatItem *ci, const CtxInfoEstado *st, float x, float y,
-                       float w, float ca, int desenhar) {
+// chama). Devolve a altura. `gap` entre os blocos, `sinN` linhas de sinopse,
+// `sombra` 1 = sombra suave sob o texto (sobre foto).
+static float compactoN(const CatItem *ci, const CtxInfoEstado *st, float x, float y,
+                       float w, float ca, int desenhar, float gap, int sinN, int sombra) {
   Modelo m;
   float y0 = y;
   if (!ci) return 0.0f;
@@ -451,44 +452,61 @@ float ctxinfo_compacto(const CatItem *ci, const CtxInfoEstado *st, float x, floa
     float h = (float)t.h > BADGE_H ? (float)t.h : BADGE_H;
     if (m.meta[0] || m.classif[0]) {
       if (desenhar) {
-        txt_desenhar_alpha(t, x, y + (h - (float)t.h) * 0.5f, .78f * ca);
+        if (sombra) { TxtLinha d = txt_linha_corta(TXT_ILHA_META, m.meta, 0, 0, 0, 255, w - cl);
+                      txt_desenhar_alpha(d, x + 1.5f, y + (h - (float)t.h) * 0.5f + 1.5f, .7f * ca); }
+        txt_desenhar_alpha(t, x, y + (h - (float)t.h) * 0.5f, (sombra ? .92f : .78f) * ca);
         if (m.classif[0])
           badge_desenhar(x + (m.meta[0] ? (float)t.w + 12.0f : 0.0f), y + (h - BADGE_H) * 0.5f,
                          m.classif, BADGE_NEUTRO, ca);
       }
-      y += h + 6.0f;
+      y += h + gap;
     } }
   if (m.temNotas) {
     NotasPlano p;
     notasui_planejar(&p, m.cru, w, 0.0f, NULL);
     if (desenhar) notasui_desenhar_linha(&p, x, y + NOTAS_H * 0.5f, ca);
-    y += NOTAS_H + 6.0f;
+    y += NOTAS_H + gap;
   }
   if (m.sinopse && m.sinopse[0]) {
     int i;
-    sinMax = 2; quebrarSinopse(m.sinopse, w); sinMax = CTXI_SIN_LINHAS;
+    sinMax = sinN; quebrarSinopse(m.sinopse, w); sinMax = CTXI_SIN_LINHAS;
     for (i = 0; i < sinCache.n; i++) {
       if (desenhar) {
         TxtLinha t = txt_linha(TXT_ILHA_TEXTO, sinCache.l[i], 243, 242, 239, 255);
-        txt_desenhar_alpha(t, x, y + (float)i * SIN_LEAD, .66f * ca);
+        if (sombra) { TxtLinha d = txt_linha(TXT_ILHA_TEXTO, sinCache.l[i], 0, 0, 0, 255);
+                      txt_desenhar_alpha(d, x + 1.5f, y + (float)i * SIN_LEAD + 1.5f, .7f * ca); }
+        txt_desenhar_alpha(t, x, y + (float)i * SIN_LEAD, (sombra ? .9f : .66f) * ca);
       }
     }
     y += (float)sinCache.n * SIN_LEAD;
-  }
+  } else if (y > y0) y -= gap;
   return y - y0;
+}
+float ctxinfo_compacto(const CatItem *ci, const CtxInfoEstado *st, float x, float y,
+                       float w, float ca, int desenhar) {
+  return compactoN(ci, st, x, y, w, ca, desenhar, 6.0f, 2, 0);
 }
 
 // SOBRE A ARTE (cartoes grandes, paisagem): a informacao e uma camada em cima da
-// propria foto — degrade na base, logo, meta, notas e sinopse curta.
-#define SOBRE_PAD 22.0f
+// propria foto, de cima para baixo e sem sobreposicao: logo (altura limitada),
+// meta com a classificacao, notas, sinopse em 2 linhas (1 se nao couber).
+// Escurecimento forte (degrade ate ~.85 nos 65% de baixo + 20% sobre a foto).
+#define SOBRE_PAD  24.0f
+#define SOBRE_LOGO 56.0f
+#define SOBRE_GAP  12.0f
 float ctxinfo_sobre_altura(const CatItem *ci, const CtxInfoEstado *st, float w) {
-  return SOBRE_PAD + 52.0f + 8.0f + ctxinfo_compacto(ci, st, 0, 0, w - 2.0f * SOBRE_PAD, 0, 0) + SOBRE_PAD * 0.7f;
+  return SOBRE_PAD + SOBRE_LOGO + SOBRE_GAP +
+         compactoN(ci, st, 0, 0, w - 2.0f * SOBRE_PAD, 0, 0, SOBRE_GAP, 2, 1) + SOBRE_PAD;
 }
 void ctxinfo_sobre_arte(const CatItem *ci, const CtxInfoEstado *st, GfxRect r, float raioPx, float ca) {
-  float h = ctxinfo_sobre_altura(ci, st, r.w), y0 = r.y + r.h - h, cw = r.w - 2.0f * SOBRE_PAD;
+  float cw = r.w - 2.0f * SOBRE_PAD, fixo = SOBRE_PAD + SOBRE_LOGO + SOBRE_GAP + SOBRE_PAD, y0;
+  int sinN = 2;
   if (ca < 0.01f) return;
-  gfx_veu_base((GfxRect){ r.x, y0 - 50.0f, r.w, h + 50.0f }, raioPx / (h + 50.0f), 0.0f, 0.94f * ca);
-  gfx_veu_base(r, raioPx / r.h, 0.45f, 0.5f * ca);
-  logotitulo_desenhar(ci, ci->titulo, TXT_ILHA_NOME, r.x + SOBRE_PAD, y0 + SOBRE_PAD, LOGO_W, 52.0f, cw, ca);
-  ctxinfo_compacto(ci, st, r.x + SOBRE_PAD, y0 + SOBRE_PAD + 52.0f + 8.0f, cw, ca, 1);
+  if (fixo + compactoN(ci, st, 0, 0, cw, 0, 0, SOBRE_GAP, 2, 1) > r.h) sinN = 1;
+  gfx_cor(r, raioPx / r.h, 0, 0, 0, 0.20f * ca);
+  gfx_veu_base(r, raioPx / r.h, 0.65f, 0.85f * ca);
+  y0 = r.y + r.h - (fixo + compactoN(ci, st, 0, 0, cw, 0, 0, SOBRE_GAP, sinN, 1));
+  if (y0 < r.y) y0 = r.y;
+  logotitulo_desenhar(ci, ci->titulo, TXT_ILHA_NOME, r.x + SOBRE_PAD, y0 + SOBRE_PAD, LOGO_W, SOBRE_LOGO, cw, ca);
+  compactoN(ci, st, r.x + SOBRE_PAD, y0 + SOBRE_PAD + SOBRE_LOGO + SOBRE_GAP, cw, ca, 1, SOBRE_GAP, sinN, 1);
 }

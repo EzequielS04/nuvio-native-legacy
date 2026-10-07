@@ -1751,7 +1751,7 @@ static void ctx_desenharCorpo_(Uint32 agora) {
   }
 
   { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-    gfx_cor(tela, 0.0f, 0, 0, 0, 0.88f * a); }
+    gfx_cor(tela, 0.0f, 0, 0, 0, 0.94f * a); }
 
   infoOn = infoPossivel(ci);
   est.salvo = tituloSalvo(ci);
@@ -1783,10 +1783,12 @@ static void ctx_desenharCorpo_(Uint32 agora) {
   morph = infoOn && temCartaz && !doPainel;
   if (morph) {
     float hAlvo, wCart;
-    grande = cartazRect.w > cartazRect.h * 1.2f;
-    wCart = grande ? (cartazRect.w < 440.0f ? 440.0f : cartazRect.w)
+    grande = cartazRect.w > cartazRect.h * 1.2f && cartazRect.w < cartazRect.h * 1.5f;   // so o 4:3 (Destaque)
+    // Cartao grande LEVANTA ao abrir o menu: ~+22% de largura e de altura.
+    wCart = grande ? (cartazRect.w * 1.22f < 480.0f ? 480.0f : cartazRect.w * 1.22f)
                    : (CTXI_CARTAO_W < cartazRect.w ? cartazRect.w : CTXI_CARTAO_W);
     hAlvo = grande ? ctxinfo_sobre_altura(ci, &est, wCart) : ctxinfo_altura(ci, &est, wCart);
+    if (grande && hAlvo < cartazRect.h * 1.22f) hAlvo = cartazRect.h * 1.22f;
     if (hAlvo < cartazRect.h) hAlvo = cartazRect.h;   // do tamanho do conteudo
     if (infoH < 1.0f || ajustes_animacoes_reduzidas()) infoH = hAlvo;
     else infoH += (hAlvo - infoH) * 0.22f;
