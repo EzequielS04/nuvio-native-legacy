@@ -12,6 +12,7 @@
 #include "tex_cache.h"
 #include "layout.h"
 #include "anim.h"
+#include "movimento.h"
 #include "ajustes.h"
 #include "progresso.h"
 #include "salvos.h"
@@ -96,7 +97,7 @@ static int   aberto, idx = -1, foco;
 // deve ser refeito a cada quadro a partir do cartaz focado da HOME.
 static int       doLista, cartazFixo, listaPedida, listaAlterou;
 static LstLista  lista;
-static float anim;
+static float anim, animV;
 static int   operacao, intencao, estadoOperacao;
 static int   espelhoAplicado;
 // A ESCRITA EM ANDAMENTO E DO SIMKL, e nao do Trakt (issue #110): diz a
@@ -1081,7 +1082,12 @@ void ctx_atualizar(float dt, Uint32 agora) {
   if (holdAtivo && agora - holdDesde >= NV_HOLD_MS) holdPronto = 1;
   if (ajustes_animacoes_reduzidas())
     anim = aberto ? 1.0f : 0.0f;
-  else
+  else if (inlineOn && doPainel) {
+    // O ACORDEAO do painel Social/Salvos anda na mola da pilula da ilha
+    // (movimento.h), como o resto do painel; o repique fica na folga de 1.0.
+    anim = mov_mola_assenta(&animV, anim, aberto ? 1.0f : 0.0f, dt, MOV_PILULA_W, MOV_PILULA_Z);
+    if (anim > 1.0f) anim = 1.0f;
+  } else
     anim = anim_mola(anim, aberto ? 1.0f : 0.0f, dt, NV_MOLA_TELA);
   // A extensao sai da borda do menu DEPOIS que ele assentou (meio caminho da
   // mola): primeiro as opcoes, logo em seguida as informacoes.

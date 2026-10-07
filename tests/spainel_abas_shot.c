@@ -279,9 +279,28 @@ int main(int argc, char **argv) {
                    1, 6, "Mesmo dia", "2026-10-08", "");
   desenho = D_PAINEL;
   spainel_abrir();
+  // A ABERTURA NA MOLA DA ILHA (movimento.h): dois quadros no meio do caminho.
+  quadros(9, NULL);
+  snprintf(bmp, sizeof bmp, "%s-0a-abrindo-150ms.bmp", saida);
+  quadros(1, bmp);
+  quadros(14, NULL);
+  snprintf(bmp, sizeof bmp, "%s-0b-abrindo-400ms.bmp", saida);
+  quadros(1, bmp);
   quadros(90, NULL);
   snprintf(bmp, sizeof bmp, "%s-1-salvos.bmp", saida);
   quadros(1, bmp);
+  // A TROCA DE ABA com a seta: tres quadros durante o deslize (~80, 180, 330 ms).
+  painelTecla(SDLK_UP); painelTecla(SDLK_UP); painelTecla(SDLK_RIGHT);
+  quadros(4, NULL);
+  snprintf(bmp, sizeof bmp, "%s-1a-troca-80ms.bmp", saida);
+  quadros(1, bmp);
+  quadros(9, NULL);
+  snprintf(bmp, sizeof bmp, "%s-1b-troca-180ms.bmp", saida);
+  quadros(1, bmp);
+  quadros(14, NULL);
+  snprintf(bmp, sizeof bmp, "%s-1c-troca-330ms.bmp", saida);
+  quadros(1, bmp);
+  quadros(60, NULL);
   spainel_ir_aba(2);                       // Amigos
   { SDL_Event e; memset(&e, 0, sizeof e); e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_RETURN;
     spainel_evento(&e); e.key.keysym.sym = SDLK_DOWN; spainel_evento(&e);

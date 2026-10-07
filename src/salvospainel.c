@@ -32,6 +32,7 @@
 #include "text.h"
 #include "tex_cache.h"
 #include "anim.h"
+#include "movimento.h"
 #include "layout.h"
 #include "ajustes.h"
 #include "idioma.h"
@@ -146,8 +147,6 @@
 #define SPI_FG_R 243
 #define SPI_FG_G 242
 #define SPI_FG_B 239
-#define SP_ABRIR_MS    230.0f
-#define SP_FECHAR_MS   150.0f
 // O VEU DA FOLHA DE FONTES (streams.c): 30 % sobre o vidro, 42 % no solido.
 // Era 58 %: a arte atras do painel apagava, e o vidro nao tinha o que mostrar
 // — no mockup o fundo continua vivo a esquerda da ilha.
@@ -480,6 +479,20 @@ static int temPedidoPerfil;
 
 static int aberto, foco, marcaCatN = -1;
 static float entrada, scrollY;
+// O MOVIMENTO e o da ilha (movimento.h). `entradaP` e a mola da abertura SEM
+// recorte (o repique e o "pulo" da forma); `entrada` e a mesma coisa em 0..1.
+static float entradaP, entradaV;
+// TROCA DE ABA (e de/para a folha Editar): `trocaT` vai de 0 a 1 na mola do
+// corpo; a lista entra deslizando do lado em que a aba nova esta (`trocaDir`),
+// o titulo antigo sai para o lado oposto e a pilula do seletor anda ate a aba
+// nova na mola da pilula.
+static float trocaT = 1.0f, trocaV;
+static int trocaDir;
+static char tituloAnt[96];
+static float pilX, pilXv, pilW, pilWv, pilAlvoX, pilAlvoW;
+static int pilIni;     // 0 = a pilula ainda nao tem posicao (cola no alvo)
+#define SP_TROCA_DESLIZE 72.0f   // quanto a lista anda ao entrar
+#define SP_TITULO_DESLIZE 28.0f
 // Velocidade da rolagem de 2a ordem (anim_mola2): partida macia, como na home.
 static float velY;
 static float animFoco[SP_MAX];
@@ -1346,8 +1359,25 @@ static void reconstruirAgenda(void) {
   agVer = agenda_versao();
 }
 
+static const char *rotuloAba(int i);
+// O titulo que o cabecalho mostra agora (a aba aberta, ou a folha Editar).
+static const char *tituloAgora(void) { return editando ? i18n("Editar abas") : i18n(rotuloAba(aba)); }
+static int posNaFaixa(int id) {
+  int i;
+  for (i = 0; i < SP_ABA_N; i++) if (abaOrdem[i] == id) return i;
+  return 0;
+}
+// Arma a transicao: guarda o titulo de agora (sai) e recomeca a mola do corpo.
+// So com o painel de pe; aberto de vez nao ha o que animar.
+static void trocaIniciar(int dir) {
+  if (!aberto || entrada < 0.9f) { trocaT = 1.0f; trocaV = 0.0f; return; }
+  if (trocaT < 0.02f) return;   // ja armada neste quadro (Editar -> outra aba)
+  snprintf(tituloAnt, sizeof tituloAnt, "%s", tituloAgora());
+  trocaDir = dir < 0 ? -1 : 1; trocaT = 0.0f; trocaV = 0.0f;
+}
 static void trocarAba(int nova) {
   if (!temAbas() || nova == aba) return;
+  trocaIniciar(posNaFaixa(nova) >= posNaFaixa(aba) ? 1 : -1);
   if (aba == SP_ABA_AVISOS) avisos_marcar_lidos();
   aba = nova;
   foco = SP_FOCO_ABAS;
@@ -2190,9 +2220,11 @@ static int nLigadas(void) {
   return n;
 }
 static void abrirEditar(void) {
+  trocaIniciar(1);
   editando = 1; editLin = 0; editCol = 0; editLapis = 0;
 }
 static void fecharEditar(void) {
+  trocaIniciar(-1);
   editando = 0;
   foco = SP_FOCO_ABAS; editLapis = 1;
   // Se a aba aberta foi desligada, a faixa vai para uma que sobrou.
@@ -2421,6 +2453,7 @@ void spainel_atualizar(float dt, Uint32 agora) {
   if (!aberto) okDesde = 0;
   if (!aberto && entrada < 0.002f) {
     if (entrada != 0.0f) entrada = 0.0f;
+    entradaP = entradaV = 0.0f; pilIni = 0; trocaT = 1.0f; trocaV = 0.0f;
     deIlha = 0;
     return;
   }
@@ -2493,8 +2526,14 @@ void spainel_atualizar(float dt, Uint32 agora) {
     if (foco >= nVisiveis()) foco = nVisiveis() > 0 ? nVisiveis() - 1 : 0;
   }
 
-  entrada = anim_rampa(entrada, aberto ? 1.0f : 0.0f, dt,
-                       aberto ? SP_ABRIR_MS : SP_FECHAR_MS);
+  // A abertura e o fechamento na mola do modal da ilha (~0,7 s, repique curto).
+  entradaP = mov_mola_assenta(&entradaV, entradaP, aberto ? 1.0f : 0.0f, dt, MOV_MODAL_W, MOV_MODAL_Z);
+  entrada = anim_clamp(entradaP, 0.0f, 1.0f);
+  trocaT = mov_mola_assenta(&trocaV, trocaT, 1.0f, dt, MOV_CORPO_W, MOV_CORPO_Z);
+  if (pilIni) {
+    pilX = mov_mola_assenta(&pilXv, pilX, pilAlvoX, dt, MOV_PILULA_W, MOV_PILULA_Z);
+    pilW = mov_mola_assenta(&pilWv, pilW, pilAlvoW, dt, MOV_PILULA_W, MOV_PILULA_Z);
+  }
   for (i = 0; i < nVisiveis() && i < SP_MAX; i++) {
     float a = (aberto && i == foco) ? 1.0f : 0.0f;
     animFoco[i] = ajustes_animacoes_reduzidas()
@@ -3224,6 +3263,32 @@ static void desenhaAbas(float dx, float a, float larguraDisp) {
     if (ajustes_vidro()) gfx_cor(caixa, 0.5f, 1, 1, 1, .06f * a);
     else gfx_cor(caixa, 0.5f, .113f, .118f, .137f, a); }
   x += SP_SEG_PAD;
+  // A PILULA DA ABA ABERTA ANDA ate a nova na mola da ilha (movimento.h); o
+  // icone e a contagem ficam no segmento. Primeiro o alvo (a posicao do
+  // segmento da aba aberta), depois a pilula, por BAIXO dos icones. Quem a
+  // move e spainel_atualizar; na primeira vez ela cola no alvo.
+  { float xs = x;
+    for (pos = 0; pos < SP_ABA_N; pos++) {
+      int i = abaOrdem[pos];
+      TxtLinha num;
+      float w;
+      if (!abaNaFaixa(i)) continue;
+      w = segLargura(i, &num, 255, todas || i == aba);
+      if (i == aba) {
+        GfxRect p;
+        pilAlvoX = xs; pilAlvoW = w;
+        if (!pilIni) { pilX = pilAlvoX; pilW = pilAlvoW; pilXv = pilWv = 0.0f; pilIni = 1; }
+        p = (GfxRect){ pilX, SP_ABAS_Y + SP_SEG_PAD, pilW, SP_ABAS_H - SP_SEG_PAD * 2.0f };
+        if (foco == SP_FOCO_ABAS && !editLapis) {
+          if (ajustes_vidro()) gfx_vidro_pilula_cheia(p, 0.5f, 1.0f, a);
+          else { botao_luz(p, .55f, a); gfx_cor(p, 0.5f, ar, ag, ab, a); }
+        } else {
+          if (ajustes_vidro()) gfx_cor(p, 0.5f, 1, 1, 1, .14f * a);
+          else gfx_cor(p, 0.5f, .204f, .212f, .243f, a);
+        }
+      }
+      xs += w + SP_SEG_VAO;
+    } }
   for (pos = 0; pos <= SP_ABA_N; pos++) {
     int lapis = (pos == SP_ABA_N);
     int i = lapis ? -1 : abaOrdem[pos];
@@ -3238,12 +3303,9 @@ static void desenhaAbas(float dx, float a, float larguraDisp) {
     w = lapis ? SP_SEG_LAPIS : segLargura(i, &num, cor, todas || ativa);
     if (lapis) num.w = 0;
     p = (GfxRect){ x, SP_ABAS_Y + SP_SEG_PAD, w, SP_ABAS_H - SP_SEG_PAD * 2.0f };
-    if (focada) {
+    if (focada && lapis) {
       if (ajustes_vidro()) gfx_vidro_pilula_cheia(p, 0.5f, 1.0f, a);
       else { botao_luz(p, .55f, a); gfx_cor(p, 0.5f, ar, ag, ab, a); }
-    } else if (ativa) {
-      if (ajustes_vidro()) gfx_cor(p, 0.5f, 1, 1, 1, .14f * a);
-      else gfx_cor(p, 0.5f, .204f, .212f, .243f, a);
     }
     ic = (float)cor / 255.0f;
     gfx_icone((GfxRect){ x + SP_SEG_PX, p.y + (p.h - SP_SEG_ICO) * 0.5f, SP_SEG_ICO, SP_SEG_ICO },
@@ -4419,13 +4481,6 @@ static void spRecorte(float x, float y, float w, float h) {
 }
 #define gfx_recorte spRecorte
 
-// Saida com repique curto (o "pulo" da pilula da ilha), so na forma.
-static float voltaSuave(float t) {
-  const float c1 = 1.25f, c3 = c1 + 1.0f;
-  float u = t - 1.0f;
-  return 1.0f + c3 * u * u * u + c1 * u * u;
-}
-
 static void desenharPainel(Uint32 agora);
 static void spainel_desenharCorpo_(Uint32 agora);
 // Camada ampliada (escala.h): o corpo desenha na tela virtual.
@@ -4439,12 +4494,12 @@ static void spainel_desenharCorpo_(Uint32 agora) {
   desenharPainel(agora);
   if (entrada < 0.002f) return;
   // POR CIMA DE TUDO DO PAINEL: a escolha aberta e o teclado de nome.
-  desenhaPop(anim_suave(entrada));
+  desenhaPop(entrada);
   if (tecladoPara) teclado_desenhar(agora);
 }
 
 static void desenharPainel(Uint32 agora) {
-  float a = anim_suave(entrada), x, y;
+  float a = entrada, x, y, xp, xl, al;
   int i;
   char buf[160];
   GfxRect forma = { SP_X, SP_Y, SP_W, SP_H };
@@ -4460,7 +4515,7 @@ static void desenharPainel(Uint32 agora) {
   // entra na segunda metade. Animacoes reduzidas: entrada ja e 0 ou 1 (anim.h).
   if (deIlha) {
     GfxRect o = (aberto || !destinoOk) ? origem : destino;
-    float e = aberto ? voltaSuave(entrada) : anim_suave(entrada);
+    float e = entradaP < 0.0f ? 0.0f : entradaP;   // a mola ja tem o repique (movimento.h)
     float rFim = raioForma * SP_H, rIni = o.h * 0.5f, ec = e > 1.0f ? 1.0f : e;
     forma.x = o.x + (SP_X - o.x) * e;  forma.y = o.y + (SP_Y - o.y) * e;
     forma.w = o.w + (SP_W - o.w) * e;  forma.h = o.h + (SP_H - o.h) * e;
@@ -4547,20 +4602,40 @@ static void desenharPainel(Uint32 agora) {
   }
   else snprintf(buf, sizeof buf, "%d %s", nLinhas, i18n(nLinhas == 1 ? "título" : "títulos"));
   if (editando) snprintf(buf, sizeof buf, "%s", i18n("Ligue ou desligue as abas e mude a ordem."));
-  caixaAltaIlha(buf, SPI_FG_R, SPI_FG_G, SPI_FG_B, SP_X + x + SP_PAD, SP_KICK_Y, a * 0.45f);
+  xp = x;
+  // A TROCA DE ABA (e de/para a folha Editar). `tt` e a mola do corpo, `ft` o
+  // fade curto (some na primeira metade do deslize). O resumo e o titulo novos
+  // entram do lado da aba nova, o titulo antigo sai para o outro; so alfa e
+  // posicao, as linhas de texto ficam no cache de text.c.
+  { float tt = trocaT, ft = anim_clamp(tt / 0.55f, 0.0f, 1.0f);
+    caixaAltaIlha(buf, SPI_FG_R, SPI_FG_G, SPI_FG_B,
+                  SP_X + x + SP_PAD + (float)trocaDir * SP_TITULO_DESLIZE * 0.5f * (1.0f - tt),
+                  SP_KICK_Y, a * 0.45f * ft);
+    // O que vem abaixo (barra de opcoes e lista) entra deslizando.
+    xl = (float)trocaDir * SP_TROCA_DESLIZE * (1.0f - tt);
+    al = ft; }
   // O TITULO GRANDE E A ABA ABERTA (pedido do dono, 07/10); as abas, compactas,
   // ficam na mesma linha, a direita. O titulo cede se o idioma o faz comprido.
   { float maxT = SP_W - SP_ABAS_X - SP_PAD - abasLargura(0) - 28.0f;
     TxtLinha t = txt_linha_corta(TXT_ILHA_TITULO,
                                  editando ? i18n("Editar abas") : i18n(rotuloAba(aba)),
                                  SPI_FG_R, SPI_FG_G, SPI_FG_B, 255, editando ? SP_INTERNO : maxT);
-    txt_desenhar_alpha(t, SP_X + x + SP_PAD, SP_TIT_Y, a);
+    { float tt = trocaT;
+      if (tt < 0.999f && tituloAnt[0]) {
+        TxtLinha o = txt_linha_corta(TXT_ILHA_TITULO, tituloAnt, SPI_FG_R, SPI_FG_G, SPI_FG_B, 255, maxT);
+        float fo = 1.0f - anim_clamp(tt / 0.35f, 0.0f, 1.0f);
+        if (fo > 0.0f) txt_desenhar_alpha(o, SP_X + x + SP_PAD - (float)trocaDir * SP_TITULO_DESLIZE * tt,
+                                          SP_TIT_Y, a * fo);
+      }
+      txt_desenhar_alpha(t, SP_X + x + SP_PAD + (float)trocaDir * SP_TITULO_DESLIZE * (1.0f - tt),
+                         SP_TIT_Y, a * anim_clamp((tt - 0.2f) / 0.5f, 0.0f, 1.0f)); }
     if (temAbas() && !editando) desenhaAbas(x, a, SP_W - SP_ABAS_X - SP_PAD - (float)t.w - 28.0f); }
+  x = xp + xl; a *= al;   // dai para baixo e o corpo, que desliza na troca
   if (editando) { desenhaEditar(x, a); gfx_sem_recorte(); return; }
   if (temBarra()) desenhaBarra(x, a);
 
   if (aba == SP_ABA_ATIVIDADE) {
-    gfx_recorte(SP_X + x, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
+    gfx_recorte(SP_X + xp, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
     y = listaTopo() + SP_FOCO_AR - scrollY;
     if (nAtv == 0) desenhaAtividadeVazia(x, y, a);
     for (i = 0; i < nAtv; i++) {
@@ -4578,7 +4653,7 @@ static void desenharPainel(Uint32 agora) {
     return;
   }
   if (aba == SP_ABA_AGENDA) {
-    gfx_recorte(SP_X + x, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
+    gfx_recorte(SP_X + xp, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
     y = listaTopo() + SP_FOCO_AR - scrollY;
     if (nAg == 0) desenhaAgendaVazia(x, y, a);
     // AS PECAS DA TELA AGENDA (agendaui.c): fio do tempo com um ponto por
@@ -4608,14 +4683,14 @@ static void desenharPainel(Uint32 agora) {
     return;
   }
   if (aba == SP_ABA_AVISOS) {
-    gfx_recorte(SP_X + x, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
+    gfx_recorte(SP_X + xp, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
     avisos_lista_desenhar(SP_X + x + SP_LINHA_X, listaTopo() + SP_FOCO_AR - scrollY, SP_LINHA_W, a, foco);
     gfx_sem_recorte();
     return;
   }
 
   if (aba == SP_ABA_SOCIAL) {
-    gfx_recorte(SP_X + x, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
+    gfx_recorte(SP_X + xp, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
     y = listaTopo() + SP_FOCO_AR - scrollY;
     // O BLOCO DE TEXTO ROLA COM A LISTA, e nao fica preso no topo: ele explica
     // a lista que vem logo abaixo, e um texto fixo com linhas passando por
@@ -4704,7 +4779,7 @@ static void desenharPainel(Uint32 agora) {
 
   // A lista rola dentro da propria janela, com um segundo recorte: o cabecalho
   // fica de fora dele e por isso nunca e coberto por um card subindo.
-  gfx_recorte(SP_X + x, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
+  gfx_recorte(SP_X + xp, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
   y = listaTopo() + SP_FOCO_AR - scrollY;
 
   // OS ROTULOS DAS SECOES, onde montarLayout os pos. A categoria vazia leva

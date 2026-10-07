@@ -14,6 +14,7 @@
 #include "ilha_voo.h"
 #include "ajustes.h"
 #include "anim.h"
+#include "movimento.h"
 #include "botoes.h"
 #include "ponteiro.h"
 #include "tex_cache.h"
@@ -673,20 +674,13 @@ int ilha_ocupada(void) { return temCur || atividadeViva(SDL_GetTicks()); }
 // repique) — aqui o repique E o efeito, e so na forma, nunca no texto.
 // w mais baixo = mais devagar. Pilula ~0,45 s ate assentar; modal ~0,7 s
 // (o dono achou 15 rad/s rapido demais: "ta abrindo muito rapido a ilha").
-#define ILHA_MOLA_W   10.0f
-#define ILHA_MOLA_Z   0.72f
-#define MODAL_MOLA_W  7.5f
-#define MODAL_MOLA_Z  0.80f
+#define ILHA_MOLA_W   MOV_PILULA_W
+#define ILHA_MOLA_Z   MOV_PILULA_Z
+#define MODAL_MOLA_W  MOV_MODAL_W
+#define MODAL_MOLA_Z  MOV_MODAL_Z
+// A mola mora em movimento.h (a Central e o painel Social andam nela tambem).
 static float molaIlhaWZ(float *v, float x, float alvo, float dt, float w, float z) {
-  int k;
-  if (anim_politica_reduzida || ajustes_animacoes_reduzidas()) { *v = 0.0f; return alvo; }
-  if (dt > 0.05f) dt = 0.05f;
-  for (k = 0; k < 4; k++) {
-    float h = dt * 0.25f, ac = w * w * (alvo - x) - 2.0f * z * w * (*v);
-    *v += ac * h;
-    x += *v * h;
-  }
-  return x;
+  return mov_mola(v, x, alvo, dt, w, z);
 }
 static float molaIlha(float *v, float x, float alvo, float dt) {
   return molaIlhaWZ(v, x, alvo, dt, ILHA_MOLA_W, ILHA_MOLA_Z);
