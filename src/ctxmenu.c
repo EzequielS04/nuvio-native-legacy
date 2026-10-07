@@ -1192,7 +1192,7 @@ static void ilhaCtx(GfxRect p, float raioPx, float a) {
                  0, 0, 0, .42f * a, p, raioPx, vid ? 0.0f : .98f * a);
   // O vidro le a textura assada e deixava o texto da fileira aparecer por
   // tras; uma base quase solida por baixo (a cor do modo sem vidro) fecha.
-  if (vid) { gfx_cor(p, raio, .071f, .075f, .086f, .93f * a); gfx_vidro_folha(p, raio, a); }
+  if (vid) { gfx_cor(p, raio, .071f, .075f, .086f, .985f * a); gfx_vidro_folha(p, raio, a); }
   else gfx_cor(p, raio, .071f, .075f, .086f, .98f * a);
   gfx_luz_canto(p, raio, p.w * .25f, -p.h * .25f, p.w * .9f, 1, 1, 1, (vid ? .06f : .04f) * a);
 }
@@ -1691,7 +1691,7 @@ static void ctx_desenharCorpo_(Uint32 agora) {
   const CatItem *ci;
   const char *mensagem = NULL;
   float a = anim, alt, x, y, cab, grupoH;
-  int i, comLogo, infoOn, morph = 0;
+  int i, comLogo, infoOn, morph = 0, grande = 0;
   CtxInfoGeo geo;
   CtxCartaoGeo cg;
   CtxInfoEstado est;
@@ -1751,7 +1751,7 @@ static void ctx_desenharCorpo_(Uint32 agora) {
   }
 
   { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-    gfx_cor(tela, 0.0f, 0, 0, 0, 0.74f * a); }
+    gfx_cor(tela, 0.0f, 0, 0, 0, 0.88f * a); }
 
   infoOn = infoPossivel(ci);
   est.salvo = tituloSalvo(ci);
@@ -1782,11 +1782,15 @@ static void ctx_desenharCorpo_(Uint32 agora) {
   // proprio cartaz crescido (ctxinfo_cartao_geo) e o menu fica colado a ele.
   morph = infoOn && temCartaz && !doPainel;
   if (morph) {
-    float hAlvo = ctxinfo_altura(ci, &est, CTXI_CARTAO_W < cartazRect.w ? cartazRect.w : CTXI_CARTAO_W);
-    if (hAlvo < alt) hAlvo = alt;
+    float hAlvo, wCart;
+    grande = cartazRect.w > cartazRect.h * 1.2f;
+    wCart = grande ? (cartazRect.w < 440.0f ? 440.0f : cartazRect.w)
+                   : (CTXI_CARTAO_W < cartazRect.w ? cartazRect.w : CTXI_CARTAO_W);
+    hAlvo = grande ? ctxinfo_sobre_altura(ci, &est, wCart) : ctxinfo_altura(ci, &est, wCart);
+    if (hAlvo < cartazRect.h) hAlvo = cartazRect.h;   // do tamanho do conteudo
     if (infoH < 1.0f || ajustes_animacoes_reduzidas()) infoH = hAlvo;
     else infoH += (hAlvo - infoH) * 0.22f;
-    ctxinfo_cartao_geo(&cartazRect, infoH, CTX_W, &cg);
+    ctxinfo_cartao_geo_w(&cartazRect, wCart, infoH, CTX_W, &cg);
     x = cg.menuX; y = cg.cartao.y; grupoH = cg.cartao.h;
   } else
   if (infoOn) {
@@ -1832,17 +1836,22 @@ static void ctx_desenharCorpo_(Uint32 agora) {
     if (raioPx > 0.5f * (r.h < r.w ? r.h : r.w)) raioPx = 0.5f * (r.h < r.w ? r.h : r.w);
     sa = anim_clamp(e * 3.0f, 0.0f, 1.0f);
     ca = anim_clamp((e - 0.8f) / 0.2f, 0.0f, 1.0f);
-    artA = 1.0f - anim_clamp((e - 0.15f) / 0.55f, 0.0f, 1.0f);
+    artA = grande ? 1.0f : 1.0f - anim_clamp((e - 0.15f) / 0.55f, 0.0f, 1.0f);
     ilhaCtx(r, raioPx, sa);
     if (artA > 0.01f && cartazArte[0]) {
       GLuint t = tex_obter_larg(cartazArte, P.w * gfx_escala_ui());
       if (t) {
         gfx_tex_aspect_atual = tex_aspecto(cartazArte);
+        gfx_card_forcar_cover_atual = 1.0f;
         gfx_rect(r, t, GFX_CARD, 0, 0, 0, raioPx / r.h, 0, 0, 0, artA);
+        gfx_card_forcar_cover_atual = 0.0f;
         gfx_tex_aspect_atual = 0.0f;
       }
     }
-    if (ca > 0.01f) ctxinfo_desenhar(ci, &est, C.x, C.y, C.w, sa, ca);
+    if (ca > 0.01f) {
+      if (grande) ctxinfo_sobre_arte(ci, &est, C, raioPx, ca);
+      else ctxinfo_desenhar(ci, &est, C.x, C.y, C.w, sa, ca);
+    }
     infoDesenhada = 1; infoLadoUlt = cg.lado;
     infoCaixa = C;
     menuCaixa = (GfxRect){ cg.menuX, y, CTX_W, alt };

@@ -58,6 +58,8 @@ void ctxinfo_geometria(const GfxRect *cartaz, float menuXPadrao, float centroX,
 #define CTXI_CARTAO_W 500.0f
 typedef struct { GfxRect cartao; float menuX; int lado; } CtxCartaoGeo;
 void ctxinfo_cartao_geo(const GfxRect *poster, float h, float menuW, CtxCartaoGeo *g);
+// A mesma, com a largura do cartao pedida (cartao grande: a do proprio cartaz).
+void ctxinfo_cartao_geo_w(const GfxRect *poster, float w, float h, float menuW, CtxCartaoGeo *g);
 
 // O titulo do menu mudou (ou abriu): pede o resumo em fundo quando falta algo.
 void ctxinfo_abrir(const CatItem *ci);
@@ -82,4 +84,9 @@ void ctxinfo_texto(const CatItem *ci, const CtxInfoEstado *st, char *dst, size_t
 // em duas linhas, em (x, y) com largura w. Devolve a altura; `desenhar` 0 so mede.
 float ctxinfo_compacto(const CatItem *ci, const CtxInfoEstado *st, float x, float y,
                        float w, float ca, int desenhar);
+// CARTOES GRANDES (paisagem): sem cartao novo — a informacao vai SOBRE a arte do
+// cartao (degrade na base, logo, meta, notas, sinopse em 2 linhas). `r` e o
+// retangulo do cartao; ctxinfo_sobre_altura e a altura que isso pede.
+float ctxinfo_sobre_altura(const CatItem *ci, const CtxInfoEstado *st, float w);
+void  ctxinfo_sobre_arte(const CatItem *ci, const CtxInfoEstado *st, GfxRect r, float raioPx, float ca);
 #endif
