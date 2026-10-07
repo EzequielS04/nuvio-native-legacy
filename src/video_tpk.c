@@ -340,6 +340,13 @@ int  video_registro_negado(void) { return 0; }
 static int emTrailer = 0;   // ver video_tpk_trailer_marcar
 // Abre urlAtual no host. Serve a fonte nova e ao recarregar da reconexao.
 static int abrirSessao(void) {
+  // video_iniciar() NAO e chamada no .tpk (so video.c, o ramo da LG, a chama;
+  // aqui o trailer usa video_iniciar_auto, que nao a chama), entao a flag do
+  // texto simples ficava em 0 e toda faixa S_TEXT/UTF8 saia do mkvass como
+  // "no-go: faixa nao e ASS" e voltava para a TV (2.0.1: 13 pessoas, 125 logs,
+  // e nenhuma linha "e texto simples"). Ligada a cada sessao, antes de o app
+  // escolher qualquer faixa.
+  mkvass_aceitar_texto(1);
   atomic_store(&temErroDetalhe, 0);
   ativo = 1; pronto = falhou = terminou = tocando = 0;
   largura = altura = durMs = 0; bufferando = 1; bufferDesde = SDL_GetTicks();
