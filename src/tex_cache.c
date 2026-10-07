@@ -48,6 +48,7 @@ static int arqDiscoTem(const char *dst);
 #include "posterprov.h"
 #include <stdint.h>
 #include "cachearte.h"
+#include "artefalta.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -3378,9 +3379,53 @@ static int discoDireto(int idx) {
 #endif
 }
 
+#ifdef NV_TPK
+// ARTE DO PACOTE QUE FALTA (#290): ver artefalta.h. A auto-atualizacao do .tpk
+// troca so a .so; o res/art fica o da instalacao. Arquivo de res/art que nao
+// existe vira a URL da mesma tag no GitHub e segue pela fila de rede/cache de
+// disco como qualquer arte remota. O access() roda UMA vez por caminho: a
+// resposta fica numa tabela de hashes (o pedido se repete a cada quadro).
+#ifndef NV_VERSAO
+#define NV_VERSAO "dev"
+#endif
+#define ARTE_VISTA_N 512
+static unsigned long arteVistaH[ARTE_VISTA_N];
+static unsigned char arteVistaE[ARTE_VISTA_N];   // 0 livre, 1 existe, 2 falta
+static int arteFaltas;
+static const char *artePacoteOuRemota(const char *caminho, char *buf, size_t tam) {
+  unsigned long h;
+  int k, slot = -1, estado = 0;
+  if (!caminhoLocal(caminho) || !strstr(caminho, ARTE_RAIZ_PACOTE)) return caminho;
+  h = hashCaminho(caminho);
+  for (k = 0; k < 8; k++) {
+    int j = (int)((h + (unsigned long)k) % ARTE_VISTA_N);
+    if (arteVistaE[j] && arteVistaH[j] == h) { estado = arteVistaE[j]; break; }
+    if (!arteVistaE[j]) { slot = j; break; }
+  }
+  if (!estado) {
+    estado = access(caminho, R_OK) == 0 ? 1 : 2;
+    if (slot >= 0) { arteVistaH[slot] = h; arteVistaE[slot] = (unsigned char)estado; }
+    if (estado == 2 && arteFaltas < 64) {
+      // Uma linha por arquivo (a tabela lembra): e o que diz no log quais
+      // artes a .so nova pede e o pacote instalado nao tem.
+      arteFaltas++;
+      printf("[arte] falta no pacote (%d): %s -> tag v%s\n", arteFaltas,
+             strstr(caminho, ARTE_RAIZ_PACOTE) + strlen(ARTE_RAIZ_PACOTE), NV_VERSAO);
+      fflush(stdout);
+    }
+  }
+  if (estado != 2) return caminho;
+  return arte_url_remota(caminho, NV_VERSAO, buf, tam) ? buf : caminho;
+}
+#endif
+
 static GLuint tex_obter_limite(const char *caminho, int limite, int urgente,
                                int passageiro) {
   if (!caminho || !*caminho) return 0;
+#ifdef NV_TPK
+  char arteRemota[NV_TEX_URL_MAX];
+  caminho = artePacoteOuRemota(caminho, arteRemota, sizeof arteRemota);
+#endif
   if (pedidoLogo) urgente = 2;
   if (caminhoInvalido(caminho)) {
     static int avisos;

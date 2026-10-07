@@ -232,7 +232,7 @@ int rede_pedir(const RedePedido *p, RedeResposta *r) {
   const char *metodo;
   const void *corpo;
   size_t nCorpo;
-  char url[4096], origem[300];
+  char url[4096], origem[300], origemPessoal[300];
   int tls, headersPermitidos = 1, hop, ok = 0;
   if (!r) return 0;
   memset(r, 0, sizeof *r); memset(&c, 0, sizeof c);
@@ -251,6 +251,8 @@ int rede_pedir(const RedePedido *p, RedeResposta *r) {
       !pedidoCabsValidos(p->cabecalhos, c.tetoCab)) {
     r->erro = REDE_ENTRADA; return 0;
   }
+  /* `origem` follows redirects; the personal-server origin is the first one. */
+  memcpy(origemPessoal, origem, sizeof origemPessoal);
   rede_job_reter(p->job);
   c.inicio = pedidoAgoraMs();
   c.prazo = c.inicio + (p->prazo_ms ? p->prazo_ms : 15000);
@@ -285,8 +287,13 @@ int rede_pedir(const RedePedido *p, RedeResposta *r) {
     PEDIDO_OPT(OPT_TIMEOUT_MS, (long)(c.prazo - agora));
     PEDIDO_OPT(OPT_CONNECTTIMEOUT_MS, (long)(c.prazo - agora));
     PEDIDO_OPT(OPT_NOSIGNAL, 1L);
-    PEDIDO_OPT(OPT_SSL_VERIFYPEER, 1L);
-    PEDIDO_OPT(OPT_SSL_VERIFYHOST, 2L);
+    { /* #290: servidor pessoal so na propria origem (ver tls_pessoal em rede.h). */
+      char aqui[300];
+      int tlsAqui = 0, pessoal = p->tls_pessoal &&
+        pedidoOrigem(url, aqui, sizeof aqui, &tlsAqui) && tlsAqui && !strcmp(aqui, origemPessoal);
+      PEDIDO_OPT(OPT_SSL_VERIFYPEER, pessoal ? 0L : 1L);
+      PEDIDO_OPT(OPT_SSL_VERIFYHOST, pessoal ? 0L : 2L);
+    }
     if (p->ca_arquivo || discordCa[0]) PEDIDO_OPT(OPT_CAINFO, p->ca_arquivo ? p->ca_arquivo : discordCa);
     PEDIDO_OPT(OPT_USERAGENT, "Nuvio/1.8");
     /* Media diagnostics measure the player's wire body, without transparent
