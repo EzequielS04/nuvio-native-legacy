@@ -389,6 +389,9 @@ static int agIdx[SPAG_MAX];
 static int nAg;
 static int agVer = -1;
 static int temPedidoAgenda;
+// Cabecalho de DATA antes da primeira linha de cada dia (como a tela Agenda):
+// altura do cabecalho que precede a linha `i`, 0 quando o dia nao muda.
+static float agAntes(int i);
 // EDITAR ABAS: `editando` troca a lista por uma folha com uma linha por aba
 // (ligar/desligar, subir, descer). `editLin` = linha, `editCol` = botao.
 static int editando, editLin, editCol;
@@ -1318,6 +1321,25 @@ static float atvAntes(int i) {
   return (atvDia[i] != atvDia[i - 1] || strcmp(atvRot[i], atvRot[i - 1])) ? SP_SECAO_H : 0.0f;
 }
 
+static float agAntes(int i) {
+  const AgItem *a, *b;
+  if (i < 0 || i >= nAg) return 0.0f;
+  a = agenda_lista(agIdx[i]);
+  if (i == 0) return SP_SECAO_H1;
+  b = agenda_lista(agIdx[i - 1]);
+  return (a && b && strcmp(a->dataProx, b->dataProx)) ? SP_SECAO_H : 0.0f;
+}
+// "Hoje", "Amanhã" ou "Sex 10 outubro": a primeira letra em caixa alta so
+// quando e ASCII (a traducao pode comecar em outro alfabeto).
+static void agRotuloDia(const char *iso, char *dst, size_t tam) {
+  int d = agenda_dias(iso);
+  if (d == 0) snprintf(dst, tam, "%s", i18n("hoje"));
+  else if (d == 1) snprintf(dst, tam, "%s", i18n("amanh\xc3\xa3"));
+  else snprintf(dst, tam, "%s %d %s", i18n(agenda_semana_nome(agenda_semana(iso))),
+                agenda_dia(iso), i18n(agenda_mes_nome(agenda_mes(iso))));
+  if (dst[0] >= 'a' && dst[0] <= 'z') dst[0] = (char)(dst[0] - 32);
+}
+
 static void reconstruirAgenda(void) {
   int i, n;
   agenda_montar();
@@ -1754,7 +1776,13 @@ static float topoDe(int i) {
     for (k = 0; k < i && k < nAtv; k++) y += atvAntes(k) + SPA_H + SPS_GAP;
     return y + atvAntes(i);
   }
-  if (aba == SP_ABA_AGENDA) return i < nAg ? (float)i * SPAG_H : (nAg > 0 ? (float)nAg * SPAG_H + 10.0f : SPAG_VAZIO_H);
+  if (aba == SP_ABA_AGENDA) {
+    int k;
+    y = 0.0f;
+    for (k = 0; k < i && k < nAg; k++) y += agAntes(k) + SPAG_H;
+    if (i < nAg) return y + agAntes(i);
+    return nAg > 0 ? y + 10.0f : SPAG_VAZIO_H;
+  }
   // Rotulo da primeira secao, sempre; mais o de "Não começados" para quem vem
   // depois dele. Com nCont == 0 nao existe segunda secao — a unica que aparece
   // e "Sua lista", e o segundo termo tem de ser zero para todo mundo.
@@ -4214,7 +4242,9 @@ static void desenhaAgLinha(int i, float dx, float y, float a) {
   juntar(l2, sizeof l2, it->nomeEp);
   if (l2[0]) txt_desenhar_alpha(txtIlha(TXT_ILHA_SUB, l2, larg), tx, ty, a * 0.62f);
   ty += 23.0f + 4.0f;
+  // O cabecalho do dia ja diz "Hoje"/"Amanha"; so as datas longe levam a contagem.
   agenda_falta(it->dataProx, falta, sizeof falta);
+  if (agenda_dias(it->dataProx) <= 1) falta[0] = 0;
   snprintf(l3, sizeof l3, "%s", falta);
   juntar(l3, sizeof l3, it->rede);
   if (l3[0]) txt_desenhar_alpha(txtIlha(TXT_ILHA_HORA, l3, larg), tx, ty, a * 0.38f);
@@ -4602,6 +4632,15 @@ static void desenharPainel(Uint32 agora) {
     y = listaTopo() + SP_FOCO_AR - scrollY;
     if (nAg == 0) desenhaAgendaVazia(x, y, a);
     for (i = 0; i < nAg; i++) {
+      float cab = agAntes(i);
+      if (cab > 0.0f) {
+        if (y + cab >= listaTopo() && y <= SP_LISTA_BASE) {
+          char rot[64];
+          agRotuloDia(agenda_lista(agIdx[i])->dataProx, rot, sizeof rot);
+          desenhaSecao(SP_X + x, y, rot, a, i == 0);
+        }
+        y += cab;
+      }
       if (y + SPAG_H >= listaTopo() && y <= SP_LISTA_BASE) desenhaAgLinha(i, x, y, a);
       y += SPAG_H;
     }

@@ -275,8 +275,8 @@ int main(int argc, char **argv) {
   agenda_registrar_extra("tt9000002", "", "", "Apple TV+", "Drama", 50, 2);
   agenda_registrar("tt9000003", "Slow Horses", "deploy/app/art/poster/23.jpg", "Returning Series",
                    5, 1, "Estreia da temporada", "2026-10-28", "");
-  agenda_registrar("tt9000004", "Sem data", "deploy/app/art/poster/24.jpg", "Ended",
-                   0, 0, "", "", "2025-01-01");
+  agenda_registrar("tt9000004", "Sem data", "deploy/app/art/poster/24.jpg", "Returning Series",
+                   1, 6, "Mesmo dia", "2026-10-08", "");
   desenho = D_PAINEL;
   spainel_abrir();
   quadros(90, NULL);
