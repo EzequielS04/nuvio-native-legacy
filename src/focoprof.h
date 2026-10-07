@@ -27,7 +27,7 @@ static inline GfxRect foco_zoom(GfxRect r, float f) {
 static inline void foco_anel(GfxRect r, float raio, float f, float a) {
   float menor = r.w < r.h ? r.w : r.h, ar, ag, ab;
   if (f <= 0.01f || !ajustes_borda_foco()) return;
-  if (ajustes_vidro()) { gfx_vidro_cartao(r, raio * menor / r.h, f, a); return; }
+  if (ajustes_vidro()) { gfx_vidro_cartao(r, raio, f, a); return; }
   ajustes_acento(&ar, &ag, &ab);
   gfx_cor((GfxRect){ r.x - NV_ANEL_FOCO, r.y - NV_ANEL_FOCO,
                      r.w + 2 * NV_ANEL_FOCO, r.h + 2 * NV_ANEL_FOCO },
