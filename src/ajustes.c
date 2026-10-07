@@ -4105,18 +4105,36 @@ int ajustes_mesclar_blob(const char *base, char **saida) {
 // "Arredondamento do cartaz" quando as faixas de SECOES descasaram do enum.
 static void focarSecao(int s);
 static void focarOpcao(int op);
+// Opcoes que ajustes_ux_tela.inc DEIXA DE FORA desta plataforma de proposito.
+// Mantida em par com os #if de la: a lista antiga cobria so tres opcoes e a
+// conferencia gritava "aparece 0 vez(es)" para o resto em quase toda TV (2.0.1,
+// D1: "Posicao do relogio" 238 pessoas, "Sincronia por audio" 157, "Zoom do
+// trailer" 86, P2P no .wgt 6), escondendo o aviso que importa.
+static int foraDestaPlataforma(int op) {
+  if (op == AJ_RELOGIO_POS) return 1;   // saiu da tela em 7d69643a: a ilha e sempre no canto direito
+#ifndef NV_TPK
+  if (op == AJ_TRAILER_ZOOM_TPK) return 1;
+#endif
+#if defined(NV_TPK) || defined(NV_ANDROID)
+  if (op == AJ_DV_MKV) return 1;
+#else
+  if (op == AJ_GPU_EFEITOS) return 1;
+#endif
+#ifndef NV_ANDROID
+  if (op == AJ_LEG_SYNC_AUDIO) return 1;
+#endif
+#ifdef __EMSCRIPTEN__
+  if (op == AJ_P2P_LIGADO || op == AJ_P2P_URL || op == AJ_P2P_TESTAR) return 1;
+#endif
+  return 0;
+}
 static void conferirTela(void) {
   int i, vezes[AJ_N] = { 0 };
   for (i = 0; i < AJ_N_TELA; i++)
     if (TELA[i].tipo == IT_OPC && TELA[i].op >= 0 && TELA[i].op < AJ_N)
       vezes[TELA[i].op]++;
   for (i = 0; i < AJ_N; i++)
-#if !defined(NV_TPK) && !defined(NV_ANDROID)
-    if (i != AJ_GPU_EFEITOS && i != AJ_TRAILER_ZOOM_TPK)
-#else
-    if (i != AJ_DV_MKV)
-#endif
-    if (vezes[i] != 1)
+    if (vezes[i] != 1 && !(vezes[i] == 0 && foraDestaPlataforma(i)))
       printf("[ajustes] opcao %d (\"%s\") aparece %d vez(es) em TELA\n",
              i, OPCOES[i].rotulo, vezes[i]);
   if (TELA[0].tipo != IT_SEC)
