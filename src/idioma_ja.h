@@ -2726,6 +2726,7 @@
   T("Não vai", "送らないもの"),
   T("Não é um servidor Emby", "Emby サーバーではありません"),
   T("Não é um servidor Jellyfin", "Jellyfin サーバーではありません"),
+  T("Não é vídeo", "動画ではありません"),
   T("Não, não quero aparecer", "いいえ、表示されたくありません"),
   T("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.", "ダイナミックの Top 10 のように、各ポスターの横に大きな数字を表示します。行のすべての作品を表示します。"),
   T("Números da temporada %d", "シーズン%dの数字"),

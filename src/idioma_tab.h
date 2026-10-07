@@ -2725,6 +2725,7 @@
   { "Não vai", "Not sent" },
   { "Não é um servidor Emby", "Not a Emby server" },
   { "Não é um servidor Jellyfin", "Not a Jellyfin server" },
+  { "Não é vídeo", "Not a video" },
   { "Não, não quero aparecer", "No, I do not want to appear" },
   { "Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.", "A large number beside each poster, like the Top 10 in Dynamic. Shows every item in the row." },
   { "Números da temporada %d", "Season %d by the numbers" },

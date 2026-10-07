@@ -1,6 +1,7 @@
 #include "streams.h"
 #include "plrui.h"
 #include "ondever.h"
+#include "naovideo.h"
 #include "tex_cache.h"
 #include "livetv_regras.h"
 #include "idioma.h"
@@ -972,7 +973,7 @@ static int playlistVazia(const char *url, const char *cabecalhos) {
 typedef struct { unsigned geracao; int abortou; } Conferencia;
 
 static int resolverUrl(const char *url, const char *cabecalhos, int segundos,
-                        char *fim, unsigned tam) {
+                        char *fim, unsigned tam, char *mime, unsigned mimeTam, long *corpo) {
   const char *vetor[8];
   char copia[512];
   int nc = 0, http = 0;
@@ -991,7 +992,9 @@ static int resolverUrl(const char *url, const char *cabecalhos, int segundos,
     }
   }
   vetor[nc] = NULL;
-  if (rede_url_final_cab(url, segundos, nc ? vetor : NULL, fim, tam, &http)) return 1;
+  // O tipo e o tamanho do corpo vem da MESMA sonda: nenhum pedido a mais.
+  if (rede_url_final_tipo(url, segundos, nc ? vetor : NULL, fim, tam, &http,
+                          mime, mimeTam, corpo)) return 1;
 #ifdef __EMSCRIPTEN__
   // XHR nao manda estes cabecalhos; AVPlay manda. A recusa nao prova que a
   // fonte morreu (mesmo contrato de playlistVazia). 5xx nao entram aqui.
@@ -1005,9 +1008,11 @@ static int resolverUrl(const char *url, const char *cabecalhos, int segundos,
 }
 
 static int verificarUma(int i, Conferencia *c) {
-  char fim[4096], url[4096], cab[512];
+  char fim[4096], url[4096], cab[512], mime[96], addon[sizeof lista->provedor];
   int fileIdx, ok = 0;
+  long corpo = -1;
   char infoHash[48];
+  mime[0] = 0;
   pthread_mutex_lock(&verTrava);
   // Copia do que precisa, sob a trava: fora dela `lista[]` pode ser trocada.
   // Lista trocada por baixo: a candidata nao existe mais, e nada adiante dela
@@ -1020,6 +1025,7 @@ static int verificarUma(int i, Conferencia *c) {
   snprintf(url, sizeof url, "%s", lista[i].url);
   snprintf(cab, sizeof cab, "%s", lista[i].cabecalhos);
   snprintf(infoHash, sizeof infoHash, "%s", lista[i].infoHash);
+  snprintf(addon, sizeof addon, "%s", lista[i].provedor);
   fileIdx = lista[i].fileIdx;
   pthread_mutex_unlock(&verTrava);
 
@@ -1035,8 +1041,18 @@ static int verificarUma(int i, Conferencia *c) {
     } else printf("[fonte] %d torrent nao resolveu no debrid\n", i);
   } else if (!url[0]) {
     ok = 0;
-  } else if (!resolverUrl(url, cab, 10, fim, sizeof fim)) {
+  } else if (!resolverUrl(url, cab, 10, fim, sizeof fim, mime, sizeof mime, &corpo)) {
     printf("[fonte] %d nao resolveu\n", i);
+  } else if (naovideo_mime(mime, fim, corpo)) {
+    // Linha de aviso do addon (doacao, Discord, "indisponivel"): a URL leva a
+    // uma pagina, nao a um video. Fica marcada na folha e o automatico passa
+    // para a proxima da ordem da pessoa sem abrir o player.
+    printf("[fonte] nao e video: %s %s\n", addon[0] ? addon : "?",
+           mime[0] ? mime : (corpo >= 0 ? "corpo-minusculo" : "sem-tipo"));
+    fflush(stdout);
+    pthread_mutex_lock(&verTrava);
+    if (listaGeracao == c->geracao && i < n) lista[i].naoVideo = 1;
+    pthread_mutex_unlock(&verTrava);
   } else if (enderecoDeAviso(fim)) {
     printf("[fonte] %d e aviso (%.60s)\n", i, fim);
   } else if (playlistVazia(fim, cab)) {
@@ -1050,9 +1066,11 @@ static int verificarUma(int i, Conferencia *c) {
 // aviso do debrid e a playlist sem segmento. 5 s e nao 10: quem chama ja esta
 // tocando a URL em paralelo e so quer saber cedo se ela morreu.
 int stream_url_serve(const char *url, const char *cabecalhos) {
-  char fim[4096];
+  char fim[4096], mime[96];
+  long corpo = -1;
   if (!url || !*url) return 0;
-  if (!resolverUrl(url, cabecalhos, 5, fim, sizeof fim)) return 0;
+  if (!resolverUrl(url, cabecalhos, 5, fim, sizeof fim, mime, sizeof mime, &corpo)) return 0;
+  if (naovideo_mime(mime, fim, corpo)) return 0;
   if (enderecoDeAviso(fim)) return 0;
   if (playlistVazia(fim, cabecalhos)) return 0;
   return 1;
@@ -1610,15 +1628,9 @@ int stream_canal_prazo_longo(int idx) {
 // So sem altura e sem tamanho: um filme de verdade com "support" no nome tem
 // pelo menos um dos dois.
 static int ehInformativa(const Stream *s) {
-  static const char *const marcas[] = { "support the project", "support us", "donate",
-    "ko-fi", "patreon", "buymeacoffee", "buy me a coffee", "note:" };
-  char t[sizeof s->rotulo + 512];
-  if (s->altura || s->tamanhoMB) return 0;
-  snprintf(t, sizeof t, "%s %.500s", s->rotulo, s->descricao);
-  for (char *c = t; *c; c++) *c = (char)tolower((unsigned char)*c);
-  for (size_t k = 0; k < sizeof marcas / sizeof *marcas; k++)
-    if (strstr(t, marcas[k])) return 1;
-  return 0;
+  // `naoVideo`: a sonda ja viu a URL responder pagina; o nome (naovideo_nome)
+  // pega a linha de aviso antes de qualquer pedido.
+  return s->naoVideo || naovideo_nome(s->rotulo, s->descricao, s->altura, s->tamanhoMB);
 }
 
 static int canalFolha;
@@ -3018,7 +3030,7 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
     // pontuacao (stream_automatico: MP4/DV que a LG toca primeiro). E a unica
     // forma cheia da lista inteira, e por isso o olho vai nela.
     { char nome[96];
-      int c=sel?255:205;
+      int c=s->naoVideo?(sel?150:105):(sel?255:205);   // apagada: e aviso, nao video
       char ep[64]="";
       tira=0;
       if(ajustes_fonte_texto_addon()) tituloAddon(s,nome,sizeof nome);
@@ -3118,6 +3130,9 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
       // FORA DO CACHE: o debrid ainda vai baixar; tocar agora da o clipe de
       // aviso (ver o toast em app.c). Discreto, no fim da fileira — e uma
       // condicao da fonte, nao um defeito dela.
+      if(s->naoVideo){ int c=sel?185:140;
+        TxtLinha ln=txt_linha(TXT_HERO_META,"Não é vídeo",c,c-6,c-14,255);
+        if(lw+18+ln.w<=txtW0) { txt_desenhar_alpha(ln,tx0+(lw>0?lw+18:0),cy+(FOLHA_SELO_H-ln.h)*.5f,anim); lw+=(lw>0?18:0)+ln.w; } }
       if(s->foraCache){ int c=sel?185:140;
         TxtLinha lf=txt_linha(TXT_HERO_META,"Fora do cache",c,c-6,c-14,255);
         if(lw+18+lf.w<=txtW0) { txt_desenhar_alpha(lf,tx0+(lw>0?lw+18:0),cy+(FOLHA_SELO_H-lf.h)*.5f,anim); lw+=(lw>0?18:0)+lf.w; } } }

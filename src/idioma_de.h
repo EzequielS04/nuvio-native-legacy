@@ -2725,6 +2725,7 @@
   T("Não vai", "Geht nicht mit"),
   T("Não é um servidor Emby", "Kein Emby-Server"),
   T("Não é um servidor Jellyfin", "Kein Jellyfin-Server"),
+  T("Não é vídeo", "Kein Video"),
   T("Não, não quero aparecer", "Nein, ich möchte nicht erscheinen"),
   T("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.", "Eine große Zahl neben jedem Poster, wie die Top 10 in Dynamisch. Zeigt alle Einträge der Reihe."),
   T("Números da temporada %d", "Staffel %d in Zahlen"),

@@ -2726,6 +2726,7 @@
   T("Não vai", "Nesiunčiama"),
   T("Não é um servidor Emby", "Tai ne Emby serveris"),
   T("Não é um servidor Jellyfin", "Tai ne Jellyfin serveris"),
+  T("Não é vídeo", "Ne vaizdo įrašas"),
   T("Não, não quero aparecer", "Ne, nenoriu rodytis"),
   T("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.", "Didelis skaičius šalia kiekvieno plakato, kaip Top 10 išdėstyme Dinaminė. Rodo visus eilės elementus."),
   T("Números da temporada %d", "%d sezonas skaičiais"),

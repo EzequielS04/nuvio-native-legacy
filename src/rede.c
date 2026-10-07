@@ -513,7 +513,7 @@ char *rede_postar_seguro_st(const char *url, int segundos, const char *const *ca
 // Sonda sem corpo atravessando a ponte. O XHR ainda recebe o corpo inteiro se
 // o servidor ignorar Range, mas nao aloca essa copia no heap do WASM.
 EM_JS(int, nv_url_sonda, (const char *url, const char *cabs, char *dst,
-                         int tam, int *status), {
+                         int tam, int *status, char *mime, int mimeTam, long *corpo), {
   var xhr = new XMLHttpRequest();
   if (status) HEAP32[status >> 2] = 0;
   try {
@@ -527,6 +527,16 @@ EM_JS(int, nv_url_sonda, (const char *url, const char *cabs, char *dst,
     xhr.send(null);
   } catch (e) { return 0; }
   if (status) HEAP32[status >> 2] = xhr.status;
+  if (mime && mimeTam > 0) {
+    var ct = (xhr.getResponseHeader("Content-Type") || "").split(";")[0].trim().toLowerCase();
+    stringToUTF8(ct, mime, mimeTam);
+  }
+  if (corpo) {
+    // Pelo Content-Length, sem ler o corpo (nao copia midia para o JS).
+    var cl = xhr.getResponseHeader("Content-Length");
+    var len = (xhr.status === 200 && cl !== null && /^\d+$/.test(cl.trim())) ? parseInt(cl, 10) : -1;
+    HEAP32[corpo >> 2] = len > 64 ? -1 : len;
+  }
   var finalUrl = xhr.responseURL || "";
   var bytes = 0;
   for (var k = 0; k < finalUrl.length; k++) {
@@ -541,10 +551,19 @@ EM_JS(int, nv_url_sonda, (const char *url, const char *cabs, char *dst,
 
 int rede_url_final_cab(const char *url, int segundos, const char *const *cab,
                        char *dst, unsigned tam, int *status) {
+  return rede_url_final_tipo(url, segundos, cab, dst, tam, status, NULL, 0, NULL);
+}
+
+int rede_url_final_tipo(const char *url, int segundos, const char *const *cab,
+                        char *dst, unsigned tam, int *status,
+                        char *mime, unsigned mimeTam, long *corpo) {
   char *cabs;
   int ok, http = 0;
+  long c32 = -1;
   (void)segundos;
   if (status) *status = 0;
+  if (mime && mimeTam) mime[0] = 0;
+  if (corpo) *corpo = -1;
   if (dst && tam) dst[0] = 0;
   if (!url || !*url || !dst || !tam || tam > INT_MAX) return 0;
   // Um pedaco minusculo em vez de HEAD, pelo mesmo motivo do outro caminho:
@@ -552,8 +571,10 @@ int rede_url_final_cab(const char *url, int segundos, const char *const *cab,
   // mas honram Range.
   cabs = juntarCabs(cab, NULL);
   if (cab && cab[0] && !cabs) return 0;
-  ok = nv_url_sonda(url, cabs, dst, (int)tam, &http);
+  ok = nv_url_sonda(url, cabs, dst, (int)tam, &http, mime,
+                    mime && mimeTam < INT_MAX ? (int)mimeTam : 0, &c32);
   free(cabs);
+  if (corpo) *corpo = c32;
   if (status) *status = http;
   return ok;
 }
@@ -1573,6 +1594,8 @@ static char *rede_baixar_interno3(const char *url, int segundos, long *tam,
 }
 
 typedef struct { size_t n; int limitado; } UrlSonda;
+// CURLINFO_CONTENT_TYPE = CURLINFO_STRING (0x100000) + 18.
+#define INFO_CONTENT_TYPE 1048594
 static size_t receberSonda(void *dados, size_t tam, size_t qtd, void *u) {
   UrlSonda *s = u;
   size_t bytes;
@@ -1587,6 +1610,12 @@ static size_t receberSonda(void *dados, size_t tam, size_t qtd, void *u) {
 
 int rede_url_final_cab(const char *url, int segundos, const char *const *cab,
                        char *dst, unsigned tam, int *status) {
+  return rede_url_final_tipo(url, segundos, cab, dst, tam, status, NULL, 0, NULL);
+}
+
+int rede_url_final_tipo(const char *url, int segundos, const char *const *cab,
+                        char *dst, unsigned tam, int *status,
+                        char *mime, unsigned mimeTam, long *corpo) {
   UrlSonda s = {0};
   Vigia vigia;
   void *c, *lista = NULL;
@@ -1595,6 +1624,8 @@ int rede_url_final_cab(const char *url, int segundos, const char *const *cab,
   unsigned long prazoMs;
   int r, ok, k;
   if (status) *status = 0;
+  if (mime && mimeTam) mime[0] = 0;
+  if (corpo) *corpo = -1;
   if (dst && tam) dst[0] = 0;
   if (!url || !*url || !dst || !tam || tam > INT_MAX || !abrir() || !curl_getinfo) return 0;
   if (cab && cab[0] && (!slist_append || !slist_free)) return 0;
@@ -1620,6 +1651,16 @@ int rede_url_final_cab(const char *url, int segundos, const char *const *cab,
   curl_getinfo(c, INFO_RESPONSE_CODE, &http);
   curl_getinfo(c, INFO_URL_FINAL, &fim);
   if (status) *status = (int)http;
+  if (mime && mimeTam) {
+    char *ct = NULL, *pv;
+    unsigned k2 = 0;
+    curl_getinfo(c, INFO_CONTENT_TYPE, &ct);
+    for (pv = ct; pv && *pv && *pv != ';' && k2 + 1 < mimeTam; pv++)
+      if (*pv != ' ' && *pv != '\t') mime[k2++] = (char)tolower((unsigned char)*pv);
+    mime[k2] = 0;
+  }
+  // Corpo inteiro conhecido so num 200 que acabou antes do nosso teto de 64 B.
+  if (corpo && http == 200 && !s.limitado && !r) *corpo = (long)s.n;
   // Curl23 so vale quando NOS cortamos o corpo apos o teto. Um corpo cortado
   // pelo servidor (curl18/56) ou outro erro continua falha de transporte.
   ok = (!r || (r == 23 && s.limitado)) && !redeCancelouLocal &&

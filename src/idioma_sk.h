@@ -2726,6 +2726,7 @@
   T("Não vai", "Neodchádza"),
   T("Não é um servidor Emby", "Nie je to server Emby"),
   T("Não é um servidor Jellyfin", "Nie je to server Jellyfin"),
+  T("Não é vídeo", "Nie je to video"),
   T("Não, não quero aparecer", "Nie, nechcem sa zobrazovať"),
   T("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.", "Veľké číslo vedľa každého plagátu, ako Top 10 v rozložení Dynamické. Zobrazí všetky položky radu."),
   T("Números da temporada %d", "Séria %d v číslach"),

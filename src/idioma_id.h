@@ -2726,6 +2726,7 @@
   T("Não vai", "Tidak dikirim"),
   T("Não é um servidor Emby", "Bukan server Emby"),
   T("Não é um servidor Jellyfin", "Bukan server Jellyfin"),
+  T("Não é vídeo", "Bukan video"),
   T("Não, não quero aparecer", "Tidak, aku tidak mau tampil"),
   T("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.", "Angka besar di samping setiap poster, seperti Top 10 di Dinamis. Menampilkan semua item di baris."),
   T("Números da temporada %d", "Musim %d dalam angka"),

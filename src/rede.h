@@ -231,6 +231,15 @@ int rede_url_final(const char *url, int segundos, char *dst, unsigned tam);
 // controlado pelo navegador de fonte morta: AVPlay pode enviar esse cabecalho.
 int rede_url_final_cab(const char *url, int segundos, const char *const *cabecalhos,
                        char *dst, unsigned tam, int *status);
+// O MESMO PEDIDO, devolvendo tambem o que a resposta final diz ser: `mime`
+// (Content-Type sem parametros, minusculo; vazio quando a resposta nao disse)
+// e `corpo` (bytes do corpo quando a resposta foi um 200 completo de ate 64 B,
+// ou -1 quando nao da para saber: 206, corpo cortado). Qualquer ponteiro de
+// saida pode ser NULL. Nenhum pedido a mais: sao dados da mesma sonda. Serve a
+// naovideo.h (link de aviso que responde HTML/JSON em vez de video).
+int rede_url_final_tipo(const char *url, int segundos, const char *const *cabecalhos,
+                        char *dst, unsigned tam, int *status,
+                        char *mime, unsigned mimeTam, long *corpo);
 
 // POST de JSON. Existe para o Trakt, que so aceita escrita por POST.
 char *rede_postar(const char *url, int segundos, const char *const *cabecalhos,

@@ -2726,6 +2726,7 @@
   T("Não vai", "Skickas inte"),
   T("Não é um servidor Emby", "Inte en Emby-server"),
   T("Não é um servidor Jellyfin", "Inte en Jellyfin-server"),
+  T("Não é vídeo", "Inte en video"),
   T("Não, não quero aparecer", "Nej, jag vill inte synas"),
   T("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.", "En stor siffra bredvid varje affisch, som Topp 10 i Dynamisk. Visar alla objekt i raden."),
   T("Números da temporada %d", "Säsong %d i siffror"),

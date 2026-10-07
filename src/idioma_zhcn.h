@@ -2726,6 +2726,7 @@
   T("Não vai", "不发送"),
   T("Não é um servidor Emby", "不是 Emby 服务器"),
   T("Não é um servidor Jellyfin", "不是 Jellyfin 服务器"),
+  T("Não é vídeo", "不是视频"),
   T("Não, não quero aparecer", "不，我不想被看到"),
   T("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.", "每张海报旁边显示大号数字，就像动态布局中的 Top 10。显示该行的所有作品。"),
   T("Números da temporada %d", "第 %d 季数据"),

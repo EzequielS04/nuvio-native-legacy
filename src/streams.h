@@ -85,6 +85,10 @@ typedef struct {
   // em streams.c), e a escolha manual avisa na tela que o servico esta
   // baixando. Nao exclui nada: escolhida a dedo, toca como na 1.3.5.
   int  foraCache;
+  // A SONDA VIU A URL RESPONDER PAGINA (HTML/JSON/texto) e nao video (2.0.2,
+  // naovideo.h): linha de aviso do addon. A folha a mostra apagada ("Nao e
+  // video") e o automatico a pula. Marcada na verificacao, nunca no parser.
+  int  naoVideo;
   // PACOTE DE SELOS ATIVO (selospacote.h): os filtros que casaram com esta
   // fonte, calculados UMA vez (quando a lista chega, ou quando o pacote muda;
   // `selosPacoteVer` != selospacote_versao() manda recalcular), nunca no

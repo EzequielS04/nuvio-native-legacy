@@ -2726,6 +2726,7 @@
   T("Não vai", "Gitmez"),
   T("Não é um servidor Emby", "Bu bir Emby sunucusu değil"),
   T("Não é um servidor Jellyfin", "Bu bir Jellyfin sunucusu değil"),
+  T("Não é vídeo", "Video değil"),
   T("Não, não quero aparecer", "Hayır, görünmek istemiyorum"),
   T("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.", "Her afişin yanında büyük bir numara, Dinamik'teki Top 10 gibi. Satırdaki tüm öğeleri gösterir."),
   T("Números da temporada %d", "%d. sezon rakamlarla"),

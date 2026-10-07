@@ -2726,6 +2726,7 @@
   T("Não vai", "Sendes ikke"),
   T("Não é um servidor Emby", "Ikke en Emby-server"),
   T("Não é um servidor Jellyfin", "Ikke en Jellyfin-server"),
+  T("Não é vídeo", "Ikke en video"),
   T("Não, não quero aparecer", "Nej, jeg vil ikke vises"),
   T("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.", "Et stort tal ved siden af hvert plakat, som Top 10 i Dynamisk. Viser alle elementer i rækken."),
   T("Números da temporada %d", "Sæson %d i tal"),

@@ -2726,6 +2726,7 @@
   T("Não vai", "Không gửi"),
   T("Não é um servidor Emby", "Không phải máy chủ Emby"),
   T("Não é um servidor Jellyfin", "Không phải máy chủ Jellyfin"),
+  T("Não é vídeo", "Không phải video"),
   T("Não, não quero aparecer", "Không, tôi không muốn hiển thị"),
   T("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.", "Số lớn bên cạnh mỗi poster, như Top 10 của Động. Hiện mọi mục trong hàng."),
   T("Números da temporada %d", "Mùa %d qua các con số"),

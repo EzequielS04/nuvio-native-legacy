@@ -2726,6 +2726,7 @@
   T("Não vai", "Ne ide"),
   T("Não é um servidor Emby", "Nije Emby server"),
   T("Não é um servidor Jellyfin", "Nije Jellyfin server"),
+  T("Não é vídeo", "Nije video"),
   T("Não, não quero aparecer", "Ne, ne želim da se prikazujem"),
   T("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.", "Veliki broj pored svakog postera, kao Top 10 u rasporedu Dinamički. Prikazuje sve stavke reda."),
   T("Números da temporada %d", "Sezona %d u brojkama"),

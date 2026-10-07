@@ -2726,6 +2726,7 @@
   T("Não vai", "Δεν στέλνονται"),
   T("Não é um servidor Emby", "Δεν είναι διακομιστής Emby"),
   T("Não é um servidor Jellyfin", "Δεν είναι διακομιστής Jellyfin"),
+  T("Não é vídeo", "Δεν είναι βίντεο"),
   T("Não, não quero aparecer", "Όχι, δεν θέλω να εμφανίζομαι"),
   T("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.", "Μεγάλος αριθμός δίπλα σε κάθε αφίσα, όπως το Top 10 της Δυναμικής. Δείχνει όλα τα στοιχεία της σειράς."),
   T("Números da temporada %d", "Η σεζόν %d σε αριθμούς"),

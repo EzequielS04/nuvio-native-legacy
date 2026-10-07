@@ -2726,6 +2726,7 @@
   T("Não vai", "Nem megy"),
   T("Não é um servidor Emby", "Nem Emby-szerver"),
   T("Não é um servidor Jellyfin", "Nem Jellyfin-szerver"),
+  T("Não é vídeo", "Nem videó"),
   T("Não, não quero aparecer", "Nem, nem akarok megjelenni"),
   T("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.", "Nagy szám minden poszter mellett, mint a Top 10 a Dinamikus elrendezésben. A sor összes elemét mutatja."),
   T("Números da temporada %d", "%d. évad számokban"),

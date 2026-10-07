@@ -2726,6 +2726,7 @@
   T("Não vai", "Не се изпраща"),
   T("Não é um servidor Emby", "Не е Emby сървър"),
   T("Não é um servidor Jellyfin", "Не е Jellyfin сървър"),
+  T("Não é vídeo", "Не е видео"),
   T("Não, não quero aparecer", "Не, не искам да се показвам"),
   T("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.", "Голямо число до всеки плакат, като Top 10 в Динамичен. Показва всички елементи на реда."),
   T("Números da temporada %d", "Сезон %d в числа"),

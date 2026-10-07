@@ -2725,6 +2725,7 @@
   T("Não vai", "Nu pleacă"),
   T("Não é um servidor Emby", "Nu este un server Emby"),
   T("Não é um servidor Jellyfin", "Nu este un server Jellyfin"),
+  T("Não é vídeo", "Nu este video"),
   T("Não, não quero aparecer", "Nu, nu vreau să apar"),
   T("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.", "Un număr mare lângă fiecare afiș, ca Top 10 din Dinamic. Arată toate elementele rândului."),
   T("Números da temporada %d", "Sezonul %d în cifre"),

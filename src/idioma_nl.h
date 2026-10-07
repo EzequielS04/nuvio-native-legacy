@@ -2726,6 +2726,7 @@
   T("Não vai", "Gaat niet mee"),
   T("Não é um servidor Emby", "Geen Emby-server"),
   T("Não é um servidor Jellyfin", "Geen Jellyfin-server"),
+  T("Não é vídeo", "Geen video"),
   T("Não, não quero aparecer", "Nee, ik wil niet zichtbaar zijn"),
   T("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.", "Een groot getal naast elke poster, zoals de Top 10 van Dynamisch. Toont alle items van de rij."),
   T("Números da temporada %d", "Seizoen %d in cijfers"),

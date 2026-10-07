@@ -2726,6 +2726,7 @@
   T("Não vai", "Non va"),
   T("Não é um servidor Emby", "Non è un server Emby"),
   T("Não é um servidor Jellyfin", "Non è un server Jellyfin"),
+  T("Não é vídeo", "Non è un video"),
   T("Não, não quero aparecer", "No, non voglio apparire"),
   T("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.", "Un numero grande accanto a ogni locandina, come la Top 10 di Dinamico. Mostra tutti gli elementi della riga."),
   T("Números da temporada %d", "La stagione %d in numeri"),
