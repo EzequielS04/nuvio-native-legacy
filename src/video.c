@@ -790,8 +790,16 @@ static void *prenderPlano(void *u) {
                "{\"context\":\"%s\",\"audio\":{\"immersive\":\"none\"}}", minha);
       if (!acbBindValido(bind)) goto fora;
       int rvd = acbVideoData(meuAcb, vd, &tarefa);
-      printf("[video] videoData=%d (hdrType=%s)\n", rvd, htipo);
-      if (!strcmp(htipo, "DolbyVision") && !strcasecmp(vidHdr, "HDR10")) {
+      // DOLBY VISION IN MKV: the file's own dvcC proved the layer and our
+      // demux feeds it with DolbyHdrInfo, so the "decoder did not see DV"
+      // guesses below do not apply. They read vidHdr, which this path resets
+      // and the TV re-reports only after the bind; on the C9 the 700 ms
+      // re-send as SDR/HDR10 won that race and the TV never entered its
+      // Dolby Vision mode (no DV popup) although the pipeline said DolbyVision.
+      const int dvNosso = dtsSessao && dtsModoDv && !strcmp(htipo, "DolbyVision");
+      printf("[video] videoData=%d (hdrType=%s%s)\n", rvd, htipo, dvNosso ? ", Dolby Vision from the file" : "");
+      if (dvNosso) { /* keep DolbyVision */ }
+      else if (!strcmp(htipo, "DolbyVision") && !strcasecmp(vidHdr, "HDR10")) {
         // O ACB aceita DolbyVision e a TV acende o badge mesmo quando o
         // demuxer do MKV so entregou a camada HDR10 — nesse caso o plano fica
         // sem imagem. O retorno sincrono nao detecta isso. Depois de negociar
