@@ -349,6 +349,20 @@ static unsigned heroEsperaSoma, heroEsperaPior;
 // instante em que ele passou a ser desejado. -1 = ninguem atrasado.
 static int      heroTardeItem = -1;
 static unsigned heroTardeEm;
+// PRE-BUSCA DO PROXIMO DO CARROSSEL (07/10, TCL Android 2.0.2). O carrossel
+// sabe quem vem a seguir ~7 s antes, mas so pedia a arte NO INSTANTE da troca —
+// download (500-1300 ms) mais decode contra um prazo de 600 ms: o log mostrava
+// `ESTOUROU, sem arte` em toda primeira volta e `arte atrasada chegou em
+// 1400-1700 ms`. Nos ultimos NV_HERO_PRE_MS antes da troca o proximo e pedido
+// como destaque (arte de 1920 e logo), e a troca encontra tudo pronto. O custo
+// e UMA arte de tela a mais por ate NV_HERO_PRE_MS — o mesmo par atual+proximo
+// que a mistura da troca ja segura — e nenhuma qualidade a menos: o pedido e
+// o mesmo tex_obter_hero da troca, no mesmo teto.
+// -1 = nada a pre-buscar. Escrito no passo (home_atualizar), lido no desenho.
+#define NV_HERO_PRE_MS 3000
+static int heroPreItem = -1;
+// O item cuja pre-busca ja foi anunciada no log (uma linha por item).
+static int heroPreLogado = -1;
 
 // --- EXPANSAO DO CARTAZ FOCADO EM REPOUSO ------------------------------------
 //
@@ -2781,6 +2795,20 @@ void home_atualizar(float dt, Uint32 agora) {
       heroDirDesejado = 1;   // o carrossel sempre anda para o proximo
       heroTrocaEm = agora + NV_HERO_INTERVALO_MS;
     }
+    // PRE-BUSCA (ver heroPreItem): as MESMAS condicoes da troca automatica
+    // acima, so que NV_HERO_PRE_MS antes. Com trailer segurando, nada: o
+    // trailer pode durar minutos e a arte ficaria ocupando memoria parada.
+    heroPreItem = -1;
+    if (alvo < 0 && heroDesejado < 0 && !heroAutoDesligado &&
+        agora + NV_HERO_PRE_MS >= heroTrocaEm &&
+        (!focoHero || agora + NV_HERO_PRE_MS - heroUltTecla >= HOME_HERO_OCIO_MS) &&
+        !heroTrailerSegurando(agora)) {
+      int total = heroNLista();
+      int pos = heroPosDe(heroAtual);
+      int proximo = total > 0 ? heroIdxEm(((pos < 0 ? 0 : pos) + 1) % total) : 0;
+      if (proximo < 0) proximo = 0;
+      if (proximo != heroAtual) heroPreItem = proximo;
+    }
   }
   }
   // Relogio da expansao. Zera a cada movimento; conta so com o foco parado.
@@ -3131,6 +3159,27 @@ static void desenhaPontosHero(float xDir, float yc, int n, int atual, float a) {
 // a troca deslizada desenhar DOIS: o do titulo que sai e o do que entra, cada
 // um andando com a sua arte. `principal` 0 = o que sai: nao observa a selecao
 // de logo da sessao nem manda na cor viva.
+// A largura do logo do titulo no destaque, por layout. Partilhada pelo
+// desenho e pelos pedidos antecipados (heroPedirLogo): o MESMO teto cai no
+// MESMO item do cache, sem promocao nem segundo decode.
+static float heroLogoMaxW(int lay, int cheio) {
+  if (lay == HOME_LAYOUT_PADRAO) return NV_PAD_LOGO_MAX_W;
+  if (lay == HOME_LAYOUT_DINAMICA) return NV_DIN_LOGO_MAX_W;
+  return cheio ? NV_LOGO_HERO_CHEIO_MAX_W : NV_LOGO_HERO_MAX_W;
+}
+
+// O LOGO DO TITULO JUNTO COM A ARTE (07/10, TCL Android 2.0.2). O logo so era
+// pedido por desenhaCopiaHero, e ela so desenha heroAtual — que so muda quando
+// a arte nova fica pronta ou a espera estoura. O logo entrava na fila 600 ms
+// depois da arte, no melhor caso (`pedido role=logo` sempre logo apos o
+// `ESTOUROU` no log). Pedido aqui, ele baixa EM PARALELO com a arte. So pede:
+// nao observa a sessao de logo (artehero_logo_sessao_observar), que e do
+// titulo que esta na tela.
+static void heroPedirLogo(const CatItem *ci, int lay, int cheio) {
+  const char *url = ci ? artehero_logo_sessao(ci) : NULL;
+  if (url && url[0]) (void)tex_obter_logo_larg_qualquer(url, heroLogoMaxW(lay, cheio));
+}
+
 static float desenhaCopiaHero(const CatItem *ci, int principal, float x,
                              float base, int lay, int cheio, float logoH,
                              float sinW, int sinLinhas, float aTexto,
@@ -3225,9 +3274,7 @@ static float desenhaCopiaHero(const CatItem *ci, int principal, float x,
   const char *urlLogo = ci ? ((!principal || detail_aberto() || player_aberto())
                               ? artehero_logo_sessao(ci)
                               : artehero_logo_sessao_observar(ci)) : NULL;
-  float maxWLogo = cheio ? NV_LOGO_HERO_CHEIO_MAX_W : NV_LOGO_HERO_MAX_W;
-  if (lay == HOME_LAYOUT_PADRAO) maxWLogo = NV_PAD_LOGO_MAX_W;
-  else if (lay == HOME_LAYOUT_DINAMICA) maxWLogo = NV_DIN_LOGO_MAX_W;
+  float maxWLogo = heroLogoMaxW(lay, cheio);
   // Durante a promoção para o hero, entregar a textura menor já pronta evita
   // um quadro vazio; o cache continua reprocessando para o teto final.
   GLuint tlogo = urlLogo ? tex_obter_logo_larg_qualquer(urlLogo, maxWLogo) : 0;
@@ -3643,11 +3690,37 @@ static void desenhaHero(Uint32 agora, float saida) {
   // Com um deslize em curso a troca seguinte espera ele assentar: comecar
   // outro no meio faria o titulo que esta entrando saltar de volta ao lugar.
   // A seta segurada nao acumula: vale o ultimo desejo.
+  // O logo do desejado entra na fila JUNTO com a arte (ver heroPedirLogo).
+  if (heroDesejado >= 0 && heroDesejado != heroAtual)
+    heroPedirLogo(cat_item_exato(heroDesejado), lay, cheio);
+  // O proximo do carrossel, nos ultimos NV_HERO_PRE_MS (ver heroPreItem).
+  if (heroPreItem >= 0 && heroPreItem != heroAtual && heroDesejado < 0) {
+    const char *arteP = arte_por_identidade(heroPreItem, 2);
+    if (arteP) (void)tex_obter_hero(arteP);
+    heroPedirLogo(cat_item_exato(heroPreItem), lay, cheio);
+    if (heroPreLogado != heroPreItem) {
+      heroPreLogado = heroPreItem;
+      printf("[hero] pre-busca do proximo hash=%08lx (%d ms antes da troca)\n",
+             tex_hash_public(arteP), NV_HERO_PRE_MS);
+      fflush(stdout);
+    }
+  }
   if (heroDesejado >= 0 && heroDesejado != heroAtual && heroDesliza >= 1.0f) {
     const char *arteD = arte_por_identidade(heroDesejado, 2);
     // Ausencia de arte tambem e um estado pronto: o placeholder pertence ao
     // item e pode entrar sem apagar o hero anterior primeiro.
     int artePronta = !arteD || tex_obter_hero(arteD);
+    // A pre-busca valeu? Uma linha por troca que foi pre-buscada.
+    if (heroPreLogado == heroDesejado && (artePronta ||
+        SDL_GetTicks() - heroDesejadoEm >= NV_HERO_ESPERA_MS)) {
+      const CatItem *cD = cat_item_exato(heroDesejado);
+      const char *uL = cD ? artehero_logo_sessao(cD) : NULL;
+      printf("[hero] pre-busca %s hash=%08lx logo=%s\n",
+             artePronta ? "acertou" : "nao chegou a tempo", tex_hash_public(arteD),
+             !uL ? "sem" : tex_obter_logo_larg_qualquer(uL, heroLogoMaxW(lay, cheio)) ? "pronto" : "a caminho");
+      fflush(stdout);
+      heroPreLogado = -1;
+    }
     // ...OU A ESPERA ESTOUROU. Ver NV_HERO_ESPERA_MS em layout.h: passar do
     // prazo troca mesmo sem textura, e o heroi mostra o marcador do titulo
     // novo em vez da arte do anterior. O pedido acima ja enfileirou o decode,
