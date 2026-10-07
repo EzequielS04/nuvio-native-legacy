@@ -435,7 +435,7 @@ char *rede_baixar_st_retry(const char *url, int segundos, const char *const *cab
 // UM pedido de Range (o laco em pedacos e rede_baixar_trecho_st, no fim do
 // arquivo). XHR nao entrega corpo cortado: uma conexao que fecha antes do
 // Content-Length e erro de rede e o corpo some — aqui nunca ha "parcial".
-static char *trechoUmaVez(const char *url, int segundos, long ini, long fim,
+static char *trechoUmaVez(const char *url, int segundos, long long ini, long long fim,
                           long *tam, int *status, int *erro,
                           char *final, unsigned tamFinal) {
   char faixa[80];
@@ -445,9 +445,9 @@ static char *trechoUmaVez(const char *url, int segundos, long ini, long fim,
   (void)segundos;
   if (erro) *erro = 0;
   if (final && tamFinal) final[0] = 0;
-  snprintf(faixa, sizeof faixa, "Range: bytes=%ld-%ld", ini, fim);
+  snprintf(faixa, sizeof faixa, "Range: bytes=%lld-%lld", ini, fim);
   cab[0] = faixa; cab[1] = NULL;
-  rede_teto = fim - ini + 1;
+  rede_teto = (long)(fim - ini + 1);
   redeFinalDst = final; redeFinalTam = final ? tamFinal : 0;
   r = pedir("GET", url, cab, NULL, NULL, tam, &st);
   redeFinalDst = NULL; redeFinalTam = 0;
@@ -1336,7 +1336,7 @@ char *rede_baixar(const char *url, int segundos) {
 // CORPO CORTADO FICA (#92): um 206 que fecha antes do Content-Length (curl 18,
 // ou 56 no meio do corpo) devolve o que veio, com o codigo em *erro. So quem
 // sabe pedir o resto (o laco) liga isto; o resto do modulo segue igual.
-static char *trechoUmaVez(const char *url, int segundos, long ini, long fim,
+static char *trechoUmaVez(const char *url, int segundos, long long ini, long long fim,
                           long *tam, int *status, int *erro,
                           char *final, unsigned tamFinal) {
   char faixa[80];
@@ -1344,10 +1344,10 @@ static char *trechoUmaVez(const char *url, int segundos, long ini, long fim,
   char *r;
   int st = 0;
   if (final && tamFinal) final[0] = 0;
-  snprintf(faixa, sizeof faixa, "Range: bytes=%ld-%ld", ini, fim);
+  snprintf(faixa, sizeof faixa, "Range: bytes=%lld-%lld", ini, fim);
   cab[0] = faixa; cab[1] = NULL;
   redeCurlLocal = 0;
-  rede_teto = fim - ini + 1;
+  rede_teto = (long)(fim - ini + 1);
   redeFinalDst = final; redeFinalTam = final ? tamFinal : 0;
   redeParcialOk = 1;
   // Com `status` o interno2 devolve o corpo de um 4xx (e o contrato do
@@ -2374,12 +2374,12 @@ static void corteAprender(const char *url, long veio) {
   }
 }
 
-char *rede_baixar_trecho_st(const char *url, int segundos, long ini, long fim,
+char *rede_baixar_trecho_st(const char *url, int segundos, long long ini, long long fim,
                             long *tam, int *status, int *erro,
                             char *final, unsigned tamFinal) {
   unsigned long t0 = redeAgoraMs(),
                 prazo = (unsigned long)(segundos > 0 ? segundos : 30) * 1000UL;
-  long pedido = fim - ini + 1, veio = 0;
+  long pedido = (long)(fim - ini + 1), veio = 0;
   char *buf = NULL;
   int st = 0, e = 0, pedacos = 0, cortes = 0;
   // `atual`: o endereco dos pedacos seguintes (o final, depois do primeiro:
@@ -2393,7 +2393,7 @@ char *rede_baixar_trecho_st(const char *url, int segundos, long ini, long fim,
   if (!url || pedido <= 0) return trechoUmaVez(url, segundos, ini, fim, tam, status, erro, final, tamFinal);
   snprintf(atual, sizeof atual, "%s", url);
   for (;;) {
-    long a = ini + veio, b = fim, n = 0, teto = rede_corte_host(atual);
+    long long a = ini + veio, b = fim; long n = 0, teto = rede_corte_host(atual);
     int seg = segundos, cortado;
     char *r;
     if (teto <= 0) teto = rede_corte_host(url);
@@ -2426,7 +2426,7 @@ char *rede_baixar_trecho_st(const char *url, int segundos, long ini, long fim,
       cortes++;
       corteAprender(atual, n);
       if (strcmp(atual, url)) corteAprender(url, n);
-      printf("[rede] Range %ld+%ld: %ld de %ld bytes ate aqui, pedindo o resto (pedaco %d)\n",
+      printf("[rede] Range %lld+%ld: %ld de %ld bytes ate aqui, pedindo o resto (pedaco %d)\n",
              ini, pedido, veio, pedido, pedacos);
       fflush(stdout);
     }
@@ -2443,7 +2443,7 @@ falhou:
   // Sem progresso: o que ja veio se perde (quem chama pede o trecho de novo,
   // e o teto aprendido faz o pedido seguinte caber).
   if (veio > 0) {
-    printf("[rede] Range %ld+%ld sem progresso depois de %ld bytes em %d pedaco(s) (HTTP %d, curl %d%s)\n",
+    printf("[rede] Range %lld+%ld sem progresso depois de %ld bytes em %d pedaco(s) (HTTP %d, curl %d%s)\n",
            ini, pedido, veio, pedacos, st, e,
            redeRestoRecusado ? ", o servidor recusou o resto" : "");
     fflush(stdout);

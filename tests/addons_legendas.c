@@ -28,7 +28,7 @@ char *rede_baixar_medido_controle(const char *url, int seconds,
   return responses[idx] ? strdup(responses[idx]) : NULL;
 }
 // #201: os dois Range do hash. Conteudo deterministico: byte = posicao % 251.
-char *rede_baixar_trecho_st(const char *url, int segundos, long ini, long fim,
+char *rede_baixar_trecho_st(const char *url, int segundos, long long ini, long long fim,
                             long *tam, int *st, int *erro, char *final, unsigned tamFinal) {
   char *b;
   (void)segundos; (void)final; (void)tamFinal;
