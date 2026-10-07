@@ -1824,7 +1824,7 @@
   T("Fundo", "背景"),
   T("Fundo da escolha de perfil", "個人檔案選擇畫面背景"),
   T("Fundo da segunda legenda", "第二字幕背景"),
-  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Também a arte do perfil desfocada ou as listras do login.", "選擇檔案畫面的背景。電影：每個檔案看過的海報，排在一面傾斜的牆上。光：黑色背景加上檔案顏色的光。投影機：開演前的電影院。也可以用模糊的檔案圖片或登入畫面的條紋。"),
+  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Arte do perfil: o fundo escolhido ao editar o perfil no app Nuvio; sem ele, o avatar desfocado. Ou as listras do login.", "選擇檔案畫面的背景。電影：每個檔案看過的海報，排在一面傾斜的牆上。光：黑色背景加上檔案顏色的光。投影機：開演前的電影院。檔案圖片：在 Nuvio 應用程式中編輯檔案時選擇的背景；沒有則用模糊的頭像。也可以用登入畫面的條紋。"),
   T("Fundo da tela de escolha de perfil: o mural de capas do catálogo, a arte do perfil em foco desfocada (sem arte, o mural) ou as listras do login.", "設定檔選擇畫面的背景:目錄封面拼貼牆、目前聚焦設定檔的模糊圖片(沒有圖片時用拼貼牆),或登入頁的條紋。"),
   T("Fundo de perfil", "個人檔案背景"),
   T("Fundo do destaque do addon", "附加元件的主視覺背景"),

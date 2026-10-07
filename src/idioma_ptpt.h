@@ -1824,7 +1824,7 @@
   T("Fundo", "Fundo"),
   T("Fundo da escolha de perfil", "Fundo da escolha de perfil"),
   T("Fundo da segunda legenda", "Fundo da segunda legenda"),
-  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Também a arte do perfil desfocada ou as listras do login.", "Fundo do ecrã de escolha de perfil. Filmes: os cartazes do que cada perfil viu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Também a arte do perfil desfocada ou as listas do início de sessão."),
+  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Arte do perfil: o fundo escolhido ao editar o perfil no app Nuvio; sem ele, o avatar desfocado. Ou as listras do login.", "Fundo do ecrã de escolha de perfil. Filmes: os cartazes do que cada perfil viu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Arte do perfil: o fundo escolhido ao editar o perfil na app Nuvio; sem ele, o avatar desfocado. Ou as listas do início de sessão."),
   T("Fundo da tela de escolha de perfil: o mural de capas do catálogo, a arte do perfil em foco desfocada (sem arte, o mural) ou as listras do login.", "Fundo do ecrã de escolha de perfil: o mural de capas do catálogo, a arte do perfil em foco desfocada (sem arte, o mural) ou as listas do início de sessão."),
   T("Fundo de perfil", "Fundo do perfil"),
   T("Fundo do destaque do addon", "Fundo do destaque do add-on"),

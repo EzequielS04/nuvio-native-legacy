@@ -1824,7 +1824,7 @@
   T("Fundo", "Fonas"),
   T("Fundo da escolha de perfil", "Profilio pasirinkimo fonas"),
   T("Fundo da segunda legenda", "Antrųjų subtitrų fonas"),
-  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Também a arte do perfil desfocada ou as listras do login.", "Profilio pasirinkimo ekrano fonas. Filmai: kiekvieno profilio žiūrėtų kūrinių plakatai ant pasvirusios sienos. Šviesa: juoda su profilio spalvos šviesa. Projektorius: kino salė prieš seansą. Taip pat sulietas profilio vaizdas arba prisijungimo juostos."),
+  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Arte do perfil: o fundo escolhido ao editar o perfil no app Nuvio; sem ele, o avatar desfocado. Ou as listras do login.", "Profilio pasirinkimo ekrano fonas. Filmai: kiekvieno profilio žiūrėtų kūrinių plakatai ant pasvirusios sienos. Šviesa: juoda su profilio spalvos šviesa. Projektorius: kino salė prieš seansą. Profilio vaizdas: fonas, pasirinktas redaguojant profilį Nuvio programėlėje; jei jo nėra – sulietas avataras. Arba prisijungimo juostos."),
   T("Fundo da tela de escolha de perfil: o mural de capas do catálogo, a arte do perfil em foco desfocada (sem arte, o mural) ou as listras do login.", "Profilio pasirinkimo ekrano fonas: katalogo viršelių mozaika, pasirinkto profilio sulieta iliustracija (be jos mozaika) arba prisijungimo juostos."),
   T("Fundo de perfil", "Profilio fonas"),
   T("Fundo do destaque do addon", "Pagrindinio bloko fonas iš papildinio"),

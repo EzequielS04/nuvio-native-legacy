@@ -1824,7 +1824,7 @@
   T("Fundo", "Pozadie"),
   T("Fundo da escolha de perfil", "Pozadie výberu profilu"),
   T("Fundo da segunda legenda", "Pozadie druhých titulkov"),
-  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Também a arte do perfil desfocada ou as listras do login.", "Pozadie obrazovky výberu profilu. Filmy: plagáty toho, čo každý profil sledoval, na šikmej stene. Svetlo: čierna so svetlom vo farbe profilu. Projektor: kinosála pred predstavením. Aj rozmazaný obrázok profilu alebo pruhy z prihlásenia."),
+  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Arte do perfil: o fundo escolhido ao editar o perfil no app Nuvio; sem ele, o avatar desfocado. Ou as listras do login.", "Pozadie obrazovky výberu profilu. Filmy: plagáty toho, čo každý profil sledoval, na šikmej stene. Svetlo: čierna so svetlom vo farbe profilu. Projektor: kinosála pred predstavením. Obrázok profilu: pozadie zvolené pri úprave profilu v aplikácii Nuvio; bez neho rozmazaný avatar. Alebo pruhy z prihlásenia."),
   T("Fundo da tela de escolha de perfil: o mural de capas do catálogo, a arte do perfil em foco desfocada (sem arte, o mural) ou as listras do login.", "Pozadie obrazovky výberu profilu: mozaika obálok z katalógu, rozostrený obrázok vybraného profilu (bez obrázka mozaika) alebo pruhy z prihlásenia."),
   T("Fundo de perfil", "Pozadie profilu"),
   T("Fundo do destaque do addon", "Pozadie hlavného bannera z doplnku"),

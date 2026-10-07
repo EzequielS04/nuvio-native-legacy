@@ -1823,7 +1823,7 @@
   T("Fundo", "Фон"),
   T("Fundo da escolha de perfil", "Фон выбора профиля"),
   T("Fundo da segunda legenda", "Фон вторых субтитров"),
-  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Também a arte do perfil desfocada ou as listras do login.", "Фон экрана выбора профиля. Фильмы: постеры того, что смотрел каждый профиль, на наклонной стене. Свет: чёрный фон со светом в цвете профиля. Проектор: кинозал перед сеансом. Также размытый арт профиля или полосы экрана входа."),
+  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Arte do perfil: o fundo escolhido ao editar o perfil no app Nuvio; sem ele, o avatar desfocado. Ou as listras do login.", "Фон экрана выбора профиля. Фильмы: постеры того, что смотрел каждый профиль, на наклонной стене. Свет: чёрный фон со светом в цвете профиля. Проектор: кинозал перед сеансом. Арт профиля: фон, выбранный при редактировании профиля в приложении Nuvio; без него — размытый аватар. Или полосы экрана входа."),
   T("Fundo da tela de escolha de perfil: o mural de capas do catálogo, a arte do perfil em foco desfocada (sem arte, o mural) ou as listras do login.", "Фон экрана выбора профиля: мозаика обложек из каталога, размытый арт профиля в фокусе (без арта — мозаика) или полосы входа."),
   T("Fundo de perfil", "Фон профиля"),
   T("Fundo do destaque do addon", "Фон главного баннера из аддона"),

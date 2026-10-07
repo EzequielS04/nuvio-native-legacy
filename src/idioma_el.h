@@ -1824,7 +1824,7 @@
   T("Fundo", "Φόντο"),
   T("Fundo da escolha de perfil", "Φόντο της επιλογής προφίλ"),
   T("Fundo da segunda legenda", "Φόντο δεύτερων υποτίτλων"),
-  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Também a arte do perfil desfocada ou as listras do login.", "Φόντο της οθόνης επιλογής προφίλ. Ταινίες: οι αφίσες όσων είδε κάθε προφίλ, σε έναν κεκλιμένο τοίχο. Φως: μαύρο με ένα φως στο χρώμα του προφίλ. Προβολέας: κινηματογραφική αίθουσα πριν από την προβολή. Επίσης η θολή εικόνα του προφίλ ή οι ρίγες της σύνδεσης."),
+  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Arte do perfil: o fundo escolhido ao editar o perfil no app Nuvio; sem ele, o avatar desfocado. Ou as listras do login.", "Φόντο της οθόνης επιλογής προφίλ. Ταινίες: οι αφίσες όσων είδε κάθε προφίλ, σε έναν κεκλιμένο τοίχο. Φως: μαύρο με ένα φως στο χρώμα του προφίλ. Προβολέας: κινηματογραφική αίθουσα πριν από την προβολή. Εικόνα προφίλ: το φόντο που επιλέχθηκε στην επεξεργασία του προφίλ στην εφαρμογή Nuvio· χωρίς αυτό, το θολό άβαταρ. Ή οι ρίγες της σύνδεσης."),
   T("Fundo da tela de escolha de perfil: o mural de capas do catálogo, a arte do perfil em foco desfocada (sem arte, o mural) ou as listras do login.", "Φόντο της οθόνης επιλογής προφίλ: το μωσαϊκό εξωφύλλων του καταλόγου, η θολή εικόνα του επιλεγμένου προφίλ (χωρίς εικόνα, το μωσαϊκό) ή οι ρίγες της σύνδεσης."),
   T("Fundo de perfil", "Φόντο προφίλ"),
   T("Fundo do destaque do addon", "Φόντο του banner από το πρόσθετο"),

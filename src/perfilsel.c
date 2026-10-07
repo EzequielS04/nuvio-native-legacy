@@ -140,14 +140,19 @@ static float muralLuzTempo;
 // Teclado 3x4, na ordem do telefone. O que havia aqui era 5 colunas com 12
 // teclas: as duas ultimas (apagar e OK) sobravam sozinhas numa terceira linha
 // encostada a esquerda, e o olho procurava o OK no canto errado toda vez.
+// #289: profile PINs are ALWAYS 4 digits (PROFILE_PIN_LENGTH in the official
+// web app, which also creates them), so the 4th digit verifies by itself and
+// the OK key is gone. Bottom row is the phone's: blank, 0, delete.
 #define PS_PIN_MAX       8
+#define PS_PIN_LEN       4
 #define PS_TECLA        96.0f
 #define PS_TECLA_GAP    18.0f
 #define PS_TECLA_COLS       3
 #define PS_TECLA_LINS       4
-#define PS_PIN_APAGAR       9
+#define PS_PIN_VAZIO        9   // no key: focus never lands here
 #define PS_PIN_ZERO        10
-#define PS_PIN_OK          11
+#define PS_PIN_APAGAR      11
+#define PS_PIN_INICIO       4   // "5", the middle of the pad
 #define PS_PONTO        22.0f    // diametro do ponto que mascara um digito
 #define PS_PONTO_PASSO  40.0f
 
@@ -167,6 +172,7 @@ static int pinDe = -1;
 static char pin[PS_PIN_MAX + 1];
 static int pinFoco;              // indice na grade 3x4; ver PS_PIN_*
 static int pinErrado, pinRede;
+static float pinTremor;          // s left of the wrong-PIN shake (#289)
 static pthread_t fioPin;
 static int verificando;
 static _Atomic int resultadoPin; // 0 pendente, 1 ok, -1 PIN incorreto, -2 rede
@@ -643,26 +649,63 @@ static void contDesenhar(int i, float cx, float yTopo, float f, float a) {
 // (ContaPerfil.fundoUrl), desfocada e com veu, e a troca de foco e um
 // cross-fade de 0,45 s. O desfoque vem de gfx_desfocado (copia 96x54 guardada
 // por arte), entao o quadro nao aloca nem refaz nada: so desenha duas texturas.
-// Perfil sem arte cai no mural, que entra na proporcao do que a arte nao cobre.
+// #295: a profile WITHOUT background art used to fall back to the poster wall,
+// which is exactly the "Filmes" screen — the setting looked broken. The art
+// now falls back to the profile's own AVATAR, blurred and enlarged through the
+// same gfx_desfocado copy, under a wash of the profile colour; with no avatar
+// either, the uncovered part is the "Luz" style (the profile colour as light),
+// never the movie wall.
 #define PS_AMB_FADE_S  0.45f
 #define PS_AMB_VEU     0.55f   // brilho .6 + veu .34 do mockup, num so preto
+// A blurred avatar is a saturated colour field, much brighter than a backdrop:
+// it gets a darker veil and a wash of the profile colour on top.
+#define PS_AMB_VEU_AV  0.62f
+#define PS_AMB_COR_AV  0.22f
 #define PS_AMB_LARG    480.0f
 static int   ambAtual = -1, ambAnt = -1;
 static float ambT = 1.0f;                       // 0..1: de ambAnt para ambAtual
 static GLuint ambFonte[CONTA_PERFIL_MAX];       // textura nitida (pedida no update)
 static int   ambAtualPronto;                    // o desenho conseguiu a copia desfocada
 
-static int ambTemUrl(int i) {
-  const ContaPerfil *p = i >= 0 ? perfis_item(i) : NULL;
-  return p && p->fundoUrl[0];
+// The image behind profile i: its background art, else its avatar (#295).
+static const char *ambUrl(int i) {
+  const ContaPerfil *p = i >= 0 && i < CONTA_PERFIL_MAX ? perfis_item(i) : NULL;
+  if (!p) return NULL;
+  if (p->fundoUrl[0]) return p->fundoUrl;
+  if (p->avatarUrl[0]) return p->avatarUrl;
+  return NULL;
 }
+static int ambEhAvatar(int i) {
+  const ContaPerfil *p = i >= 0 && i < CONTA_PERFIL_MAX ? perfis_item(i) : NULL;
+  return p && !p->fundoUrl[0] && p->avatarUrl[0];
+}
+
+static int ambTemUrl(int i) { return ambUrl(i) != NULL; }
 
 // Copia desfocada pronta de um perfil, ou 0 (sem arte, ainda baixando, ou o
 // limite de geracoes por quadro do gfx_desfocado).
 static GLuint ambDesfocada(int i) {
-  const ContaPerfil *p = i >= 0 && i < CONTA_PERFIL_MAX ? perfis_item(i) : NULL;
-  if (!p || !p->fundoUrl[0] || !ambFonte[i]) return 0;
-  return gfx_desfocado(ambFonte[i], p->fundoUrl);
+  const char *u = ambUrl(i);
+  if (!u || !ambFonte[i]) return 0;
+  return gfx_desfocado(ambFonte[i], u);
+}
+
+// One profile's layer: the blurred image, plus the colour wash on an avatar.
+static void ambCamada(int i, GLuint t, float alfa) {
+  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+  float r, g, b;
+  const ContaPerfil *p = perfis_item(i);
+  // A square (or portrait) avatar would be letterboxed by GFX_CARD's contain
+  // rule; the ambient must fill the screen, so it is forced to cover.
+  gfx_tex_aspect_atual = tex_aspecto(ambUrl(i));
+  gfx_card_forcar_cover_atual = ambEhAvatar(i) ? 1.0f : 0.0f;
+  gfx_rect(tela, t, GFX_CARD, 0, 0, 0, 0.0f, 1, 1, 1, alfa);
+  gfx_card_forcar_cover_atual = 0.0f;
+  gfx_tex_aspect_atual = 0;
+  if (ambEhAvatar(i) && p && corDe(p->corHex, &r, &g, &b)) {
+    corLegivel(&r, &g, &b);
+    gfx_cor(tela, 0.0f, r, g, b, PS_AMB_COR_AV * alfa);
+  }
 }
 
 static void ambTrocar(int novo) {
@@ -678,8 +721,8 @@ static void ambAtualizar(float dt, int reduzida) {
   // O pedido fica no update, como o do mural: o desenho so consulta GLuint.
   for (i = 0; i < CONTA_PERFIL_MAX; i++) {
     const ContaPerfil *p = i < m ? perfis_item(i) : NULL;
-    ambFonte[i] = p && p->fundoUrl[0]
-      ? tex_obter_larg_qualquer(p->fundoUrl, PS_AMB_LARG) : 0;
+    const char *u = p ? ambUrl(i) : NULL;
+    ambFonte[i] = u ? tex_obter_larg_qualquer(u, PS_AMB_LARG) : 0;
   }
   if (ambAtual < 0) { ambAtual = ambAnt = foco; ambT = 1.0f; }
   else ambTrocar(foco);
@@ -705,17 +748,17 @@ static float ambDesenhar(float a) {
   float na = tn ? te : 0.0f;
   float cob = 1.0f - (1.0f - pa) * (1.0f - na);
   ambAtualPronto = tn != 0 || !ambTemUrl(ambAtual);
-  if (pa > 0.0f) {
-    gfx_tex_aspect_atual = tex_aspecto(perfis_item(ambAnt)->fundoUrl);
-    gfx_rect(tela, ta, GFX_CARD, 0, 0, 0, 0.0f, 1, 1, 1, a * pa);
-    gfx_tex_aspect_atual = 0;
+  if (pa > 0.0f) ambCamada(ambAnt, ta, a * pa);
+  if (na > 0.0f) ambCamada(ambAtual, tn, a * na);
+  if (cob > 0.0f) {
+    // The veil follows whichever layer dominates, so the cross-fade between a
+    // backdrop and an avatar does not pump in brightness.
+    float vAt = ambEhAvatar(ambAtual) ? PS_AMB_VEU_AV : PS_AMB_VEU;
+    float vAn = ambEhAvatar(ambAnt) ? PS_AMB_VEU_AV : PS_AMB_VEU;
+    float veu = (pa > 0.0f && na > 0.0f) ? vAn + (vAt - vAn) * te
+              : (na > 0.0f ? vAt : vAn);
+    gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f, veu * a * cob);
   }
-  if (na > 0.0f) {
-    gfx_tex_aspect_atual = tex_aspecto(perfis_item(ambAtual)->fundoUrl);
-    gfx_rect(tela, tn, GFX_CARD, 0, 0, 0, 0.0f, 1, 1, 1, a * na);
-    gfx_tex_aspect_atual = 0;
-  }
-  if (cob > 0.0f) gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f, PS_AMB_VEU * a * cob);
   return cob;
 }
 
@@ -725,7 +768,7 @@ void perfilsel_iniciar(void) {
   preparando = 0;
   pinDe = -1;
   pin[0] = 0;
-  pinFoco = PS_PIN_OK;
+  pinFoco = PS_PIN_INICIO;
   pinErrado = 0;
   pinRede = 0;
   verificando = 0;
@@ -781,7 +824,7 @@ static void escolher(int i) {
   const ContaPerfil *p = perfis_item(i);
   switch (perfis_acao(i)) {
     case PERFIL_ACAO_PIN:
-      pinDe = i; pin[0] = 0; pinFoco = PS_PIN_OK; pinErrado = pinRede = 0;
+      pinDe = i; pin[0] = 0; pinFoco = PS_PIN_INICIO; pinErrado = pinRede = 0;
       return;
     case PERFIL_ACAO_ENTRAR:
       if (p) perfis_definir_ativo(p->indice);
@@ -790,6 +833,32 @@ static void escolher(int i) {
     default:
       return;
   }
+}
+
+// Starts the async check of the typed PIN (one server round trip, in a thread
+// so the screen does not freeze).
+static void pinVerificar(void) {
+  PinTarefa *t;
+  const ContaPerfil *p = perfis_item(pinDe);
+  if (!pin[0]) return;
+  t = malloc(sizeof *t);
+  if (!t || !p) { free(t); pinRede = 1; return; }
+  t->geracao = atomic_load(&pinGeracao); t->slot = pinDe; t->indice = p->indice;
+  snprintf(t->valor, sizeof t->valor, "%s", pin);
+  verificando = 1;
+  pinErrado = pinRede = 0;
+  atomic_store(&resultadoPin, 0);
+  if (pthread_create(&fioPin, NULL, fioVerificar, t) == 0) pthread_detach(fioPin);
+  else { memset(t->valor, 0, sizeof t->valor); free(t); verificando = 0; pinRede = 1; }
+}
+
+// One digit, from the pad or the remote's number keys. The 4th one verifies.
+static void pinDigito(int digito) {
+  size_t z = strlen(pin);
+  if (z >= PS_PIN_LEN) return;
+  pin[z] = (char)('0' + digito); pin[z + 1] = 0;
+  pinErrado = pinRede = 0;
+  if (z + 1 == PS_PIN_LEN) pinVerificar();
 }
 
 static void eventoPin(SDL_Keycode k) {
@@ -805,34 +874,29 @@ static void eventoPin(SDL_Keycode k) {
     else pinDe = -1;
     return;
   }
-  if (k == SDLK_LEFT)  { if (pinFoco % PS_TECLA_COLS > 0) pinFoco--; return; }
+  // The remote's number keys type straight in, wherever the focus is.
+  if (k >= SDLK_0 && k <= SDLK_9) { pinDigito((int)(k - SDLK_0)); return; }
+  if (k >= SDLK_KP_1 && k <= SDLK_KP_9) { pinDigito((int)(k - SDLK_KP_1) + 1); return; }
+  if (k == SDLK_KP_0) { pinDigito(0); return; }
+  if (k == SDLK_BACKSPACE) { if (pin[0]) { pin[strlen(pin) - 1] = 0; pinErrado = pinRede = 0; } return; }
+  if (k == SDLK_LEFT) {
+    if (pinFoco % PS_TECLA_COLS > 0 && pinFoco - 1 != PS_PIN_VAZIO) pinFoco--;
+    return;
+  }
   if (k == SDLK_RIGHT) { if (pinFoco % PS_TECLA_COLS < PS_TECLA_COLS - 1) pinFoco++; return; }
   if (k == SDLK_UP)    { if (pinFoco >= PS_TECLA_COLS) pinFoco -= PS_TECLA_COLS; return; }
-  if (k == SDLK_DOWN)  { if (pinFoco + PS_TECLA_COLS < PS_TECLA_COLS * PS_TECLA_LINS)
-                           pinFoco += PS_TECLA_COLS; return; }
+  if (k == SDLK_DOWN)  {
+    if (pinFoco + PS_TECLA_COLS < PS_TECLA_COLS * PS_TECLA_LINS) {
+      pinFoco += PS_TECLA_COLS;
+      if (pinFoco == PS_PIN_VAZIO) pinFoco = PS_PIN_ZERO;   // "7" goes down to "0"
+    }
+    return;
+  }
   if (k != SDLK_RETURN && k != SDLK_KP_ENTER) return;
 
   if (pinFoco == PS_PIN_APAGAR) { if (pin[0]) pin[strlen(pin) - 1] = 0; return; }
-  if (pinFoco == PS_PIN_OK) {
-    PinTarefa *t;
-    const ContaPerfil *p = perfis_item(pinDe);
-    if (!pin[0]) return;
-    t = malloc(sizeof *t);
-    if (!t || !p) { free(t); pinRede = 1; return; }
-    t->geracao = atomic_load(&pinGeracao); t->slot = pinDe; t->indice = p->indice;
-    snprintf(t->valor, sizeof t->valor, "%s", pin);
-    verificando = 1;
-    pinErrado = pinRede = 0;
-    atomic_store(&resultadoPin, 0);
-    // Verificar BLOQUEIA (uma viagem ao servidor). Num fio, para a tela nao
-    // congelar por um segundo a cada tentativa.
-    if (pthread_create(&fioPin, NULL, fioVerificar, t) == 0) pthread_detach(fioPin);
-    else { memset(t->valor, 0, sizeof t->valor); free(t); verificando = 0; pinRede = 1; }
-    return;
-  }
-  { size_t z = strlen(pin);
-    int digito = (pinFoco == PS_PIN_ZERO) ? 0 : pinFoco + 1;
-    if (z < PS_PIN_MAX) { pin[z] = (char)('0' + digito); pin[z + 1] = 0; } }
+  if (pinFoco == PS_PIN_VAZIO) return;
+  pinDigito(pinFoco == PS_PIN_ZERO ? 0 : pinFoco + 1);
 }
 
 static void perfilFocar(int slot, int indice) {
@@ -849,7 +913,8 @@ static void perfilAtivar(int slot, int indice) {
 static void pinFocar(int tecla, int b) {
   (void)b;
   if (pinDe >= 0 && !verificando && !preparando &&
-      tecla >= 0 && tecla < PS_TECLA_COLS * PS_TECLA_LINS) pinFoco = tecla;
+      tecla >= 0 && tecla < PS_TECLA_COLS * PS_TECLA_LINS && tecla != PS_PIN_VAZIO)
+    pinFoco = tecla;
 }
 static void perfisRetentar(int a, int b) {
   (void)a; (void)b;
@@ -941,6 +1006,10 @@ void perfilsel_atualizar(float dt, Uint32 agora) {
     if (modo == PS_FUNDO_FILMES || modo == PS_FUNDO_LUZ || modo == PS_FUNDO_PROJETOR) {
       montarCena(&cena, reduzida);
       psestilos_atualizar(dt, &cena, modo);
+    } else if (modo == PS_FUNDO_ARTE) {
+      // The light behind a profile with no art and no avatar (#295).
+      montarCena(&cena, reduzida);
+      psestilos_atualizar(dt, &cena, PS_FUNDO_LUZ);
     } }
   { int mudou = 0;
     for (i = 0; i < 6; i++)
@@ -975,6 +1044,7 @@ void perfilsel_atualizar(float dt, Uint32 agora) {
     if (reduzida) animFoco[i] = alvo;
   }
 
+  if (pinTremor > 0.0f) { pinTremor -= dt; if (pinTremor < 0.0f) pinTremor = 0.0f; }
   { int resultado = atomic_load(&resultadoPin);
   if (verificando && resultado) {
     atomic_store(&resultadoPin, 0);
@@ -993,6 +1063,7 @@ void perfilsel_atualizar(float dt, Uint32 agora) {
     } else {
       pinErrado = 1;
       memset(pin, 0, sizeof pin);
+      pinTremor = reduzida ? 0.0f : 0.40f;
     }
   }
   }
@@ -1155,7 +1226,7 @@ static void desenhaFundo(void) {
 
 static void desenhaPin(void) {
   static const char *ROT[PS_TECLA_COLS * PS_TECLA_LINS] =
-    { "1","2","3", "4","5","6", "7","8","9", "←","0","OK" };
+    { "1","2","3", "4","5","6", "7","8","9", "","0","←" };
   const ContaPerfil *p = perfis_item(pinDe);
   float largura = PS_TECLA_COLS * PS_TECLA + (PS_TECLA_COLS - 1) * PS_TECLA_GAP;
   float x0 = (NV_TELA_W - largura) * 0.5f;
@@ -1190,6 +1261,8 @@ static void desenhaPin(void) {
   if (mostrar > PS_PIN_MAX) mostrar = PS_PIN_MAX;
   { float total = (float)mostrar * PS_PONTO_PASSO - (PS_PONTO_PASSO - PS_PONTO);
     float px = (NV_TELA_W - total) * 0.5f;
+    // Wrong PIN: the dots shake sideways and settle (decaying sine, 0.4 s).
+    if (pinTremor > 0.0f) px += sinf(pinTremor * 50.0f) * 18.0f * (pinTremor / 0.40f);
     size_t k;
     for (k = 0; k < mostrar; k++) {
       GfxRect d = { px + (float)k * PS_PONTO_PASSO, 434.0f, PS_PONTO, PS_PONTO };
@@ -1211,6 +1284,7 @@ static void desenhaPin(void) {
     GfxRect r = { x0 + col * (PS_TECLA + PS_TECLA_GAP),
                   y0 + lin * (PS_TECLA + PS_TECLA_GAP), PS_TECLA, PS_TECLA };
     int f = (i == pinFoco && !verificando);
+    if (i == PS_PIN_VAZIO) continue;
     if (pinDe >= 0 && !verificando && !preparando)
       ponteiro_alvo(r.x, r.y, r.w, r.h, pinFocar, NULL, i, pinDe);
     TxtLinha l;
@@ -1256,9 +1330,15 @@ void perfilsel_desenhar(Uint32 agora) {
       psestilos_desenhar(&cena, modo, a * (pinDe >= 0 ? 0.30f : 1.0f));
     } else {
       float cob = modo == PS_FUNDO_ARTE ? ambDesenhar(a) : 0.0f;
-      // Modo "Arte do perfil": o mural so aparece onde a arte nao cobre (perfil
-      // sem arte, ou a arte ainda baixando).
-      if (modo != PS_FUNDO_LISTRAS && cob < 0.999f)
+      // "Profile art": where the art does not cover (no art and no avatar, or
+      // still downloading) the profile's colour light shows — never the movie
+      // wall, which made this option look identical to "Filmes" (#295).
+      if (modo == PS_FUNDO_ARTE && cob < 0.999f) {
+        PSCena cena;
+        montarCena(&cena, reduzida);
+        psestilos_desenhar(&cena, PS_FUNDO_LUZ,
+                           a * (1.0f - cob) * (pinDe >= 0 ? 0.30f : 1.0f));
+      } else if (modo != PS_FUNDO_LISTRAS && modo != PS_FUNDO_ARTE && cob < 0.999f)
         muralDesenhar(a * (1.0f - cob) * (pinDe >= 0 ? 0.30f : 1.0f), reduzida);
     } }
 
@@ -1396,6 +1476,7 @@ void perfilsel_teste_estado(PerfilSelTesteEstado *e) {
 #endif
   for (i = 0; i < 8; i++) e->cont_tem[i] = contCard[i].tem;
   e->amb_t = ambT; e->amb_atual = ambAtual; e->amb_ant = ambAnt;
+  e->amb_fonte = !ambTemUrl(ambAtual) ? 0 : ambEhAvatar(ambAtual) ? 2 : 1;
 }
 #endif
 

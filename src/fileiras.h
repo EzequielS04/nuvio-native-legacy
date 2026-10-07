@@ -212,6 +212,9 @@ void fil_normalizar(void);
 // de semente ao primeiro arquivo do perfil 1, e so dele). Chamar na troca de
 // perfil.
 void fil_definir_perfil(int perfil);
+// Bumps on every real profile switch (#294): snapshots taken for the previous
+// profile are stale once this changes.
+unsigned fil_perfil_geracao(void);
 // Tira da lista os catalogos de addons que ja nao estao na conta. `ids` e
 // `bases` sao os ids de manifesto e as URLs base dos addons ATUAIS; so vale
 // depois de todos os manifestos da volta terem sido lidos. `perfilDaLista` e o

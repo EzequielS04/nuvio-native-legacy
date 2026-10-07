@@ -1824,7 +1824,7 @@
   T("Fundo", "背景"),
   T("Fundo da escolha de perfil", "プロフィール選択の背景"),
   T("Fundo da segunda legenda", "第2字幕の背景"),
-  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Também a arte do perfil desfocada ou as listras do login.", "プロフィール選択画面の背景。映画：各プロフィールが見た作品のポスターを傾いた壁に並べます。ライト：プロフィールの色の光が灯る黒い背景。プロジェクター：上映前の映画館。ぼかしたプロフィールのアートやログイン画面のストライプも選べます。"),
+  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Arte do perfil: o fundo escolhido ao editar o perfil no app Nuvio; sem ele, o avatar desfocado. Ou as listras do login.", "プロフィール選択画面の背景。映画：各プロフィールが見た作品のポスターを傾いた壁に並べます。ライト：プロフィールの色の光が灯る黒い背景。プロジェクター：上映前の映画館。プロフィールのアート：Nuvio アプリでプロフィールを編集して選んだ背景。なければぼかしたアバター。ログイン画面のストライプも選べます。"),
   T("Fundo da tela de escolha de perfil: o mural de capas do catálogo, a arte do perfil em foco desfocada (sem arte, o mural) ou as listras do login.", "プロフィール選択画面の背景: カタログのカバーのモザイク、フォーカス中のプロフィールのぼかしたアート(なければモザイク)、またはログイン画面のストライプ。"),
   T("Fundo de perfil", "プロフィールの背景"),
   T("Fundo do destaque do addon", "アドオンのヒーロー背景"),

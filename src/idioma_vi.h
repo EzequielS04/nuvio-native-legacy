@@ -1824,7 +1824,7 @@
   T("Fundo", "Nền"),
   T("Fundo da escolha de perfil", "Nền của màn hình chọn hồ sơ"),
   T("Fundo da segunda legenda", "Nền phụ đề thứ hai"),
-  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Também a arte do perfil desfocada ou as listras do login.", "Nền của màn hình chọn hồ sơ. Phim: áp phích những gì mỗi hồ sơ đã xem, trên một bức tường nghiêng. Ánh sáng: nền đen với ánh sáng theo màu hồ sơ. Máy chiếu: phòng chiếu phim trước suất chiếu. Ngoài ra còn có ảnh hồ sơ làm mờ hoặc các sọc của màn hình đăng nhập."),
+  T("Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Arte do perfil: o fundo escolhido ao editar o perfil no app Nuvio; sem ele, o avatar desfocado. Ou as listras do login.", "Nền của màn hình chọn hồ sơ. Phim: áp phích những gì mỗi hồ sơ đã xem, trên một bức tường nghiêng. Ánh sáng: nền đen với ánh sáng theo màu hồ sơ. Máy chiếu: phòng chiếu phim trước suất chiếu. Ảnh hồ sơ: nền được chọn khi chỉnh sửa hồ sơ trong ứng dụng Nuvio; nếu không có, ảnh đại diện làm mờ. Hoặc các sọc của màn hình đăng nhập."),
   T("Fundo da tela de escolha de perfil: o mural de capas do catálogo, a arte do perfil em foco desfocada (sem arte, o mural) ou as listras do login.", "Nền màn hình chọn hồ sơ: bức tranh ghép bìa từ danh mục, ảnh làm mờ của hồ sơ đang chọn (không có ảnh thì dùng bức tranh ghép) hoặc các sọc của màn hình đăng nhập."),
   T("Fundo de perfil", "Ảnh nền hồ sơ"),
   T("Fundo do destaque do addon", "Nền của banner chính từ tiện ích"),

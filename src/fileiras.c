@@ -720,10 +720,24 @@ int fil_addon_novo(const char *id, const char *base) {
 
 // TROCA DE PERFIL: solta a lista e le o arquivo do perfil novo na proxima
 // consulta. Nao grava nada aqui — o arquivo do perfil que saiu ja esta em dia.
+// Generation of the profile that owns linhas[]; bumped on every real switch so
+// callers holding per-profile snapshots (colfileiras.c) can tell they are stale.
+static unsigned perfilGeracao;
+unsigned fil_perfil_geracao(void) {
+  unsigned g; pthread_mutex_lock(&trava); g = perfilGeracao; pthread_mutex_unlock(&trava); return g;
+}
+
 void fil_definir_perfil(int p) {
   pthread_mutex_lock(&trava);
   if (p < 0) p = 0;
   if (p != perfil) {
+    // #294: a pending registry write belongs to the profile that is leaving.
+    // Flush it now; left pending, the next fil_gravar_registro wrote it under
+    // the NEW profile's file name — with nLinhas already 0 when nothing had
+    // reloaded yet, wiping that profile's saved order.
+    if (registroSujo && carregado) gravar();
+    registroSujo = 0;
+    perfilGeracao++;
     perfil = p;
     nLinhas = 0; ordemLocal = 0; limite = FIL_LIMITE_PADRAO; limiteOrigem = 0;
     memset(linhas, 0, sizeof linhas);
@@ -1580,6 +1594,7 @@ void fil_esquecer(void) {
   migrado197 = 1;  // lista vazia: nada a limpar
   memset(linhas, 0, sizeof linhas);
   gravar();
+  registroSujo = 0;  // just written; nothing pending for a later switch to flush
   pthread_mutex_unlock(&trava);
 }
 
