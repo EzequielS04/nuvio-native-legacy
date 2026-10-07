@@ -472,6 +472,7 @@ typedef enum {
   // ordem mora em fonteregra.c; aqui so o modo. No fim: valor[]/CHAVE[] posicionais.
   AJ_FONTE_ORDEM, AJ_FONTE_ORDEM_USO,
   AJ_FONTE_TOCAR_CONFERINDO,
+  AJ_FONTE_AQUECER,
   AJ_N
 } OpcaoId;
 
@@ -1283,6 +1284,7 @@ static const Opcao OPCOES[AJ_N] = {
   ACAO("Ordem dos add-ons"),                                   // fonteregra.c (local)
   ESC("Usar a ordem",                    V_FONTE_ORDEM_USO, 3), // por perfil: fonteOrdemUsoLocal
   ESC("Tocar enquanto confere a fonte", V_LIGA, 2),   // local: fonteTocarConferindoLocal
+  ESC("Aquecer conexões ao abrir o título", V_LIGA, 2),   // local: fonteAquecerLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1499,6 +1501,7 @@ static const char *CHAVE[] = {
   "socialLocal",
   "-fonteOrdem", "fonteOrdemUsoLocal",
   "fonteTocarConferindoLocal",
+  "fonteAquecerLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1811,6 +1814,7 @@ int ajustes_fonte_prazo_ms(void) {
 }
 // #202 (fonteregra.h).
 int ajustes_fonte_tocar_conferindo(void) { return lig(AJ_FONTE_TOCAR_CONFERINDO); }
+int ajustes_fonte_aquecer(void) { return lig(AJ_FONTE_AQUECER); }
 int ajustes_fonte_escopo(void)      { int v = valor[AJ_FONTE_ESCOPO]; return v < 0 || v > 2 ? 0 : v; }
 int ajustes_fonte_regex_modo(void)  { int v = valor[AJ_FONTE_REGEX]; return v < 0 || v > 2 ? 0 : v; }
 int ajustes_fonte_usar_outros(void) { return lig(AJ_FONTE_OUTROS); }
@@ -3784,6 +3788,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_FONTE_PRIORIDADE: case AJ_FONTE_HDR:   /* o que esta TV mostra e o que a rede dela aguenta */
     case AJ_FONTE_REPOR:
     case AJ_FONTE_TOCAR_CONFERINDO:
+    case AJ_FONTE_AQUECER:
     case AJ_FONTE_TEXTO:
     case AJ_SALVOS_DEST:
     case AJ_EPG_PAIS:       /* pais da grade: por aparelho, o web nao tem */
@@ -4936,6 +4941,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_FONTE_TEXTO: return "Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams. Logo do título: a logo do título no lugar do nome escrito.";
     case AJ_FONTE_PRAZO: return "As fontes aparecem na lista assim que cada add-on responde. A escolha automática não espera o mais lento: sai quando já há uma fonte boa ou depois deste tempo. Com uma fonte escolhida antes neste título, o add-on dela é sempre esperado.";
     case AJ_FONTE_TOCAR_CONFERINDO: return "Abre o player com a primeira fonte do automático na hora em que a conferência dela começa, em vez de esperar o resultado. Se a conferência reprovar a fonte, volta a esperar e segue para a próxima, sem baixar a qualidade. Torrent e fonte que precisa ser resolvida antes seguem o caminho de sempre.";
+    case AJ_FONTE_AQUECER: return "Ao abrir a página de um título e quando as fontes chegam, abre antes a conexão com o debrid e com os hosts das primeiras fontes, para o Play não gastar esse tempo. Não resolve nenhum link e não cria arquivo no debrid.";
     case AJ_FONTE_REPOR: return "Quantas outras fontes o automático tenta quando a escolhida não abre. Cada tentativa pode adicionar um arquivo na sua conta de debrid.";
 
     // --- Home
@@ -6880,7 +6886,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_DV_MKV:
     case AJ_LEG_FORCADA:
     case AJ_AUD_LINGUA: case AJ_PAUSA_OVERLAY: case AJ_PLR_CLASSIF: case AJ_FONTE_MANUAL:
-    case AJ_FONTE_AUTO: case AJ_FONTE_REPOR: case AJ_FONTE_TEXTO: case AJ_SELOS_CORES: case AJ_FONTE_TOCAR_CONFERINDO:
+    case AJ_FONTE_AUTO: case AJ_FONTE_REPOR: case AJ_FONTE_TEXTO: case AJ_SELOS_CORES: case AJ_FONTE_TOCAR_CONFERINDO: case AJ_FONTE_AQUECER:
     case AJ_FONTE_PRIORIDADE: case AJ_FONTE_HDR:
     case AJ_SELOS_PACOTE:
     case AJ_REACAO_CREDITOS:

@@ -27,6 +27,7 @@
 #include "perfis.h"
 #include "fontevolta.h"
 #include "fonteantecipa.h"
+#include "aquecer.h"
 #include "addonstats.h"
 #include "inicio.h"
 #include "perfilsel.h"
@@ -1435,6 +1436,35 @@ static void processarTorrentJob(void) {
 // alguns links respondem HTTP 200 e o uMS fica em load sem erro. Se o
 // automatico caiu nesse caso, tira a candidata da fila e verifica a proxima;
 // escolha manual fica intacta.
+// AQUECER CONEXOES (aquecer.h). Sem efeito no .wgt (o navegador cuida das dele).
+// Na pagina do titulo: a API do debrid; quando a lista de fontes chega ou cresce:
+// o host de cada uma das primeiras. Nunca resolve link nem cria arquivo.
+static void aquecerAoAbrirTitulo(void) {
+#ifndef __EMSCRIPTEN__
+  const char *api[4];
+  int n;
+  if (!ajustes_fonte_aquecer()) return;
+  n = debrid_origens(api, 4);
+  if (n > 0) aquecer_pedir(api, n);
+#endif
+}
+static void aquecerQuandoChegarem(void) {
+#ifndef __EMSCRIPTEN__
+  static int visto = -1;
+  int sn;
+  if (!detail_aberto() || player_aberto() || aguardandoFonte || !ajustes_fonte_aquecer()) { visto = -1; return; }
+  sn = stream_n();
+  if (sn == visto) return;
+  visto = sn;
+  if (sn > 0) {
+    char u[6][256];
+    const char *p[6];
+    int k, q = stream_urls_para_aquecer(u, 6);
+    for (k = 0; k < q; k++) p[k] = u[k];
+    if (q > 0) aquecer_pedir(p, q);
+  }
+#endif
+}
 // TOCAR ENQUANTO CONFERE. O fio que confere publica a primeira candidata da
 // fila (streams.c); aqui ela entra no player na hora, SEM esperar o veredito.
 // Mesmo estado de uma fonte automatica aberta (fonteVODAutomatica, a contagem
@@ -3520,11 +3550,13 @@ void app_atualizar(float dt, Uint32 agora) {
         if (!strcmp(ci->tipo, "series") || strcmp(ci->tipo, "movie") ||
             ci->nElenco == 0) desc_episodios(i, 0);
         { stream_definir_alvo(alvo); addons_buscar(alvo, ci->tipo); }
+        aquecerAoAbrirTitulo();
         // Legendas do OpenSubtitles junto: sao dezenas por titulo e a busca
         // leva segundos. Pedir so quando o dono abre a folha de faixas faria
         // ele esperar de olho numa lista vazia.
         addons_buscar_legendas(alvo, ci->tipo);
       } }
+    aquecerQuandoChegarem();
     // "Assistir do comeco" (issue #46) segue o MESMO caminho do primario; a
     // unica diferenca e a trava de retomada, armada depois de o episodio ficar
     // definitivo — player_do_inicio sobrevive as re-chamadas tardias de

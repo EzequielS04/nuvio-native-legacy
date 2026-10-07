@@ -681,6 +681,12 @@ int rede_medir_vazao(const char *url, const char *const *cab, int segundos,
   return nSeg;
 }
 
+// Aquecer conexao: o navegador gerencia as dele, nao ha o que abrir daqui.
+int rede_aquecer_lote(const char *const *origens, int n, unsigned *ms) {
+  (void)origens; (void)n; (void)ms;
+  return 0;
+}
+
 // Navegador nao abre socket. O websocket do Tizen web usa o WebSocket do
 // proprio navegador (discordws.c); estes existem para o modulo linkar.
 RedeTls *rede_tls_abrir(const char *url, int segundos) { (void)url; (void)segundos; return NULL; }
@@ -921,11 +927,67 @@ static int hostOcioso(const char *url, unsigned long agora) {
   return 0;
 }
 
+// HANDLES AQUECIDOS (2.0.2). O handle e do FIO, e o fio que confere a fonte
+// nasce a cada escolha: uma conexao aberta antes por outro fio morreria com ele.
+// rede_aquecer_lote abre DNS + TCP + TLS dos hosts que vem a seguir e ESTACIONA o
+// handle aqui; o primeiro fio que pedir um destes hosts sem ter handle proprio o
+// adota (curl_easy_reset preserva as conexoes). So adota dentro de
+// REDE_ESTAC_VALE_MS: conexao parada demais pode ter morrido sem aviso (ver
+// REDE_OCIOSO_PADRAO_MS acima), e ai o pedido esperaria o prazo inteiro.
+#define REDE_ESTAC_MAX 3
+#define REDE_ESTAC_HOSTS 6
+#define REDE_ESTAC_VALE_MS 15000UL
+typedef struct { void *c; unsigned long ms; int nh; char h[REDE_ESTAC_HOSTS][96]; } Estac;
+static Estac estac[REDE_ESTAC_MAX];
+static pthread_mutex_t estacTrava = PTHREAD_MUTEX_INITIALIZER;
+// Chamar com estacTrava: joga fora os que passaram da validade.
+static void estacVelhos(unsigned long agora) {
+  int i;
+  for (i = 0; i < REDE_ESTAC_MAX; i++)
+    if (estac[i].c && agora - estac[i].ms > REDE_ESTAC_VALE_MS) {
+      if (curl_cleanup) curl_cleanup(estac[i].c);
+      estac[i].c = NULL;
+    }
+}
+static void estacionar(void *c, char h[][96], int nh) {
+  unsigned long agora = redeAgoraMs();
+  int i, livre = -1, velho = 0;
+  pthread_mutex_lock(&estacTrava);
+  estacVelhos(agora);
+  for (i = 0; i < REDE_ESTAC_MAX; i++) {
+    if (!estac[i].c) { livre = i; break; }
+    if (estac[i].ms < estac[velho].ms) velho = i;
+  }
+  if (livre < 0) { livre = velho; if (curl_cleanup) curl_cleanup(estac[livre].c); }
+  estac[livre].c = c; estac[livre].ms = agora; estac[livre].nh = nh;
+  for (i = 0; i < nh && i < REDE_ESTAC_HOSTS; i++) snprintf(estac[livre].h[i], 96, "%s", h[i]);
+  pthread_mutex_unlock(&estacTrava);
+}
+static void *estacTomar(const char *url) {
+  char h[96];
+  unsigned long agora = redeAgoraMs();
+  void *c = NULL;
+  int i, k;
+  hostDaUrl(url, h, sizeof h);
+  if (!h[0]) return NULL;
+  pthread_mutex_lock(&estacTrava);
+  estacVelhos(agora);
+  for (i = 0; i < REDE_ESTAC_MAX && !c; i++)
+    for (k = 0; estac[i].c && k < estac[i].nh; k++)
+      if (!strcmp(estac[i].h[k], h)) { c = estac[i].c; estac[i].c = NULL; break; }
+  pthread_mutex_unlock(&estacTrava);
+  return c;
+}
+
 static void *pegarHandle(const char *url) {
   void *c;
   if (!curl_reset) return curl_init();     // libcurl sem reset: como antes
   pthread_once(&handleUma, handleCriarChave);
   c = pthread_getspecific(handleChave);
+  if (!c) {
+    c = estacTomar(url);
+    if (c) pthread_setspecific(handleChave, c);
+  }
   if (c && hostOcioso(url, redeAgoraMs())) {
     curl_cleanup(c);
     pthread_setspecific(handleChave, NULL);
@@ -1684,6 +1746,53 @@ int rede_url_final_tipo(const char *url, int segundos, const char *const *cab,
 
 int rede_url_final(const char *url, int segundos, char *dst, unsigned tam) {
   return rede_url_final_cab(url, segundos, NULL, dst, tam, NULL);
+}
+
+// AQUECER CONEXOES (2.0.2): abre DNS + TCP + TLS de cada origem ("https://host")
+// com um HEAD em "/", SEM seguir redirecionamento e sem ler corpo, e deixa o
+// handle estacionado para o fio que for pedir esses hosts (estacTomar). Nunca
+// toca um caminho de stream: um HEAD na raiz nao resolve link nem cria arquivo
+// no debrid. Chamar de um fio proprio e descartavel (aquecer.c): o handle do fio
+// sai da chave para ficar no estacionamento. ms[i] = tempo da origem i (0 =
+// falhou). Devolve quantas abriram.
+static size_t descartarCorpo(void *d, size_t t, size_t q, void *u) { (void)d; (void)u; return t * q; }
+int rede_aquecer_lote(const char *const *origens, int n, unsigned *ms) {
+  char ok[REDE_ESTAC_HOSTS][96];
+  int i, abriu = 0, nok = 0;
+  void *c;
+  if (!origens || n < 1 || !abrir() || !curl_reset || !curl_getinfo) return 0;
+  for (i = 0; i < n; i++) {
+    char u[200], h[96];
+    unsigned long t0;
+    int r;
+    if (ms) ms[i] = 0;
+    hostDaUrl(origens[i], h, sizeof h);
+    if (!h[0] || strlen(h) + 2 > sizeof u) continue;
+    snprintf(u, sizeof u, "%s/", h);
+    c = pegarHandle(u);
+    if (!c) continue;
+    curl_setopt(c, OPT_URL, u);
+    curl_setopt(c, OPT_NOBODY, (long)1);
+    curl_setopt(c, OPT_WRITEFUNCTION, descartarCorpo);
+    curl_setopt(c, OPT_FOLLOWLOCATION, (long)0);
+    opcoesComuns(c, 4000UL);
+    t0 = redeAgoraMs();
+    r = curl_perform(c);
+    if (ms) { unsigned long dt = redeAgoraMs() - t0; ms[i] = r ? 0 : (unsigned)(dt ? dt : 1); }
+    soltarHandleR(c, r, u);
+    if (!r) {
+      abriu++;
+      if (nok < REDE_ESTAC_HOSTS) snprintf(ok[nok++], 96, "%s", h);
+    }
+  }
+  // O handle, com as conexoes que abriu, sai deste fio e vai para o estacionamento.
+  c = pthread_getspecific(handleChave);
+  if (c && nok > 0) {
+    pthread_setspecific(handleChave, NULL);
+    hostsEsquecer();
+    estacionar(c, ok, nok);
+  }
+  return abriu;
 }
 
 char *rede_postar(const char *url, int segundos, const char *const *cab,

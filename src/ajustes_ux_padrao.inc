@@ -245,3 +245,4 @@
   0, /* social features (2.0.2, per profile): Ligado */
   0, 0, /* add-on order (action; list lives in fonteregra.c) and use of it: Nao */
   0, /* play while verifying the first auto source (2.0.2): Ligado */
+  0, /* warm connections when a title opens (2.0.2): Ligado */

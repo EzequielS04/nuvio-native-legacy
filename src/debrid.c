@@ -141,6 +141,16 @@ const char *debrid_chave_mascarada(const char *servico, char *dst, unsigned n) {
 // So conta servico que PODE resolver: com todas as chaves em conta sem plano,
 // streams.c descarta os torrents sem url logo na lista (como sem debrid) e a
 // verificacao vai direto as fontes diretas, em vez de gastar o lote nelas.
+// As origens das APIs dos servicos com chave que PODEM resolver, para aquecer.c.
+// Sem caminho, sem chave: so "https://host".
+int debrid_origens(const char **o, int max) {
+  static const char *const API[SN] = { "https://api.real-debrid.com", "https://api.torbox.app",
+                                       "https://www.premiumize.me", "https://api.alldebrid.com" };
+  int q, k = 0;
+  for (q = 0; q < SN && k < max; q++)
+    if (chave[q][0] && !atomic_load(&semPlano[q])) o[k++] = API[q];
+  return k;
+}
 int debrid_ativo(void) {
   int q;
   for (q = 0; q < SN; q++) if (chave[q][0] && !atomic_load(&semPlano[q])) return 1;

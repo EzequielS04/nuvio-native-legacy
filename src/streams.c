@@ -1109,6 +1109,29 @@ static void falhouUma(int i, void *u) {
   if (!c->abortou) stream_automatico_excluir(i);
 }
 
+// URLs (so o host importa) para aquecer.c abrir a conexao antes: as primeiras
+// fontes da lista que o automatico tentaria. Torrent sem link entra pela API do
+// debrid, que e o host que a resolucao vai pedir. Nunca resolve nada.
+int stream_urls_para_aquecer(char dst[][256], int max) {
+  const char *api[4];
+  int k, q = 0, a, na = 0, vistas = 0;
+  pthread_mutex_lock(&verTrava);
+  for (k = 0; k < n && q < max && vistas < 3; k++) {
+    int i = ORD(k);
+    if (automaticaExcluida(i)) continue;
+    if (lista[i].url[0]) {
+      snprintf(dst[q++], 256, "%s", lista[i].url);
+      vistas++;
+    } else if (lista[i].infoHash[0] && debrid_ativo()) {
+      if (!na) na = debrid_origens(api, 4);
+      for (a = 0; a < na && q < max; a++) snprintf(dst[q++], 256, "%s", api[a]);
+      vistas++;
+    }
+  }
+  pthread_mutex_unlock(&verTrava);
+  return q;
+}
+
 // A candidata que o player pode abrir ja (fonteantecipa.h), so se ainda for da
 // lista em memoria. -1 = nenhuma.
 int stream_antecipada(int *estado) {

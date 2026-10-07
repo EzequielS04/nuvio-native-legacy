@@ -224,6 +224,9 @@ int  stream_primeira_boa(int tentativas);
 // TOCAR ENQUANTO CONFERE (fonteantecipa.h): o indice da candidata que o player
 // ja pode abrir enquanto a conferencia dela roda, e o estado (FA_*). -1 = nada.
 int  stream_antecipada(int *estado);
+// Ate `max` URLs (256 bytes cada; so o host importa) das primeiras fontes que o
+// automatico tentaria, para aquecer.c abrir a conexao antes. Nunca resolve nada.
+int  stream_urls_para_aquecer(char dst[][256], int max);
 // Conferencia de uma URL avulsa, sem lista (bloqueia; chamar de fio proprio).
 int  stream_url_serve(const char *url, const char *cabecalhos);
 

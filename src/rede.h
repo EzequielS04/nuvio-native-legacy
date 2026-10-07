@@ -388,6 +388,13 @@ void rede_preparar(void);
 // Texto da falha de transporte do ULTIMO pedido deste fio ("curl 35: ..."), ou
 // "" quando ele passou. Sem URL, corpo ou segredo; serve a tela e ao log (#223).
 const char *rede_ultimo_erro(void);
+
+// AQUECER CONEXOES (2.0.2). Abre DNS + TCP + TLS de cada origem ("https://host")
+// com um HEAD em "/" (sem seguir redirecionamento, sem corpo, nunca um caminho
+// de stream) e deixa o handle guardado para o proximo fio que pedir um destes
+// hosts. ms[i] recebe o tempo de cada origem (0 = falhou). Devolve quantas
+// abriram. Chamar de um fio descartavel; no .wgt nao faz nada (devolve 0).
+int rede_aquecer_lote(const char *const *origens, int n, unsigned *ms);
 const char *rede_url_publica(const char *url, char *dst, unsigned tam);
 
 // URL DE IMAGEM/META PARA LOG, mais util que rede_url_publica mas igualmente
