@@ -37,6 +37,7 @@ static pthread_t fioVigia;
 static char tidAtual[65], sidAtual[65], hashAtual[41], prefixoUrl[96];
 static int metaPronta;
 static char pastaRaiz[600], pastaMae[600];
+static uint64_t livreSubida;   // livre medido quando o motor subiu (#202)
 static P2pmEstado estado;
 
 static _Atomic unsigned geracao;
@@ -90,10 +91,21 @@ static P2pmSondaFn sondaFn = sondaReal;
 // Percorre `p` sem seguir links. apagar=1 remove tudo (inclusive `p`);
 // apagar=0 so soma os blocos REAIS (o arquivo do torrent e esparso: o
 // tamanho mente).
+// #202: no ARM de 32 bits sem _FILE_OFFSET_BITS=64 o lstat de um arquivo
+// acima de 2 GB falha (EOVERFLOW): o video do torrent nao era contado nem
+// apagado, e o disco da TV enchia sessao apos sessao. O tpk.sh compila este
+// arquivo com 64 bits; se o lstat falhar mesmo assim, apagar tenta o unlink.
+#if defined(NV_TPK) && defined(__arm__)
+_Static_assert(sizeof(off_t) == 8, "p2pmotor.c precisa de -D_FILE_OFFSET_BITS=64 (#202)");
+#endif
 static uint64_t percorrer(const char *p, int apagar, int fundo) {
   struct stat st;
   uint64_t soma = 0;
-  if (fundo > 16 || lstat(p, &st) != 0) return 0;
+  if (fundo > 16) return 0;
+  if (lstat(p, &st) != 0) {
+    if (apagar && fundo > 0) unlink(p);
+    return 0;
+  }
   if (S_ISDIR(st.st_mode)) {
     DIR *d = opendir(p);
     struct dirent *e;
@@ -143,6 +155,47 @@ static int orcamento(const char *mae, uint64_t *mole, uint64_t *duro, uint64_t *
   if (l / 2 < *duro) *duro = l / 2;
   if (l < ((uint64_t)P2PM_LIVRE_MIN_MB << 20)) return P2P_ERR_SEM_ESPACO;
   return P2P_OK;
+}
+
+// #202: o livre caiu ~1,2 GB num 4K com a pasta do motor em 16 MB, e nao
+// voltou depois do motor desligado. Sem saber onde o espaco foi, lista o que
+// pesa na pasta do app (pai de <dados>) e no /tmp. So na TV (raiz real): no
+// teste o pai da raiz e o TMPDIR do Mac inteiro. Fio da vigia ou do pedido,
+// nunca o da tela.
+static void ondeFoi(const char *mae) {
+  char app[600], f[1200], linha[900];
+  const char *outros[3];
+  size_t n, k = 0;
+  DIR *d;
+  struct dirent *e;
+  unsigned i;
+  if (raizInjetada[0]) return;
+  snprintf(app, sizeof app, "%s", mae);
+  n = strlen(app);
+  while (n > 1 && app[n - 1] == '/') app[--n] = 0;
+  { char *b = strrchr(app, '/'); if (!b || b == app) return; *b = 0; }
+  linha[0] = 0;
+  if ((d = opendir(app))) {
+    while ((e = readdir(d))) {
+      uint64_t mb;
+      if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
+      if (snprintf(f, sizeof f, "%s/%s", app, e->d_name) >= (int)sizeof f) continue;
+      mb = percorrer(f, 0, 0) >> 20;
+      if (mb && k < sizeof linha - 80)
+        k += (size_t)snprintf(linha + k, sizeof linha - k, " %s=%llu", e->d_name, (unsigned long long)mb);
+    }
+    closedir(d);
+  }
+  outros[0] = "/tmp"; outros[1] = getenv("TMPDIR"); outros[2] = "/opt/usr/home/owner/share";
+  for (i = 0; i < 3; i++) {
+    uint64_t mb;
+    if (!outros[i] || !outros[i][0]) continue;
+    mb = percorrer(outros[i], 0, 0) >> 20;
+    if (mb && k < sizeof linha - 80)
+      k += (size_t)snprintf(linha + k, sizeof linha - k, " %s=%llu", outros[i], (unsigned long long)mb);
+  }
+  printf("[p2p-motor] onde (MB) em %s:%s\n", app, linha[0] ? linha : " nada acima de 1 MB");
+  fflush(stdout);
 }
 
 static int contem(const char *s, const char *agulha) {   // sem strcasestr
@@ -342,13 +395,14 @@ void p2pmotor_saida(void) {
 // ------------------------------------------------------------------ vigia
 static void *vigiaFio(void *x) {
   const P2pmOps *o = x;
+  unsigned volta = 0;
   pthread_mutex_lock(&trava);
   for (;;) {
     double fim = agora() + vigiaMs / 1000.0;
     void *m;
     int lerEventos, motivo = 0, espaco = 0, okLivre;
     char tid[65], raiz[600], mae[600];
-    uint64_t duro, usado, livre = 0;
+    uint64_t duro, usado, livre = 0, subida;
     P2pmStats st;
     while (!vigiaSair && agora() < fim) esperarSinal(vigiaMs);
     if (vigiaSair) break;
@@ -361,6 +415,7 @@ static void *vigiaFio(void *x) {
     snprintf(raiz, sizeof raiz, "%s", pastaRaiz);
     snprintf(mae, sizeof mae, "%s", pastaMae);
     duro = estado.disco_duro;
+    subida = livreSubida;
     pthread_mutex_unlock(&trava);
 
     // Tudo isto e I/O ou chamada ao motor: sem a trava.
@@ -381,6 +436,22 @@ static void *vigiaFio(void *x) {
     else if (espaco || usado > duro || livre < ((uint64_t)P2PM_LIVRE_PISO_MB << 20))
       motivo = P2P_ERR_SEM_ESPACO;
     else if (st.ram_usada > ((uint64_t)P2PM_RAM_DURO_MB << 20)) motivo = P2P_ERR_RAM;
+
+    // #202: a cada ~60 s, quem gasta o disco. O livre caindo com a pasta
+    // parada aponta para fora do motor.
+    if (++volta * vigiaMs >= 60000u) {
+      volta = 0;
+      printf("[p2p-motor] disco: pasta %.0f MB, motor %.0f MB, baixado %.0f MB, livre %.0f MB (ao subir %.0f MB)\n",
+             (double)usado / 1048576.0, (double)st.disco_motor / 1048576.0,
+             (double)st.baixado / 1048576.0, (double)livre / 1048576.0,
+             (double)subida / 1048576.0);
+      fflush(stdout);
+    }
+    if (motivo == P2P_ERR_SEM_ESPACO) {
+      printf("[p2p-motor] sem espaco: baixado %.0f MB, livre ao subir %.0f MB\n",
+             (double)st.baixado / 1048576.0, (double)subida / 1048576.0);
+      ondeFoi(mae);
+    }
 
     pthread_mutex_lock(&trava);
     if (lerEventos) vigiaEventos = 0;
@@ -419,6 +490,7 @@ static int subir(const P2pmOps *o, unsigned g) {
   e = orcamento(mae, &mole, &duro, &livre);
   if (e != P2P_OK) {
     printf("[p2p-motor] recusado (erro %d): livre %.0f MB\n", e, (double)livre / 1048576.0);
+    if (e == P2P_ERR_SEM_ESPACO) ondeFoi(mae);
     return e;
   }
   snprintf(dad, sizeof dad, "%s/dados", raiz);
@@ -464,6 +536,7 @@ static int subir(const P2pmOps *o, unsigned g) {
   estado.disco_teto = mole;
   estado.disco_duro = duro;
   estado.livre = livre;
+  livreSubida = livre;
   estado.ram_teto = (uint64_t)P2PM_RAM_MB << 20;
   estado.ram_duro = (uint64_t)P2PM_RAM_DURO_MB << 20;
   atomic_store(&tetoUltimoMb, (unsigned)(duro >> 20));

@@ -123,6 +123,7 @@ typedef struct {
 } P2pmConfig;
 typedef struct {
   uint64_t ram_usada, disco_motor, baixando_bps;
+  uint64_t baixado;          // bytes do torrent recebidos desde que o motor subiu
   unsigned pares;
 } P2pmStats;
 typedef struct {
