@@ -817,7 +817,7 @@ static void ajcCenaOpcao(int sec, int op) {
     case AJ_ANIM: case AJ_RELOGIO: case AJ_RELOGIO_12H: case AJ_ESMAECER: case AJ_DESCANSO_ESTILO: case AJ_DESCANSO_FONTE:
       ajcCenaMovimento(op); return;
     case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: case AJ_FONTE_HDR: ajcCenaQualidade(op); return;
-    case AJ_ADDONS: case AJ_PLUGINS: case AJ_ADDONS_PRINCIPAL: case AJ_BUSCA_CINEMETA: ajcCenaAddons(op); return;
+    case AJ_ADDONS: case AJ_PLUGINS: case AJ_ADDONS_PRINCIPAL: case AJ_BUSCA_CINEMETA: case AJ_BUSCA_NUVIO: case AJ_BUSCA_ORIGEM: ajcCenaAddons(op); return;
     case AJ_IDIOMA: case AJ_TMDB_IDIOMA: ajcCenaIdioma(op); return;
     case AJ_DEBRID_RD: case AJ_DEBRID_TB: case AJ_DEBRID_PM: case AJ_DEBRID_AD: case AJ_DEBRID_AD_TESTAR:
       ajcCenaServico(op, "aj_zap"); return;

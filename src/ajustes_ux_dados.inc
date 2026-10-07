@@ -171,6 +171,8 @@ static const char *uxSinonimos(int op) {
     case AJ_SOCIAL: return "social amigos amigo atividade recomendar recomendacoes friends activity recommend presenca desligar remover";
     case AJ_PLR_CLASSIF: return "classificacao indicativa idade faixa etaria 16 12 18 livre guia parental avisos violencia nudez player content rating age parental guide";
     case AJ_APOIAR: return "apoiar apoio doar doacao patreon kofi ko-fi cafe contribuir ajudar projeto qr support donate";
+    case AJ_BUSCA_NUVIO: return "busca pesquisa nuvio catalogo resultados primeiro ultimo desligar ocultar mover baixo aiometadata addon search results first last disable";
+    case AJ_BUSCA_ORIGEM: return "busca pesquisa fonte origem de from rotulo legenda grupo resultados ocultar esconder mostrar source label caption";
     case AJ_BUSCA_CINEMETA: return "busca pesquisa cinemeta catalogo nuvio addon excluir desligar resultados procurar search";
     case AJ_ENQUETES: return "enquete enquetes votacao votar pesquisa opiniao notificacao notificacoes aviso convite ilha relogio poll";
     case AJ_LEG_LINGUA2: return "idioma legenda secundaria segunda dupla dual second subtitle subtitles";
@@ -242,7 +244,7 @@ static const char *uxCaminhoAntigo(int op) {
     case AJ_FONTE_ORDEM: case AJ_FONTE_ORDEM_USO:
     case AJ_SELOS_CORES: case AJ_SELOS_PACOTE: case AJ_SELOS_PACOTE_ADD: case AJ_SELOS_PACOTE_REM:
       return "Reprodução";
-    case AJ_BUSCA_CINEMETA: return "Busca";
+    case AJ_BUSCA_CINEMETA: case AJ_BUSCA_NUVIO: case AJ_BUSCA_ORIGEM: return "Busca";
     case AJ_AVANCADAS: return "Aparência";
     case AJ_IDIOMA: return "Idioma";
     default: return "";
@@ -306,6 +308,7 @@ int ajustes_buscar(const char *consulta, AjusteBuscaResultado *resultados, int c
     visto[op] = 1;
     if (op == AJ_ICONE_APP && !apoiador_ativo()) continue;
     if ((op == AJ_PERFIL_PESQ || op == AJ_PERFIL_EDITAR) && !recomenda_ativo()) continue;
+    if (op == AJ_BUSCA_CINEMETA && valor[op] == 0 && !cinemetaInstalado()) continue;
     uxNormalizar(i18n(rotuloOpcao(op)), titulo, sizeof titulo);
     uxNormalizar(rotuloOpcao(op), tituloPt, sizeof tituloPt);
     uxNormalizar(uxSinonimos(op), aliases, sizeof aliases);

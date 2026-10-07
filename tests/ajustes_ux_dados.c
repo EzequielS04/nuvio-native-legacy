@@ -509,7 +509,16 @@ int main(void) {
   assert(valorPadrao[AJ_BUSCA_CINEMETA] == 0 && ajustes_busca_cinemeta());
   assert(somenteDesteAparelho(AJ_BUSCA_CINEMETA) && !dePerfil(AJ_BUSCA_CINEMETA));
   { int vz = 0, k; for (k = 0; k < AJ_N_TELA; k++) if (TELA[k].tipo == IT_OPC && TELA[k].op == AJ_BUSCA_CINEMETA) vz++; assert(vz == 1); }
-  assert(indiceResultado(AJ_BUSCA_CINEMETA, ajustes_buscar("cinemeta", resultados, AJ_N)) >= 0);
+  /* #311: sem o add-on Cinemeta instalado (o teste nao tem add-ons) o interruptor Ligado nao aparece. */
+  assert(indiceResultado(AJ_BUSCA_CINEMETA, ajustes_buscar("cinemeta", resultados, AJ_N)) < 0);
+  /* #311: Nuvio na busca (Primeiro/Por ultimo/Desligado) e a fonte nos grupos: locais, no padrao de antes. */
+  assert(AJ_BUSCA_ORIGEM == AJ_BUSCA_NUVIO + 1 && AJ_N == AJ_BUSCA_ORIGEM + 1);
+  assert(!strcmp(CHAVE[AJ_BUSCA_NUVIO], "buscaNuvioLocal") && OPCOES[AJ_BUSCA_NUVIO].n == 3 && valorPadrao[AJ_BUSCA_NUVIO] == 0);
+  assert(!strcmp(CHAVE[AJ_BUSCA_ORIGEM], "buscaOrigemLocal") && OPCOES[AJ_BUSCA_ORIGEM].n == 2 && valorPadrao[AJ_BUSCA_ORIGEM] == 0);
+  assert(ajustes_busca_nuvio() == 0 && ajustes_busca_origem());
+  assert(somenteDesteAparelho(AJ_BUSCA_NUVIO) && somenteDesteAparelho(AJ_BUSCA_ORIGEM));
+  assert(indiceResultado(AJ_BUSCA_NUVIO, ajustes_buscar("nuvio catalogo", resultados, AJ_N)) >= 0);
+  assert(indiceResultado(AJ_BUSCA_ORIGEM, ajustes_buscar("fonte resultados", resultados, AJ_N)) >= 0);
   /* OLED: esmaecer quando parado (padrao 5 min) e brilho da interface do player (padrao 80%). Ultimas, locais. */
   assert(AJ_ESMAECER == AJ_BUSCA_CINEMETA + 1 && AJ_BRILHO_PLAYER == AJ_FONTE_ESCOPO - 11 && AJ_BRILHO_PLAYER == AJ_ESMAECER + 1);
   assert(!strcmp(CHAVE[AJ_ESMAECER], "esmaecerLocal") && !strcmp(CHAVE[AJ_BRILHO_PLAYER], "brilhoPlayerLocal"));
