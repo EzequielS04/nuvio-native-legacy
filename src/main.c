@@ -1164,7 +1164,7 @@ int main(int argc, char **argv) {
   // NIVEL DE GPU (gpunivel.h): le GL_*, marca a GPU fraca no perfil e decide
   // o nivel de partida ANTES de tex_iniciar, que tira o perfil do aparelho.
   gpun_iniciar(dw, dh);
-  gputempo_iniciar();   // GPU clock per frame (Android, where the extension exists)
+  gputempo_iniciar();   // GPU clock per frame: Android diagnostic, opt-in (gputempo.h)
   int gpuPref = ajustes_gpu_efeitos();
   if (gpuPref) gpun_preferencia(gpuPref);
   if (ajustes_720p()) gpun_forcar_720();
@@ -1925,6 +1925,7 @@ int main(int argc, char **argv) {
         //   debug.nuvio.quadros 1  -> per-frame trace, same as /tmp/nuvio-quadros
         //   debug.nuvio.fill 1     -> the "[gpu-modos] fill" line every report
         //   debug.nuvio.gpunivel N -> force GPU level N (0-3) for A/B measurement
+        //   debug.nuvio.gputempo 1 -> GPU timer per frame (read at startup, gputempo.c)
         int forcaFill = 0;
 #ifdef NV_ANDROID
         { char pv[PROP_VALUE_MAX] = "";

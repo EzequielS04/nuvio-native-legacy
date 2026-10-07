@@ -16,6 +16,11 @@
 // extension on ES2 contexts; the webOS build is WebGL (no timer queries) and
 // the .tpk is not measured here. Everywhere else every function is a no-op
 // and gputempo_colher returns 0.
+//
+// OPT-IN since #318: off unless `adb shell setprop debug.nuvio.gputempo 1`
+// before the app opens. A per-frame query in every user's build bought nothing
+// and the Xiaomi MiTV-AFKR0 (Mali-G31) returned garbage while its screen
+// flickered and froze; results over 1 s or across a disjoint are dropped.
 #ifndef NV_GPUTEMPO_H
 #define NV_GPUTEMPO_H
 

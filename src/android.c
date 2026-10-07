@@ -4,7 +4,6 @@
 #include <SDL2/SDL.h>
 #include <android/log.h>
 #include <jni.h>
-#include <sys/system_properties.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,12 +18,6 @@
 //   "<MANUFACTURER> <MODEL>|<SDK_INT>|<RELEASE>|<versionName>"
 // A tela ainda nao existe neste ponto (o SDL nem iniciou); a linha `janela=` do
 // main.c ja diz o drawable.
-int android_318_religar(const char *nome) {
-  static char v[PROP_VALUE_MAX];
-  static int lido;
-  if (!lido) { lido = 1; if (__system_property_get("debug.nuvio.318", v) <= 0) v[0] = 0; }
-  return v[0] && strstr(v, nome) != NULL;
-}
 static void logaTv(void) {
   char info[256], *campo[4] = { "", "", "", "" }, *p = info;
   const char *e = getenv("NUVIO_TV_INFO");

@@ -34,12 +34,5 @@ int android_abrir_loja(const char *pacote, const char *nome);
 // do SDL chama.
 void android_etapa(const char *nome);
 void android_quadro(void);
-// #318 (Xiaomi MiTV-AFKR0 e outros: tela pisca e congela ao trocar de tela,
-// desde a 2.0.1). Tres mudancas de GL so do Android entraram na 2.0.1: o
-// glDiscardFramebufferEXT (descarte), a consulta de tempo de GPU (gputempo) e o
-// fundo da Dinamica adiado (din). Ficam DESLIGADAS, como na 2.0.0; cada uma
-// volta com `adb shell setprop debug.nuvio.318 "descarte gputempo din"`.
-// 1 = religar `nome`.
-int android_318_religar(const char *nome);
 #endif
 #endif

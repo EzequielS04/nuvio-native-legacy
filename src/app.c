@@ -620,8 +620,14 @@ static void trocarTela(Tela nova) {
   if (nova != TELA_SOCIAL) socialDoPerfil = 0;
   if (tela == TELA_AJUSTES) ajustes_encerrar();
   if (tela == TELA_LIVETV_DIAG) livetvdiag_encerrar();
-  // #318: a tela pisca e congela logo depois de uma troca de tela (Android).
-  printf("[transicao] tela %d -> %d t=%u\n", (int)tela, (int)nova, (unsigned)SDL_GetTicks());
+  // #318: a tela piscava e congelava logo depois de uma troca de tela
+  // (Android). A linha fica para o proximo relato, com teto: as 120 primeiras
+  // trocas e depois no maximo uma a cada 10 s.
+  { static int nTr; static Uint32 ultTr; Uint32 agTr = SDL_GetTicks();
+    if (nTr < 120 || agTr - ultTr >= 10000) {
+      nTr++; ultTr = agTr;
+      printf("[transicao] tela %d -> %d t=%u\n", (int)tela, (int)nova, (unsigned)agTr);
+    } }
   tela = nova;
   // Cada tela zera o proprio estado ao ser aberta: voltar para a busca com o
   // texto de duas navegacoes atras seria lixo, nao memoria util.
