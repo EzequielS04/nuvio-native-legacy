@@ -4502,6 +4502,9 @@ void app_desenhar(Uint32 agora) {
   // (plrilha.h, desenhada em desenharTelas): a mesma pilula, no mesmo canto,
   // com a hora e o "termina as" do titulo. No Guia ela vai para o topo direito
   // (o titulo do guia ocupa o esquerdo).
+#ifndef HOME_CARGA_AVISO_MAX_MS
+#define HOME_CARGA_AVISO_MAX_MS 20000u
+#endif
   static int homeCarregando;
   static Uint32 homeConcluida;
   // O VOO DO PLAYER ATE A PILULA NAO DIVIDE A ILHA COM A CARGA DA HOME
@@ -4517,6 +4520,10 @@ void app_desenhar(Uint32 agora) {
   }
   else if (tela == TELA_HOME && !detail_aberto()) {
     DescHomeCarga load; desc_home_carga(&load);
+    // TETO DO AVISO: um catalogo que nunca responde (ou voltas que recomecam)
+    // mantem `buscando` ligado e a pilula ficava em "Carregando fileiras…" com
+    // a Home ja pronta. Passado o teto o aviso se encerra e a ilha volta ao relogio.
+    if (load.ativo && load.ms > HOME_CARGA_AVISO_MAX_MS) load.ativo = 0;
     if (load.ativo) { homeCarregando = 1; homeConcluida = 0; }
     else if (homeCarregando) { homeCarregando = 0; homeConcluida = agora; }
     int concluida = homeConcluida && agora - homeConcluida < 1000u;

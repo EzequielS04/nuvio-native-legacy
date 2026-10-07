@@ -3915,8 +3915,10 @@ static void desenhaHero(Uint32 agora, float saida) {
         // Em foco, o preenchimento e a tinta vem do ACENTO (botao_superficie,
         // a mesma pilula primaria do resto do app, inclusive "Cor da logo"
         // e vidro) — nunca um branco fixo (dono, 06/10: nao mudava com o acento).
-        int tb = btnFoco ? ajustes_tinta_foco() : 245;
-        TxtLinha lb = txt_linha(TXT_ILHA_NOME, rot, tb, tb, tb, 255);
+        // O rotulo usa o MESMO corpo (TXT_DET_BOTAO, botoes.h) e a MESMA tinta
+        // que botao_superficie devolve para este foco: antes era TXT_ILHA_NOME
+        // 24/600 com ajustes_tinta_foco, mais pesado e fora da pilula do app.
+        TxtLinha lb = txt_linha(TXT_DET_BOTAO, rot, 245, 245, 245, 255);
         float bh = btnH;
         float bw = lb.w + 56.0f;
         float by = actionY;
@@ -3924,7 +3926,10 @@ static void desenhaHero(Uint32 agora, float saida) {
 
         // Raio = metade da ALTURA: o raio do gfx_cor e fracao da altura do
         // retangulo, entao 0,5 e a pilula exata em qualquer largura.
-        if (btnFoco) botao_superficie(bt, 1.0f, aBtn);
+        if (btnFoco) {
+          int tb = botao_superficie(bt, 1.0f, aBtn);
+          lb = txt_linha(TXT_DET_BOTAO, rot, tb, tb, tb, 255);
+        }
         else if (ajustes_vidro()) gfx_vidro_painel(bt, 0.5f, 0.55f, aBtn);
         else gfx_cor(bt, 0.5f, 1.0f, 1.0f, 1.0f, 0.18f * aBtn);
         // O TRIANGULO DE REPRODUZIR NAO ENTRA AQUI. Ele e a marca universal de
