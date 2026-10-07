@@ -63,6 +63,29 @@ static int uxRequisito(int op) {
     default: return -1;
   }
 }
+// 2.0.3 (M3): "OK liga as duas". Liga, na ordem, os interruptores de que a
+// linha depende (ate tres degraus: Continuar > Miniatura > Desfocar) e, se a
+// linha tambem e um interruptor desligado, ela junto. Primeiro ensaia em
+// valor[] e desfaz: so liga se no fim a linha ficaria ativa. Devolve 2 (liga
+// as duas), 1 (liga so o requisito) ou 0 (nao da: o OK mostra o requisito).
+static int uxLigarRequisitos(int op, int aplicar) {
+  int salvo[AJ_N], ligar[4], n = 0, k, res;
+  if (op < 0 || op >= AJ_N || !inativa(op)) return 0;
+  memcpy(salvo, valor, sizeof salvo);
+  for (k = 0; k < 3 && inativa(op); k++) {
+    int req = uxRequisito(op);
+    if (req < 0 || !ehInterruptor(req) || lig(req) || inativa(req)) break;
+    valor[req] = 0; ligar[n++] = req;
+  }
+  res = n > 0 && !inativa(op) ? (ehInterruptor(op) && !lig(op) ? 2 : 1) : 0;
+  memcpy(valor, salvo, sizeof salvo);
+  if (!aplicar || !res) return res;
+  for (k = 0; k < n; k++)
+    if (!definirValorDireto(ligar[k], 0)) { uxNotificar("Não foi possível salvar. O valor anterior foi mantido."); return 0; }
+  if (res == 2) definirValorDireto(op, 0);
+  uxNotificar("Ajuste salvo nesta TV.");
+  return res;
+}
 static void uxAbrirEditor(int op) {
   if (op < 0 || op >= AJ_N || soLeitura(op)) return;
   uxCancelar();
@@ -276,6 +299,14 @@ static int uxEvento(SDL_Keycode k) {
   }
   if (k == SDLK_RIGHT) return 1;
   if (uxOk(k) && focoOp >= 0 && uxAlternarDireto(focoOp)) return 1;
-  if (uxOk(k) && focoOp >= 0 && inativa(focoOp)) { uxAbrirEditor(focoOp); return 1; }
+  // Linha apagada (2.0.3): OK liga o que falta, como a propria linha diz; quando
+  // o requisito nao e um interruptor (layout, chave da conta...), leva ate ele
+  // e Voltar devolve aqui. A modal de dependencia ficou para os atalhos.
+  if (uxOk(k) && focoOp >= 0 && inativa(focoOp)) {
+    int req = uxRequisito(focoOp);
+    if (uxLigarRequisitos(focoOp, 1)) return 1;
+    if (req >= 0) { int op = focoOp; uxCancelar(); focarOpcao(req); uxRetornarOp = op; return 1; }
+    uxAbrirEditor(focoOp); return 1;
+  }
   return 0; // Ações existentes: conta, teclado, fileiras, diagnóstico.
 }

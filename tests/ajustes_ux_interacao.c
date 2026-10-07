@@ -39,9 +39,26 @@ int main(void) {
   assert(inativa(AJ_VIDRO_CONTORNO));
   assert(uxRequisito(AJ_VIDRO_CONTORNO) == AJ_VIDRO);
   assert(strstr(ajudaOpcao(AJ_VIDRO_CONTORNO), "Ative a interface de vidro"));
-  antes = arquivo(); abrir(AJ_VIDRO_CONTORNO);
-  assert(uxEditor == 2); igual(antes);
+  // 2.0.3 (M3): the line says what it needs and OK turns it on ("OK liga").
+  // The dry run touches nothing; the modal stays for shortcuts.
+  antes = arquivo(); focarOpcao(AJ_VIDRO_CONTORNO);
+  assert(uxLigarRequisitos(AJ_VIDRO_CONTORNO, 0) == 1); igual(antes);
+  assert(ajLinhaAviso(focoItem));
+  key(SDLK_RETURN); assert(!uxEditor && lig(AJ_VIDRO) && !inativa(AJ_VIDRO_CONTORNO) && focoOp == AJ_VIDRO_CONTORNO);
+  { char *d = arquivo(); assert(strcmp(antes, d)); free(d); } free(antes);
+  valor[AJ_VIDRO] = 1; antes = arquivo(); uxAbrirEditor(AJ_VIDRO_CONTORNO); assert(uxEditor == 2); igual(antes);
   key(SDLK_ESCAPE); igual(antes); free(antes);
+  // "liga as duas": Desfocar o proximo episodio needs Miniatura do episodio.
+  valor[AJ_CW_LIGADO] = 0; valor[AJ_CW_THUMB] = 1; valor[AJ_CW_BLUR_PROX] = 1;
+  assert(inativa(AJ_CW_BLUR_PROX) && uxLigarRequisitos(AJ_CW_BLUR_PROX, 0) == 2);
+  focarOpcao(AJ_CW_BLUR_PROX); key(SDLK_RETURN);
+  assert(lig(AJ_CW_THUMB) && lig(AJ_CW_BLUR_PROX) && !inativa(AJ_CW_BLUR_PROX));
+  // A child right under its parent is indented; the first row of a block is not.
+  { int k, ti = -1, tb = -1;
+    for (k = 0; k < AJ_N_TELA; k++) if (TELA[k].tipo == IT_OPC) {
+      if (TELA[k].op == AJ_CW_THUMB) ti = k;
+      if (TELA[k].op == AJ_CW_LIGADO) tb = k; }
+    assert(ti > 0 && tb > 0 && ajLinhaFilha(ti) && !ajLinhaFilha(tb)); }
   valor[AJ_VIDRO] = original;
 
   // Interruptor (Ligado/Desligado): OK troca e grava na hora, sem editor nem
@@ -57,8 +74,8 @@ int main(void) {
   { char falho[1400]; snprintf(falho, sizeof falho, "%s/ausente", dir); snprintf(dirAjustes, sizeof dirAjustes, "%s", falho);
     key(SDLK_RETURN); assert(valor[AJ_RELOGIO] == 0 && !uxEditor); assert(strstr(uxAviso, "salvar"));
     snprintf(dirAjustes, sizeof dirAjustes, "%s", dir); }
-  // Interruptor inativo (depende de outro) continua abrindo o aviso de requisito.
-  valor[AJ_VIDRO] = 1; focarOpcao(AJ_VIDRO_CONTORNO); key(SDLK_RETURN); assert(uxEditor == 2); key(SDLK_ESCAPE);
+  // Interruptor inativo (depende de outro): 2.0.3, o OK liga o requisito.
+  valor[AJ_VIDRO] = 1; focarOpcao(AJ_VIDRO_CONTORNO); key(SDLK_RETURN); assert(!uxEditor && lig(AJ_VIDRO));
   valor[AJ_VIDRO] = 0;
   focarOpcao(AJ_RELOGIO);
 
@@ -154,13 +171,17 @@ int main(void) {
   key(SDLK_UP); while (uxTopo != AJ2_T_BUSCA) key(SDLK_LEFT);   // e anda ate o Buscar
   key(SDLK_RETURN); assert(ajustes_pediu_busca()); assert(!ajustes_pediu_busca());
 
-  // Dependência: abrir requisito e voltar retorna à opção original.
-  valor[AJ_HERO_TRAILER] = 1; abrir(AJ_HERO_TRAILER_ESPERA); assert(uxEditor == 2);
-  key(SDLK_RETURN); assert(focoOp == AJ_HERO_TRAILER && !uxEditor);
-  key(SDLK_ESCAPE); assert(focoOp == AJ_HERO_TRAILER_ESPERA && !focoIndice);
+  // Dependência (2.0.3): requisito interruptor, OK liga e o foco fica; requisito
+  // que nao e interruptor (o layout), OK leva ate ele e Voltar devolve.
+  valor[AJ_HERO_TRAILER] = 1; focarOpcao(AJ_HERO_TRAILER_ESPERA); key(SDLK_RETURN);
+  assert(lig(AJ_HERO_TRAILER) && !inativa(AJ_HERO_TRAILER_ESPERA) && focoOp == AJ_HERO_TRAILER_ESPERA && !uxEditor);
+  valor[AJ_HOME_LAYOUT] = 1; focarOpcao(AJ_HERO_CHEIO); assert(inativa(AJ_HERO_CHEIO) && !uxLigarRequisitos(AJ_HERO_CHEIO, 0));
+  key(SDLK_RETURN); assert(focoOp == AJ_HOME_LAYOUT && !uxEditor && uxRetornarOp == AJ_HERO_CHEIO);
+  key(SDLK_ESCAPE); assert(focoOp == AJ_HERO_CHEIO && !focoIndice);
 
-  abrir(AJ_HERO_TRAILER_ESPERA); key(SDLK_RETURN); key(SDLK_DOWN);
+  focarOpcao(AJ_HERO_CHEIO); key(SDLK_RETURN); key(SDLK_DOWN);
   assert(uxRetornarOp == -1); key(SDLK_ESCAPE); assert(focoIndice);
+  valor[AJ_HOME_LAYOUT] = 0;
 
   // Categoria lembra a última opção; esconder avançados nunca deixa foco oculto.
   focarOpcao(AJ_TEX_MB); int sec = secAtual;

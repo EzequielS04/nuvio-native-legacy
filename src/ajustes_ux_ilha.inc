@@ -41,7 +41,10 @@ static int ajDicasDe(int op, AjDica *d) {
   { int n = 0;
     if (op < 0 && focoItem >= 0 && TELA[focoItem].tipo == IT_MAIS)
       d[n++] = (AjDica){ "OK", maisAberto[secAtual] ? "Esconder" : "Abrir" };
-    else if (op >= 0 && inativa(op) && uxRequisito(op) >= 0) d[n++] = (AjDica){ "OK", "Mostrar" };
+    else if (op >= 0 && inativa(op) && uxRequisito(op) >= 0) {
+      int liga = uxLigarRequisitos(op, 0);
+      d[n++] = (AjDica){ "OK", liga == 2 ? "Ligar as duas" : liga == 1 ? "Ligar a outra" : "Mostrar" };
+    }
     else if (op == AJ_ENVIAR_LOG && !inativa(op)) d[n++] = (AjDica){ "OK", "Enviar" };
     else if (op >= 0 && !inativa(op)) switch (ajTipo(op)) {
       case AJL_TOG: d[n++] = (AjDica){ "OK", "Mudar" }; break;
@@ -74,6 +77,18 @@ static float aj2MetaRecomendado(const char *v, float x, float y, float w, float 
   txt_desenhar_alpha(lv, x + w - lv.w - 34, y + 14 + (29 - lv.h) * 0.5f, 0.85f * a);
   { float ar, ag, ab; ajustes_acento(&ar, &ag, &ab);
     gfx_icone((GfxRect){ x + w - 24, y + 14 + 2.5f, 24, 24 }, "aj_check", 0.55f + 0.45f * ar, 0.55f + 0.45f * ag, 0.55f + 0.45f * ab, a); }
+  return 14 + 29 + 14;
+}
+// "Custo ......... (globe) usa mais internet" (mockup v3).
+static float aj2MetaCusto(int op, float x, float y, float w, float a) {
+  int c = ajCusto(op);
+  const char *ic = (c & 1) ? "aj_zap" : (c & 2) ? "aj_globe" : "aj_key-round";
+  TxtLinha lk = ajTxt(TXT_V3_INSP, "Custo");
+  TxtLinha lv = ajTxtC(TXT_V3_INSP, ajCustoTexto(c), w - lk.w - 70);
+  gfx_cor((GfxRect){ x, y, w, 1 }, 0, 1, 1, 1, 0.07f * a);
+  txt_desenhar_alpha(lk, x, y + 14 + (29 - lk.h) * 0.5f, 0.45f * a);
+  txt_desenhar_alpha(lv, x + w - lv.w, y + 14 + (29 - lv.h) * 0.5f, 0.85f * a);
+  ajIcone(ic, x + w - lv.w - 34, y + 14 + 2.5f, 24, 0.7f * a);
   return 14 + 29 + 14;
 }
 static float aj2Ef(const char *icone, const char *s, float x, float y, float w, float a) {
@@ -213,6 +228,7 @@ static void ajDesenharInspetor(void) {
       y += 26.0f;
       y += aj2Meta(i18n("Vale para"), i18n(uxEscopo(op)), x, y, w, 1);
       y += aj2MetaRecomendado(padrao, x, y, w, 1);
+      if (ajCusto(op) && y + 57.0f <= fim + 20.0f) y += aj2MetaCusto(op, x, y, w, 1);
       if (tec && y + 57.0f <= fim + 20.0f) y += aj2Meta(i18n("Nome técnico"), i18n(tec), x, y, w, 1);
     }
     // ENVIAR REGISTRO: o ultimo envio, o ultimo codigo e o destino.
