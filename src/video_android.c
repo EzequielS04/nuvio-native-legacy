@@ -28,6 +28,7 @@
 #ifdef NV_ANDROID
 #include "marco.h"
 #include "video.h"
+#include "audioinfo.h"
 #include "video_reconexao.h"
 #include "idioma.h"
 #include "linguas.h"
@@ -306,10 +307,11 @@ static int nNovasA, nNovasL;
 
 // `flags` (#287): bit 0 = SELECTION_FLAG_FORCED, bit 1 = ROLE_FLAG_DESCRIBES_
 // MUSIC_AND_SOUND (SDH); `nome` = Format.label (o Name da faixa do MKV).
+// `mime`/`canais` (#293): codec e canais da faixa de audio.
 JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeFaixa(JNIEnv *env, jclass cls, jint tipo, jint idx, jstring lingua,
-                                                                       jint flags, jstring nome) {
+                                                                       jint flags, jstring nome, jstring mime, jint canais) {
   VideoFaixa *f;
-  char l[16], nm[48];
+  char l[16], nm[48], mm[24], ai[40];
   (void)cls;
   deJString(env, lingua, l, sizeof l);
   deJString(env, nome, nm, sizeof nm);
@@ -331,6 +333,16 @@ JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeFaixa(JNIEnv
       size_t k = strlen(f->rotulo);
       snprintf(f->rotulo + k, sizeof f->rotulo - k, "  \xc2\xb7  %s", i18n(r));
     }
+  } else {
+    // #293: codec (mime do Format) e canais; a linha de baixo da folha de Audio
+    // vira "E-AC-3 5.1 Atmos". Mime desconhecido: rotulo como estava.
+    deJString(env, mime, mm, sizeof mm);
+    snprintf(f->codec, sizeof f->codec, "%s", mm);
+    f->canais = canais;
+    if (audioinfo_texto(mm, canais, 0, ai, sizeof ai))
+    { char base[sizeof f->rotulo];
+      snprintf(base, sizeof base, "%s", f->rotulo);
+      snprintf(f->rotulo, sizeof f->rotulo, "%s  \xc2\xb7  %s", base, ai); }
   }
 }
 

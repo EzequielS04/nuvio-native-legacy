@@ -1,5 +1,6 @@
 #include "app_id.h"
 #include "video.h"
+#include "audioinfo.h"
 #include "esmaecer.h"
 #include "video_escala.h"
 #include "video_reconexao.h"
@@ -924,11 +925,18 @@ static int eventoPayload(const char *p, unsigned minhaSessao) {
         // rotulo ficava em portugues mesmo com o app em ingles sempre que
         // havia canal ou Atmos ao lado do idioma. i18n() aqui, snprintf
         // depois — como as telas ja consertadas fazem.
-        snprintf(f->rotulo, sizeof f->rotulo, "%s%s%s%s%s",
-                 f->idioma[0] ? i18n(ling_nome(f->idioma)) : i18n("Faixa"),
-                 imm[0] ? "  \xc2\xb7  " : (ch[0] ? "  \xc2\xb7  " : ""),
-                 imm[0] ? "Atmos" : "",
-                 (imm[0] && ch[0]) ? " " : "", ch);
+        // #293: com o codec conhecido a linha de baixo e "E-AC-3 5.1 Atmos";
+        // sem ele, o que sempre foi ("Atmos 5.1" / "5.1").
+        { char ai[40];
+          if (audioinfo_texto(cod, f->canais, !strcasecmp(imm, "ATMOS"), ai, sizeof ai))
+            snprintf(f->rotulo, sizeof f->rotulo, "%s  \xc2\xb7  %s",
+                     f->idioma[0] ? i18n(ling_nome(f->idioma)) : i18n("Faixa"), ai);
+          else
+            snprintf(f->rotulo, sizeof f->rotulo, "%s%s%s%s%s",
+                     f->idioma[0] ? i18n(ling_nome(f->idioma)) : i18n("Faixa"),
+                     imm[0] ? "  \xc2\xb7  " : (ch[0] ? "  \xc2\xb7  " : ""),
+                     imm[0] ? "Atmos" : "",
+                     (imm[0] && ch[0]) ? " " : "", ch); }
         nAudio++;
         o = fo ? strchr(fo, '{') : NULL;
       }

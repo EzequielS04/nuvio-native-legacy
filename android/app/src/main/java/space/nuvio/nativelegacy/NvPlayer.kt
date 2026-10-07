@@ -110,7 +110,8 @@ object NvPlayer {
     @JvmStatic external fun nativeEvento(tipo: Int, a: Int, b: Int)
     // flags (#287): 1 = forcada (SELECTION_FLAG_FORCED), 2 = SDH
     // (ROLE_FLAG_DESCRIBES_MUSIC_AND_SOUND); nome = Format.label.
-    @JvmStatic external fun nativeFaixa(tipo: Int, idx: Int, lingua: String, flags: Int, nome: String)
+    // mime/canais (#293): codec e canais da faixa de audio.
+    @JvmStatic external fun nativeFaixa(tipo: Int, idx: Int, lingua: String, flags: Int, nome: String, mime: String, canais: Int)
     @JvmStatic external fun nativeFaixasFim(selAudio: Int, selLeg: Int)
     @JvmStatic external fun nativeLegenda(texto: String, durMs: Int)
     @JvmStatic external fun nativePos(ms: Int)
@@ -789,13 +790,14 @@ object NvPlayer {
             for ((n, par) in a.withIndex()) {
                 val (g, i) = par
                 if (sel < 0 && g.isTrackSelected(i)) sel = n
-                nativeFaixa(0, n, g.getTrackFormat(i).language ?: "", 0, "")
+                val fmt = g.getTrackFormat(i)
+                nativeFaixa(0, n, fmt.language ?: "", 0, "", fmt.sampleMimeType ?: "", fmt.channelCount.coerceAtLeast(0))
             }
             for ((n, par) in l.withIndex()) {
                 val f = par.first.getTrackFormat(par.second)
                 val flags = (if (f.selectionFlags and C.SELECTION_FLAG_FORCED != 0) 1 else 0) or
                     (if (f.roleFlags and C.ROLE_FLAG_DESCRIBES_MUSIC_AND_SOUND != 0) 2 else 0)
-                nativeFaixa(1, n, f.language ?: "", flags, f.label ?: "")
+                nativeFaixa(1, n, f.language ?: "", flags, f.label ?: "", "", 0)
             }
             nativeFaixasFim(sel, -1)
         } catch (e: UnsatisfiedLinkError) { Log.w(TAG, "faixas sem lib: $e") }

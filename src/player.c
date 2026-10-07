@@ -103,6 +103,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "escala.h"
 #include "plrilha.h"
 #include "cacheboost.h"
+#include "audioinfo.h"
 #include "legendasui.h"   /* F04: second subtitle band */
 #include <time.h>
 #include "servidores.h"
@@ -434,6 +435,28 @@ static int marcaDtsAtual(void) {
     case 2: return FMT_DTSHD;
     default: return FMT_DTS;   // convertendo, a faixa vem do FFmpeg como "dts"
   }
+}
+// CODEC E CANAIS DA FAIXA TOCANDO ("E-AC-3 5.1 Atmos", "DTS-HD MA 5.1", #293),
+// ou "" quando o codec e desconhecido (some em vez de chutar). Calculado na
+// TROCA de faixa (indice, codec, canais, estado do receptor), nunca por quadro.
+// Com o audio indo em bitstream para o receptor (Android), acrescenta o
+// "receptor", discreto.
+static const char *textoAudioAtual(void) {
+  static char txt[56], chave[96];
+  const VideoFaixa *f = video_audio(video_audio_atual());
+  int pt = cacheboost_ganho_estado() == CB_GANHO_PASSTHROUGH;
+  char k[sizeof chave];
+  snprintf(k, sizeof k, "%d|%s|%d|%d|%s", video_audio_atual(), f ? f->codec : "", f ? f->canais : 0, pt,
+           f ? f->rotulo : "");
+  if (strcmp(k, chave)) {
+    memcpy(chave, k, sizeof chave);
+    txt[0] = 0;
+    if (f && audioinfo_texto(f->codec, f->canais, strstr(f->rotulo, "Atmos") != NULL, txt, sizeof txt) && pt) {
+      size_t n = strlen(txt);
+      snprintf(txt + n, sizeof txt - n, " \xc2\xb7 %s", i18n("receptor"));
+    }
+  }
+  return txt;
 }
 const char *player_id_canal(void) { return canalSessao ? itemCanal.imdb : ""; }
 
@@ -2366,7 +2389,8 @@ static void avMontarOsd(AoVivoOsd *o) {
         case VIDEO_DTS_SEM_SOM:    d = "Áudio: DTS, esta TV não toca (sem som)"; break;
       }
       if (d) snprintf(o->info[k++], sizeof o->info[0], "%s", i18n(d)); }
-    if (video_tem_atmos()) snprintf(o->info[k++], sizeof o->info[0], "%s", i18n("Áudio: Dolby Atmos"));
+    if (textoAudioAtual()[0]) snprintf(o->info[k++], sizeof o->info[0], i18n("Áudio: %s"), textoAudioAtual());
+    else if (video_tem_atmos()) snprintf(o->info[k++], sizeof o->info[0], "%s", i18n("Áudio: Dolby Atmos"));
     if (comVideo && video_bufferando_ms() > 0)
       snprintf(o->info[k++], sizeof o->info[0], i18n("Buffer: carregando há %u s"), video_bufferando_ms() / 1000u);
     else snprintf(o->info[k++], sizeof o->info[0], "%s", i18n("Buffer: estável"));
@@ -4624,9 +4648,15 @@ static void desenharOsdCorpo(Uint32 agora, float a, float ac, const CatItem *c) 
 #endif
     if (video_tem_atmos())        selos[nSelos++] = FMT_ATMOS;
     if (marcaDtsAtual() >= 0)     selos[nSelos++] = (FormatoMarca)marcaDtsAtual();
+    // #293: o codec da faixa tocando vira texto na mesma fileira, depois dos
+    // selos (a marca do DTS/Atmos diz o FORMATO; isto diz o que a faixa e).
+    const char *rotAudio = ehCanal() ? "" : textoAudioAtual();
+    TxtLinha lAudio = { 0 };
+    if (rotAudio[0]) lAudio = txt_linha(TXT_G18M, rotAudio, 243, 242, 239, 255);
     { const float mh = 34.0f;
       float w[4], tot = 0.0f, x;
       int i, esq = plrilha_direita();
+      if (lAudio.w > 0) tot += (nSelos ? 22.0f : 0.0f) + (float)lAudio.w;
       // ENTRADA ESCALONADA: o rasterizador faz poucas linhas por quadro e os
       // selos ja chegariam um a um; a curva assume a cadencia (90 ms, 10 px).
       float t0 = (float)(agora - ultimoInput) / 1000.0f;
@@ -4639,6 +4669,13 @@ static void desenharOsdCorpo(Uint32 agora, float a, float ac, const CatItem *c) 
           marca_formato(selos[i], x, 58.0f + desce + (1.0f - e) * 10.0f, mh,
                         0.953f, 0.949f, 0.937f, ac * 0.82f * e);
         x += w[i] + 22.0f;
+      }
+      if (lAudio.w > 0) {
+        float ts = anim_clamp((t0 - nSelos * 0.09f) / 0.26f, 0.0f, 1.0f);
+        float e  = 1.0f - (1.0f - ts) * (1.0f - ts);
+        if (e > 0.004f)
+          txt_desenhar_alpha(lAudio, x, 58.0f + desce + (mh - (float)lAudio.h) * 0.5f + (1.0f - e) * 10.0f,
+                             ac * 0.82f * e);
       } }
   }
 
