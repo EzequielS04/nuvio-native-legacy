@@ -28,6 +28,7 @@
 #include "idbase.h"
 #include "cwfrente.h"
 #include "servidores.h"
+#include "descdebounce.h"
 #include <stdint.h>   /* uintptr_t: a geracao viaja no argumento do fio */
 #include <stdio.h>
 #include <string.h>
@@ -956,6 +957,9 @@ void desc_espera_addons_definir(int (*f)(void)) { esperaAddons = f; }
 // `volatile` porque sao fios diferentes; nao ha corrida real de valor — o pior
 // caso e uma remontagem a mais, que e barata perto de perder o pedido.
 static volatile int repetirAoFim;
+// DEBOUNCE (descdebounce.h): quando a ultima volta comecou e se ha inicio agendado.
+static NvDescDeb descDeb;
+static void descIniciarAdiado(void);
 // GERACAO DO PEDIDO DE REMONTAGEM, e a razao dela existir esta medida.
 //
 // `repetirAoFim` sozinho nao distingue duas coisas muito diferentes: um pedido
@@ -3122,7 +3126,7 @@ static void publicarMontagem(const CatItem *lote, int n, const CatFileira *fils,
 // atraso na resposta nao muda nada para quem pergunta (app.c, uma vez por
 // quadro, com teto de tempo).
 int desc_montando(void) {
-  return buscando || repetirAoFim || cwVivo || cwDeNovo;
+  return buscando || repetirAoFim || descDeb.adiado || cwVivo || cwDeNovo;
 }
 // A CARGA DA HOME (o aviso "Carregando fileiras…" da ilha) e o ciclo de
 // descoberta, nao a refacao so do Continuar assistindo: essa nao consulta add-on
@@ -4464,7 +4468,7 @@ static void *montar(void *u) {
                                            txt, sizeof txt)); }
       fflush(stdout);
       free(lote); repetirAoFim = 0; buscando = 0;
-      desc_iniciar();
+      descIniciarAdiado();
       return NULL;
     }
     // A tela passa a ter a volta COMPLETA (publicada agora, ou igual a ela).
@@ -4590,7 +4594,7 @@ static void *montar(void *u) {
     if (geracaoLida == geracaoPedida)
       printf("[desc] remontagem dispensada: a lista nova entrou nesta volta\n");
     else
-      desc_iniciar();
+      descIniciarAdiado();
   }
   return NULL;
 
@@ -4606,7 +4610,7 @@ condenada:
   free(lote);
   repetirAoFim = 0;
   buscando = 0;
-  desc_iniciar();
+  descIniciarAdiado();
   return NULL;
 #undef CONDENADA
 #undef LISTAS_SE_PRONTAS
@@ -4618,6 +4622,7 @@ void desc_iniciar(void) {
   buscando = 1;
   listaLidaNaVolta = 0;
   pthread_mutex_unlock(&listaTrava);
+  nv_desc_iniciou(&descDeb, descAgoraMs());
   montagemGeracao++;
   if (pthread_create(&fio, NULL, montar, NULL) != 0) {
     // NAO FALHAR CALADO. No webOS um pthread_create nunca falhou e o caminho de
@@ -4799,11 +4804,44 @@ void desc_repetir_silencioso(void) {
   if (!buscando) montSilenciosa = 1;
   repetirInterno();
 }
+static void *adiadoFio(void *arg) {
+  unsigned ms = (unsigned)(uintptr_t)arg;
+  struct timespec t = { ms / 1000u, (long)(ms % 1000u) * 1000000L };
+  nanosleep(&t, NULL);
+  if (!buscando) desc_iniciar();
+  else { descDeb.adiado = 0; repetirAoFim = 1; }   // a volta no ar repete ao fim
+  return NULL;
+}
+// Inicia uma volta respeitando o minimo entre voltas; pedidos no intervalo
+// viram UM agendamento. Nunca bloqueia o chamador.
+static void descIniciarAdiado(void) {
+  long w = nv_desc_pedido(&descDeb, descAgoraMs());
+  pthread_t th;
+  if (w == 0) { desc_iniciar(); return; }
+  if (w < 0) {
+    printf("[desc] remontagem coalescida: ja ha uma agendada (minimo %llu s entre voltas)\n",
+           NV_DESC_MIN_MS / 1000ull);
+    fflush(stdout); return;
+  }
+  printf("[desc] remontagem adiada %ld ms (minimo %llu s entre voltas)\n", w, NV_DESC_MIN_MS / 1000ull);
+  fflush(stdout);
+  if (pthread_create(&th, NULL, adiadoFio, (void *)(uintptr_t)w) != 0) {
+    descDeb.adiado = 0; desc_iniciar(); return;
+  }
+  pthread_detach(th);
+}
 static void repetirInterno(void) {
-  montagemGeracao++;
   geracaoPedida++;
-  if (!buscando) { desc_iniciar(); return; }
+  if (!buscando) { montagemGeracao++; descIniciarAdiado(); return; }
   repetirAoFim = 1;
+  // So condena a volta no ar se ela ja rodou o minimo: antes disso o pedido
+  // espera o fim dela (que publica o que ja tem) e vira UMA volta nova.
+  if (!nv_desc_pode_condenar(&descDeb, descAgoraMs())) {
+    printf("[desc] remontagem pedida; volta em curso e recente: termina e repete uma vez\n");
+    fflush(stdout);
+    return;
+  }
+  montagemGeracao++;
   printf("[desc] remontagem pedida; a volta em curso para no proximo ponto seguro e recomeca\n");
   fflush(stdout);
 }
