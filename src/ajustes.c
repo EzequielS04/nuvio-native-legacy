@@ -3078,6 +3078,20 @@ void ajustes_dir(const char *dir) {
       gravar();
     } }
 #endif
+  // MIGRACAO UNICA (2.0.3, dono): o tamanho dos Ajustes volta ao padrao de 80%
+  // para quem ainda esta no padrao antigo (90%, ate e87ecb3c). O arquivo grava
+  // o indice, entao 90% guardado e quase sempre o padrao que ninguem escolheu.
+  // Quem tem 100% escolheu, e quem trocar depois desta marca, fica.
+  { char *m = dados_ler("ajustesescala-203.txt");
+    if (m) free(m);
+    else {
+      if (valor[AJ_TAMANHO_AJUSTES] == 1) {
+        valor[AJ_TAMANHO_AJUSTES] = 0;
+        printf("[ajustes] tamanho dos ajustes 90%% -> 80%% (migracao unica da 2.0.3)\n");
+      }
+      dados_gravar("ajustesescala-203.txt", "1\n");
+      gravar();
+    } }
   // MIGRACAO UNICA (2.0): o fundo da escolha de perfil volta a Filmes (0, a
   // parede de cartazes de cada perfil, PS_FUNDO_FILMES em psestilos.h) para
   // todo mundo, uma vez. O dono decidiu: quem tinha Listras ou Arte do perfil
