@@ -1,10 +1,11 @@
-// CONFERIR VARIAS FONTES AO MESMO TEMPO (2.0.2, desligado de fabrica).
+// CONFERIR VARIAS FONTES AO MESMO TEMPO (2.0.2, ligado de fabrica, so para fontes ja prontas no debrid).
 //
 // A verificacao do automatico e em SERIE de proposito (issue #130, fonteauto.h):
 // conferir uma fonte de debrid faz o servico adicionar o arquivo ao painel, e
-// uma por vez e o que garante que so a fonte que vai tocar vira arquivo. Quem
-// liga "Conferir varias fontes ao mesmo tempo" troca isso por velocidade: as
-// primeiras `k` da fila sao conferidas JUNTAS, e a escolhida e a primeira que
+// uma por vez e o que garante que so a fonte que vai tocar vira arquivo. Com
+// "Conferir varias fontes ao mesmo tempo" (ligado) so as que ja estao em cache no
+// debrid — conferir uma delas nao baixa nada — saem da serie por velocidade: as
+// primeiras `k` da fila (todas em cache) sao conferidas JUNTAS, e a escolhida e a primeira que
 // serve NA ORDEM DA FILA — a resposta mais rapida de uma fonte pior nunca passa
 // na frente de uma melhor que ainda esta conferindo. Isto so muda quanto se
 // espera, e nunca a qualidade escolhida.
@@ -27,5 +28,11 @@
 // `prazoMs` > 0 trata o que nao respondeu ate la como "nao serviu".
 int fonteparalela(const int *fila, int n, int k, FonteVerificar verificar,
                   FonteFalhou falhou, void *u, int *tocadas, unsigned prazoMs);
+
+// Quantas das primeiras da fila entram na conferencia conjunta: o PREFIXO de
+// fila[] (ate `max`) em que pronta(fila[i]) e verdadeiro — fontes ja em cache no
+// debrid. A primeira que nao esta pronta corta a corrida: dai em diante tudo e
+// conferido em serie, uma por vez (#130), e nenhum download extra comeca.
+int fonteparalela_prefixo(const int *fila, int n, int max, int (*pronta)(int i, void *u), void *u);
 
 #endif

@@ -1158,7 +1158,7 @@
   T("Conexão: servidor ainda não medido", "接続: サーバー未測定"),
   T("Conexão: servidor só conhecido ao tocar", "接続: サーバーは再生時にのみ判明"),
   T("Conexão: tamanho do arquivo não informado", "接続: ファイルサイズ不明"),
-  T("Confere as 3 primeiras fontes do automático ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Acha uma fonte boa mais depressa quando a primeira falha, mas pode aparecer mais de um arquivo no painel do seu debrid, mesmo de fontes que você não vai assistir. Só vale com a Fonte automática em Melhor fonte.", "最初の3つの自動ソースを1つずつではなく同時に確認し、使える中で最良のものを再生します。最初のソースが失敗したときに良いソースを早く見つけられますが、見ないソースのファイルも含め、debrid のパネルに複数のファイルが表示されることがあります。自動ソースが「最良のソース」のときだけ有効です。"),
+  T("Confere até 3 fontes já prontas no debrid ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Fontes que ainda não estão prontas seguem uma por vez, sem baixar nada a mais. Só vale com a Fonte automática em Melhor fonte.", "debrid ですでに準備できているソースを最大3つまで1つずつではなく同時に確認し、使える中で最良のものを再生します。まだ準備できていないソースはこれまでどおり1つずつ確認するので、余分なダウンロードは発生しません。自動ソースが「最良のソース」のときだけ有効です。"),
   T("Conferindo o arquivo...", "ファイルを確認しています..."),
   T("Conferindo o servidor…", "サーバーを確認中…"),
   T("Conferir", "確認"),

@@ -1157,7 +1157,7 @@
   T("Conexão: servidor ainda não medido", "Соединение: сервер ещё не измерен"),
   T("Conexão: servidor só conhecido ao tocar", "Соединение: сервер известен только при воспроизведении"),
   T("Conexão: tamanho do arquivo não informado", "Соединение: размер файла не указан"),
-  T("Confere as 3 primeiras fontes do automático ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Acha uma fonte boa mais depressa quando a primeira falha, mas pode aparecer mais de um arquivo no painel do seu debrid, mesmo de fontes que você não vai assistir. Só vale com a Fonte automática em Melhor fonte.", "Проверяет первые 3 автоматических источника одновременно, а не по одному, и воспроизводит лучший из рабочих. Быстрее находит хороший источник, когда первый не срабатывает, но в панели debrid может появиться больше одного файла, даже из источников, которые вы не будете смотреть. Действует только при Автоматическом источнике в режиме Лучший источник."),
+  T("Confere até 3 fontes já prontas no debrid ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Fontes que ainda não estão prontas seguem uma por vez, sem baixar nada a mais. Só vale com a Fonte automática em Melhor fonte.", "Проверяет одновременно до 3 источников, уже готовых в debrid, а не по одному, и воспроизводит лучший из рабочих. Источники, которые ещё не готовы, по-прежнему проверяются по одному, поэтому ничего лишнего не скачивается. Действует только при Автоматическом источнике в режиме Лучший источник."),
   T("Conferindo o arquivo...", "Проверка файла..."),
   T("Conferindo o servidor…", "Проверка сервера…"),
   T("Conferir", "Проверить"),

@@ -89,3 +89,10 @@ int fonteparalela(const int *fila, int n, int k, FonteVerificar verificar,
   soltar(p);
   return venceu;
 }
+
+int fonteparalela_prefixo(const int *fila, int n, int max, int (*pronta)(int i, void *u), void *u) {
+  int k = 0;
+  if (max > FONTEPARALELA_MAX) max = FONTEPARALELA_MAX;
+  while (k < n && k < max && pronta(fila[k], u)) k++;
+  return k;
+}

@@ -1158,7 +1158,7 @@
   T("Conexão: servidor ainda não medido", "Ryšys: serveris dar neišmatuotas"),
   T("Conexão: servidor só conhecido ao tocar", "Ryšys: serveris žinomas tik paleidus"),
   T("Conexão: tamanho do arquivo não informado", "Ryšys: failo dydis nenurodytas"),
-  T("Confere as 3 primeiras fontes do automático ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Acha uma fonte boa mais depressa quando a primeira falha, mas pode aparecer mais de um arquivo no painel do seu debrid, mesmo de fontes que você não vai assistir. Só vale com a Fonte automática em Melhor fonte.", "Tikrina pirmuosius 3 automatinius šaltinius vienu metu, o ne po vieną, ir paleidžia geriausią veikiantį. Greičiau randa gerą šaltinį, kai pirmasis nepavyksta, bet debrid skydelyje gali atsirasti daugiau nei vienas failas, net iš šaltinių, kurių nežiūrėsite. Galioja tik kai Automatinis šaltinis nustatytas į Geriausias šaltinis."),
+  T("Confere até 3 fontes já prontas no debrid ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Fontes que ainda não estão prontas seguem uma por vez, sem baixar nada a mais. Só vale com a Fonte automática em Melhor fonte.", "Vienu metu tikrina iki 3 šaltinių, kurie debrid jau paruošti, o ne po vieną, ir paleidžia geriausią veikiantį. Dar neparuošti šaltiniai tikrinami po vieną, todėl nieko papildomai neatsisiunčiama. Galioja tik kai Automatinis šaltinis nustatytas į Geriausias šaltinis."),
   T("Conferindo o arquivo...", "Tikrinamas failas..."),
   T("Conferindo o servidor…", "Tikrinamas serveris…"),
   T("Conferir", "Patikrinti"),

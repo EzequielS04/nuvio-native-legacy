@@ -1158,7 +1158,7 @@
   T("Conexão: servidor ainda não medido", "Forbindelse: serveren er ikke målt endnu"),
   T("Conexão: servidor só conhecido ao tocar", "Forbindelse: serveren kendes først ved afspilning"),
   T("Conexão: tamanho do arquivo não informado", "Forbindelse: filstørrelse ikke oplyst"),
-  T("Confere as 3 primeiras fontes do automático ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Acha uma fonte boa mais depressa quando a primeira falha, mas pode aparecer mais de um arquivo no painel do seu debrid, mesmo de fontes que você não vai assistir. Só vale com a Fonte automática em Melhor fonte.", "Kontrollerer de 3 første automatiske kilder på én gang i stedet for én ad gangen og afspiller den bedste, der virker. Finder en god kilde hurtigere, når den første fejler, men der kan dukke mere end én fil op i dit debrid-panel, selv fra kilder, du ikke ser. Gælder kun, når Automatisk kilde er sat til Bedste kilde."),
+  T("Confere até 3 fontes já prontas no debrid ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Fontes que ainda não estão prontas seguem uma por vez, sem baixar nada a mais. Só vale com a Fonte automática em Melhor fonte.", "Kontrollerer op til 3 kilder, der allerede er klar på debrid, på én gang i stedet for én ad gangen og afspiller den bedste, der virker. Kilder, der endnu ikke er klar, kontrolleres stadig én ad gangen, så intet ekstra bliver hentet. Gælder kun, når Automatisk kilde er sat til Bedste kilde."),
   T("Conferindo o arquivo...", "Kontrollerer filen..."),
   T("Conferindo o servidor…", "Kontrollerer serveren…"),
   T("Conferir", "Kontrollér"),

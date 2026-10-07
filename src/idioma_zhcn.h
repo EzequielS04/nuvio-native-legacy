@@ -1158,7 +1158,7 @@
   T("Conexão: servidor ainda não medido", "连接：服务器尚未测量"),
   T("Conexão: servidor só conhecido ao tocar", "连接：播放时才知道服务器"),
   T("Conexão: tamanho do arquivo não informado", "连接：未提供文件大小"),
-  T("Confere as 3 primeiras fontes do automático ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Acha uma fonte boa mais depressa quando a primeira falha, mas pode aparecer mais de um arquivo no painel do seu debrid, mesmo de fontes que você não vai assistir. Só vale com a Fonte automática em Melhor fonte.", "同时检查前 3 个自动来源，而不是逐个检查，并播放其中可用的最佳来源。第一个来源失败时能更快找到好来源，但 debrid 面板中可能出现多个文件，即使是你不会观看的来源。仅在自动来源设为“最佳来源”时有效。"),
+  T("Confere até 3 fontes já prontas no debrid ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Fontes que ainda não estão prontas seguem uma por vez, sem baixar nada a mais. Só vale com a Fonte automática em Melhor fonte.", "同时检查最多 3 个已在 debrid 上就绪的来源，而不是逐个检查，并播放其中可用的最佳来源。尚未就绪的来源仍逐个检查，因此不会额外下载任何内容。仅在自动来源设为“最佳来源”时有效。"),
   T("Conferindo o arquivo...", "正在检查文件..."),
   T("Conferindo o servidor…", "正在检查服务器…"),
   T("Conferir", "校验"),

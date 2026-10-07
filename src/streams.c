@@ -1273,8 +1273,15 @@ static void logarEscolha(int escolhida, int pref, int modoPrimeira) {
   pthread_mutex_unlock(&verTrava);
 }
 
+// Fonte pronta no debrid para conferir junto com outras: tem link tocavel, o
+// addon nao a marcou como fora do cache e nao e torrent. Chamada com verTrava.
+static int prontaNoDebrid(int i, void *u) {
+  (void)u;
+  return i >= 0 && i < n && lista[i].url[0] && !lista[i].foraCache && !soP2P(&lista[i]);
+}
+
 int stream_primeira_boa(int tentativas) {
-  int fila[VER_MAX], nf, q, tocadas = 0, escolhida, total, pref, livres = 0;
+  int fila[VER_MAX], nf, q, tocadas = 0, escolhida, total, pref, livres = 0, kk;
   int modo = ajustes_fonte_primeira() ? FONTEAUTO_PRIMEIRA : FONTEAUTO_MELHOR;
   long *pts;
   unsigned char *acima, *excl;
@@ -1349,12 +1356,21 @@ int stream_primeira_boa(int tentativas) {
   }
   marco("fonte: verificacao inicio");
   tVerif = SDL_GetTicks();
-  // CONFERIR VARIAS AO MESMO TEMPO (opcional, desligado de fabrica): as 3
-  // primeiras da fila juntas, escolhida a primeira que serve NA ORDEM DA FILA
-  // (fonteparalela.h). Troca arquivos extras no painel do debrid por velocidade;
-  // o resto da fila, se nenhuma das 3 servir, segue em serie como sempre.
+  // CONFERIR VARIAS AO MESMO TEMPO (ligado de fabrica): so as primeiras da fila
+  // (ate 3) que ja estao PRONTAS no debrid (nao `foraCache`, nao torrent) sao
+  // conferidas juntas, escolhida a primeira que serve NA ORDEM DA FILA
+  // (fonteparalela.h). Conferir uma fonte em cache nao baixa nada, entao nao ha
+  // arquivo extra no painel; a primeira fora do cache corta a corrida e dai em
+  // diante tudo segue em serie, uma por vez (#130).
+  kk = 0;
   if (ajustes_fonte_conferir_varias() && nf >= 2 && modo == FONTEAUTO_MELHOR) {
-    int kk = nf < 3 ? nf : 3, t1 = 0, t2 = 0;
+    pthread_mutex_lock(&verTrava);
+    if (listaGeracao == c.geracao)
+      kk = fonteparalela_prefixo(fila, nf, 3, prontaNoDebrid, NULL);
+    pthread_mutex_unlock(&verTrava);
+  }
+  if (kk >= 2) {
+    int t1 = 0, t2 = 0;
     printf("[fonte] conferencia paralela %d\n", kk);
     fflush(stdout);
     escolhida = fonteparalela(fila, nf, kk, verificarOuParar, falhouUma, &c, &t1, 20000);

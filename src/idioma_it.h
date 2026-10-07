@@ -1158,7 +1158,7 @@
   T("Conexão: servidor ainda não medido", "Connessione: server non ancora misurato"),
   T("Conexão: servidor só conhecido ao tocar", "Connessione: server noto solo in riproduzione"),
   T("Conexão: tamanho do arquivo não informado", "Connessione: dimensione del file non indicata"),
-  T("Confere as 3 primeiras fontes do automático ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Acha uma fonte boa mais depressa quando a primeira falha, mas pode aparecer mais de um arquivo no painel do seu debrid, mesmo de fontes que você não vai assistir. Só vale com a Fonte automática em Melhor fonte.", "Verifica le prime 3 fonti automatiche contemporaneamente invece che una alla volta e riproduce la migliore che funziona. Trova più in fretta una fonte buona quando la prima fallisce, ma nel pannello debrid può comparire più di un file, anche di fonti che non guarderai. Vale solo con la Fonte automatica su Migliore fonte."),
+  T("Confere até 3 fontes já prontas no debrid ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Fontes que ainda não estão prontas seguem uma por vez, sem baixar nada a mais. Só vale com a Fonte automática em Melhor fonte.", "Verifica contemporaneamente fino a 3 fonti già pronte sul debrid invece che una alla volta e riproduce la migliore che funziona. Le fonti non ancora pronte vengono verificate una alla volta, quindi non si scarica nulla in più. Vale solo con la Fonte automatica su Migliore fonte."),
   T("Conferindo o arquivo...", "Controllo del file..."),
   T("Conferindo o servidor…", "Verifica del server…"),
   T("Conferir", "Verifica"),

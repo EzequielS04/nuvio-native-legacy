@@ -1158,7 +1158,7 @@
   T("Conexão: servidor ainda não medido", "Koneksi: server belum diukur"),
   T("Conexão: servidor só conhecido ao tocar", "Koneksi: server baru diketahui saat diputar"),
   T("Conexão: tamanho do arquivo não informado", "Koneksi: ukuran file tidak disebutkan"),
-  T("Confere as 3 primeiras fontes do automático ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Acha uma fonte boa mais depressa quando a primeira falha, mas pode aparecer mais de um arquivo no painel do seu debrid, mesmo de fontes que você não vai assistir. Só vale com a Fonte automática em Melhor fonte.", "Memeriksa 3 sumber otomatis pertama sekaligus, bukan satu per satu, dan memutar yang terbaik yang berfungsi. Menemukan sumber yang bagus lebih cepat saat yang pertama gagal, tetapi lebih dari satu berkas bisa muncul di panel debrid Anda, bahkan dari sumber yang tidak akan Anda tonton. Hanya berlaku jika Sumber otomatis diatur ke Sumber terbaik."),
+  T("Confere até 3 fontes já prontas no debrid ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Fontes que ainda não estão prontas seguem uma por vez, sem baixar nada a mais. Só vale com a Fonte automática em Melhor fonte.", "Memeriksa hingga 3 sumber yang sudah siap di debrid sekaligus, bukan satu per satu, dan memutar yang terbaik yang berfungsi. Sumber yang belum siap tetap diperiksa satu per satu, jadi tidak ada unduhan tambahan. Hanya berlaku jika Sumber otomatis diatur ke Sumber terbaik."),
   T("Conferindo o arquivo...", "Memeriksa file..."),
   T("Conferindo o servidor…", "Memeriksa server…"),
   T("Conferir", "Periksa"),

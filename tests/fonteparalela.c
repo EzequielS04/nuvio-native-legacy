@@ -30,6 +30,8 @@ static void falhou(int i, void *u) { Cena *c = u; pthread_mutex_lock(&c->m); c->
 static void cena(Cena *c) { memset(c, 0, sizeof *c); pthread_mutex_init(&c->m, NULL); }
 static long agora(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec * 1000L + t.tv_nsec / 1000000L; }
 
+static int pronta(int i, void *u) { return ((const int *)u)[i]; }
+
 int main(void) {
   int fila[8] = { 0, 1, 2, 3, 4, 5, 6, 7 }, tocadas, r;
   long t0;
@@ -81,6 +83,15 @@ int main(void) {
   r = fonteparalela(fila, 1, 1, verificar, falhou, &c, &tocadas, 100);
   CONFERE(r == -1 && agora() - t0 < 500, "prazo vencido (r=%d, %ld ms)", r, agora() - t0);
   usleep(900000);
+
+  // 7. So fonte ja em cache entra na conferencia conjunta: o prefixo pronto da
+  // fila, no maximo 3. A primeira nao pronta corta; uncached segue em serie.
+  { int cache[8] = { 1, 1, 1, 1, 0, 0, 0, 0 }, f3[4] = { 4, 0, 1, 2 }, f4[3] = { 0, 4, 1 }, tudo[8] = { 1, 1, 1, 1, 1, 1, 1, 1 };
+    CONFERE(fonteparalela_prefixo(fila, 8, 3, pronta, cache) == 3, "4 em cache: so 3 juntas");
+    CONFERE(fonteparalela_prefixo(fila, 2, 3, pronta, cache) == 2, "fila curta");
+    CONFERE(fonteparalela_prefixo(f3, 4, 3, pronta, cache) == 0, "primeira fora do cache: nada em paralelo");
+    CONFERE(fonteparalela_prefixo(f4, 3, 3, pronta, cache) == 1, "uncached no meio corta o prefixo (a seguinte nao pula a fila)");
+    CONFERE(fonteparalela_prefixo(fila, 8, 9, pronta, tudo) == FONTEPARALELA_MAX, "teto FONTEPARALELA_MAX"); }
 
   if (falhas) { printf("fonteparalela: %d falha(s)\n", falhas); return 1; }
   printf("fonteparalela: ok\n");

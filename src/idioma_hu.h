@@ -1158,7 +1158,7 @@
   T("Conexão: servidor ainda não medido", "Kapcsolat: a szerver még nincs megmérve"),
   T("Conexão: servidor só conhecido ao tocar", "Kapcsolat: a szerver csak lejátszáskor ismert"),
   T("Conexão: tamanho do arquivo não informado", "Kapcsolat: a fájlméret nincs megadva"),
-  T("Confere as 3 primeiras fontes do automático ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Acha uma fonte boa mais depressa quando a primeira falha, mas pode aparecer mais de um arquivo no painel do seu debrid, mesmo de fontes que você não vai assistir. Só vale com a Fonte automática em Melhor fonte.", "Az első 3 automatikus forrást egyszerre ellenőrzi egyenként helyett, és a legjobb működőt játssza le. Gyorsabban talál jó forrást, ha az első elhasal, de a debrid panelen egynél több fájl is megjelenhet, akár olyan forrásokból is, amelyeket nem fog megnézni. Csak akkor érvényes, ha az Automatikus forrás Legjobb forrásra van állítva."),
+  T("Confere até 3 fontes já prontas no debrid ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Fontes que ainda não estão prontas seguem uma por vez, sem baixar nada a mais. Só vale com a Fonte automática em Melhor fonte.", "Egyszerre ellenőrzi legfeljebb 3, a debriden már kész forrást egyenként helyett, és a legjobb működőt játssza le. A még nem kész forrásokat továbbra is egyenként ellenőrzi, így semmi extra nem töltődik le. Csak akkor érvényes, ha az Automatikus forrás Legjobb forrásra van állítva."),
   T("Conferindo o arquivo...", "Fájl ellenőrzése..."),
   T("Conferindo o servidor…", "A szerver ellenőrzése…"),
   T("Conferir", "Ellenőrzés"),

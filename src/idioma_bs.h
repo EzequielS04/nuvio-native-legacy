@@ -1158,7 +1158,7 @@
   T("Conexão: servidor ainda não medido", "Veza: server još nije izmjeren"),
   T("Conexão: servidor só conhecido ao tocar", "Veza: server poznat tek pri reprodukciji"),
   T("Conexão: tamanho do arquivo não informado", "Veza: veličina datoteke nije navedena"),
-  T("Confere as 3 primeiras fontes do automático ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Acha uma fonte boa mais depressa quando a primeira falha, mas pode aparecer mais de um arquivo no painel do seu debrid, mesmo de fontes que você não vai assistir. Só vale com a Fonte automática em Melhor fonte.", "Provjerava prva 3 automatska izvora istovremeno umjesto jednog po jednog i reproducira najbolji koji radi. Brže pronalazi dobar izvor kad prvi zakaže, ali se u debrid panelu može pojaviti više od jedne datoteke, čak i iz izvora koje nećete gledati. Vrijedi samo kad je Automatski izvor postavljen na Najbolji izvor."),
+  T("Confere até 3 fontes já prontas no debrid ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Fontes que ainda não estão prontas seguem uma por vez, sem baixar nada a mais. Só vale com a Fonte automática em Melhor fonte.", "Provjerava do 3 izvora koji su već spremni na debridu istovremeno umjesto jednog po jednog i reproducira najbolji koji radi. Izvori koji još nisu spremni provjeravaju se jedan po jedan, pa se ništa dodatno ne preuzima. Vrijedi samo kad je Automatski izvor postavljen na Najbolji izvor."),
   T("Conferindo o arquivo...", "Provjera datoteke..."),
   T("Conferindo o servidor…", "Provjera servera…"),
   T("Conferir", "Provjeri"),

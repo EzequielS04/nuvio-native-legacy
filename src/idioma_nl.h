@@ -1158,7 +1158,7 @@
   T("Conexão: servidor ainda não medido", "Verbinding: server nog niet gemeten"),
   T("Conexão: servidor só conhecido ao tocar", "Verbinding: server pas bekend bij afspelen"),
   T("Conexão: tamanho do arquivo não informado", "Verbinding: bestandsgrootte niet opgegeven"),
-  T("Confere as 3 primeiras fontes do automático ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Acha uma fonte boa mais depressa quando a primeira falha, mas pode aparecer mais de um arquivo no painel do seu debrid, mesmo de fontes que você não vai assistir. Só vale com a Fonte automática em Melhor fonte.", "Controleert de eerste 3 automatische bronnen tegelijk in plaats van een voor een en speelt de beste werkende af. Vindt sneller een goede bron als de eerste faalt, maar in je debrid-paneel kan meer dan één bestand verschijnen, ook van bronnen die je niet gaat kijken. Geldt alleen met Automatische bron op Beste bron."),
+  T("Confere até 3 fontes já prontas no debrid ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Fontes que ainda não estão prontas seguem uma por vez, sem baixar nada a mais. Só vale com a Fonte automática em Melhor fonte.", "Controleert tot 3 bronnen die al klaarstaan op de debrid tegelijk in plaats van een voor een en speelt de beste werkende af. Bronnen die nog niet klaarstaan worden nog steeds een voor een gecontroleerd, dus er wordt niets extra gedownload. Geldt alleen met Automatische bron op Beste bron."),
   T("Conferindo o arquivo...", "Bestand controleren..."),
   T("Conferindo o servidor…", "Server controleren…"),
   T("Conferir", "Controleren"),

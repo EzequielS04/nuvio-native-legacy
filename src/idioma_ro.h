@@ -1157,7 +1157,7 @@
   T("Conexão: servidor ainda não medido", "Conexiune: server încă nemăsurat"),
   T("Conexão: servidor só conhecido ao tocar", "Conexiune: serverul e cunoscut doar la redare"),
   T("Conexão: tamanho do arquivo não informado", "Conexiune: dimensiunea fișierului nu este indicată"),
-  T("Confere as 3 primeiras fontes do automático ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Acha uma fonte boa mais depressa quando a primeira falha, mas pode aparecer mais de um arquivo no painel do seu debrid, mesmo de fontes que você não vai assistir. Só vale com a Fonte automática em Melhor fonte.", "Verifică primele 3 surse automate în același timp, nu una câte una, și redă cea mai bună care funcționează. Găsește o sursă bună mai repede când prima eșuează, dar poate apărea mai mult de un fișier în panoul debrid, chiar din surse pe care nu le vei viziona. Se aplică doar cu Sursa automată setată pe Cea mai bună sursă."),
+  T("Confere até 3 fontes já prontas no debrid ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Fontes que ainda não estão prontas seguem uma por vez, sem baixar nada a mais. Só vale com a Fonte automática em Melhor fonte.", "Verifică în același timp până la 3 surse deja pregătite pe debrid, nu una câte una, și redă cea mai bună care funcționează. Sursele care nu sunt încă pregătite sunt verificate în continuare pe rând, deci nu se descarcă nimic în plus. Se aplică doar cu Sursa automată setată pe Cea mai bună sursă."),
   T("Conferindo o arquivo...", "Se verifică fișierul..."),
   T("Conferindo o servidor…", "Se verifică serverul…"),
   T("Conferir", "Verifică"),

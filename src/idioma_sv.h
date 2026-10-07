@@ -1158,7 +1158,7 @@
   T("Conexão: servidor ainda não medido", "Anslutning: servern är inte uppmätt än"),
   T("Conexão: servidor só conhecido ao tocar", "Anslutning: servern blir känd först vid uppspelning"),
   T("Conexão: tamanho do arquivo não informado", "Anslutning: filstorlek saknas"),
-  T("Confere as 3 primeiras fontes do automático ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Acha uma fonte boa mais depressa quando a primeira falha, mas pode aparecer mais de um arquivo no painel do seu debrid, mesmo de fontes que você não vai assistir. Só vale com a Fonte automática em Melhor fonte.", "Kontrollerar de 3 första automatiska källorna samtidigt i stället för en i taget och spelar den bästa som fungerar. Hittar en bra källa snabbare när den första misslyckas, men fler än en fil kan dyka upp i din debrid-panel, även från källor du inte tittar på. Gäller bara när Automatisk källa är satt till Bästa källa."),
+  T("Confere até 3 fontes já prontas no debrid ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Fontes que ainda não estão prontas seguem uma por vez, sem baixar nada a mais. Só vale com a Fonte automática em Melhor fonte.", "Kontrollerar upp till 3 källor som redan är klara på debrid samtidigt i stället för en i taget och spelar den bästa som fungerar. Källor som inte är klara än kontrolleras fortfarande en i taget, så inget extra laddas ned. Gäller bara när Automatisk källa är satt till Bästa källa."),
   T("Conferindo o arquivo...", "Kontrollerar filen..."),
   T("Conferindo o servidor…", "Kontrollerar servern…"),
   T("Conferir", "Kontrollera"),

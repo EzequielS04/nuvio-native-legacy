@@ -1158,7 +1158,7 @@
   T("Conexão: servidor ainda não medido", "Připojení: server zatím nezměřen"),
   T("Conexão: servidor só conhecido ao tocar", "Připojení: server známý až při přehrávání"),
   T("Conexão: tamanho do arquivo não informado", "Připojení: velikost souboru neuvedena"),
-  T("Confere as 3 primeiras fontes do automático ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Acha uma fonte boa mais depressa quando a primeira falha, mas pode aparecer mais de um arquivo no painel do seu debrid, mesmo de fontes que você não vai assistir. Só vale com a Fonte automática em Melhor fonte.", "Zkontroluje první 3 automatické zdroje najednou místo jednoho po druhém a přehraje nejlepší funkční. Rychleji najde dobrý zdroj, když první selže, ale v panelu debridu se může objevit víc než jeden soubor, i ze zdrojů, které nebudete sledovat. Platí jen s Automatickým zdrojem nastaveným na Nejlepší zdroj."),
+  T("Confere até 3 fontes já prontas no debrid ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Fontes que ainda não estão prontas seguem uma por vez, sem baixar nada a mais. Só vale com a Fonte automática em Melhor fonte.", "Zkontroluje až 3 zdroje, které jsou už připravené na debridu, najednou místo jednoho po druhém a přehraje nejlepší funkční. Zdroje, které ještě nejsou připravené, se kontrolují po jednom, takže se nic navíc nestahuje. Platí jen s Automatickým zdrojem nastaveným na Nejlepší zdroj."),
   T("Conferindo o arquivo...", "Kontroluje se soubor..."),
   T("Conferindo o servidor…", "Kontrola serveru…"),
   T("Conferir", "Ověřit"),

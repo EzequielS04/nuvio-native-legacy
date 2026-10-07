@@ -1158,7 +1158,7 @@
   T("Conexão: servidor ainda não medido", "Bağlantı: sunucu henüz ölçülmedi"),
   T("Conexão: servidor só conhecido ao tocar", "Bağlantı: sunucu yalnızca oynatırken bilinir"),
   T("Conexão: tamanho do arquivo não informado", "Bağlantı: dosya boyutu belirtilmemiş"),
-  T("Confere as 3 primeiras fontes do automático ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Acha uma fonte boa mais depressa quando a primeira falha, mas pode aparecer mais de um arquivo no painel do seu debrid, mesmo de fontes que você não vai assistir. Só vale com a Fonte automática em Melhor fonte.", "İlk 3 otomatik kaynağı tek tek yerine aynı anda kontrol eder ve çalışanların en iyisini oynatır. İlk kaynak başarısız olduğunda iyi bir kaynağı daha hızlı bulur, ama debrid panelinizde izlemeyeceğiniz kaynaklardan bile birden fazla dosya görünebilir. Yalnızca Otomatik kaynak En iyi kaynak olarak ayarlıyken geçerlidir."),
+  T("Confere até 3 fontes já prontas no debrid ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Fontes que ainda não estão prontas seguem uma por vez, sem baixar nada a mais. Só vale com a Fonte automática em Melhor fonte.", "Debrid üzerinde zaten hazır olan en fazla 3 kaynağı tek tek yerine aynı anda kontrol eder ve çalışanların en iyisini oynatır. Henüz hazır olmayan kaynaklar yine tek tek kontrol edilir, bu yüzden fazladan bir şey indirilmez. Yalnızca Otomatik kaynak En iyi kaynak olarak ayarlıyken geçerlidir."),
   T("Conferindo o arquivo...", "Dosya kontrol ediliyor..."),
   T("Conferindo o servidor…", "Sunucu denetleniyor…"),
   T("Conferir", "Doğrula"),

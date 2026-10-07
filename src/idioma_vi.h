@@ -1158,7 +1158,7 @@
   T("Conexão: servidor ainda não medido", "Kết nối: máy chủ chưa được đo"),
   T("Conexão: servidor só conhecido ao tocar", "Kết nối: chỉ biết máy chủ khi phát"),
   T("Conexão: tamanho do arquivo não informado", "Kết nối: không có kích thước tệp"),
-  T("Confere as 3 primeiras fontes do automático ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Acha uma fonte boa mais depressa quando a primeira falha, mas pode aparecer mais de um arquivo no painel do seu debrid, mesmo de fontes que você não vai assistir. Só vale com a Fonte automática em Melhor fonte.", "Kiểm tra 3 nguồn tự động đầu tiên cùng lúc thay vì lần lượt, và phát nguồn tốt nhất hoạt động được. Tìm được nguồn tốt nhanh hơn khi nguồn đầu thất bại, nhưng trong bảng debrid của bạn có thể xuất hiện hơn một tệp, kể cả từ những nguồn bạn sẽ không xem. Chỉ áp dụng khi Nguồn tự động đặt là Nguồn tốt nhất."),
+  T("Confere até 3 fontes já prontas no debrid ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Fontes que ainda não estão prontas seguem uma por vez, sem baixar nada a mais. Só vale com a Fonte automática em Melhor fonte.", "Kiểm tra cùng lúc tối đa 3 nguồn đã sẵn sàng trên debrid thay vì lần lượt, và phát nguồn tốt nhất hoạt động được. Các nguồn chưa sẵn sàng vẫn được kiểm tra lần lượt từng nguồn, nên không tải thêm gì. Chỉ áp dụng khi Nguồn tự động đặt là Nguồn tốt nhất."),
   T("Conferindo o arquivo...", "Đang kiểm tra tệp..."),
   T("Conferindo o servidor…", "Đang kiểm tra máy chủ…"),
   T("Conferir", "Kiểm tra"),

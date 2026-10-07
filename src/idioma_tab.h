@@ -1157,7 +1157,7 @@
   { "Conexão: servidor ainda não medido", "Connection: server not measured yet" },
   { "Conexão: servidor só conhecido ao tocar", "Connection: server known only when playing" },
   { "Conexão: tamanho do arquivo não informado", "Connection: file size not provided" },
-  { "Confere as 3 primeiras fontes do automático ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Acha uma fonte boa mais depressa quando a primeira falha, mas pode aparecer mais de um arquivo no painel do seu debrid, mesmo de fontes que você não vai assistir. Só vale com a Fonte automática em Melhor fonte.", "Checks the first 3 automatic sources at the same time instead of one by one, and plays the best one that works. Finds a good source faster when the first one fails, but more than one file may show up in your debrid panel, even from sources you will not watch. Only applies with Automatic source set to Best source." },
+  { "Confere até 3 fontes já prontas no debrid ao mesmo tempo, em vez de uma por vez, e toca a melhor que servir. Fontes que ainda não estão prontas seguem uma por vez, sem baixar nada a mais. Só vale com a Fonte automática em Melhor fonte.", "Checks up to 3 sources already ready on the debrid at the same time instead of one by one, and plays the best one that works. Sources that are not ready yet are still checked one at a time, so nothing extra is downloaded. Only applies with Automatic source set to Best source." },
   { "Conferindo o arquivo...", "Checking the file..." },
   { "Conferindo o servidor…", "Checking the server…" },
   { "Conferir", "Verify" },
