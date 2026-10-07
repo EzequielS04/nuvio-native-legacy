@@ -366,7 +366,12 @@ static int ajCenaSecao(int op);
 static float ajSecaoDesenhar(int cena, int op, float x, float y, float w);
 static int ajcSecA = -1;   // a arte da categoria para uma cena de bloco sem opcao
 static float ajFontesResumo(int A, float x, float y, float w);   // ajustes_ux_secoes.inc
+static float ajCenaGerada(int sec, int op, float x, float y, float w);   // ajustes_ux_cenas.inc
 static float ajVisualCena(int sec, int op, float x, float y, float w) {
+  // 2.0.2 (dono: "essas fotos reais dos settings atrapalham mais do que
+  // ajudam"): toda cena dos Ajustes e o desenho gerado. O desenho com as
+  // artes de amostra abaixo ficou so como referencia do que cada cena mostra.
+  if (sec >= 0 || op >= 0) return ajCenaGerada(sec, op, x, y, w);
   float s = w / 640.0f, h = w * 9.0f / 16.0f, rr = 22.0f, ar, ag, ab;
   GfxRect q = { x, y, w, h };
   int i, j;

@@ -84,8 +84,7 @@ static void aj2Dicas(const AjDica *d, int n, float x, float yBase, float w, floa
   aj2DicasLinha(d, n, x + 6.0f, yBase - 18.0f, TXT_V2_KBD18, 36, 40, 11, TXT_V2_24, 10, 24, 1, a);
 }
 static float aj2Previa(int op, float x, float y, float w) {
-  if (op == AJ_TEMA) return aj2PreviaCor(x, y, w);
-  return ajPrevia(op, x, y, w);
+  return ajPrevia(op, x, y, w);   // 2.0.2: a cor tambem e a previa gerada
 }
 // A COLUNA DA ARTE (A3): a previa da opcao em foco grande, sem ilha, com o
 // segmentado da opcao (80/90/100...) sobre o canto de baixo; embaixo o kicker
