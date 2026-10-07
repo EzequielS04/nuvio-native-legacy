@@ -34,7 +34,10 @@ static void *open_adapter(int major, const DtsAdapter **api) {
                  major == 3 ? 3 : 4) >= (int)sizeof path) return NULL;
   }
   library = dlopen(path, RTLD_NOW | RTLD_LOCAL);
-  if (!library) return NULL;
+  if (!library) {
+    fprintf(stderr, "[dts] adapter load failed: %s: %s\n", path, dlerror());
+    return NULL;
+  }
   *(void **)(&entry) = dlsym(library, "nuvio_dts_adapter_v2");
   if (!entry) goto fail;
   *api = entry();
@@ -44,12 +47,14 @@ static void *open_adapter(int major, const DtsAdapter **api) {
       !(*api)->eos || !(*api)->media_id || !(*api)->error || !(*api)->probe()) goto fail;
   return library;
 fail:
+  fprintf(stderr, "[dts] adapter unavailable: %s (ABI or firmware probe failed)\n", path);
   *api = NULL; dlclose(library); return NULL;
 }
 int dts_pipeline_available(int major) {
   const DtsAdapter *api;
   void *lib = open_adapter(major, &api);
   if (!lib) return 0;
+  printf("[dts] firmware adapter ready\n"); fflush(stdout);
   dlclose(lib); return 1;
 }
 DtsPipeline *dts_pipeline_create(const char *app, const char *window, int major,
