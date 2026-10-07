@@ -79,6 +79,27 @@ void ctxinfo_geometria(const GfxRect *cartaz, float menuXPadrao, float centroX,
     if (g->infoW < CTXI_W_SOLTA) { g->infoW = 0.0f; g->lado = 0; } }
 }
 
+void ctxinfo_cartao_geo(const GfxRect *poster, float h, float menuW, CtxCartaoGeo *g) {
+  const float W = NV_TELA_W, H = NV_TELA_H, B = CTXI_BORDA, G = CTXI_GAP;
+  float w = CTXI_CARTAO_W < poster->w ? poster->w : CTXI_CARTAO_W;
+  float total = w + G + menuW, x;
+  if (h < poster->h) h = poster->h;
+  memset(g, 0, sizeof *g);
+  if (poster->x + total <= W - B) {
+    x = poster->x; g->lado = 1; g->menuX = x + w + G;
+  } else if (poster->x + poster->w - total >= B) {
+    x = poster->x + poster->w - w; g->lado = -1; g->menuX = x - G - menuW;
+  } else {
+    // Nenhum lado leva os dois: prende o grupo na tela, do lado com mais chao.
+    int dir = (W - B - (poster->x + poster->w)) >= (poster->x - B);
+    float gx = dir ? poster->x : poster->x + poster->w - total;
+    gx = prender(gx, B, W - B - total);
+    g->lado = dir ? 1 : -1;
+    if (dir) { x = gx; g->menuX = gx + w + G; } else { g->menuX = gx; x = gx + menuW + G; }
+  }
+  g->cartao = (GfxRect){ x, prender(poster->y, B, H - B - h > B ? H - B - h : B), w, h };
+}
+
 // --------------------------------------------------------------------- dados
 static int ehSerie(const CatItem *ci) { return ci && !strcmp(ci->tipo, "series"); }
 static int temId(const CatItem *ci) { return ci && ci->imdb[0] == 't' && ci->imdb[1] == 't'; }
@@ -194,18 +215,19 @@ static void montar(const CatItem *ci, const CtxInfoEstado *st, Modelo *m) {
 
 // A SINOPSE QUEBRADA UMA VEZ. A chave e o texto, a largura e o idioma; o
 // quadro seguinte so desenha as linhas (txt_linha ja guarda a textura).
-static struct { char chave[96]; float w; int idioma, n; char l[CTXI_SIN_LINHAS][300]; } sinCache;
+static struct { char chave[96]; float w; int idioma, n, max; char l[CTXI_SIN_LINHAS][300]; } sinCache;
+static int sinMax = CTXI_SIN_LINHAS;
 
 static void quebrarSinopse(const char *s, float w) {
   char chave[96];
   const char *p = s;
   int n = 0;
   snprintf(chave, sizeof chave, "%.80s|%zu", s, strlen(s));
-  if (sinCache.w == w && sinCache.idioma == ajustes_idioma() && !strcmp(sinCache.chave, chave)) return;
+  if (sinCache.w == w && sinCache.max == sinMax && sinCache.idioma == ajustes_idioma() && !strcmp(sinCache.chave, chave)) return;
   memset(&sinCache, 0, sizeof sinCache);
   snprintf(sinCache.chave, sizeof sinCache.chave, "%s", chave);
-  sinCache.w = w; sinCache.idioma = ajustes_idioma();
-  while (*p && n < CTXI_SIN_LINHAS) {
+  sinCache.w = w; sinCache.idioma = ajustes_idioma(); sinCache.max = sinMax;
+  while (*p && n < sinMax) {
     char linha[300] = "";
     const char *corte = NULL;
     while (*p == ' ') p++;
@@ -220,7 +242,7 @@ static void quebrarSinopse(const char *s, float w) {
       while (*p == ' ') p++;
     }
     // A ULTIMA linha leva a reticencia quando ainda sobra texto.
-    if (n == CTXI_SIN_LINHAS - 1 && (corte || *p)) {
+    if (n == sinMax - 1 && (corte || *p)) {
       size_t nl = strlen(linha);
       for (;;) {
         char tent[310];
@@ -409,4 +431,45 @@ void ctxinfo_texto(const CatItem *ci, const CtxInfoEstado *st, char *dst, size_t
   snprintf(dst + n, cap - n, "%s\nsynopsis: %.60s\nprogress: %s\nfriends: %s\nschedule: %s\nbadges:%s%s\n",
            m.notasCarregando ? " (loading)" : "", m.sinopse ? m.sinopse : "", m.prog,
            m.amigos, m.agenda, m.salvo ? " saved" : "", m.visto ? " watched" : "");
+}
+
+// A VERSAO COMPACTA, para dentro da linha expandida do painel de Salvos: meta +
+// classificacao, notas e sinopse em duas linhas. Sem arte (a faixa e de quem
+// chama). Devolve a altura.
+float ctxinfo_compacto(const CatItem *ci, const CtxInfoEstado *st, float x, float y,
+                       float w, float ca, int desenhar) {
+  Modelo m;
+  float y0 = y;
+  if (!ci) return 0.0f;
+  montar(ci, st, &m);
+  { float cl = m.classif[0] ? badge_largura(m.classif) + 12.0f : 0.0f;
+    TxtLinha t = txt_linha_corta(TXT_ILHA_META, m.meta, 243, 242, 239, 255, w - cl);
+    float h = (float)t.h > BADGE_H ? (float)t.h : BADGE_H;
+    if (m.meta[0] || m.classif[0]) {
+      if (desenhar) {
+        txt_desenhar_alpha(t, x, y + (h - (float)t.h) * 0.5f, .78f * ca);
+        if (m.classif[0])
+          badge_desenhar(x + (m.meta[0] ? (float)t.w + 12.0f : 0.0f), y + (h - BADGE_H) * 0.5f,
+                         m.classif, BADGE_NEUTRO, ca);
+      }
+      y += h + 6.0f;
+    } }
+  if (m.temNotas) {
+    NotasPlano p;
+    notasui_planejar(&p, m.cru, w, 0.0f, NULL);
+    if (desenhar) notasui_desenhar_linha(&p, x, y + NOTAS_H * 0.5f, ca);
+    y += NOTAS_H + 6.0f;
+  }
+  if (m.sinopse && m.sinopse[0]) {
+    int i;
+    sinMax = 2; quebrarSinopse(m.sinopse, w); sinMax = CTXI_SIN_LINHAS;
+    for (i = 0; i < sinCache.n; i++) {
+      if (desenhar) {
+        TxtLinha t = txt_linha(TXT_ILHA_TEXTO, sinCache.l[i], 243, 242, 239, 255);
+        txt_desenhar_alpha(t, x, y + (float)i * SIN_LEAD, .66f * ca);
+      }
+    }
+    y += (float)sinCache.n * SIN_LEAD;
+  }
+  return y - y0;
 }

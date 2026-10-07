@@ -480,6 +480,8 @@ static void montar(void) {
 }
 
 static void abrirComum(int indice);
+static int inlineOn, inlinePend;
+static int modoInline(void);
 // O cartaz vem da HOME, em pixels da tela real; o menu e camada ampliada e
 // mede pela tela virtual (escala.h). Desenhado na virtual ele cai no mesmo
 // lugar e no mesmo tamanho da tela.
@@ -631,6 +633,7 @@ void ctx_abrir_salvo(const CatItem *titulo) {
   doPainel = 1;
   doSocial = 0;
   doLista = 0;
+  inlineOn = inlinePend; inlinePend = 0;
   abrirComum(-1);
 }
 
@@ -1061,6 +1064,8 @@ void ctx_evento(const SDL_Event *e) {
   // efeito de aperta-los era sumir. Somado a guarda de aplicar() logo acima,
   // era a metade visivel do "nao faz nada" no botao de desmarcar.
   if (operacao != CTX_OP_NENHUMA && estadoOperacao == CTX_PENDENTE) return;
+  if (modoInline() && k == SDLK_LEFT)  { if (foco > 0) foco--; return; }
+  if (modoInline() && k == SDLK_RIGHT) { if (foco + 1 < nOps) foco++; return; }
   if (k == SDLK_UP)   { if (foco > 0) foco--; return; }
   if (k == SDLK_DOWN) { if (foco + 1 < nOps) foco++; return; }
   if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) { aplicar(); return; }
@@ -1185,7 +1190,9 @@ static void ilhaCtx(GfxRect p, float raioPx, float a) {
   float raio = raioPx / p.h;
   gfx_sombra_sob((GfxRect){ p.x - 18.0f, p.y - 8.0f, p.w + 36.0f, p.h + 40.0f }, 1.0f, 0, 0.5f,
                  0, 0, 0, .42f * a, p, raioPx, vid ? 0.0f : .98f * a);
-  if (vid) gfx_vidro_folha(p, raio, a);
+  // O vidro le a textura assada e deixava o texto da fileira aparecer por
+  // tras; uma base quase solida por baixo (a cor do modo sem vidro) fecha.
+  if (vid) { gfx_cor(p, raio, .071f, .075f, .086f, .93f * a); gfx_vidro_folha(p, raio, a); }
   else gfx_cor(p, raio, .071f, .075f, .086f, .98f * a);
   gfx_luz_canto(p, raio, p.w * .25f, -p.h * .25f, p.w * .9f, 1, 1, 1, (vid ? .06f : .04f) * a);
 }
@@ -1593,6 +1600,78 @@ static void desenhaLista(float a) {
   }
 }
 
+// ---- A LINHA EXPANDIDA DO PAINEL DE SALVOS (ver ctxmenu.h) ----
+#define IL_PAD    18.0f
+#define IL_PILULA 50.0f
+void ctx_inline_pedir(int on) { inlinePend = on; }
+static int modoInline(void) { return inlineOn && doPainel && !doSocial && !doLista && !soFileira; }
+float ctx_inline_t(void) { return modoInline() ? (anim < 0.0f ? 0.0f : anim > 1.0f ? 1.0f : anim) : 0.0f; }
+static CtxInfoEstado estInline(const CatItem *ci) {
+  CtxInfoEstado e; e.salvo = tituloSalvo(ci); e.visto = historicoDe(ci); return e;
+}
+// Rotulo CURTO da pilula (o menu flutuante usa o longo): cabe sem reticencias.
+static const char *pilulaRot(int i, const CatItem *ci) {
+  switch (ops[i].acao) {
+    case OP_LISTA:     return tituloSalvo(ci) ? "Remover" : "Salvar";
+    case OP_ASSISTIDO: return historicoDe(ci) == 1 ? "Não assistido" : "Assistido";
+    case OP_CATEGORIA: return "Categoria";
+    default:           return ops[i].rot;
+  }
+}
+float ctx_inline_altura(float w, float faixaH) {
+  const CatItem *ci = itemAtual();
+  CtxInfoEstado e;
+  if (!ci || !modoInline()) return 0.0f;
+  e = estInline(ci);
+  return IL_PAD + faixaH + 14.0f + ctxinfo_compacto(ci, &e, 0, 0, w - 2.0f * (IL_PAD + 6.0f), 0, 0) +
+         14.0f + IL_PILULA + IL_PAD;
+}
+void ctx_inline_desenhar(float x, float y, float w, float faixaH, float a) {
+  const CatItem *ci = itemAtual();
+  CtxInfoEstado e;
+  float cx = x + IL_PAD + 6.0f, cw = w - 2.0f * (IL_PAD + 6.0f), py, hi, gap = 10.0f;
+  int i;
+  float ar, ag, ab;
+  if (!ci || !modoInline() || a < 0.01f) return;
+  e = estInline(ci);
+  logotitulo_desenhar(ci, ci->titulo, TXT_ILHA_NOME, cx + 6.0f, y + IL_PAD + faixaH - 16.0f - 52.0f,
+                      300.0f, 52.0f, cw - 12.0f, a);
+  hi = ctxinfo_compacto(ci, &e, cx, y + IL_PAD + faixaH + 14.0f, cw, a, 1);
+  py = y + IL_PAD + faixaH + 14.0f + hi + 14.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  { float nat[CTX_MAX], tot = 0.0f, k = 1.0f, px = cx;
+    for (i = 0; i < nOps; i++) {
+      nat[i] = 20.0f + 10.0f + (float)txt_linha(TXT_CAPTION2, pilulaRot(i, ci), 255, 255, 255, 255).w + 22.0f;
+      tot += nat[i];
+    }
+    tot += gap * (float)(nOps > 1 ? nOps - 1 : 0);
+    if (tot > cw) k = (cw - gap * (float)(nOps > 1 ? nOps - 1 : 0)) / (tot - gap * (float)(nOps > 1 ? nOps - 1 : 0));
+    for (i = 0; i < nOps; i++) {
+      GfxRect r = { px, py, nat[i] * k, IL_PILULA };
+      float f = focoAnim[i];
+      const char *icone = "aj_info";
+      TxtLinha t;
+      float tw;
+      px += r.w + gap;
+      switch (ops[i].acao) {
+        case OP_LISTA: icone = "aj_library"; break;
+        case OP_ASSISTIDO: icone = historicoDe(ci) == 1 ? "aj_eye-off" : "aj_eye"; break;
+        case OP_CATEGORIA: icone = "aj_folders"; break;
+        default: break;
+      }
+      gfx_cor(r, 0.5f, 1, 1, 1, (.07f + .05f * f) * a);
+      if (f > 0.01f) gfx_cor(r, 0.5f, ar, ag, ab, .30f * f * a);
+      if (aberto && a > 0.5f) ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroCtxOpcao, NULL, i, 0);
+      t = txt_linha_corta(TXT_CAPTION2, pilulaRot(i, ci), 243, 242, 239, 255, r.w - 22.0f - 30.0f);
+      tw = 30.0f + (float)t.w;
+      gfx_icone((GfxRect){ r.x + (r.w - tw) * 0.5f, r.y + (r.h - 20.0f) * 0.5f, 20.0f, 20.0f },
+                icone, .953f, .949f, .937f, (.7f + .3f * f) * a);
+      txt_desenhar_alpha(t, r.x + (r.w - tw) * 0.5f + 30.0f, r.y + (r.h - (float)t.h) * 0.5f,
+                         (.78f + .22f * f) * a);
+    }
+  }
+}
+
 static void ctx_desenharCorpo_(Uint32 agora);
 // Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void ctx_desenhar(Uint32 agora) {
@@ -1612,8 +1691,9 @@ static void ctx_desenharCorpo_(Uint32 agora) {
   const CatItem *ci;
   const char *mensagem = NULL;
   float a = anim, alt, x, y, cab, grupoH;
-  int i, comLogo, infoOn;
+  int i, comLogo, infoOn, morph = 0;
   CtxInfoGeo geo;
+  CtxCartaoGeo cg;
   CtxInfoEstado est;
   (void)agora;
   infoDesenhada = 0;
@@ -1643,6 +1723,7 @@ static void ctx_desenharCorpo_(Uint32 agora) {
                        420.0f * p, 8.0f }, 4.0f, 0.78f, 0.84f, 0.96f, 0.98f);
   }
   if (a < 0.01f) return;
+  if (modoInline() && pagina == 0) return;   // a linha do painel se abre sozinha (salvospainel.c)
   if (pagina == 1) { desenhaEstilos(a); return; }
   if (doLista) { desenhaLista(a); return; }
   ci = itemAtual();
@@ -1670,7 +1751,7 @@ static void ctx_desenharCorpo_(Uint32 agora) {
   }
 
   { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-    gfx_cor(tela, 0.0f, 0, 0, 0, 0.55f * a); }
+    gfx_cor(tela, 0.0f, 0, 0, 0, 0.74f * a); }
 
   infoOn = infoPossivel(ci);
   est.salvo = tituloSalvo(ci);
@@ -1695,7 +1776,19 @@ static void ctx_desenharCorpo_(Uint32 agora) {
   // A EXTENSAO muda o lugar do menu: os dois juntos ao lado do cartaz (ou no
   // meio), e o grupo inteiro dentro da tela. Ver ctxinfo_geometria.
   memset(&geo, 0, sizeof geo);
+  memset(&cg, 0, sizeof cg);
   grupoH = alt;
+  // O CARTAZ VIRA O CARTAO: com cartaz focado o cartao de informacoes e o
+  // proprio cartaz crescido (ctxinfo_cartao_geo) e o menu fica colado a ele.
+  morph = infoOn && temCartaz && !doPainel;
+  if (morph) {
+    float hAlvo = ctxinfo_altura(ci, &est, CTXI_CARTAO_W < cartazRect.w ? cartazRect.w : CTXI_CARTAO_W);
+    if (hAlvo < alt) hAlvo = alt;
+    if (infoH < 1.0f || ajustes_animacoes_reduzidas()) infoH = hAlvo;
+    else infoH += (hAlvo - infoH) * 0.22f;
+    ctxinfo_cartao_geo(&cartazRect, infoH, CTX_W, &cg);
+    x = cg.menuX; y = cg.cartao.y; grupoH = cg.cartao.h;
+  } else
   if (infoOn) {
     float pedido = doPainel && dicaCx >= 0.0f ? dicaCx : -1.0f;
     ctxinfo_geometria(temCartaz && !doPainel ? &cartazRect : NULL, x, pedido, CTX_W, &geo);
@@ -1725,6 +1818,38 @@ static void ctx_desenharCorpo_(Uint32 agora) {
   // recorte, veus, rotulo, logo, anel), em pixels reais — nada de refazer a
   // arte aqui com outro aspecto. So o que nao e da home (Biblioteca) cai na
   // arte solta abaixo.
+  if (morph) {
+    // O CARTAZ CRESCE ATE O CARTAO. `e` anda com a mola de abertura, entao
+    // fechar desfaz o mesmo caminho de volta ate o cartaz. A arte do cartaz
+    // some na primeira metade e o conteudo so acende no fim (ele e posto na
+    // caixa final: antes disso a caixa ainda nao o contem).
+    float e = a < 0.0f ? 0.0f : a > 1.0f ? 1.0f : a;
+    GfxRect P = cartazRect, C = cg.cartao, r;
+    float raioP = ajustes_raio_poster_px() / gfx_escala_ui(), raioPx, sa, ca, artA;
+    r.x = P.x + (C.x - P.x) * e; r.y = P.y + (C.y - P.y) * e;
+    r.w = P.w + (C.w - P.w) * e; r.h = P.h + (C.h - P.h) * e;
+    raioPx = raioP + (CTX_ILHA_RAIO - raioP) * e;
+    if (raioPx > 0.5f * (r.h < r.w ? r.h : r.w)) raioPx = 0.5f * (r.h < r.w ? r.h : r.w);
+    sa = anim_clamp(e * 3.0f, 0.0f, 1.0f);
+    ca = anim_clamp((e - 0.8f) / 0.2f, 0.0f, 1.0f);
+    artA = 1.0f - anim_clamp((e - 0.15f) / 0.55f, 0.0f, 1.0f);
+    ilhaCtx(r, raioPx, sa);
+    if (artA > 0.01f && cartazArte[0]) {
+      GLuint t = tex_obter_larg(cartazArte, P.w * gfx_escala_ui());
+      if (t) {
+        gfx_tex_aspect_atual = tex_aspecto(cartazArte);
+        gfx_rect(r, t, GFX_CARD, 0, 0, 0, raioPx / r.h, 0, 0, 0, artA);
+        gfx_tex_aspect_atual = 0.0f;
+      }
+    }
+    if (ca > 0.01f) ctxinfo_desenhar(ci, &est, C.x, C.y, C.w, sa, ca);
+    infoDesenhada = 1; infoLadoUlt = cg.lado;
+    infoCaixa = C;
+    menuCaixa = (GfxRect){ cg.menuX, y, CTX_W, alt };
+    // O menu sai da borda do cartao, acendendo depois dele.
+    x -= (float)cg.lado * (1.0f - e) * 40.0f;
+    a = anim_clamp((e - 0.35f) / 0.65f, 0.0f, 1.0f);
+  } else
   if (temCartaz && !doPainel && !cartazFixo && cartaoDaHome()) {
     /* feito */
   } else
@@ -1749,13 +1874,13 @@ static void ctx_desenharCorpo_(Uint32 agora) {
     float ca = a * anim_clamp((e - 0.3f) / 0.7f, 0.0f, 1.0f);
     ilhaCtx((GfxRect){ ix, y, geo.infoW, infoH }, CTX_ILHA_RAIO, sa);
     ctxinfo_desenhar(ci, &est, ix, y, geo.infoW, sa, ca);
-    infoDesenhada = 1; infoLadoUlt = geo.lado;
+    infoDesenhada = 1; infoLadoUlt = -geo.lado;
     infoCaixa = (GfxRect){ geo.infoX, y, geo.infoW, infoH };
     menuCaixa = (GfxRect){ geo.menuX, y, CTX_W, alt };
   }
 
   // Entra deslizando 16 px a partir do lado do poster, como as folhas do app.
-  x += (1.0f - a) * (temCartaz && !doPainel && x < cartazRect.x ? 16.0f : -16.0f);
+  if (!morph) x += (1.0f - a) * (temCartaz && !doPainel && x < cartazRect.x ? 16.0f : -16.0f);
   ilhaCtx((GfxRect){ x, y, CTX_W, alt }, CTX_ILHA_RAIO, a);
 
   // CABECALHO: o nome e, embaixo, o que o titulo e ("Serie · 2024 · ...") —

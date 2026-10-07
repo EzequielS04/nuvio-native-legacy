@@ -45,6 +45,20 @@ typedef struct { float menuX, infoX, infoW; int lado, separada; } CtxInfoGeo;
 void ctxinfo_geometria(const GfxRect *cartaz, float menuXPadrao, float centroX,
                        float menuW, CtxInfoGeo *g);
 
+// O CARTAZ VIRA O CARTAO (dono, 06/10/2026, segunda rodada): com um cartaz
+// focado nao ha segunda ilha nem painel solto — o PROPRIO cartaz cresce no
+// lugar dele ate o cartao de informacoes (CTXI_CARTAO_W x altura do conteudo) e
+// o menu fica colado ao lado. Funcao pura (testada em tests/ctxinfo_shot.c).
+//   `poster`  a caixa do cartaz (tela virtual); `h` a altura do cartao (nunca
+//             menor que a do cartaz); `menuW` a largura do menu.
+// O cartao cresce a partir da borda ESQUERDA do cartaz e o menu vai a direita
+// (lado = +1); sem lugar a direita, cresce a partir da borda DIREITA e o menu
+// vai a esquerda (lado = -1); se nenhum dos dois cabe, o grupo e preso na tela.
+// Verticalmente o cartao nasce no topo do cartaz e e preso entre as margens.
+#define CTXI_CARTAO_W 500.0f
+typedef struct { GfxRect cartao; float menuX; int lado; } CtxCartaoGeo;
+void ctxinfo_cartao_geo(const GfxRect *poster, float h, float menuW, CtxCartaoGeo *g);
+
 // O titulo do menu mudou (ou abriu): pede o resumo em fundo quando falta algo.
 void ctxinfo_abrir(const CatItem *ci);
 
@@ -64,4 +78,8 @@ float ctxinfo_desenhar(const CatItem *ci, const CtxInfoEstado *st,
 // "friends: ...", "schedule: ...", "badges: saved watched"). Para os testes;
 // os rotulos sao em ingles para nao parecerem texto de tela.
 void ctxinfo_texto(const CatItem *ci, const CtxInfoEstado *st, char *dst, size_t cap);
+// Versao compacta (linha expandida do painel de Salvos): meta, notas e sinopse
+// em duas linhas, em (x, y) com largura w. Devolve a altura; `desenhar` 0 so mede.
+float ctxinfo_compacto(const CatItem *ci, const CtxInfoEstado *st, float x, float y,
+                       float w, float ca, int desenhar);
 #endif
