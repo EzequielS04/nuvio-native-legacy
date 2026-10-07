@@ -361,7 +361,11 @@ class NuvioActivity : SDLActivity() {
         env("NUVIO_LOCALE", java.util.Locale.getDefault().toLanguageTag())
         env("NUVIO_TV_INFO", "${Build.MANUFACTURER} ${Build.MODEL}|${Build.VERSION.SDK_INT}|${Build.VERSION.RELEASE}|$versao")
         env("NUVIO_SAIDA_ANTERIOR", saidaAnterior())
+        // Onde o crash nativo anterior aconteceu (Tombstone.kt); android.c imprime.
+        env("NUVIO_QUEDA_ANDROID", quedaAnterior.joinToString("\n"))
     }
+
+    private var quedaAnterior: List<String> = emptyList()
 
     // POR QUE O PROCESSO ANTERIOR MORREU, segundo o proprio Android (11+). O log
     // do app nao ve ANR, crash nativo nem o low memory killer: a sessao
@@ -388,6 +392,7 @@ class NuvioActivity : SDLActivity() {
                 android.app.ApplicationExitInfo.REASON_OTHER -> "outro"
                 else -> "desconhecido"
             }
+            if (r.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE) quedaAnterior = Tombstone.doExitInfo(r)
             val ha = (System.currentTimeMillis() - r.timestamp) / 1000
             val desc = (r.description ?: "").replace('\n', ' ').take(120)
             "motivo=$nome(${r.reason}) status=${r.status} importancia=${r.importance} " +

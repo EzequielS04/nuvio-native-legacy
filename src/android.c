@@ -31,6 +31,10 @@ static void logaTv(void) {
   // Motivo da morte do processo anterior (ApplicationExitInfo, NuvioActivity).
   e = getenv("NUVIO_SAIDA_ANTERIOR");
   if (e && e[0]) printf("[android] saida anterior: %s\n", e);
+  // E, se foi crash nativo no Android 12+, onde: o resumo do tombstone, ja em
+  // linhas "[queda] ..." (Tombstone.kt).
+  e = getenv("NUVIO_QUEDA_ANDROID");
+  if (e && e[0]) printf("%s\n", e);
   fflush(stdout);
 }
 
