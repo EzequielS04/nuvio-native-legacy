@@ -285,7 +285,16 @@ namespace NuvioTpk
                 p.Display = fazDisplay();
                 p.DisplaySettings.Mode = PlayerDisplayMode.LetterBox;
                 await p.PrepareAsync();
-                if (minha != sessao) { p.Unprepare(); p.Dispose(); return; }
+                // Sessao trocada durante o Prepare: Parar() ja soltou e descartou este
+                // Player (player == p la), entao Unprepare() lancava
+                // ObjectDisposedException e o catch registrava "abrir:" (2.0.1: 45
+                // pessoas, 176 logs). Nada a fazer aqui; cada passo isolado.
+                if (minha != sessao)
+                {
+                    try { p.Unprepare(); } catch { }
+                    try { p.Dispose(); } catch { }
+                    return;
+                }
                 int dur = 0;
                 try { dur = p.StreamInfo.GetDuration(); } catch { }
                 try { var v = p.StreamInfo.GetVideoProperties(); NvVid.Evento(EV_TAMANHO, v.Size.Width, v.Size.Height); } catch { }
@@ -311,8 +320,9 @@ namespace NuvioTpk
             }
             catch (Exception e)
             {
+                if (minha != sessao) { Log("abrir: sessao antiga encerrada (" + e.GetType().Name + ")"); return; }
                 Log("abrir: " + e);
-                if (minha == sessao) NvVid.Evento(EV_ERRO, -1, 0);
+                NvVid.Evento(EV_ERRO, -1, 0);
             }
         }
 
