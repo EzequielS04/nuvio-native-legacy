@@ -1313,7 +1313,7 @@ static void prepararOpenSSL(void) {
   fflush(stdout);
 }
 
-static int abrir(void) {
+static int abrirReal(void) {
   void *h;
   int r = __atomic_load_n(&pronto, __ATOMIC_ACQUIRE);
   // Acquire publica tambem os ponteiros dlsym e o global_init para os outros
@@ -1342,7 +1342,6 @@ static int abrir(void) {
 #ifdef NV_ANDROID
   // Android: o sistema nao oferece libcurl a apps; ela vai no APK (jniLibs) com
   // o nome "libcurl.so", e o dlopen por nome acha na pasta nativa do app.
-  android_etapa("rede_preparar: dlopen libcurl");
   printf("[rede] dlopen libcurl.so\n"); fflush(stdout);
   h = dlopen("libcurl.so", RTLD_NOW);
   if (!h)
@@ -1388,7 +1387,6 @@ static int abrir(void) {
 #ifdef NV_ANDROID
   // #266: a Shield (Tegra) para em "rede_preparar" sem imprimir mais nada; a
   // libcurl 8 + mbedTLS 3.6 inicia o PSA/entropia aqui dentro. Marca cada lado.
-  android_etapa("rede_preparar: curl_global_init");
   printf("[rede] curl_global_init\n"); fflush(stdout);
 #endif
   if (curl_global) curl_global(3 /* CURL_GLOBAL_DEFAULT */);
@@ -1405,7 +1403,58 @@ static int abrir(void) {
   return 1;
 }
 
+#ifdef NV_ANDROID
+// #266: na Shield (Tegra, Android 11) o app nunca terminava de abrir, parado em
+// rede_preparar. Suspeita nao provada: dlopen da libcurl / curl_global_init
+// (mbedTLS 3.6 PSA/entropia) bloqueando. No Android isso roda num fio proprio;
+// a interface segue abrindo e quem precisa de rede espera pela bandeira, com
+// limite. Se a init nunca voltar, o log diz.
+static int fioIniciado;
+static void *fioCurl(void *a) {
+  struct timespec t0, t1;
+  (void)a;
+  clock_gettime(CLOCK_MONOTONIC, &t0);
+  abrirReal();
+  clock_gettime(CLOCK_MONOTONIC, &t1);
+  printf("[rede] libcurl pronta em %ld ms (pronto=%d)\n",
+         (long)((t1.tv_sec - t0.tv_sec) * 1000 + (t1.tv_nsec - t0.tv_nsec) / 1000000),
+         __atomic_load_n(&pronto, __ATOMIC_ACQUIRE));
+  fflush(stdout);
+  return NULL;
+}
+static void iniciarFioCurl(void) {
+  pthread_t t;
+  if (__atomic_exchange_n(&fioIniciado, 1, __ATOMIC_ACQ_REL)) return;
+  if (pthread_create(&t, NULL, fioCurl, NULL) != 0) { fioCurl(NULL); return; }
+  pthread_detach(t);
+}
+static int abrir(void) {
+  int r = __atomic_load_n(&pronto, __ATOMIC_ACQUIRE);
+  static int avisou;
+  struct timespec t0, t1;
+  if (r == 1 || r == -1) return r > 0;
+  iniciarFioCurl();
+  clock_gettime(CLOCK_MONOTONIC, &t0);
+  for (;;) {
+    struct timespec d = { 0, 10 * 1000 * 1000 };
+    r = __atomic_load_n(&pronto, __ATOMIC_ACQUIRE);
+    if (r == 1 || r == -1) return r > 0;
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    if (t1.tv_sec - t0.tv_sec >= 20) {
+      if (!__atomic_exchange_n(&avisou, 1, __ATOMIC_RELAXED)) {
+        printf("[rede] curl_global_init nao voltou (20 s, pronto=%d)\n", r);
+        fflush(stdout);
+      }
+      return 0;
+    }
+    nanosleep(&d, NULL);
+  }
+}
+void rede_preparar(void) { iniciarFioCurl(); }
+#else
+static int abrir(void) { return abrirReal(); }
 void rede_preparar(void) { abrir(); }
+#endif
 
 /* Request novo isolado do handle/controles por fio dos wrappers. */
 // Trusted Mozilla bundle configured once at startup. Android's libcurl has
