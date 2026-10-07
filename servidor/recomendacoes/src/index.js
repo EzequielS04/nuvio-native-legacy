@@ -20,6 +20,7 @@ import { rotaEnquete } from "./enquete.js";
 import { rotaSala, limpezaSala } from "./sala.js";
 import { rotaDiario, DIARIO_CORPO_MAX, DIARIO_CORPO_MAX_LB } from "./diario.js";
 import { rotaCaca } from "./conquista.js";
+import { rotaTrava, travaRev } from "./trava.js";
 import { resolverCanonica, canonizarEntrada, identidadesDe, rotaIdentidades, idSimkl,
          perfilExiste, RECURSO } from "./identidade.js";
 
@@ -586,7 +587,10 @@ export async function rotaReceber(env, quem, url, req) {
   // O estado das respostas entra no ETag (quantas, soma dos instantes e das
   // reacoes): responder em outra TV tem de invalidar o 304 desta.
   const sig = respostas.reduce((a, x) => a + x.respondido + (x.reacao === null ? 0 : x.reacao + 2) + x.terminou, 0);
-  const etag = `"${quem.id.length}-${maiorId}-${naoVistas}-${respostas.length}.${sig}"`;
+  // TRAVA DE SERIE (migracao 012): a revisao das travas desta pessoa pega
+  // carona nesta sondagem. Mudou = a TV faz GET /v1/travas. Sem a tabela, 0.
+  const tRev = await travaRev(env, quem.id);
+  const etag = `"${quem.id.length}-${maiorId}-${naoVistas}-${respostas.length}.${sig}.${tRev}"`;
   if (req.headers.get("if-none-match") === etag) {
     // SEM CORS AQUI, o XHR da TV via `mode: "cors"` nunca via ESTE 304 —
     // via um erro de rede generico, porque a resposta sem
@@ -595,7 +599,7 @@ export async function rotaReceber(env, quem, url, req) {
     // novo") era exatamente o caminho sem CORS; so o 200 com corpo tinha.
     return new Response(null, { status: 304, headers: { etag, ...CORS } });
   }
-  return json({ cursor: maiorId, novas: naoVistas, itens, respostas }, 200, { etag });
+  return json({ cursor: maiorId, novas: naoVistas, itens, respostas, travaRev: tRev }, 200, { etag });
 }
 
 async function rotaVisto(env, quem, corpo) {
@@ -636,6 +640,23 @@ async function rotaRegistro(env, quem, corpo) {
   return json(recibo);
 }
 
+const ARRANQUE_MAX = 64 * 1024;
+const ARRANQUE_DIA = 300;
+async function rotaArranque(req, env) {
+  const bruto = await req.text();
+  if (bruto.length > 2 * ARRANQUE_MAX) return erro("grande demais", 413);
+  let corpo = {};
+  try { corpo = JSON.parse(bruto.trim() || "{}"); } catch { return erro("json invalido", 400); }
+  const n = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM registro WHERE pessoa LIKE 'arranque:%' AND criado > ?"
+  ).bind(agora() - 24 * 3600).first();
+  if ((n?.n || 0) >= ARRANQUE_DIA) return erro("limite diario", 429);
+  const tv = String(corpo?.tv || "?").replace(/[^\w.:-]/g, "").slice(0, 64) || "?";
+  let texto = String(corpo?.texto || "");
+  if (texto.length > ARRANQUE_MAX) texto = texto.slice(texto.length - ARRANQUE_MAX);
+  return rotaRegistro(env, { id: "arranque:" + tv }, { ...corpo, texto, execucao_id: "" });
+}
+
 async function rotaApagar(env, quem, corpo) {
   const id = parseInt(corpo?.id, 10);
   if (!Number.isInteger(id)) return erro("sem id", 400);
@@ -662,6 +683,13 @@ export default {
       if (!env.TV) return erro("site da tv em outro endereco", 404);
       return env.TV.fetch(req);
     }
+
+    // REGISTRO DE ARRANQUE SEM CONTA (#266). A TV Android que nao passa da
+    // tela preta nao tem sessao para assinar o envio; o vigia do APK
+    // (ArranqueVigia.kt) manda o fim do log por aqui. Sem token, entao com
+    // tetos proprios: texto ate 64 KB, pessoa "arranque:<marca>" e no maximo
+    // ARRANQUE_DIA envios por dia no total (o D1 ja encheu uma vez).
+    if (rota === "/v1/registro/arranque" && req.method === "POST") return rotaArranque(req, env);
 
     // BUILD DE DIAGNOSTICO (#77, 20/09/2026): uma TV que nao chega nem ao
     // login nao tem sessao nem Trakt para assinar o envio, e o dono pediu uma
@@ -823,6 +851,9 @@ export default {
     // segredo TMDB_KEY para /v1/filmografia).
     const caca = await rotaCaca(rota, req.method, env, quem, corpo, url, h);
     if (caca) return caca;
+    // Trava de serie (trava.js; exige migracao-012).
+    const trv = await rotaTrava(rota, req.method, env, quem, corpo, h, req, { limitar, mesmaConta });
+    if (trv) return trv;
 
     // Perfil publico, busca, pedidos, bloqueio e atividade (amigos.js).
     const amigos = await rotaAmigos(rota, req.method, env, quem, corpo, h);
