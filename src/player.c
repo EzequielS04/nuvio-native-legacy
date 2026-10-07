@@ -1257,6 +1257,9 @@ void player_abrir(int indiceCatalogo, const char *url) {
   // O modo de proporcao e do APARELHO, nao da sessao: reler aqui e o que faz
   // "Zoom cinema" continuar valendo no filme seguinte, como no web.
   prefsLer();
+  // #202: Proporcao padrao (Ajustes > Reproducao). So em memoria: o arquivo
+  // guarda o ultimo modo escolhido na mao, que continua valendo para "Ultimo usado".
+  { int pad = ajustes_proporcao_padrao(); if (pad >= 0 && pad < PLR_ASP_N) aspecto = pad; }
   toastAte = 0; toastTexto[0] = 0; avisouAudio = 0;
   prebuscaUrl[0] = 0;
   // Reconexao so no filme/episodio: canal ao vivo tem o watchdog de app.c.

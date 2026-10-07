@@ -94,6 +94,8 @@ int ajustes_animacoes_reduzidas(void);
 // V_BRILHO_PLAYER (padrao 1 = 80%).
 int ajustes_esmaecer(void);
 int ajustes_brilho_player(void);
+// #202: -1 = ultimo modo usado (padrao); 0..7 = PlrAspecto aplicado ao abrir o video.
+int ajustes_proporcao_padrao(void);
 int ajustes_descanso_estilo(void);   // ESM_ESTILO_* (esmaecer.h)
 int ajustes_descanso_fonte(void);    // DESC_FONTE_* (descanso.h)
 int ajustes_dolby_vision(void);
