@@ -658,9 +658,83 @@ static void ajcSvEnquete(void) {
   ajcChaveCanto(k);
 }
 
+// Plugins: cada plugin entrega fontes; elas descem para a lista e a primeira toca.
+static void ajcSvPlugins(void) {
+  int i, chega = ajc_passo(0.9f, 5);
+  for (i = 0; i < 3; i++) {
+    float y = 60 + i * 84;
+    ajc_neutro(40, y, 200, 64, 16, 1);
+    ajc_ladrilho("aj_plug", 76, y + 32, 38, i == chega % 3, 1);
+    ajc_barra(104, y + 24, 100, 0.75f); ajc_barra(104, y + 38, 60, 0.35f);
+  }
+  ajc_painel(300, 40, 300, 280, 18, 1);
+  for (i = 0; i < 4; i++) {
+    float y = 60 + i * 60, a = i < chega ? 1.0f : 0.15f;
+    ajc_neutro(316, y, 268, 46, 12, a);
+    ajc_barra(334, y + 14, 120, 0.75f * a); ajc_barra(334, y + 27, 70, 0.35f * a);
+    if (i < chega) ajcSelo(i == 0 ? "4K" : i == 1 ? "1080p" : "720p", 500, y + 12, 11, i == 0, a);
+    if (i == 0 && chega > 0) ajc_foco(316, y, 268, 46, 12, 1);
+  }
+  ajc_bolinha(270, 92 + (chega % 3) * 84 - 32 + 32 * ajc_passo_t(0.9f), 10, 1, 1, 1, 0.8f);
+}
+// Usar os addons do perfil principal: os outros perfis copiam a pilha do
+// principal (ligado) ou cada um tem a sua (desligado).
+static void ajcSvPrincipal(int op) {
+  float k = ajcLig(op);
+  int i, j;
+  for (i = 0; i < 3; i++) {
+    float cx = 120 + i * 200, cy = 96, r, g, b;
+    ajc_matiz(i * 3 + 1, &r, &g, &b);
+    ajc_bolinha(cx, cy, i == 0 ? 84 : 70, r, g, b, 1);
+    ajc_icone("aj_user-round", cx, cy, i == 0 ? 36 : 30, 0.85f);
+    if (i == 0) { ajc_bolinha(cx + 30, cy - 30, 26, 0.10f, 0.11f, 0.13f, 1); ajc_icone("aj_star", cx + 30, cy - 30, 14, 1); }
+    for (j = 0; j < 3; j++) {
+      // ligado: a mesma pilha do principal (matizes 0,1,2); desligado: a propria
+      int m = (i == 0 || k > 0.5f) ? j : i * 3 + j + 3;
+      float y = 170 + j * 46;
+      ajc_neutro(cx - 70, y, 140, 38, 10, 1);
+      { float rr, gg, bb; ajc_matiz(m, &rr, &gg, &bb); ajc_ret(cx - 60, y + 9, 20, 20, 6, rr, gg, bb, 0.9f); }
+      ajc_icone("aj_puzzle", cx - 50, y + 19, 12, 0.9f);
+      ajc_barra(cx - 30, y + 16, 80, 0.6f);
+    }
+    if (i > 0 && k > 0.01f) {
+      float f = ajc_fase(2.0f);
+      ajc_ret(120 + 72, 189 + 46, (cx - 70) - 192, 2, 1, 1, 1, 1, 0.25f * k);
+      ajc_bolinha(192 + ((cx - 70) - 192) * f, 236, 9, 1, 1, 1, k * (1 - f * 0.5f));
+    }
+  }
+  ajc_foco(50, 170, 140, 130, 12, 0.5f + 0.5f * ajc_onda(2.4f));
+  ajcChaveCanto(k);
+}
+// Buscar no Cinemeta: a busca consulta o catalogo do Nuvio e o Cinemeta;
+// desligado, o Cinemeta sai e os resultados dele somem.
+static void ajcSvCinemeta(int op) {
+  float k = ajcLig(op);
+  int i, letras = 1 + ajc_passo(0.35f, 6);
+  ajc_painel(40, 36, 560, 56, 28, 1);
+  ajc_icone("aj_search", 74, 64, 22, 0.9f);
+  for (i = 0; i < letras; i++) ajc_ret(100 + i * 18, 56, 12, 16, 3, 1, 1, 1, 0.8f);
+  ajc_ret(100 + letras * 18, 52, 2, 24, 1, 1, 1, 1, ajc_onda(0.8f) > 0.5f ? 0.9f : 0.1f);
+  // duas origens: Nuvio (sempre) e Cinemeta (pela chave)
+  ajc_neutro(40, 120, 150, 40, 20, 1); ajc_icone("aj_database", 64, 140, 16, 0.9f); ajcTexto("Nuvio", 15, 1, 82, 131, 0.9f);
+  ajc_neutro(40, 176, 150, 40, 20, 0.35f + 0.65f * k); ajc_icone(k > 0.5f ? "aj_film" : "aj_eye-off", 64, 196, 16, 0.4f + 0.5f * k);
+  ajcTexto("Cinemeta", 15, 1, 82, 187, 0.35f + 0.55f * k);
+  if (k > 0.5f) ajc_acento_ret(40, 176, 150, 40, 20, 0.35f * k);
+  for (i = 0; i < 6; i++) {
+    int doCinemeta = i % 2 == 1;
+    float a = doCinemeta ? k : 1.0f, x = 220 + (i % 3) * 126, y = 120 + (i / 3) * 112;
+    ajc_cartaz(x, y, 110, 96, i + 2, 0.15f + 0.85f * a);
+    if (doCinemeta) ajc_icone("aj_film", x + 96, y + 14, 12, 0.8f * a);
+  }
+  ajcChaveCanto(k);
+}
+
 static int ajcNovaServicos(int sec, int op) {
   (void)sec;
   switch (op) {
+    case AJ_PLUGINS: ajcSvPlugins(); return 1;
+    case AJ_ADDONS_PRINCIPAL: ajcSvPrincipal(op); return 1;
+    case AJ_BUSCA_CINEMETA: ajcSvCinemeta(op); return 1;
     case AJ_DEBRID_RD: ajcSvDebrid("Real-Debrid", "aj_download", 10, 0x5, 0); return 1;
     case AJ_DEBRID_TB: ajcSvDebrid("TorBox", "aj_package", 7, 0x6, 0); return 1;
     case AJ_DEBRID_PM: ajcSvDebrid("Premiumize", "aj_sparkle", 9, 0xB, 0); return 1;
