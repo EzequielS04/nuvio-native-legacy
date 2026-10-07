@@ -826,7 +826,7 @@ static void aj2InspetorDiferencas(void) {
 
 // --- A TELA ---------------------------------------------------------------------
 static int ajModalAberto(void) {
-  return (uxEditor && (uxRestaurar || uxAvisoRisco || uxEditor == 2)) || riscoFolha || ajVinculoAtivo() ||
+  return (uxEditor && (uxRestaurar || uxAvisoRisco || uxEditor == 2)) || riscoFolha || frAberta || ajVinculoAtivo() ||
          teclado_aberto() || registro_envio_aberto();
 }
 static void ajDesenharTela(void) {
@@ -997,6 +997,67 @@ static void ajDesenharAddons(int foco) {
   }
   { AjDica d[2] = { { "OK", "Ligar ou desligar" }, { "Voltar", "Ajustes" } };
     ajDicas(d, 2, ir.x + 32, ir.y + ir.h - 32, ir.w - 64, 1); }
+}
+
+// "Add-ons permitidos" / "Plugins permitidos" (#202): o modal com "Todos" no
+// topo e um chip por nome. As linhas sao as da folha de Addons (84 px).
+static void desenhaFolhaPermitidos(void) {
+  int plugin = frAberta == 2, i, n;
+  GfxRect m = { 460, 90, 1000, 900 };
+  float topo, base, y, alvo;
+  char sub[200];
+  frMontar();
+  n = frN + 1;
+  ajVeuModal();
+  ajCentraModal(&m);
+  ajIlha(m, 36, 1, 1);
+  snprintf(sub, sizeof sub, "%s", i18n(ajustes_fonte_usar_outros()
+    ? "Nenhum marcado = todos. Os marcados vêm primeiro; os outros só tocam se eles não tiverem fonte."
+    : "Nenhum marcado = todos. Só os marcados tocam no automático; sem fonte neles, a lista abre."));
+  { char k[160];
+    snprintf(k, sizeof k, "%s · %s", i18n("Fontes e addons"), i18n("Escolha da fonte"));
+    topo = ajCabecalhoFolha(m, k, plugin ? "Plugins permitidos" : "Add-ons permitidos", sub, 0, 1); }
+  base = m.y + m.h - 96.0f;
+  alvo = frFoco * 84.0f - (base - topo - 80.0f) * 0.5f;
+  if (alvo > n * 84.0f - (base - topo)) alvo = n * 84.0f - (base - topo);
+  if (alvo < 0) alvo = 0;
+  gfx_recorte(m.x, topo, m.w, base - topo);
+  y = topo - alvo;
+  for (i = 0; i < n; i++, y += 84) {
+    GfxRect r = { m.x + 18, y, m.w - 36, 80 };
+    int f = i == frFoco, lig;
+    const char *nome, *apoio;
+    float cw, tw;
+    if (y + 80 < topo || y > base) continue;
+    if (i == 0) {
+      nome = plugin ? "Todos os plugins ligados" : "Todos os add-ons";
+      apoio = "";
+      lig = fonteregra_n(plugin) == 0;
+    } else {
+      nome = frNome[i - 1]; apoio = frApoio[i - 1];
+      lig = fonteregra_contem(plugin, nome);
+    }
+    if (f) ajFocoLinha(r, 22, 1, 1);
+    if (i == 0) {
+      ajNeutro((GfxRect){ r.x + 22, y + 16, 48, 48 }, 14, 0.09f, 0.141f, 0.149f, 0.173f, 1);
+      ajIcone(plugin ? "aj_plug" : "aj_puzzle", r.x + 22 + 14, y + 16 + 14, 20, 0.85f);
+    } else ajRosto(nome, r.x + 22, y + 16, 48, 14, 0.09f, 0.85f, TXT_ILHA_INICIAL);
+    cw = ajChipLiga(r.x + r.w - 22, y + 40, lig, 1);
+    tw = r.w - 22 - 64 - cw - 40;
+    // O nome do add-on e do usuario: nao passa por i18n.
+    { TxtLinha t = i == 0 ? ajTxtC(TXT_AJ_ROTULO, nome, tw) : txt_linha_corta(TXT_AJ_ROTULO, nome, AJ_TX, tw);
+      TxtLinha c = ajTxtC(TXT_ILHA_GENERO, apoio, tw);
+      float ty = y + 40 - (t.h + (apoio[0] ? 4 + c.h : 0)) * 0.5f;
+      txt_desenhar_alpha(t, r.x + 22 + 48 + 16, ty, f ? 1.0f : 0.86f);
+      if (apoio[0]) txt_desenhar_alpha(c, r.x + 22 + 48 + 16, ty + t.h + 4, 0.42f); }
+  }
+  gfx_sem_recorte();
+  { AjDica d[2] = { { "OK", "Ligar ou desligar" }, { "Voltar", "Fechar" } };
+    ajDicas(d, 2, m.x + 44, m.y + m.h - 36, m.w - 88, 1); }
+  if (uxAviso[0]) {
+    TxtLinha t = ajTxtC(TXT_AJ_SUB, uxAviso, 1100);
+    txt_desenhar_alpha(t, (NV_VTELA_W - t.w) * 0.5f, NV_VTELA_H - 50, 0.8f);
+  }
 }
 
 // --- PLUGINS (pluginsui.c, F09) NO MESMO ARRANJO ----------------------------------

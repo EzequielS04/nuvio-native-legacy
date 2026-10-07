@@ -60,6 +60,7 @@
 #include "debrid.h"
 #include "seekr.h"
 #include "selospacote.h"
+#include "fonteregra.h"
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -429,6 +430,12 @@ typedef enum {
   // = a guia parental sobe da ilha com a faixa etaria ("Guia parental · 12");
   // Desligado = nada dela aparece. LOCAL. No fim: valor[]/CHAVE[] posicionais.
   AJ_PLR_CLASSIF,
+  // AUTO-PLAY COMO NO NUVIO OFICIAL (#202, fonteregra.h): escopo, add-ons e
+  // plugins permitidos, "usar os outros se nao houver" e a regex (modo, padrao
+  // e modelos). As listas e o padrao moram em fonteregra.c (valor[] nao guarda
+  // texto); o escopo e o modo sao numeros daqui. No fim: posicionais.
+  AJ_FONTE_ESCOPO, AJ_FONTE_ADDONS_PERM, AJ_FONTE_PLUGINS_PERM, AJ_FONTE_OUTROS,
+  AJ_FONTE_REGEX, AJ_FONTE_REGEX_PADRAO, AJ_FONTE_REGEX_MODELO,
   AJ_N
 } OpcaoId;
 
@@ -468,7 +475,21 @@ static const char *V_DESCANSO_FONTE[]  = { "Catálogo", "Minha lista e Continuar
 static const char *V_BRILHO_PLAYER[] = { "100%", "80%", "65%", "50%" };
 static const char *V_LOGO_APP[] = { "Novo", "Clássico" };
 static const char *V_ABERTURA[] = { "Padrão", "Só esmaece", "Direto" };
-static const char *V_FONTE_PRAZO[] = { "3 s", "5 s", "8 s", "Todos os add-ons" };
+// #202: "Instantâneo" e 15/30 s, como o "Stream Selection Timeout" do
+// oficial (0 = instantaneo; Unlimited = todos). O indice e o gravado em
+// fonteEsperaLocal; o fontePrazoLocal de antes (3 s, 5 s, 8 s, Todos) migra na
+// leitura (ver prazoAntigo em ajustes_dir).
+static const char *V_FONTE_PRAZO[] = { "Instantâneo", "3 s", "5 s", "8 s", "15 s", "30 s", "Todos os add-ons" };
+static const int   FONTE_PRAZO_MS[] = { 0, 3000, 5000, 8000, 15000, 30000, -1 };
+// O que o automatico considera (stream_auto_play_source do oficial). Os
+// literais sao os do enum do oficial (W_FONTE_ESCOPO), que a conta guarda.
+static const char *V_FONTE_ESCOPO[] = { "Todas as fontes", "Só add-ons instalados", "Só plugins ligados" };
+static const char *W_FONTE_ESCOPO[] = { "ALL_SOURCES", "INSTALLED_ADDONS_ONLY", "ENABLED_PLUGINS_ONLY", NULL };
+// Regex: desligada, exigir (o REGEX_MATCH do oficial: so casa) ou preferir.
+static const char *V_FONTE_REGEX[] = { "Desligada", "Exigir", "Preferir" };
+// Modelos de regex (fonteregra_modelo). 0 = o padrao digitado.
+static const char *V_FONTE_MODELO[] = { "Personalizado", "Espanhol", "Português", "Inglês",
+                                        "Multi-áudio (MULTI)", "Áudio duplo (DUAL)", "4K e Remux" };
 // Indice gravado em tamanhoUiLocal; o fator sai de ajustes_tamanho_ui.
 static const char *V_TAMANHO_UI[] = { "100%", "120%", "130%", "150%" };
 static const char *V_TAMANHO_AJUSTES[] = { "80%", "90%", "100%" };
@@ -1140,7 +1161,7 @@ static const Opcao OPCOES[AJ_N] = {
   NUM("Sincronia da miniatura",          -60, 60, 1, " s"),   // local: seekrAjusteLocal
   ESC("Ao sair do player",               V_SAIDA_PLAYER, 2),  // local: saidaPlayerLocal
   ESC("Perguntar o que achou nos créditos", V_LIGA, 2),     // local: reacaoCreditosLocal
-  ESC("Espera pelos add-ons",            V_FONTE_PRAZO, 4),   // local: fontePrazoLocal
+  ESC("Espera pelos add-ons",            V_FONTE_PRAZO, 7),   // local: fonteEsperaLocal
   ACAO("Ver o registro na tela"),
   ESC("Medidor de desempenho",           V_MEDIDOR, 4),       // local: medidorFormaLocal
   ACAO("Guia de uso"),
@@ -1194,6 +1215,13 @@ static const Opcao OPCOES[AJ_N] = {
   ACAO("Apoiar o projeto"),
   ESC("Legenda forçada automática quando o áudio for no seu idioma", V_LIGA, 2), // local: legendaForcadaLocal
   ESC("Classificação no player",         V_LIGA, 2),             // local: classifPlayerLocal
+  ESC("Fontes do automático",            V_FONTE_ESCOPO, 3),  // por perfil: stream_auto_play_source
+  ACAO("Add-ons permitidos"),                                  // fonteregra.c (conta)
+  ACAO("Plugins permitidos"),                                  // fonteregra.c (conta)
+  ESC("Usar os outros se não houver",    V_LIGA, 2),          // por perfil: fonteOutrosLocal
+  ESC("Coincidência por regex",          V_FONTE_REGEX, 3),   // por perfil: fonteRegexLocal
+  ACAO("Padrão da regex"),                                     // fonteregra.c (conta)
+  ESC("Modelo de regex",                 V_FONTE_MODELO, 7),  // espelho de fonteregra_modelo_atual
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1358,7 +1386,7 @@ static const char *CHAVE[] = {
   "saidaPlayerLocal",
   // LOCAL e SEM o "-": o web nao tem a pergunta.
   "reacaoCreditosLocal",
-  "fontePrazoLocal",
+  "fonteEsperaLocal",
   // "-": acao, nao grava. O medidor e LOCAL e SEM o "-": e desta TV.
   "-verRegistro", "medidorFormaLocal",   // era "medidorDesempenhoLocal" (V_LIGA): ver ajustes_dir
   "-guiaUso",
@@ -1394,6 +1422,12 @@ static const char *CHAVE[] = {
   "-apoiar",
   "legendaForcadaLocal",
   "classifPlayerLocal",
+  // #202. O escopo usa o NOME do oficial (stream_auto_play_source no blob)
+  // para ir e voltar da conta; as listas e o padrao sao de fonteregra.c. O
+  // "usar os outros" e o modo da regex o oficial nao tem: nascem POR PERFIL
+  // (nao estao em somenteDesteAparelho) e o blob simplesmente nao os traz.
+  "streamAutoPlaySource", "-fonteAddonsPermitidos", "-fontePluginsPermitidos",
+  "fonteOutrosLocal", "fonteRegexLocal", "-fonteRegexPadrao", "-fonteRegexModelo",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1693,14 +1727,17 @@ int ajustes_fonte_texto_logo(void)    { return valor[AJ_FONTE_TEXTO] == 2; }
 // medido no D1 da 1.7.0 (.tpk), a primeira fonte chega em 0,85 s no p90 e o
 // ultimo addon em 12 s — o prazo cobre a cauda dos rapidos sem pagar a dos
 // mudos.
+//
+// #202: 0 = INSTANTANEO (a primeira fonte aceitavel do melhor grupo sai na
+// hora); -1 = esperar todos os addons.
 int ajustes_fonte_prazo_ms(void) {
-  switch (valor[AJ_FONTE_PRAZO]) {
-    case 0: return 3000;
-    case 2: return 8000;
-    case 3: return 0;
-    default: return 5000;
-  }
+  int v = valor[AJ_FONTE_PRAZO];
+  return v < 0 || v >= (int)(sizeof FONTE_PRAZO_MS / sizeof *FONTE_PRAZO_MS) ? 5000 : FONTE_PRAZO_MS[v];
 }
+// #202 (fonteregra.h).
+int ajustes_fonte_escopo(void)      { int v = valor[AJ_FONTE_ESCOPO]; return v < 0 || v > 2 ? 0 : v; }
+int ajustes_fonte_regex_modo(void)  { int v = valor[AJ_FONTE_REGEX]; return v < 0 || v > 2 ? 0 : v; }
+int ajustes_fonte_usar_outros(void) { return lig(AJ_FONTE_OUTROS); }
 int ajustes_fonte_repor(void) {
   int v = valor[AJ_FONTE_REPOR];
   return v < 0 ? 0 : v > 3 ? 3 : v;     // arquivo editado a mao: dentro da tabela
@@ -2334,6 +2371,7 @@ static const char *const *literaisDe(int op) {
     case AJ_CW_ORDEM:   return W_CW_ORDEM;
     case AJ_TMDB_IDIOMA: return W_TMDB_LING;
     case AJ_TEMA:       return W_TEMA;
+    case AJ_FONTE_ESCOPO: return W_FONTE_ESCOPO;
     default:            return NULL;
   }
 }
@@ -2782,6 +2820,7 @@ void ajustes_dir(const char *dir) {
   char caminho[600], linha[96];
   if (!dir || !*dir) return;
   snprintf(dirAjustes, sizeof dirAjustes, "%s", dir);
+  fonteregra_carregar();
   fanartCarregar();
   seekrCarregar();
   p2pCarregar();
@@ -2802,7 +2841,7 @@ void ajustes_dir(const char *dir) {
     return;
   }
   { int viuIdioma = 0, viuAuto = 0, idiomaGravado = IDIOMA_EN, autoGravado = 0;
-    int medidorAntigo = -1, viuMedidor = 0, resAntiga = -1, viuRes = 0;
+    int medidorAntigo = -1, viuMedidor = 0, resAntiga = -1, viuRes = 0, prazoAntigo = -1, viuEspera = 0;
   while (fgets(linha, sizeof linha, f)) {
     char chave[64]; int v, i;
     if (sscanf(linha, "%63s %d", chave, &v) != 2) continue;
@@ -2820,6 +2859,9 @@ void ajustes_dir(const char *dir) {
     // e virou a forma na ilha (V_MEDIDOR). Ligado continua visivel: Grande, o
     // painel inteiro de antes; desligado continua desligado.
     if (!strcmp(chave, "medidorDesempenhoLocal")) { medidorAntigo = v; continue; }
+    // "Espera pelos add-ons" ganhou Instantaneo/15 s/30 s (#202): o indice de
+    // antes (3 s, 5 s, 8 s, Todos) vira o da lista nova.
+    if (!strcmp(chave, "fontePrazoLocal")) { prazoAntigo = v; continue; }
     if (!strcmp(chave, "idiomaFonteLocal")) {
       if (v >= IDA_TMDB && v <= IDA_PADRAO) idiomaFonteGravada = v;
       continue;
@@ -2832,6 +2874,7 @@ void ajustes_dir(const char *dir) {
       valor[i] = limita(i, v);
       if (i == AJ_MEDIDOR) viuMedidor = 1;
       if (i == AJ_RESOLUCAO) viuRes = 1;
+      if (i == AJ_FONTE_PRAZO) viuEspera = 1;
       break;
     }
   }
@@ -2839,6 +2882,10 @@ void ajustes_dir(const char *dir) {
   if (!viuRes && resAntiga >= 0) {
     valor[AJ_RESOLUCAO] = res_migrar(resAntiga);
     printf("[ajustes] resolucao da interface: resolucao_ui %d -> resolucaoUi %d\n", resAntiga, valor[AJ_RESOLUCAO]);
+  }
+  if (!viuEspera && prazoAntigo >= 0) {
+    static const int DE_PARA[4] = { 1, 2, 3, 6 };   // 3 s, 5 s, 8 s, Todos
+    valor[AJ_FONTE_PRAZO] = prazoAntigo < 4 ? DE_PARA[prazoAntigo] : valorPadrao[AJ_FONTE_PRAZO];
   }
   // Escolha manual: "idioma" gravado e SEM a marca de automatico (arquivo de
   // antes da marca, ou de quem escolheu). Sem "idioma" nenhum, nunca houve
@@ -3481,6 +3528,9 @@ int ajustes_aplicar_blob(const char *json) {
   // Os pacotes de selos da conta (features.stream_badge_settings) vivem em
   // selospacote.c, que guarda por perfil; nao sao uma opcao desta tabela.
   selospacote_conta_do_blob(json);
+  // Add-ons/plugins permitidos e o padrao da regex do auto-play (#202), com as
+  // chaves do oficial: texto e listas, que valor[] nao guarda.
+  fonteregra_do_blob(json);
   fim = json + strlen(json);
   idiomasDoBlob(json, fim);
   idiomaContaDoBlob(json, fim);
@@ -3736,12 +3786,15 @@ void ajustes_perfil_guardar(int perfil) {
   }
   nomePerfil(nome, sizeof nome, perfil);
   dados_gravar(nome, buf);
+  fonteregra_perfil_guardar(perfil);
 }
 
 int ajustes_perfil_restaurar(int perfil) {
   char nome[32], *t, *l;
   int mudou = 0;
   if (perfil <= 0) return 0;
+  // As listas e a regex do auto-play (#202) seguem o perfil do mesmo jeito.
+  fonteregra_perfil_restaurar(perfil);
   nomePerfil(nome, sizeof nome, perfil);
   t = dados_ler(nome);
   if (!t) return 0;
@@ -3777,6 +3830,7 @@ void ajustes_perfil_esquecer(void) {
   // Os indices de perfil da conta sao pequenos (CONTA_PERFIL_MAX perfis); 32
   // cobre com folga. Apagar arquivo que nao existe nao custa nada.
   for (i = 1; i <= 32; i++) { nomePerfil(nome, sizeof nome, i); dados_apagar(nome); }
+  fonteregra_perfil_esquecer();
 }
 
 // Onde esta o valor de `chave` dentro de [ini,fim): *vi aponta o primeiro
@@ -3904,7 +3958,7 @@ int ajustes_mesclar_blob(const char *base, char **saida) {
     troca[n].vi = vi; troca[n].vf = vf;
     n++;
   }
-  if (!n) return 0;
+  if (!n) return fonteregra_mesclar(base, saida);
 
   // Por posicao, para a costura ser uma passada so. n e pequeno (dezenas) e a
   // insercao simples e mais curta de conferir que a alternativa.
@@ -3929,6 +3983,11 @@ int ajustes_mesclar_blob(const char *base, char **saida) {
   memcpy(out + w, p, (size_t)(fim - p)); w += (size_t)(fim - p);
   out[w] = 0;
   *saida = out;
+  // As chaves de texto/lista do auto-play (#202) por cima do que ja foi
+  // costurado: a mesma regra, so chave que existe e no mesmo tipo.
+  { char *mais = NULL;
+    int m = fonteregra_mesclar(out, &mais);
+    if (m > 0 && mais) { free(out); *saida = mais; n += m; } }
   printf("[ajustes] %d ajuste(s) desta TV entram no blob da conta\n", n);
   return n;
 }
@@ -4234,6 +4293,8 @@ static void pxAtivar(int op) {
   plex_entrar();
 }
 
+static const char *frResumo(int plugin);
+static const char *frRegexTexto(void);
 static const char *textoLeitura(int op) {
   static char buf[64];
   // MASCARADO, sempre. Esta tela e fotografada e colada em issue — foi assim
@@ -4298,6 +4359,9 @@ static const char *textoLeitura(int op) {
     recomenda_perfil(&pf);
     return pf.apelido[0] ? pf.apelido : i18n("Não configurado");
   }
+  if (op == AJ_FONTE_ADDONS_PERM) return frResumo(0);
+  if (op == AJ_FONTE_PLUGINS_PERM) return frResumo(1);
+  if (op == AJ_FONTE_REGEX_PADRAO) return frRegexTexto();
   if (op == AJ_P2P_URL) return p2pEndereco[0] ? p2pEndereco
                              : p2pmotor_disponivel() ? i18n("Nesta TV") : i18n("Não configurado");
   if (op >= AJ_JF_SERVIDOR && op <= AJ_JF_SAIR) return jfTexto(op);
@@ -4898,6 +4962,13 @@ static const char *ajudaOpcao(int op) {
     case AJ_RELOGIO: return "Desligado, a pílula do relógio não fica na tela em repouso. Os avisos continuam saindo dela: ela aparece só para o aviso e some depois.";
     case AJ_SAIDA_PLAYER: return "Ao sair de um filme ou episódio no meio. Home: o vídeo encolhe até a pílula do relógio, que fica com o título para você retomar (CH+ ou AZUL). Página do título: volta para onde você estava. Só vale com o relógio na tela; terminar o título segue para o próximo episódio como sempre.";
     case AJ_TAM_MAX: return "Na escolha automática, fontes maiores que este tamanho ficam para o fim da fila. Serve para quem tem franquia de internet limitada. Só vale para arquivos com tamanho conhecido; se só houver fontes fora da faixa, a melhor delas ainda toca.";
+    case AJ_FONTE_ESCOPO: return "De onde o automático pode tocar: todas as fontes, só os add-ons instalados ou só os plugins ligados. Fica no seu perfil.";
+    case AJ_FONTE_ADDONS_PERM: return "Os add-ons que o automático usa primeiro, como os do seu idioma. Nenhum marcado = todos. A lista de fontes continua mostrando tudo.";
+    case AJ_FONTE_PLUGINS_PERM: return "Os plugins que o automático usa primeiro. Nenhum marcado = todos os plugins ligados.";
+    case AJ_FONTE_OUTROS: return "Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.";
+    case AJ_FONTE_REGEX: return "Compara uma regex com o nome, a descrição e o add-on de cada fonte, sem diferenciar maiúsculas. Exigir: só toca o que casa. Preferir: o que casa vem primeiro.";
+    case AJ_FONTE_REGEX_PADRAO: return "O padrão da regex, como no Nuvio oficial. Ex.: ESP|Latino|Castellano. Dá para digitar pelo celular. Um padrão inválido é ignorado.";
+    case AJ_FONTE_REGEX_MODELO: return "Padrões prontos: idiomas como os add-ons escrevem, áudio MULTI ou DUAL, 4K e Remux. Escolher um troca o padrão da regex.";
     case AJ_TAM_MIN: return "Na escolha automática, fontes menores que este tamanho ficam para o fim da fila. Se for maior que o tamanho máximo, o mínimo é ignorado. Só vale para arquivos com tamanho conhecido; se só houver fontes fora da faixa, a melhor delas ainda toca.";
     case AJ_PLR_CLASSIF: return "Ligado (padrão): no começo do filme, a ilha mostra a classificação indicativa e os avisos do guia parental (violência, nudez, palavrões). Desligado: o player não mostra nada disso.";
     case AJ_RELOGIO_12H: return "Como a hora aparece no relógio, na tela de descanso, no fim do filme e no guia de TV: 18:30 ou 6:30 PM.";
@@ -5596,6 +5667,96 @@ static void riscoFolhaEvento(SDL_Keycode k) {
 }
 static void desenhaRiscoFolha(void);
 
+// --- folha "Add-ons permitidos" / "Plugins permitidos" (#202) ----------------
+// Modal dentro desta tela, como a de fileiras: a lista dos instalados (e dos
+// marcados que ja nao estao instalados, para poder tira-los), com "Todos" no
+// topo. OK marca/desmarca e grava na hora (fonteregra.c); Voltar fecha.
+#define FR_FOLHA_MAX 128
+static int frAberta;            // 0 fechada; 1 add-ons; 2 plugins
+static int frFoco;
+static int frN;
+static char frNome[FR_FOLHA_MAX][FR_NOME_MAX];
+static char frApoio[FR_FOLHA_MAX][64];
+static void uxNotificar(const char *s);
+static void frPor(const char *nome, const char *apoio) {
+  int k;
+  if (!nome || !nome[0] || frN >= FR_FOLHA_MAX) return;
+  for (k = 0; k < frN; k++) if (!strcasecmp(frNome[k], nome)) return;
+  snprintf(frNome[frN], FR_NOME_MAX, "%s", nome);
+  snprintf(frApoio[frN], sizeof frApoio[frN], "%s", apoio ? apoio : "");
+  frN++;
+}
+static void frMontar(void) {
+  int plugin = frAberta == 2, i, j, k;
+  char nm[FR_NOME_MAX];
+  frN = 0;
+  if (!plugin) {
+    for (i = 0; i < addons_n(); i++)
+      if (!addons_sondado(i) || addons_fornece(i, ADD_STREAM))
+        frPor(addons_nome(i), addons_ativo(i) ? "" : "Desligado");
+  } else {
+    for (i = 0; i < plugins_n_repos(); i++) {
+      int tot = plugins_repo_scrapers(i, NULL);
+      for (j = 0; j < tot; j++) {
+        PlugScraper sc;
+        if (plugins_scraper(i, j, &sc)) frPor(sc.nome, sc.ativo ? "" : "Desligado");
+      }
+    }
+  }
+  for (k = 0; k < fonteregra_n(plugin); k++)
+    if (fonteregra_nome(plugin, k, nm, sizeof nm)) frPor(nm, "Não instalado");
+  if (frFoco > frN) frFoco = frN;
+  if (frFoco < 0) frFoco = 0;
+}
+static void frAbrir(int plugin) { frAberta = plugin ? 2 : 1; frFoco = 0; frMontar(); }
+static void frEvento(SDL_Keycode k) {
+  int plugin = frAberta == 2;
+  frMontar();
+  if (k == SDLK_ESCAPE || k == SDLK_AC_BACK || k == SDLK_BACKSPACE || k == SDLK_DELETE || k == SDLK_LEFT) {
+    frAberta = 0; return;
+  }
+  if (k == SDLK_UP && frFoco > 0) frFoco--;
+  if (k == SDLK_DOWN && frFoco < frN) frFoco++;
+  if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
+    if (frFoco == 0) fonteregra_limpar(plugin);
+    else fonteregra_alternar(plugin, frNome[frFoco - 1]);
+    // Sobe para a conta como os outros ajustes do perfil (#85).
+    sync_proteger_ajustes_locais();
+    uxNotificar("Ajuste salvo nesta TV.");
+  }
+}
+// Resumo na linha: "Todos" ou os nomes marcados.
+static const char *frResumo(int plugin) {
+  static char b[2][160];
+  char nm[FR_NOME_MAX];
+  int n = fonteregra_n(plugin), k;
+  char *d = b[plugin ? 1 : 0];
+  if (!n) return i18n(plugin ? "Todos os plugins ligados" : "Todos os add-ons");
+  d[0] = 0;
+  for (k = 0; k < n && k < 3; k++) {
+    if (!fonteregra_nome(plugin, k, nm, sizeof nm)) continue;
+    if (d[0]) strncat(d, ", ", 160 - strlen(d) - 1);
+    strncat(d, nm, 160 - strlen(d) - 1);
+  }
+  if (n > 3) { char m[24]; snprintf(m, sizeof m, " +%d", n - 3); strncat(d, m, 160 - strlen(d) - 1); }
+  return d;
+}
+// O padrao na linha, ou o aviso de que esta vazio/invalido.
+static const char *frRegexTexto(void) {
+  static char b[96];
+  char p[FR_REGEX_MAX + 1];
+  int e = fonteregra_regex_estado();
+  fonteregra_regex(p, sizeof p);
+  if (e < 0) return i18n("Regex inválida: ignorada");
+  if (!p[0]) return i18n("Nenhum");
+  snprintf(b, sizeof b, "%.60s%s", p, strlen(p) > 60 ? "…" : "");
+  return b;
+}
+// Sinais de regex que o teclado da TV oferece (o celular digita o que quiser,
+// dentro do mesmo alfabeto).
+static const char *FR_ALFA_REGEX =
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789|()[]{}.*+?^$\\-_ :!/,";
+
 // UM PASSO NO VALOR DA OPCAO `op` (dir = +1 ou -1), com tudo o que a mudanca
 // tem de disparar, e a gravacao. Um lugar so para as setas do modo edicao e
 // para o OK do interruptor: dois caminhos para o mesmo valor eram duas listas
@@ -5639,6 +5800,9 @@ static int definirValorDireto(int op, int novo) {
   if (op == AJ_ENQUETES) enquete_definir_optout(novo != 0);
   if (op == AJ_ADDONS_PRINCIPAL) sync_iniciar();
   if (op == AJ_SELOS_PACOTE) { selospacote_escolher(novo - 1); spEspelhar(); }
+  // Modelo de regex (#202): escolher um troca o padrao; "Personalizado" so
+  // deixa o padrao como esta.
+  if (op == AJ_FONTE_REGEX_MODELO && novo > 0) fonteregra_definir_regex(fonteregra_modelo(novo));
   sync_proteger_ajustes_locais();
   return 1;
 }
@@ -5716,6 +5880,7 @@ static void eventoTela(const SDL_Event *e) {
     } }
   // A folha de aviso de memoria (mais fileiras/itens) e modal e vem antes de tudo.
   if (riscoFolha) { riscoFolhaEvento(k); return; }
+  if (frAberta) { frEvento(k); return; }
   // A folha de fileiras e modal, como a do vinculo acima.
   if (filAberta) { eventoFileiras(k); return; }
   if (uxEvento(k)) return;
@@ -5753,6 +5918,19 @@ static void eventoTela(const SDL_Event *e) {
     if (focoOp == AJ_APOIAR) { uxNotificar("Aponte a câmera do celular para um dos códigos."); return; }
     if (focoOp == AJ_ADDONS) { pediuAddons = 1; return; }
     if (focoOp == AJ_PLUGINS) { pediuPlugins = 1; return; }
+    if (focoOp == AJ_FONTE_ADDONS_PERM || focoOp == AJ_FONTE_PLUGINS_PERM) {
+      frAbrir(focoOp == AJ_FONTE_PLUGINS_PERM); return;
+    }
+    if (focoOp == AJ_FONTE_REGEX_PADRAO) {
+      char atual[FR_REGEX_MAX + 1];
+      fonteregra_regex(atual, sizeof atual);
+      stCampo = focoOp;
+      // O padrao volta para o campo: corrigir um sinal nao pode obrigar a
+      // redigitar tudo. Vazio apaga.
+      teclado_abrir_com("Padrão da regex", "Ex.: ESP|Latino|Castellano. Vazio apaga.",
+                        TECLADO_LONGO, FR_ALFA_REGEX, atual[0] ? atual : NULL);
+      return;
+    }
     if (focoOp == AJ_DIAGNOSTICO) { pediuDiagnostico = 1; return; }
     if (focoOp == AJ_HERO_CATALOGOS) { if (!inativa(focoOp)) heroFonteCiclar(+1); return; }
     if (focoOp == AJ_VELOCIDADE) { pediuVelocidade = 1; return; }
@@ -5887,6 +6065,7 @@ void ajustes_atualizar(float dt, Uint32 agora) {
   if (uxAviso[0] && SDL_TICKS_PASSED(agora, uxAvisoAte)) uxAviso[0] = 0;
   montarTela();
   valor[AJ_PERFIL_PESQ] = recomenda_pesquisavel() ? 0 : 1;   // V_LIGA: 0 = Ligado
+  valor[AJ_FONTE_REGEX_MODELO] = fonteregra_modelo_atual();   // espelho do padrao (#202)
   p2pTesteRecolher();
   pstTesteRecolher();
   adTesteRecolher();
@@ -5910,6 +6089,11 @@ void ajustes_atualizar(float dt, Uint32 agora) {
       else if (stCampo == AJ_SEEKR_CHAVE)     { seekrDefinir(teclado_texto()); atomic_store_explicit(&skTeste, 0, memory_order_release); }
       else if (stCampo == AJ_SELOS_PACOTE_ADD) spAdicionar(teclado_texto());
       else if (stCampo == AJ_P2P_URL)         ajustes_definir_p2p_url(teclado_texto());
+      else if (stCampo == AJ_FONTE_REGEX_PADRAO) {
+        int e = fonteregra_definir_regex(teclado_texto());
+        sync_proteger_ajustes_locais();
+        uxNotificar(e < 0 ? "Regex inválida: ignorada" : "Ajuste salvo nesta TV.");
+      }
       else if (stCampo == AJ_JF_SERVIDOR)     jellyfin_definir_servidor(teclado_texto());
       else if (stCampo == AJ_EM_SERVIDOR)     emby_definir_servidor(teclado_texto());
       else if ((stCampo == AJ_JF_ENTRAR || stCampo == AJ_EM_ENTRAR) && !jfUsuario[0] && teclado_texto()[0]) {
@@ -6467,6 +6651,8 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_SELOS_PACOTE:
     case AJ_REACAO_CREDITOS:
     case AJ_FONTE_PRAZO: case AJ_TAM_MAX: case AJ_TAM_MIN:
+    case AJ_FONTE_ESCOPO: case AJ_FONTE_ADDONS_PERM: case AJ_FONTE_PLUGINS_PERM: case AJ_FONTE_OUTROS:
+    case AJ_FONTE_REGEX: case AJ_FONTE_REGEX_PADRAO: case AJ_FONTE_REGEX_MODELO:
       return AJPV_REPRO;
     case AJ_HOME_LAYOUT:
     case AJ_LANDSCAPE: case AJ_HERO_CHEIO: case AJ_HERO_FUNDO:
@@ -6584,6 +6770,7 @@ static void ajDesenharTudo(Uint32 agora) {
   // atropelam. Ela ja ocupa a tela toda em 100%.
   if (filAberta) { ESCALA_REAL_INI(); desenhaFileiras(); ESCALA_REAL_FIM(); }
   if (riscoFolha) desenhaRiscoFolha();
+  if (frAberta) desenhaFolhaPermitidos();
 
   // Por cima de tudo: enquanto um vinculo esta em andamento, ele e a pergunta
   // da tela.
@@ -6869,6 +7056,9 @@ void ajustes_teste_fonte_interface(int familia) {
   valor[AJ_FONTE_UI] = familia;
   txt_definir_fonte_interface((TxtFamilia)familia);
 }
+// #202: abre a folha de permitidos (1 add-ons, 2 plugins) com o foco na
+// linha `foco` (0 = "Todos").
+void ajustes_teste_permitidos(int qual, int foco) { frAberta = qual; frFoco = foco; }
 #endif
 
 #ifdef NV_SHOT_HOOKS

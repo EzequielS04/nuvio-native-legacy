@@ -132,9 +132,15 @@ int ajustes_fonte_texto_logo(void);
 // escolhida nao abre (0..3; 0 = nenhuma). Nao vale para escolha manual nem
 // para canal ao vivo, que tem o watchdog proprio em app.c.
 int ajustes_fonte_repor(void);
-// Prazo, em ms, da escolha automatica com a lista ainda enchendo (#221); 0 =
-// esperar todos os addons. "Espera pelos add-ons" em Ajustes.
+// Prazo, em ms, da escolha automatica com a lista ainda enchendo (#221);
+// 0 = INSTANTANEO (#202), -1 = esperar todos os addons. "Espera pelos
+// add-ons" em Ajustes.
 int ajustes_fonte_prazo_ms(void);
+// Auto-play como no oficial (#202, fonteregra.h): FR_ESCOPO_*, FR_REGEX_* e
+// "Usar os outros se nao houver" (1 = ligado).
+int ajustes_fonte_escopo(void);
+int ajustes_fonte_regex_modo(void);
+int ajustes_fonte_usar_outros(void);
 // R9b: 0 Equilibrio, 1 Qualidade maxima, 2 Começar rápido / 0 Preferir, 1 Indiferente, 2 Evitar HDR e DV.
 int ajustes_fonte_prioridade(void);
 int ajustes_fonte_hdr(void);

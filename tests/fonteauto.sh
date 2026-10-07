@@ -4,8 +4,8 @@
 #   bash tests/fonteauto.sh
 set -eu
 cd "$(dirname "$0")/.."
-cc -O1 -g -Wall -Wextra -Isrc src/fonteauto.c tests/fonteauto.c -o /tmp/nuvio-fonteauto-tests
-/tmp/nuvio-fonteauto-tests
+cc -O1 -g -Wall -Wextra -Isrc src/fonteauto.c tests/fonteauto.c -o "${TMPDIR:-/tmp}/nuvio-fonteauto-tests"
+"${TMPDIR:-/tmp}/nuvio-fonteauto-tests"
 
 # CONTRATO: a verificacao de filme nao volta a abrir fios. O lote paralelo de
 # 4 fios era a causa dos 6 arquivos no TorBox; quem trouxer o paralelismo de

@@ -131,7 +131,12 @@ void stream_lista_acrescentar(const Stream *lista, int n, int ordemAddon);
 int  stream_ordem_addon(int i);
 // A escolha automatica ja pode sair com a lista parcial? Ver
 // fonteauto_pode_decidir. `preferida` e o indice da lembrada nesta lista (-1).
-int  stream_auto_pode_decidir(int preferida, int prefPendente, int prazoPassou);
+// `instantaneo` (#202): "Espera pelos add-ons" = Instantaneo.
+int  stream_auto_pode_decidir(int preferida, int prefPendente, int prazoPassou, int instantaneo);
+// REGRAS DE AUTO-PLAY (#202, fonteregra.h): o grupo da fonte i (-1 = fora,
+// 0..3 = ordem) e se a ultima escolha so falhou por causa delas.
+int  stream_grupo_regra(int i);
+int  stream_regra_bloqueou(void);
 // Candidatas que o automatico ainda pode tentar nesta lista (nao excluidas).
 int  stream_n_candidatas(void);
 
@@ -167,6 +172,8 @@ float stream_selos_fileira(const Stream *s, float x, float y, float maxW, float 
 
 // Indice do stream que o modo automatico escolhe, ou -1 se a lista esta vazia.
 int  stream_automatico(void);
+// O mesmo sem as regras de auto-play (#202): canal ao vivo.
+int  stream_automatico_canal(void);
 // Exclui uma candidata que ja foi entregue ao player e travou no pipeline.
 // A exclusao vale so para a lista atual; uma resposta nova limpa a memoria.
 int  stream_automatico_excluir(int indice);

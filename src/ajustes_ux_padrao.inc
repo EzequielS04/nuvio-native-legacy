@@ -191,7 +191,7 @@
   0,                /* sincronia da miniatura: 0 s (a documentacao: nada automatico) */
   0,                /* ao sair do player: a home, minimizando na ilha (com o relogio) */
   0,                /* perguntar o que achou nos creditos: LIGADO (V_LIGA: 0 = Ligado) */
-  1,                /* espera pelos add-ons: 5 s (#221) */
+  2,                /* espera pelos add-ons: 5 s (#221; indice 2 da lista do #202) */
   0,                /* ver o registro na tela: acao */
   0,                /* medidor de desempenho: DESLIGADO (V_MEDIDOR: 0 = Desligado) */
   0,                /* guia de uso: acao */
@@ -230,3 +230,8 @@
   0, /* support the project (Sobre e ajuda): action */
   0, /* forced subtitle when the audio is in your language (#287): Ligado (V_LIGA: 0 = Ligado) */
   0, /* content rating in the player: Ligado (V_LIGA: 0) */
+  0, /* auto-play scope (#202): Todas as fontes (ALL_SOURCES, the official default) */
+  0, 0, /* allowed add-ons / plugins: actions (lists live in fonteregra.c; empty = all) */
+  0, /* use the others when the allowed have none: Ligado (V_LIGA: 0 = Ligado) */
+  0, /* regex match: Desligada */
+  0, 0, /* regex pattern (action) and preset mirror (Personalizado) */

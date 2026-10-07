@@ -28,6 +28,7 @@
 #include "addons.h"
 #include "marco.h"
 #include "debrid.h"
+#include "fonteregra.h"
 #include "p2p.h"
 #include "p2pmotor.h"
 #include "fonteauto.h"
@@ -782,6 +783,62 @@ static long pontos(const Stream *s) {
 }
 
 long stream_pontos(const Stream *s) { return s ? pontos(s) : 0; }
+
+// QUAIS FONTES O AUTOMATICO PODE TOCAR, E EM QUE ORDEM DE GRUPO (#202). A
+// regra e de fonteregra.h; aqui so o texto que a regex le (o mesmo do
+// oficial: addon, nome, titulo/descricao e url) e um cache por indice, porque
+// autoParcialPronto pergunta a cada quadro e a regex custa. O cache cai com a
+// lista nova (geracao), com a regra mudada (versao) ou com Ajustes mudados.
+static FonteRegraCfg regraCfg(void) {
+  FonteRegraCfg c;
+  c.escopo = ajustes_fonte_escopo();
+  c.regexModo = ajustes_fonte_regex_modo();
+  c.usarOutros = ajustes_fonte_usar_outros();
+  return c;
+}
+static pthread_mutex_t grupoTrava = PTHREAD_MUTEX_INITIALIZER;
+static signed char *grupoCache;
+static int grupoCacheN, grupoCacheCap;
+static unsigned grupoCacheGer, grupoCacheVer;
+static FonteRegraCfg grupoCacheCfg;
+static int grupoDaFonte(const FonteRegraCfg *c, const Stream *s) {
+  char t[sizeof s->provedor + sizeof s->rotulo + sizeof s->descricao + sizeof s->arquivo + 1200];
+  snprintf(t, sizeof t, "%s %s %s %s %.1024s %s", s->provedor, s->rotulo, s->descricao,
+           s->arquivo, s->url, s->infoHash);
+  return fonteregra_grupo(c, s->provedor, ehPlugin(s), t);
+}
+// Chamar com a lista estavel (verTrava, ou o fio da tela que e quem a troca).
+static int grupoDe(int i) {
+  FonteRegraCfg c = regraCfg();
+  unsigned v = fonteregra_versao();
+  int g;
+  if (i < 0 || i >= n) return -1;
+  pthread_mutex_lock(&grupoTrava);
+  if (grupoCacheGer != listaGeracao || grupoCacheVer != v ||
+      memcmp(&grupoCacheCfg, &c, sizeof c)) {
+    grupoCacheN = 0; grupoCacheGer = listaGeracao; grupoCacheVer = v; grupoCacheCfg = c;
+  }
+  if (i >= grupoCacheN) {
+    if (n > grupoCacheCap) {
+      signed char *nv = realloc(grupoCache, (size_t)n);
+      if (!nv) { pthread_mutex_unlock(&grupoTrava); return grupoDaFonte(&c, &lista[i]); }
+      grupoCache = nv; grupoCacheCap = n;
+    }
+    while (grupoCacheN < n) { grupoCache[grupoCacheN] = (signed char)grupoDaFonte(&c, &lista[grupoCacheN]); grupoCacheN++; }
+  }
+  g = grupoCache[i];
+  pthread_mutex_unlock(&grupoTrava);
+  return g;
+}
+int stream_grupo_regra(int i) { return grupoDe(i); }
+// A ultima escolha nao achou candidata SO por causa das regras (#202): ha
+// fonte nao excluida, mas nenhuma e permitida. app.c abre a folha de fontes,
+// como o oficial faz quando o auto-play nao acha nada.
+static volatile int regraBloqueou;
+int stream_regra_bloqueou(void) { return regraBloqueou; }
+static int pendenteGrupoCb(const char *nome, int plugin, void *u) {
+  return fonteregra_grupo_pendente((const FonteRegraCfg *)u, nome, plugin);
+}
 int  stream_cabe_no_teto(const Stream *s) { return s ? cabeNoTeto(s) : 1; }
 
 // Endereco de aviso e nao de conteudo. Estes dois foram MEDIDOS no aparelho:
@@ -1123,10 +1180,11 @@ static void logarEscolha(int escolhida, int pref, int modoPrimeira) {
 }
 
 int stream_primeira_boa(int tentativas) {
-  int fila[VER_MAX], nf, q, tocadas = 0, escolhida, total, pref;
+  int fila[VER_MAX], nf, q, tocadas = 0, escolhida, total, pref, livres = 0;
   int modo = ajustes_fonte_primeira() ? FONTEAUTO_PRIMEIRA : FONTEAUTO_MELHOR;
   long *pts;
   unsigned char *acima, *excl;
+  signed char *grp;
   Conferencia c = { 0, 0 };
   tentativas = fonteauto_tentativas(modo, tentativas);
   pthread_mutex_lock(&verTrava);
@@ -1139,9 +1197,11 @@ int stream_primeira_boa(int tentativas) {
   pts = malloc(sizeof *pts * (size_t)total);
   acima = calloc((size_t)total, 1);
   excl = calloc((size_t)total, 1);
-  if (!pts || !acima || !excl) {
+  grp = calloc((size_t)total, 1);
+  regraBloqueou = 0;
+  if (!pts || !acima || !excl || !grp) {
     pthread_mutex_unlock(&verTrava);
-    free(pts); free(acima); free(excl);
+    free(pts); free(acima); free(excl); free(grp);
     return -1;
   }
   // A FILA E MONTADA NA ORDEM DE EXIBICAO (#221) e traduzida de volta para
@@ -1150,7 +1210,7 @@ int stream_primeira_boa(int tentativas) {
   { int *ordem = malloc(sizeof *ordem * (size_t)total), posPref = -1;
     if (!ordem) {
       pthread_mutex_unlock(&verTrava);
-      free(pts); free(acima); free(excl);
+      free(pts); free(acima); free(excl); free(grp);
       return -1;
     }
     for (q = 0; q < total; q++) {
@@ -1160,13 +1220,22 @@ int stream_primeira_boa(int tentativas) {
       pts[q] = pontos(&lista[i]);
       acima[q] = (unsigned char)!cabeNoTeto(&lista[i]);
       excl[q] = (unsigned char)automaticaExcluida(i);
+      grp[q] = (signed char)grupoDe(i);
+      if (!excl[q]) livres++;
     }
     pthread_mutex_unlock(&verTrava);
-    nf = fonteauto_fila(modo, total, posPref, pts, acima, excl, tentativas, fila);
+    nf = fonteauto_fila_g(modo, total, posPref, pts, acima, excl, grp, tentativas, fila);
     for (q = 0; q < nf; q++) fila[q] = ordem[fila[q]];
     free(ordem); }
-  free(pts); free(acima); free(excl);
-  if (nf < 1) return -1;
+  free(pts); free(acima); free(excl); free(grp);
+  if (nf < 1) {
+    // Havia fonte, mas as regras de Ajustes nao deixam nenhuma (#202).
+    if (livres > 0) {
+      regraBloqueou = 1;
+      printf("[fonte] auto-play: %d fonte(s), nenhuma passa nas regras (permitidos/regex); abrindo a lista\n", livres);
+    }
+    return -1;
+  }
 
   marco("fonte: verificacao inicio");
   escolhida = fonteauto_primeira(fila, nf, verificarOuParar, falhouUma, &c, &tocadas);
@@ -1176,6 +1245,17 @@ int stream_primeira_boa(int tentativas) {
          modo == FONTEAUTO_PRIMEIRA ? "primeira da lista" : "melhor fonte",
          tocadas, nf, c.abortou ? ", lista trocada no meio" : "");
   if (escolhida >= 0) { printf("[fonte] %d ok\n", escolhida); logarEscolha(escolhida, pref, modo == FONTEAUTO_PRIMEIRA); }
+  { FonteRegraCfg c = regraCfg();
+    if (escolhida >= 0 && fonteregra_ativa(&c)) {
+      static const char *const ESC_[3] = { "all", "addons-only", "plugins-only" };
+      static const char *const RX[3] = { "off", "require", "prefer" };
+      static const char *const GR[4] = { "allowed+match", "allowed", "other+match", "other" };
+      int g = grupoDe(escolhida);
+      printf("[fonte] auto-play rules: scope=%s addons=%d plugins=%d regex=%s(%s) others=%s -> winner %s\n",
+             ESC_[c.escopo], fonteregra_n(0), fonteregra_n(1), RX[c.regexModo],
+             fonteregra_regex_estado() > 0 ? "ok" : fonteregra_regex_estado() < 0 ? "invalid, ignored" : "empty",
+             c.usarOutros ? "on" : "off", g >= 0 && g < 4 ? GR[g] : "remembered");
+    } }
   return escolhida;
 }
 
@@ -1192,10 +1272,12 @@ static int boaParaJa(const Stream *s) {
 
 static int pendenteAntesCb(int addon, void *u) { (void)u; return addons_pendente_antes(addon); }
 
-int stream_auto_pode_decidir(int preferida, int prefPendente, int prazoPassou) {
+int stream_auto_pode_decidir(int preferida, int prefPendente, int prazoPassou, int instantaneo) {
   FonteautoParcial p;
   long *pts; unsigned char *acima, *excl, *boa; int *ad;
+  signed char *grp;
   int q, total, r, posPref = -1;
+  FonteRegraCfg rc = regraCfg();
   memset(&p, 0, sizeof p);
   pthread_mutex_lock(&verTrava);
   total = n;
@@ -1203,9 +1285,10 @@ int stream_auto_pode_decidir(int preferida, int prefPendente, int prazoPassou) {
   pts = malloc(sizeof *pts * (size_t)total);
   acima = calloc((size_t)total, 1); excl = calloc((size_t)total, 1);
   boa = calloc((size_t)total, 1); ad = malloc(sizeof *ad * (size_t)total);
-  if (!pts || !acima || !excl || !boa || !ad) {
+  grp = calloc((size_t)total, 1);
+  if (!pts || !acima || !excl || !boa || !ad || !grp) {
     pthread_mutex_unlock(&verTrava);
-    free(pts); free(acima); free(excl); free(boa); free(ad);
+    free(pts); free(acima); free(excl); free(boa); free(ad); free(grp);
     return 0;
   }
   for (q = 0; q < total; q++) {
@@ -1216,6 +1299,7 @@ int stream_auto_pode_decidir(int preferida, int prefPendente, int prazoPassou) {
     excl[q] = (unsigned char)automaticaExcluida(i);
     boa[q] = (unsigned char)boaParaJa(&lista[i]);
     ad[q] = chave ? (int)(chave[i] >> 16) : 0;
+    grp[q] = (signed char)grupoDe(i);
   }
   pthread_mutex_unlock(&verTrava);
   p.modo = ajustes_fonte_primeira() ? FONTEAUTO_PRIMEIRA : FONTEAUTO_MELHOR;
@@ -1223,8 +1307,10 @@ int stream_auto_pode_decidir(int preferida, int prefPendente, int prazoPassou) {
   p.prazoPassou = prazoPassou; p.algumPendente = addons_faltam(NULL, 0) > 0;
   p.pontos = pts; p.acimaTeto = acima; p.excluida = excl; p.boa = boa;
   p.addon = ad; p.pendenteAntes = pendenteAntesCb;
+  p.grupo = grp; p.instantaneo = instantaneo;
+  p.pendenteGrupoMin = addons_pendente_grupo_min(pendenteGrupoCb, &rc);
   r = fonteauto_pode_decidir(&p);
-  free(pts); free(acima); free(excl); free(boa); free(ad);
+  free(pts); free(acima); free(excl); free(boa); free(ad); free(grp);
   return r;
 }
 
@@ -1509,22 +1595,28 @@ static int ehInformativa(const Stream *s) {
   return 0;
 }
 
-int stream_automatico(void) {
+static int canalFolha;
+static int automaticoCom(int regras) {
   if (!stream_n()) return -1;
-  int melhor = -1;
+  int melhor = -1, gMelhor = 0;
   long maior = 0;
   // NA ORDEM DE EXIBICAO (#221), que e a da lista inteira: com a lista
   // enchendo por addon o indice e a ordem de CHEGADA, nao a dos addons.
   for (int k = 0; k < n; k++) {
-    int i = ORD(k);
-    if (automaticaExcluida(i) || ehInformativa(&lista[i])) continue;
+    int i = ORD(k), g = regras ? grupoDe(i) : 0;
+    if (automaticaExcluida(i) || ehInformativa(&lista[i]) || g < 0) continue;
     long p = pontos(&lista[i]);
+    // O GRUPO das regras (#202) vem antes da pontuacao: permitida primeiro.
     // `>` e nao `>=`: em empate fica o PRIMEIRO da lista, que e a ordem em que
     // o addon devolveu — e ele costuma saber algo que a pontuacao nao ve.
-    if (melhor < 0 || p > maior) { maior = p; melhor = i; }
+    if (melhor < 0 || g < gMelhor || (g == gMelhor && p > maior)) { maior = p; melhor = i; gMelhor = g; }
   }
   return melhor;
 }
+// As regras de auto-play (#202) sao de filme e serie, como no oficial: canal
+// ao vivo escolhe sem elas (stream_automatico_canal).
+int stream_automatico(void) { return automaticoCom(1); }
+int stream_automatico_canal(void) { return automaticoCom(0); }
 
 
 static int grupo, filtro, soMp4, soCache, soDub;
@@ -1615,7 +1707,7 @@ static int nFiltrados(void) {
 // na frente quando existe; senao, a de maior pontuacao. Pedido do dono, 16/09.
 // Uma vez por quadro, nunca por linha: stream_automatico percorre a lista.
 static int automaticaDaFolha(void) {
-  return preferida >= 0 && !automaticaExcluida(preferida) ? preferida : stream_automatico();
+  return preferida >= 0 && !automaticaExcluida(preferida) ? preferida : automaticoCom(!canalFolha);
 }
 
 // A LISTA AGRUPADA POR RESOLUCAO. A ordem da lista (a pontuacao) vale DENTRO
@@ -2152,7 +2244,7 @@ void stream_folha_abrir(void) {
   // nao e a de maior pontuacao, entao abrir na linha 0 poria o realce numa
   // fonte qualquer de 4K enquanto a marca "automatica" fica la embaixo.
   aut = automaticaDaFolha();
-  melhorFolha = stream_automatico();
+  melhorFolha = automaticoCom(!canalFolha);
   alvo = atual >= 0 ? atual : aut;
   abreFoco = 1; abreAnt = 0; linhaAnt = -1; foco = 0;
   montar(aut);
@@ -2318,7 +2410,7 @@ void stream_folha_atualizar(float dt, Uint32 agora) {
   }
   abreFoco = anim_mola(abreFoco, 1, dt, NV_MOLA_TELA);
   abreAnt  = anim_mola(abreAnt, 0, dt, NV_MOLA_TELA);
-  melhorFolha = stream_automatico();
+  melhorFolha = automaticoCom(!canalFolha);
   montar(automaticaDaFolha());
   if (focoFixo >= 0) {
     int r = grupo == 1 ? linhaDe(focoFixo) : -1;
@@ -2747,7 +2839,7 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
       txt_desenhar_alpha(num[qidx],r.x+22+nome[qidx].w+10,r.y+(FOLHA_ABA_H-num[qidx].h)*.5f+1,anim);
       sx+=iw[qidx]+6.0f; } }
   automatica = automaticaDaFolha();
-  melhor = melhorFolha = stream_automatico();
+  melhor = melhorFolha = automaticoCom(!canalFolha);
   montar(automatica);
   nf=nOrdem;
   gfx_recorte(x,FOLHA_TOPO-8,w,folhaBase-(FOLHA_TOPO-8));
