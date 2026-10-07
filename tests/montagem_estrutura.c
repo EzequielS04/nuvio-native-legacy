@@ -195,6 +195,8 @@ int   addons_perfil_da_lista(void)         { return 0; }
 int   fil_limite(void)                     { return 3; }
 const char *fil_hero_fonte(void)           { return "auto"; }
 int   fil_oculta(const char *c)            { (void)c; return 0; }
+int   fil_adicionada_na_tv(const char *c) { (void)c; return 0; }
+int   fil_estado_chave(const char *c) { (void)c; return -1; }
 int   fil_tem_ordem(void)                  { return 0; }
 int   fil_unir(const char *const *c, int n, int *s, int m) {
   int i; (void)c; for (i = 0; i < n && i < m; i++) s[i] = i; return i; }

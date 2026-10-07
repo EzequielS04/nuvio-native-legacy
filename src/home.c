@@ -711,6 +711,19 @@ static void heroMontarSet(void) {
         } }
       break;
     }
+    // #327: a fileira escolhida pode nao estar DESENHADA (catalogo dentro de
+    // uma pasta de colecao, ou fora da Home): a descoberta a baixa so para
+    // alimentar o destaque. Os titulos dela estao no catalogo publicado.
+    if (!heroSetN) {
+      for (i = 0; i < cat_n_fileiras(); i++) {
+        const CatFileira *cf = cat_fileira(i);
+        int k;
+        if (!cf || strcmp(cf->chave, fonte)) continue;
+        for (k = 0; k < cf->n && heroSetN < HOME_HERO_LISTA; k++)
+          if (cf->ini + k >= 0 && cf->ini + k < cat_n()) heroSet[heroSetN++] = cf->ini + k;
+        break;
+      }
+    }
     if (heroSetN) return;
   }
   for (i = 0; i < total && heroSetN < HOME_HERO_LISTA; i++) heroSet[heroSetN++] = i;
