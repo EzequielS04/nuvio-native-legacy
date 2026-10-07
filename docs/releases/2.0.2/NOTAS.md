@@ -1,0 +1,55 @@
+# Nuvio Legacy 2.0.2
+
+A visual refresh, a lot more control over playback, and faster starts.
+
+## Added
+
+- **New Home hero.** Smaller accent-colored button, page dots that follow your accent, and a softer gradient over the trailer.
+- **Context menu redone.** The poster turns into an info card with the menu beside it. On large cards the info sits over the image. The menu also works in lists, and the Social panel opens inline.
+- **Title page "..." button** with Trailer, Explore and Change artwork.
+- **Season progress chart** on series pages, with how far your friends are.
+- **Settings previews** are now generated and animated, in every scene.
+- **Friends tab simplified.** A single "Add people" button and your linked accounts in one row.
+- **Row and title spacing** on Home, in Settings.
+- **Default aspect ratio** applied when playback starts (#300).
+- **Hide the parental guide** in the player.
+- **Auto-play rules like official Nuvio:** allowed add-ons and plugins, regex filter, and an instant-wait option.
+- **Also in Continue watching:** keep a held title in the row as well.
+- **Continue on profile picker** (#303).
+- **Search:** a switch to turn Cinemeta results off (#311).
+- **Interface resolution: Automatic.** The 4K interface is only used when the TV can handle it.
+- **DTS on LG** can now be converted to stereo or to 5.1.
+- **Dolby Vision in MKV on LG** (experimental, off by default).
+- **Player:** audio codec shown (#293), forced subtitles (#287), resolution in the sources list, Arabic subtitles (#273).
+- **Samsung** warns when the TV can't play DTS or TrueHD, and prefers Dolby sources.
+- **LG:** add-on live channels work (#283).
+
+## Fixed
+
+- **Faster stream start without lowering quality.** If a source gives no signal, the next one is tried after 15 s. Slow or silent add-ons no longer hold up auto-play, and the clock island tells you what it is waiting for.
+- **P2P files over 2 GB** on Samsung and LG (#297).
+- **Samsung:** embedded subtitles in MKV files over 2 GB (#269).
+- **Android 11:** a black screen at launch now shows a rescue screen, and the log is sent even without login (#266).
+- **Android TV:** the app froze when opening a second movie.
+- **LG:** DTS audio hidden by the TV is recovered (#301).
+- **Skip credits** button hides itself after 10 s.
+- **Live TV** reconnects when a channel stops playing (#302).
+- **Samsung Tizen 4 with Mali-400:** the "Light" effects level now drops to minimal (#286).
+- Smoother and lighter on slower TVs.
+- Home trailer fade matches the still art (#290), plus fixes for #294, #295 and #289.
+- More audio and video details in the logs on TCL.
+
+## Notes
+
+| Platform | File |
+| --- | --- |
+| LG webOS 3+ | `space.nuvio.native.legacy_2.0.2_arm.ipk` |
+| LG with more RAM | `space.nuvio.native.legacy_2.0.2_arm-highcache.ipk` |
+| Samsung Tizen 4 / 5 / 5.5 | `Nuvio-2.0.2-NuvioTpk40.tpk` |
+| Samsung Tizen 6 | `Nuvio-2.0.2-NuvioTpk60.tpk` |
+| Samsung Tizen 6.5 / 7 | `Nuvio-2.0.2-NuvioTpk65.tpk` |
+| Samsung Tizen 8 / 9 | `Nuvio-2.0.2-NuvioTpk.tpk` |
+| Samsung web app, Tizen 5.5+ | `NuvioTV-2.0.2-tizen.wgt` |
+| Android TV / Google TV, Android 7+ | `Nuvio-2.0.2-android.apk` |
+
+Tested on an LG C9 and a TCL Android TV. Dolby Vision in MKV was only tested on a C9 (webOS 4.10). The Samsung builds were not run on a Samsung TV. If something breaks, send the log code from Settings › About and help.
