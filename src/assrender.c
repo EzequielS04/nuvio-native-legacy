@@ -228,10 +228,12 @@ static unsigned long long ass_amostra_fonte(const unsigned char *p, size_t n) {
 static char assPastaFontes[640], assPastaFontesApp[640];
 static int assUsaSistema;
 static int assVistoNaskh;          /* NotoNaskhArabic-Regular chegou ao libass nesta carga */
+static int assNaskhBold;           /* NotoNaskhArabic-Bold chegou ao libass nesta carga (#335) */
 static char assPastaExtra[640];    /* NV_TPK: pasta de fontes baixadas (dados/fontes) */
 static void ass_fonte_da_pasta(const char *nome, const void *dados, size_t tam, void *u) {
   (void)u;
   if (!strcmp(nome, "NotoNaskhArabic-Regular.ttf")) assVistoNaskh = 1;
+  if (!strcmp(nome, "NotoNaskhArabic-Bold.ttf")) assNaskhBold = 1;
   /* The UI subset shares the family name but lacks mixed-script glyphs.
    * Plain subtitles use the verified complete face; leave UI selection intact. */
   if (!strcmp(nome, "NotoNaskhArabic-Subset.ttf")) return;
@@ -260,6 +262,7 @@ static void ass_subset_naskh_locked(void) {
 static void ass_carregar_pasta_locked(void) {
   int ignorados = 0, lidas;
   if (!assLib || !assPastaFontes[0]) return;
+  assNaskhBold = 0;
   lidas = assUsaSistema ? assrender_ler_pasta_fontes(assPastaFontes, ass_fonte_da_pasta, NULL, &ignorados) : 0;
   assVistoNaskh = 0;
   if (assPastaFontesApp[0] && (!assUsaSistema || strcmp(assPastaFontesApp, assPastaFontes)))
@@ -457,8 +460,8 @@ static int ass_texto_tem_arabe(const char *t) {
 static void ass_trilha_arabe_sem_negrito(ASS_Track *t) {
   int i, arabe = 0;
   for (i = 0; i < t->n_events && !arabe; i++) arabe = ass_texto_tem_arabe(t->events[i].Text);
-  assArabe = arabe;
-  if (!arabe) return;
+  assArabe = arabe && !assNaskhBold;   /* com a face Bold real, Bold=1 e \b1 a usam */
+  if (!arabe || assNaskhBold) return;
   for (i = 0; i < t->n_styles; i++) t->styles[i].Bold = 0;
   ass_diag("libass: trilha com arabe: negrito sintetico desligado");
 }
@@ -822,6 +825,18 @@ static void ass_garantir_naskh(void) {
     fclose(f); free(buf);
     if (rename(tmp, caminho) != 0) { remove(tmp); goto falhou; }
     fprintf(stderr, "[libass] NotoNaskhArabic-Regular baixada da tag v%s (%ld bytes)\n", NV_VERSAO, n);
+    /* Negrito real (#335), de cortesia: sem ele o libass cai no "sem negrito"
+     * para trilhas com arabe, que e o comportamento antigo seguro. */
+    snprintf(url, sizeof url, "https://raw.githubusercontent.com/iqui27/nuvio-native-legacy/v%s/deploy/app/fonts/NotoNaskhArabic-Bold.ttf", NV_VERSAO);
+    snprintf(caminho, sizeof caminho, "%s/NotoNaskhArabic-Bold.ttf", pasta);
+    buf = rede_baixar_bin(url, 20, &n);
+    if (buf && n > 100000 && n < 400000 && assrender_bytes_sao_fonte((const unsigned char *)buf, 4)) {
+      snprintf(tmp, sizeof tmp, "%s.tmp", caminho);
+      f = fopen(tmp, "wb");
+      if (f && fwrite(buf, 1, (size_t)n, f) == (size_t)n) { fclose(f); if (rename(tmp, caminho)) remove(tmp); }
+      else { if (f) fclose(f); remove(tmp); }
+    }
+    free(buf);
   }
   pronto = 1;
   pthread_mutex_lock(&assTrava);
