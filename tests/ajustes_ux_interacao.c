@@ -1,5 +1,7 @@
 // Exercita o contrato do controle com persistência real numa pasta descartável.
 #include "../src/ajustes.c"
+#include "../src/addonsui.h"
+#include "../src/pluginsui.h"
 #include <assert.h>
 #include <unistd.h>
 
@@ -241,6 +243,18 @@ int main(void) {
     guiaSair(); assert(!guiaAberto && focoIndice && uxTopo == AJ2_T_RESOLVER);
     uxTopo = AJ2_T_PERFIL; key(SDLK_RETURN); assert(!focoIndice && focoOp == AJ_PERFIL_ATIVO);
     sair = 0; focoIndice = 1; uxTopo = AJ2_T_TOUR; key(SDLK_LEFT); assert(sair); sair = 0;
+    uxIndice = 1; focoIndice = 1; uxTopo = -1; }
+  // 2.0.3: as listas de addons/plugins voltam para a linha de onde sairam
+  // (Fontes e addons), e nao para o indice; Voltar/ESC/Esquerda saem delas.
+  { SDL_Event ev = { 0 };
+    ajustes_voltar_de_lista(0); ajustes_iniciar();
+    assert(!focoIndice && focoOp == AJ_ADDONS && !uxVeioBusca);
+    ajustes_voltar_de_lista(1); ajustes_iniciar();
+    assert(!focoIndice && focoOp == AJ_PLUGINS);
+    ev.type = SDL_KEYDOWN;
+    addonsui_abrir(); ev.key.keysym.sym = SDLK_ESCAPE; addonsui_evento(&ev); assert(addonsui_quer_sair());
+    addonsui_abrir(); ev.key.keysym.sym = SDLK_LEFT; addonsui_evento(&ev); assert(addonsui_quer_sair());
+    pluginsui_abrir(); ev.key.keysym.sym = SDLK_ESCAPE; pluginsui_evento(&ev); assert(pluginsui_quer_sair());
     uxIndice = 1; focoIndice = 1; uxTopo = -1; }
   valor[AJ_ANIM] = 1; ajustes_atualizar(1.0f, SDL_GetTicks());
   assert(animItem[focoItem] == 0);

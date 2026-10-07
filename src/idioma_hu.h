@@ -2232,6 +2232,7 @@
   T("Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.", "Be: a felső előzetes hanggal megy. Ki: hang nélkül."),
   T("Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre em tela cheia com som.", "Be: a cím oldalán magától induló előzetes hanggal megy. Ki: hang nélkül megy; az OK teljes képernyőn, hanggal nyitja meg."),
   T("Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.", "Be: ha az engedélyezetteknek a várakozás alatt nincs forrása, az automatikus lejátszás a többit használja. Ki: csak az engedélyezettek; ha nincs bennük forrás, megnyílik a forráslista."),
+  T("Ligados nesta TV", "Bekapcsolva ezen a TV-n"),
   T("Ligando…", "Összekapcsolás…"),
   T("Ligar", "Összekapcsolás"),
   T("Ligar a outra", "A másik bekapcsolása"),

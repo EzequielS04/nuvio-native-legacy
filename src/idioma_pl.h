@@ -2232,6 +2232,7 @@
   T("Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.", "Włączone: zwiastun u góry gra z dźwiękiem. Wyłączone: bez dźwięku."),
   T("Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre em tela cheia com som.", "Włączone: zwiastun, który sam się odtwarza na stronie tytułu, gra z dźwiękiem. Wyłączone: bez dźwięku; OK otwiera go na pełnym ekranie z dźwiękiem."),
   T("Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.", "Włączone: gdy dozwolone nie mają źródła w czasie oczekiwania, autoodtwarzanie użyje innych. Wyłączone: tylko dozwolone; bez źródła w nich otwiera się lista źródeł."),
+  T("Ligados nesta TV", "Włączone na tym telewizorze"),
   T("Ligando…", "Łączenie…"),
   T("Ligar", "Połącz"),
   T("Ligar a outra", "Włącz drugą"),

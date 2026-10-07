@@ -2232,6 +2232,7 @@
   T("Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.", "Įjungta: anonsas viršuje rodomas su garsu. Išjungta: be garso."),
   T("Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre em tela cheia com som.", "Įjungta: anonsas, kuris pats paleidžiamas pavadinimo puslapyje, rodomas su garsu. Išjungta: be garso; OK atidaro jį per visą ekraną su garsu."),
   T("Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.", "Įjungta: jei leidžiami per laukimą neturi šaltinio, automatinis paleidimas naudoja kitus. Išjungta: tik leidžiami; jei juose nėra šaltinio, atsidaro šaltinių sąrašas."),
+  T("Ligados nesta TV", "Įjungti šiame televizoriuje"),
   T("Ligando…", "Susiejama…"),
   T("Ligar", "Susieti"),
   T("Ligar a outra", "Įjungti kitą"),

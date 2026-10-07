@@ -2232,6 +2232,7 @@
   T("Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.", "Uključeno: trejler na vrhu ide sa zvukom. Isključeno: bez zvuka."),
   T("Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre em tela cheia com som.", "Uključeno: trejler koji sam krene na stranici naslova ide sa zvukom. Isključeno: bez zvuka; OK ga otvara preko cijelog ekrana sa zvukom."),
   T("Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.", "Uključeno: ako dozvoljeni nemaju izvor za vrijeme čekanja, automatika koristi ostale. Isključeno: samo dozvoljeni; bez izvora u njima otvara se lista izvora."),
+  T("Ligados nesta TV", "Uključeni na ovom TV-u"),
   T("Ligando…", "Povezivanje…"),
   T("Ligar", "Poveži"),
   T("Ligar a outra", "Uključi drugu"),

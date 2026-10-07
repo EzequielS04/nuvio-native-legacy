@@ -1020,89 +1020,119 @@ void ajustes_desenhar_addons(int foco) {
   ajDesenharAddons(foco);
   AJ_ESCALA_FIM();
 }
-static void ajDesenharAddons(int foco) {
-  int n = addons_n(), i, lig = 0, salvoIdx = uxIndice, salvoFoco = focoIndice;
-  GfxRect fr, ir;
-  float topo, base = NV_VTELA_H - 40.0f / ajustes_tamanho_ajustes(), y, alvo;
-  char sub[96];
-  montarTela();
-  for (i = 0; i < n; i++) if (addons_ativo(i)) lig++;
-  ajFundo();
-  uxIndice = uxSecaoDe(AJ_ADDONS) + 2; focoIndice = 0;
-  ajDesenharIndice();
-  uxIndice = salvoIdx; focoIndice = salvoFoco;
-  fr = ajFolhaR(); ir = ajInspR();
-  ajIlha(fr, 36, 1, 0);
-  snprintf(sub, sizeof sub, i18n("%d de %d ligados nesta TV"), lig, n);
-  topo = ajCabecalhoFolha(fr, "Fontes e addons", "Addons", n ? sub : "Nenhum addon nesta conta.", 0, 1);
-  if (foco >= n) foco = n - 1;
-  alvo = foco * 84.0f - (base - topo - 80.0f) * 0.5f;
-  if (alvo > n * 84.0f - (base - topo)) alvo = n * 80.0f - (base - topo);
+// --- 2.0.3: AS SUBLISTAS (ADDONS, PLUGINS) NO MODELO NOVO DOS AJUSTES ---------------
+// Mesma pagina da categoria (cabecalho de ponta a ponta, a cena a esquerda, a
+// lista com as linhas novas e as pilulas com o estado escrito a direita). Antes
+// era o indice antigo na coluna da esquerda e o chip "Ligado" velho.
+typedef struct { const char *nome, *apoio, *icone; int pilula, chevron, traduz; } AjSubLinha;
+static void ajSubCabecalho(const char *ic, const char *kick, const char *titulo, const char *valor, const char *sub) {
+  GfxRect h = aj2PaginaR();
+  float ar, ag, ab, tinta = ajTinta() / 255.0f, tile = 76.0f, x = h.x + 28.0f, direita = h.x + h.w - 36.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  ajIlha(h, 36.0f, 1, 0);
+  gfx_cor(h, 36.0f / h.h, ar, ag, ab, 0.10f);
+  { GfxRect tr = { x, h.y + (h.h - tile) * 0.5f, tile, tile };
+    gfx_cor(tr, 22.0f / tile, ar, ag, ab, 1);
+    gfx_icone((GfxRect){ tr.x + 19, tr.y + 19, 38, 38 }, ic, tinta, tinta, tinta, 1); }
+  x += tile + 26.0f;
+  { TxtLinha lv = ajTxtC(TXT_V2_28, valor, h.w * 0.30f), lq = ajTxtC(TXT_V2_24, sub, h.w * 0.30f);
+    if (valor[0]) txt_desenhar_alpha(lv, direita - lv.w, h.y + h.h * 0.5f - lv.h - (sub[0] ? 0 : -lv.h * 0.5f), 0.85f);
+    if (sub[0]) txt_desenhar_alpha(lq, direita - lq.w, h.y + h.h * 0.5f + 4.0f, 0.5f);
+    direita -= (lv.w > lq.w ? lv.w : lq.w) + 40.0f; }
+  ajKickerAcento(kick, x + 2.0f, h.y + h.h * 0.5f - 44.0f, 1);
+  { TxtLinha tt = ajTxtC(TXT_V2_TIT, titulo, direita - x); txt_desenhar(tt, x, h.y + h.h * 0.5f - 18.0f); }
+}
+#define AJ_SUB_PASSO 96.0f
+static void ajSubLista(const AjSubLinha *L, int n, int foco, const AjDica *d, int nd, const char *aviso) {
+  GfxRect fr = aj2ListaR();
+  float topo = fr.y + 30.0f, base = fr.y + fr.h - AJ_A3_RODAPE - 8.0f, y, alvo;
+  int i;
+  ajIlha(fr, 40.0f, 1, 0);
+  alvo = foco * AJ_SUB_PASSO - (base - topo - AJ_SUB_PASSO) * 0.5f;
+  if (alvo > n * AJ_SUB_PASSO - (base - topo)) alvo = n * AJ_SUB_PASSO - (base - topo);
   if (alvo < 0) alvo = 0;
   gfx_recorte(fr.x, topo, fr.w, base - topo);
   y = topo - alvo;
-  for (i = 0; i < n; i++, y += 84) {
-    GfxRect r = { fr.x + 18, y, fr.w - 36, 80 };
-    float a = ajMascara(y + 40, topo, base);
-    int ligado = addons_ativo(i), f = i == foco;
+  for (i = 0; i < n; i++, y += AJ_SUB_PASSO) {
+    GfxRect r = { fr.x + 18.0f, y, fr.w - 36.0f, AJ_SUB_PASSO - 6.0f };
+    float a = ajMascara(y + r.h * 0.5f, topo, base), cw = 0, tx = r.x + 22.0f + 52.0f + 18.0f, tw, yc = y + r.h * 0.5f;
+    int f = i == foco;
     TxtLinha t, c;
-    if (y + 80 < topo || y > base) continue;
-    if (f) ajFocoLinha(r, 22, 1, a);
-    ajRosto(addons_nome(i), r.x + 22, y + 16, 48, 14, 0.09f, 0.85f * a, TXT_ILHA_INICIAL);
-    { float cw = ajChipLiga(r.x + r.w - 22, y + 40, ligado, a);
-      t = ajTxtC(TXT_AJ_ROTULO, addons_nome(i), r.w - 22 - 64 - cw - 40);
-      c = ajTxtC(TXT_ILHA_GENERO, ajAddonFornece(i), r.w - 22 - 64 - cw - 40); }
-    txt_desenhar_alpha(t, r.x + 22 + 48 + 16, y + 40 - (t.h + 4 + c.h) * 0.5f, (f ? 1.0f : 0.86f) * a);
-    txt_desenhar_alpha(c, r.x + 22 + 48 + 16, y + 40 - (t.h + 4 + c.h) * 0.5f + t.h + 4, 0.42f * a);
+    if (y + r.h < topo || y > base) continue;
+    if (f) { float ar, ag, ab; ajFocoLinha(r, 18.0f, 1, a); ajustes_acento(&ar, &ag, &ab); gfx_cor(r, 18.0f / r.h, ar, ag, ab, 0.14f * a); }
+    if (L[i].icone) {
+      ajNeutro((GfxRect){ r.x + 22, yc - 26, 52, 52 }, 15, 0.09f, 0.141f, 0.149f, 0.173f, a);
+      ajIcone(L[i].icone, r.x + 22 + 14, yc - 12, 24, 0.85f * a);
+    } else ajRosto(L[i].nome, r.x + 22, yc - 26, 52, 15, 0.09f, 0.85f * a, TXT_ILHA_INICIAL);
+    if (L[i].pilula >= 0) cw = aj2PilulaEstado(-1, r.x + r.w - 22.0f, yc, L[i].pilula, a) + 16.0f;
+    if (L[i].chevron) { aj2Chevron(r.x + r.w - 22.0f - cw, yc, (f ? 0.7f : 0.32f) * a); cw += 34.0f; }
+    tw = r.x + r.w - 22.0f - cw - tx - 12.0f;
+    // O nome do addon/plugin e do usuario: nao passa por i18n.
+    t = L[i].traduz ? ajTxtC(f ? TXT_V3_LN_B : TXT_V3_LN, L[i].nome, tw)
+                    : txt_linha_corta(f ? TXT_V3_LN_B : TXT_V3_LN, L[i].nome, AJ_TX, tw);
+    c = ajTxtC(TXT_V3_BEN, L[i].apoio ? L[i].apoio : "", tw);
+    { float bh = t.h + (c.w ? 4 + c.h : 0), ty = yc - bh * 0.5f;
+      txt_desenhar_alpha(t, tx, ty, (f ? 1.0f : 0.88f) * a);
+      if (c.w) txt_desenhar_alpha(c, tx, ty + t.h + 4, 0.55f * a); }
   }
   gfx_sem_recorte();
-  if (!ajTemInspetor()) return;
-  ajIlha(ir, 36, 1, 0);
+  if (aviso && aviso[0]) {
+    snprintf(uxAviso, sizeof uxAviso, "%s", aviso);
+    uxAvisoAte = SDL_GetTicks() + 1000;
+  }
+  aj2RodapeA3(fr, d, nd, 1);
+}
+// A coluna da esquerda: a cena gerada da linha (a mesma da categoria) e o
+// kicker, o titulo e o texto da linha em foco.
+static float ajSubInspetor(int op, const char *kick, const char *titulo, const char *texto) {
+  GfxRect ir = aj2InspR();
+  float x = ir.x, w = ir.w, y = ir.y + 4.0f;
+  y += ajCenaTroca(AJ_TROCA_INSPETOR, uxSecaoDe(op), op, x, y, w, 0) + 30.0f;
+  ajKickerAcento(kick, x + 2.0f, y, 1);
+  y += 34.0f;
+  y += ajBloco(TXT_V2_A3TIT, titulo, x, y, w, 56.0f, 1, 2) + 10.0f;
+  if (texto && texto[0]) y += ajBloco(TXT_V3_INSP, texto, x, y, w, 37.0f, 0.70f, 4) + 14.0f;
+  return y;
+}
+static void ajDesenharAddons(int foco) {
+  static AjSubLinha L[64];
+  int n = addons_n(), i, lig = 0;
+  char sub[96], val[64], k[160];
+  montarTela();
+  if (n > 64) n = 64;
+  for (i = 0; i < n; i++) if (addons_ativo(i)) lig++;
+  ajFundo();
+  snprintf(val, sizeof val, i18n("%d de %d"), lig, n);
+  snprintf(sub, sizeof sub, "%s", n ? i18n("Ligados nesta TV") : i18n("Nenhum addon nesta conta."));
+  ajSubCabecalho("aj_puzzle", "Fontes e addons", "Addons", n ? val : "", sub);
+  if (foco >= n) foco = n - 1;
+  if (foco < 0) foco = 0;
+  { static char apoio[64][96];
+    for (i = 0; i < n; i++) {
+      snprintf(apoio[i], sizeof apoio[i], "%s", ajAddonFornece(i));   // ajAddonFornece devolve um buffer so
+      L[i] = (AjSubLinha){ addons_nome(i), apoio[i], NULL, addons_ativo(i), 0, 0 };
+    } }
+  { AjDica d[3] = { { "OK", "Mudar" }, { "↑ ↓", "Navegar" }, { "Voltar", "Fontes e addons" } };
+    ajSubLista(L, n, foco, d, 3, NULL); }
+  snprintf(k, sizeof k, "%s · %s", i18n("Fontes e addons"), i18n("Addons"));
   if (n > 0) {
-    float x = ir.x + 32, w = ir.w - 64, py = ir.y + 32, ix = x + 26;
-    static const int REC[3] = { ADD_CATALOGO, ADD_STREAM, ADD_LEGENDA };
-    static const char *const NOME[3] = { "Catálogo", "Fontes", "Legendas" };
     const char *base0 = addons_base(foco);
-    char host[160] = "";
-    float h = 26 + 64 + 24 + 18 + 12 + 44 + 22 + 2 * 42.5f + 22;
+    char host[160] = "", forn[200];
+    GfxRect ir = aj2InspR();
+    float y;
     if (base0) {
       const char *p = strstr(base0, "://");
       p = p ? p + 3 : base0;
       snprintf(host, sizeof host, "%.*s", (int)strcspn(p, "/"), p);
     }
-    ajNeutro((GfxRect){ x, py, w, h }, 22, 0.04f, 0.106f, 0.110f, 0.129f, 1);
-    py += 26;
-    ajRosto(addons_nome(foco), ix, py, 64, 20, 0.10f, 1, TXT_AJ_TIT28);
-    { TxtLinha nm = ajTxtC(TXT_AJ_NOME, addons_nome(foco), w - 52 - 80);
-      TxtLinha st = ajTxt(TXT_ILHA_GENERO, addons_sondado(foco) ? "manifesto conferido" : "conferindo o manifesto…");
-      float ty = py + 32 - (nm.h + 4 + st.h) * 0.5f;
-      txt_desenhar(nm, ix + 80, ty);
-      txt_desenhar_alpha(st, ix + 80, ty + nm.h + 4, 0.55f); }
-    py += 64 + 24;
-    ajKicker("Fornece", ix, py, 1);
-    py += 18 + 12;
-    { float cx = ix;
-      for (i = 0; i < 3; i++) {
-        int sim = addons_fornece(foco, REC[i]);
-        TxtLinha l = ajTxt(TXT_ILHA_GENERO, NOME[i]);
-        float cw = 16 + 18 + 10 + l.w + 16;
-        ajNeutro((GfxRect){ cx, py, cw, 44 }, 22, 0.08f, AJ_CHIP_SOL, 1);
-        ajIcone(sim ? "aj_check" : "aj_x", cx + 16, py + 13, 18, sim ? 0.85f : 0.4f);
-        txt_desenhar_alpha(l, cx + 16 + 18 + 10, py + (44 - l.h) * 0.5f, sim ? 0.85f : 0.4f);
-        cx += cw + 10;
-      } }
-    py += 44 + 22;
-    py += ajMeta(i18n("Nesta TV"), i18n(addons_ativo(foco) ? "Ligado" : "Desligado"), ix, py, w - 52, 1) - 4;
-    ajMeta(i18n("Endereço"), host, ix, py, w - 52, 1);
-    { float yy = ir.y + 32 + h + 26, tx = x + 6, tw = w - 12;
-      ajIcone("aj_puzzle", tx, yy - 1, 20, 0.45f);
-      ajCaps(TXT_MINI, "Ligar ou desligar", 2.1f, tx + 30, yy, 0.45f);
-      yy += 28;
-      yy += ajBloco(TXT_AJ_INSP, addons_nome(foco), tx, yy, tw, 38.4f, 1, 2) + 12;
-      ajBloco(TXT_AJ_SUB, "A lista de addons da sua conta, para ligar e desligar cada um nesta TV.", tx, yy, tw, 28.5f, 0.62f, 5); }
-  }
-  { AjDica d[2] = { { "OK", "Ligar ou desligar" }, { "Voltar", "Ajustes" } };
-    ajDicas(d, 2, ir.x + 32, ir.y + ir.h - 32, ir.w - 64, 1); }
+    snprintf(forn, sizeof forn, "%s", ajAddonFornece(foco));
+    y = ajSubInspetor(AJ_ADDONS, k, addons_nome(foco), i18n("A lista de addons da sua conta, para ligar e desligar cada um nesta TV."));
+    if (y + 3 * 57.0f <= ir.y + ir.h) {
+      y += aj2Meta(i18n("Fornece"), forn, ir.x, y, ir.w, 1);
+      y += aj2Meta(i18n("Nesta TV"), i18n(addons_ativo(foco) ? "Ligado" : "Desligado"), ir.x, y, ir.w, 1);
+      aj2Meta(i18n("Endereço"), host, ir.x, y, ir.w, 1);
+    }
+  } else ajSubInspetor(AJ_ADDONS, k, "Addons", i18n("Nenhum addon nesta conta."));
 }
 
 // "Add-ons permitidos" / "Plugins permitidos" (#202): o modal com "Todos" no
@@ -1254,135 +1284,98 @@ void ajustes_desenhar_plugins(const AjPluginsVista *v) {
   AJ_ESCALA_FIM();
 }
 static void ajDesenharPlugins(const AjPluginsVista *v) {
-  int disp = plugins_disponivel(), nr = plugins_n_repos(), n, i, salvoIdx = uxIndice, salvoFoco = focoIndice;
-  int foco = v->foco;
-  GfxRect fr, ir;
-  float topo, base = NV_VTELA_H - 40.0f / ajustes_tamanho_ajustes(), y, alvo;
-  char sub[160], linha[200];
+  static AjSubLinha L[96];
+  static char nomes[96][128], apoios[96][160];
+  int disp = plugins_disponivel(), nr = plugins_n_repos(), n, i, foco = v->foco;
+  char sub[160], val[64], k[200], linha[200];
   PlugRepo rp;
   montarTela();
   ajFundo();
-  uxIndice = uxSecaoDe(AJ_PLUGINS) + 2; focoIndice = 0;
-  ajDesenharIndice();
-  uxIndice = salvoIdx; focoIndice = salvoFoco;
-  fr = ajFolhaR(); ir = ajInspR();
-  ajIlha(fr, 36, 1, 0);
   memset(&rp, 0, sizeof rp);
   if (v->nivel == 1) plugins_repo(v->repo, &rp);
+  val[0] = 0;
   if (!disp) snprintf(sub, sizeof sub, "%s", i18n("Indisponível nesta plataforma"));
   else if (v->nivel == 0) {
-    int ns = 0, k;
-    for (k = 0; k < nr; k++) ns += plugins_repo_scrapers(k, NULL);
+    int ns = 0, q;
+    for (q = 0; q < nr; q++) ns += plugins_repo_scrapers(q, NULL);
     snprintf(sub, sizeof sub, i18n("%d repositórios · %d scrapers"), nr, ns);
+    snprintf(val, sizeof val, "%s", i18n(plugins_ligado() ? "Ligado" : "Desligado"));
   } else {
     int lig, tot = plugins_repo_scrapers(v->repo, &lig);
     snprintf(sub, sizeof sub, i18n("%d scrapers · %d ligados"), tot, lig);
   }
-  topo = ajCabecalhoFolha(fr, v->nivel == 1 ? "Plugins" : "Fontes e addons",
-                          v->nivel == 1 ? (rp.nome[0] ? rp.nome : rp.url) : "Plugins", sub, 0, 1);
+  ajSubCabecalho("aj_plug", v->nivel == 1 ? "Plugins" : "Fontes e addons",
+                 v->nivel == 1 ? (rp.nome[0] ? rp.nome : rp.url) : "Plugins", val, sub);
   n = !disp ? 1 : v->nivel == 0 ? 2 + nr : 1 + plugins_repo_scrapers(v->repo, NULL);
+  if (n > 96) n = 96;
   if (foco >= n) foco = n - 1;
-  alvo = foco * 84.0f - (base - topo - 80.0f) * 0.5f;
-  if (alvo > n * 84.0f - (base - topo)) alvo = n * 84.0f - (base - topo);
-  if (alvo < 0) alvo = 0;
-  gfx_recorte(fr.x, topo, fr.w, base - topo);
-  y = topo - alvo;
-  for (i = 0; i < n; i++, y += 84) {
-    GfxRect r = { fr.x + 18, y, fr.w - 36, 80 };
-    float a = ajMascara(y + 40, topo, base), cw = 0;
-    int f = i == foco;
-    const char *nome = "", *apoio = "", *icone = NULL;
-    char nomeBuf[128] = "", apoioBuf[160] = "";
-    int chip = -1;   // -1 sem chip; 0/1 desligado/ligado
-    if (y + 80 < topo || y > base) continue;
-    if (!disp) { nome = "Plugins"; apoio = "O motor de plugins não roda neste aparelho."; icone = "aj_puzzle"; }
+  for (i = 0; i < n; i++) {
+    AjSubLinha *l = &L[i];
+    *l = (AjSubLinha){ "", "", NULL, -1, 0, 1 };
+    if (!disp) { l->nome = "Plugins"; l->apoio = "O motor de plugins não roda neste aparelho."; l->icone = "aj_plug"; }
     else if (v->nivel == 0 && i == 0) {
-      nome = "Plugins"; apoio = "Scrapers dos repositórios Nuvio como mais uma fonte, ao lado dos add-ons"; icone = "aj_puzzle"; chip = plugins_ligado();
+      l->nome = "Plugins"; l->apoio = "Scrapers dos repositórios Nuvio como mais uma fonte, ao lado dos add-ons"; l->icone = "aj_plug"; l->pilula = plugins_ligado();
     } else if (v->nivel == 0 && i == 1) {
-      nome = "Adicionar repositório"; apoio = "Digite a URL do manifest.json"; icone = "aj_plus";
+      l->nome = "Adicionar repositório"; l->apoio = "Digite a URL do manifest.json"; l->icone = "aj_plus";
     } else if (v->nivel == 0) {
       PlugRepo q; int lig, tot;
       plugins_repo(i - 2, &q);
       tot = plugins_repo_scrapers(i - 2, &lig);
-      snprintf(nomeBuf, sizeof nomeBuf, "%s", q.nome[0] ? q.nome : q.url);
-      nome = nomeBuf;
-      if (plugins_repo_estado(i - 2) == 1) snprintf(apoioBuf, sizeof apoioBuf, i18n("%d scrapers · %d ligados"), tot, lig);
-      else snprintf(apoioBuf, sizeof apoioBuf, "%s", i18n(ajPlugEstado(i - 2)));
-      apoio = apoioBuf; chip = q.ativo;
+      snprintf(nomes[i], sizeof nomes[i], "%s", q.nome[0] ? q.nome : q.url);
+      if (plugins_repo_estado(i - 2) == 1) snprintf(apoios[i], sizeof apoios[i], i18n("%d scrapers · %d ligados"), tot, lig);
+      else snprintf(apoios[i], sizeof apoios[i], "%s", i18n(ajPlugEstado(i - 2)));
+      l->nome = nomes[i]; l->apoio = apoios[i]; l->pilula = q.ativo; l->chevron = 1; l->traduz = 0;
     } else if (i == 0) {
-      nome = "Remover repositório"; icone = "aj_x";
-      apoio = v->armado ? "OK de novo remove o repositório" : "OK para remover";
+      l->nome = "Remover repositório"; l->icone = "aj_x";
+      l->apoio = v->armado ? "OK de novo remove o repositório" : "OK para remover";
     } else {
-      PlugScraper s;
-      if (plugins_scraper(v->repo, i - 1, &s)) {
-        snprintf(nomeBuf, sizeof nomeBuf, "%s", s.nome);
-        snprintf(apoioBuf, sizeof apoioBuf, "%s", i18n(s.filme && s.serie ? "Filmes e séries" : s.filme ? "Filmes" : "Séries"));
-        nome = nomeBuf; apoio = apoioBuf; chip = s.ativo;
+      PlugScraper sc;
+      if (plugins_scraper(v->repo, i - 1, &sc)) {
+        snprintf(nomes[i], sizeof nomes[i], "%s", sc.nome);
+        snprintf(apoios[i], sizeof apoios[i], "%s", i18n(sc.filme && sc.serie ? "Filmes e séries" : sc.filme ? "Filmes" : "Séries"));
+        l->nome = nomes[i]; l->apoio = apoios[i]; l->pilula = sc.ativo; l->traduz = 0;
       }
     }
-    if (f) ajFocoLinha(r, 22, 1, a);
-    if (icone) {
-      ajNeutro((GfxRect){ r.x + 22, y + 16, 48, 48 }, 14, 0.09f, 0.141f, 0.149f, 0.173f, a);
-      ajIcone(icone, r.x + 22 + 14, y + 16 + 14, 20, 0.85f * a);
-    } else ajRosto(nome, r.x + 22, y + 16, 48, 14, 0.09f, 0.85f * a, TXT_ILHA_INICIAL);
-    if (chip >= 0) cw = ajChipLiga(r.x + r.w - 22, y + 40, chip, a);
-    else if (v->nivel == 0 && i >= 2) cw = 0;
-    { TxtLinha t = ajTxtC(TXT_AJ_ROTULO, nome, r.w - 22 - 64 - cw - 40);
-      TxtLinha c = ajTxtC(TXT_ILHA_GENERO, apoio, r.w - 22 - 64 - cw - 40);
-      float ty = y + 40 - (t.h + 4 + c.h) * 0.5f;
-      txt_desenhar_alpha(t, r.x + 22 + 48 + 16, ty, (f ? 1.0f : 0.86f) * a);
-      txt_desenhar_alpha(c, r.x + 22 + 48 + 16, ty + t.h + 4, 0.42f * a); }
   }
-  gfx_sem_recorte();
-  if (v->aviso && v->aviso[0]) {
-    TxtLinha t = ajTxtC(TXT_AJ_SUB, v->aviso, fr.w - 100);
-    txt_desenhar_alpha(t, fr.x + 50, fr.y + fr.h - 30 - t.h, 0.7f);
+  if (!disp) { AjDica d[1] = { { "Voltar", "Fontes e addons" } }; ajSubLista(L, n, foco, d, 1, v->aviso); }
+  else if (v->nivel == 0) {
+    AjDica d[3] = { { "OK", foco == 1 ? "Adicionar" : "Mudar" }, { "→", "Scrapers" }, { "Voltar", "Fontes e addons" } };
+    if (foco < 2) d[1] = d[2];
+    ajSubLista(L, n, foco, d, foco >= 2 ? 3 : 2, v->aviso);
+  } else {
+    AjDica d[2] = { { "OK", foco == 0 ? "Remover" : "Mudar" }, { "Voltar", "Repositórios" } };
+    ajSubLista(L, n, foco, d, 2, v->aviso);
   }
-  if (!ajTemInspetor()) return;
-  ajIlha(ir, 36, 1, 0);
-  { float x = ir.x + 32, w = ir.w - 64, py = ir.y + 32, tx = x + 6, tw = w - 12;
-    const char *titulo = "Plugins", *texto =
-      "Scrapers em JavaScript dos repositórios de plugins do Nuvio, como mais uma fonte na lista, ao lado dos add-ons. Os repositórios vêm da sua conta. Desligado por padrão.";
+  snprintf(k, sizeof k, "%s · %s", i18n("Fontes e addons"), i18n("Plugins"));
+  { GfxRect ir = aj2InspR();
+    float y;
     char host[160] = "";
-    if (!disp) texto = "O motor de plugins não roda neste aparelho.";
-    else if (v->nivel == 0 && foco == 1) { titulo = "Adicionar repositório"; texto = "A URL do manifest.json. Ex.: raw.githubusercontent.com/usuario/repo/main"; }
-    else if (v->nivel == 0 && foco >= 2 && plugins_repo(foco - 2, &rp)) {
+    if (disp && v->nivel == 0 && foco >= 2 && plugins_repo(foco - 2, &rp)) {
       int lig, tot = plugins_repo_scrapers(foco - 2, &lig);
       ajPlugHost(rp.url, host, sizeof host);
-      ajKicker("Repositório", tx, py, 1); py += 30;
-      py += ajBloco(TXT_AJ_INSP, rp.nome[0] ? rp.nome : host, tx, py, tw, 38.4f, 1, 2) + 14;
-      py += ajMeta(i18n("Conta"), i18n(rp.ativo ? "Ligado" : "Desligado"), tx, py, tw, 1) - 4;
-      py += ajMeta(i18n("Estado"), i18n(ajPlugEstado(foco - 2)), tx, py, tw, 1) - 4;
+      y = ajSubInspetor(AJ_PLUGINS, k, rp.nome[0] ? rp.nome : host, "");
       snprintf(linha, sizeof linha, i18n("%d scrapers · %d ligados"), tot, lig);
-      py += ajMeta(i18n("Scrapers"), linha, tx, py, tw, 1) - 4;
-      ajMeta(i18n("Endereço"), host, tx, py, tw, 1);
-      titulo = NULL;
-    } else if (v->nivel == 1 && foco >= 1) {
-      PlugScraper s;
-      if (plugins_scraper(v->repo, foco - 1, &s)) {
-        ajKicker("Scraper", tx, py, 1); py += 30;
-        py += ajBloco(TXT_AJ_INSP, s.nome, tx, py, tw, 38.4f, 1, 2) + 14;
-        py += ajMeta(i18n("Nesta TV"), i18n(s.ativo ? "Ligado" : "Desligado"), tx, py, tw, 1) - 4;
-        ajMeta(i18n("Tipo"), i18n(s.filme && s.serie ? "Filmes e séries" : s.filme ? "Filmes" : "Séries"), tx, py, tw, 1);
-        titulo = NULL;
+      if (y + 3 * 57.0f <= ir.y + ir.h) {
+        y += aj2Meta(i18n("Estado"), i18n(ajPlugEstado(foco - 2)), ir.x, y, ir.w, 1);
+        y += aj2Meta(i18n("Scrapers"), linha, ir.x, y, ir.w, 1);
+        aj2Meta(i18n("Endereço"), host, ir.x, y, ir.w, 1);
       }
-    } else if (v->nivel == 1) { titulo = "Remover repositório"; texto = "Remove o repositório desta TV e da sua conta. Remover o último deixa a lista vazia também na conta."; }
-    if (titulo) {
-      ajIcone("aj_puzzle", tx, py - 1, 20, 0.45f);
-      ajCaps(TXT_MINI, "Plugins", 2.1f, tx + 30, py, 0.45f);
-      py += 28;
-      py += ajBloco(TXT_AJ_INSP, titulo, tx, py, tw, 38.4f, 1, 2) + 12;
-      ajBloco(TXT_AJ_SUB, texto, tx, py, tw, 28.5f, 0.62f, 7);
+    } else if (disp && v->nivel == 1 && foco >= 1) {
+      PlugScraper sc;
+      if (plugins_scraper(v->repo, foco - 1, &sc)) {
+        y = ajSubInspetor(AJ_PLUGINS, k, sc.nome, "");
+        y += aj2Meta(i18n("Nesta TV"), i18n(sc.ativo ? "Ligado" : "Desligado"), ir.x, y, ir.w, 1);
+        aj2Meta(i18n("Tipo"), i18n(sc.filme && sc.serie ? "Filmes e séries" : sc.filme ? "Filmes" : "Séries"), ir.x, y, ir.w, 1);
+      }
+    } else if (disp && v->nivel == 1) {
+      ajSubInspetor(AJ_PLUGINS, k, "Remover repositório", "Remove o repositório desta TV e da sua conta. Remover o último deixa a lista vazia também na conta.");
+    } else if (disp && foco == 1) {
+      ajSubInspetor(AJ_PLUGINS, k, "Adicionar repositório", "A URL do manifest.json. Ex.: raw.githubusercontent.com/usuario/repo/main");
+    } else {
+      ajSubInspetor(AJ_PLUGINS, k, "Plugins", disp
+        ? "Scrapers em JavaScript dos repositórios de plugins do Nuvio, como mais uma fonte na lista, ao lado dos add-ons. Os repositórios vêm da sua conta. Desligado por padrão."
+        : "O motor de plugins não roda neste aparelho.");
     } }
-  if (!disp) { AjDica d[1] = { { "Voltar", "Ajustes" } }; ajDicas(d, 1, ir.x + 32, ir.y + ir.h - 32, ir.w - 64, 1); }
-  else if (v->nivel == 0) {
-    AjDica d[3] = { { "OK", foco == 1 ? "Adicionar" : "Ligar ou desligar" }, { "→", "Scrapers" }, { "Voltar", "Ajustes" } };
-    if (foco < 2) d[1] = d[2];   // sem scrapers para abrir nesta linha
-    ajDicas(d, foco >= 2 ? 3 : 2, ir.x + 32, ir.y + ir.h - 32, ir.w - 64, 1);
-  } else {
-    AjDica d[2] = { { "OK", foco == 0 ? "Remover" : "Ligar ou desligar" }, { "←", "Repositórios" } };
-    ajDicas(d, 2, ir.x + 32, ir.y + ir.h - 32, ir.w - 64, 1);
-  }
 }
 
 // --- KIT DAS ILHAS PARA AS TELAS VIZINHAS (diagnostico.c, livetvdiag.c) -----------

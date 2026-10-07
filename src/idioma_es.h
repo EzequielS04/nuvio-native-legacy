@@ -2231,6 +2231,7 @@
   T("Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.", "Activado: el tráiler de arriba se reproduce con sonido. Desactivado: sin sonido."),
   T("Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre em tela cheia com som.", "Activado: el tráiler que se reproduce solo en la página del título suena. Desactivado: se reproduce sin sonido; OK lo abre a pantalla completa con sonido."),
   T("Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.", "Activado: si los permitidos no tienen fuente durante la espera, la reproducción automática usa los demás. Desactivado: solo los permitidos; sin fuente en ellos, se abre la lista de fuentes."),
+  T("Ligados nesta TV", "Activados en este televisor"),
   T("Ligando…", "Vinculando…"),
   T("Ligar", "Vincular"),
   T("Ligar a outra", "Activar la otra"),

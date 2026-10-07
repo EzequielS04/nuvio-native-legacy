@@ -2231,6 +2231,7 @@
   T("Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.", "Activat: trailerul de sus rulează cu sunet. Dezactivat: rulează fără sunet."),
   T("Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre em tela cheia com som.", "Activat: trailerul care rulează singur pe pagina titlului are sunet. Dezactivat: rulează fără sunet; OK îl deschide pe tot ecranul, cu sunet."),
   T("Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.", "Activat: dacă cele permise n-au sursă în timpul așteptării, redarea automată le folosește pe celelalte. Dezactivat: doar cele permise; fără sursă în ele, se deschide lista de surse."),
+  T("Ligados nesta TV", "Pornite pe acest televizor"),
   T("Ligando…", "Se leagă…"),
   T("Ligar", "Leagă"),
   T("Ligar a outra", "Pornește-o pe cealaltă"),

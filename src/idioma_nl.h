@@ -2232,6 +2232,7 @@
   T("Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.", "Aan: de trailer bovenaan speelt met geluid. Uit: zonder geluid."),
   T("Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre em tela cheia com som.", "Aan: de trailer die vanzelf start op de titelpagina speelt met geluid. Uit: zonder geluid; OK opent hem schermvullend met geluid."),
   T("Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.", "Aan: hebben de toegestane binnen de wachttijd geen bron, dan gebruikt automatisch afspelen de andere. Uit: alleen toegestane; zonder bron daarin opent de bronnenlijst."),
+  T("Ligados nesta TV", "Aan op deze tv"),
   T("Ligando…", "Koppelen…"),
   T("Ligar", "Koppelen"),
   T("Ligar a outra", "De andere aanzetten"),

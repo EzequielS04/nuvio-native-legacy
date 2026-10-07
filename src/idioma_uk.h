@@ -2231,6 +2231,7 @@
   T("Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.", "Увімкнено: трейлер угорі грає зі звуком. Вимкнено: без звуку."),
   T("Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre em tela cheia com som.", "Увімкнено: трейлер, що грає сам на сторінці тайтлу, йде зі звуком. Вимкнено: без звуку; OK відкриває його на весь екран зі звуком."),
   T("Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.", "Увімкнено: якщо в дозволених немає джерела за час очікування, автоматика бере інші. Вимкнено: лише дозволені; без джерела в них відкривається список джерел."),
+  T("Ligados nesta TV", "Увімкнено на цьому телевізорі"),
   T("Ligando…", "Пов'язування…"),
   T("Ligar", "Пов'язати"),
   T("Ligar a outra", "Увімкнути іншу"),

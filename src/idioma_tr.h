@@ -2232,6 +2232,7 @@
   T("Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.", "Açık: üstteki fragman sesli oynar. Kapalı: sessiz oynar."),
   T("Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre em tela cheia com som.", "Açık: başlık sayfasında kendiliğinden oynayan fragman sesli çalar. Kapalı: sessiz çalar; Tamam onu sesli ve tam ekran açar."),
   T("Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.", "Açık: izin verilenlerde bekleme süresinde kaynak yoksa otomatik oynatma diğerlerini kullanır. Kapalı: yalnızca izin verilenler; onlarda kaynak yoksa kaynak listesi açılır."),
+  T("Ligados nesta TV", "Bu TV’de açık"),
   T("Ligando…", "Bağlanıyor…"),
   T("Ligar", "Bağla"),
   T("Ligar a outra", "Diğerini aç"),

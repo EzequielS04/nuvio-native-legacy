@@ -2232,6 +2232,7 @@
   T("Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.", "Aktif: trailer di atas diputar dengan suara. Mati: tanpa suara."),
   T("Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre em tela cheia com som.", "Aktif: trailer yang diputar otomatis di halaman judul bersuara. Mati: diputar tanpa suara; OK membukanya layar penuh dengan suara."),
   T("Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.", "Aktif: jika yang diizinkan tidak punya sumber selama waktu tunggu, putar otomatis memakai yang lain. Nonaktif: hanya yang diizinkan; tanpa sumber, daftar sumber terbuka."),
+  T("Ligados nesta TV", "Aktif di TV ini"),
   T("Ligando…", "Menautkan…"),
   T("Ligar", "Tautkan"),
   T("Ligar a outra", "Nyalakan yang lain"),

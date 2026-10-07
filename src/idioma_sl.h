@@ -2232,6 +2232,7 @@
   T("Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.", "Vklopljeno: napovednik na vrhu se predvaja z zvokom. Izklopljeno: brez zvoka."),
   T("Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre em tela cheia com som.", "Vklopljeno: napovednik, ki se sam predvaja na strani naslova, ima zvok. Izklopljeno: predvaja se brez zvoka; OK ga odpre čez cel zaslon z zvokom."),
   T("Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.", "Vklopljeno: če dovoljeni med čakanjem nimajo vira, samodejno predvajanje uporabi druge. Izklopljeno: samo dovoljeni; brez vira v njih se odpre seznam virov."),
+  T("Ligados nesta TV", "Vklopljeni na tem televizorju"),
   T("Ligando…", "Povezovanje…"),
   T("Ligar", "Poveži"),
   T("Ligar a outra", "Vklopi drugo"),

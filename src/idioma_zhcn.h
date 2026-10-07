@@ -2232,6 +2232,7 @@
   T("Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.", "开启：顶部预告片有声播放。关闭：静音播放。"),
   T("Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre em tela cheia com som.", "开启：作品页自动播放的预告片有声音。关闭：静音播放；按确定键可全屏有声打开。"),
   T("Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.", "开：允许的在等待时间内没有来源时，自动播放改用其他。关：只用允许的；它们没有来源时打开来源列表。"),
+  T("Ligados nesta TV", "在这台电视上已开启"),
   T("Ligando…", "正在关联…"),
   T("Ligar", "关联"),
   T("Ligar a outra", "开启另一项"),

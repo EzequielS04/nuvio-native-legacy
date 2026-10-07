@@ -2232,6 +2232,7 @@
   T("Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.", "På: trailern i toppen spelas med ljud. Av: utan ljud."),
   T("Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre em tela cheia com som.", "På: trailern som spelas av sig själv på titelsidan har ljud. Av: spelas utan ljud; OK öppnar den i helskärm med ljud."),
   T("Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.", "På: saknar de tillåtna källa inom väntetiden används de andra. Av: bara tillåtna; utan källa i dem öppnas källistan."),
+  T("Ligados nesta TV", "På på den här TV:n"),
   T("Ligando…", "Kopplar…"),
   T("Ligar", "Koppla"),
   T("Ligar a outra", "Slå på den andra"),

@@ -2232,6 +2232,7 @@
   T("Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.", "Zapnuto: trailer nahoře hraje se zvukem. Vypnuto: bez zvuku."),
   T("Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre em tela cheia com som.", "Zapnuto: trailer, který se sám spustí na stránce titulu, hraje se zvukem. Vypnuto: hraje bez zvuku; OK ho otevře na celou obrazovku se zvukem."),
   T("Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.", "Zapnuto: když povolené nemají zdroj během čekání, automatika použije ostatní. Vypnuto: jen povolené; bez zdroje v nich se otevře seznam zdrojů."),
+  T("Ligados nesta TV", "Zapnuté na této televizi"),
   T("Ligando…", "Propojování…"),
   T("Ligar", "Propojit"),
   T("Ligar a outra", "Zapnout druhou"),

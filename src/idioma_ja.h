@@ -2232,6 +2232,7 @@
   T("Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.", "オン：上部の予告編を音声付きで再生。オフ：無音で再生。"),
   T("Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre em tela cheia com som.", "オン：作品ページで自動再生される予告編が音声付きになります。オフ：無音で再生。OKで全画面・音声付きで開きます。"),
   T("Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.", "オン: 待ち時間内に許可したものにソースがなければ、他を使います。オフ: 許可したものだけ。ソースがなければソース一覧が開きます。"),
+  T("Ligados nesta TV", "このテレビでオン"),
   T("Ligando…", "連携中…"),
   T("Ligar", "連携"),
   T("Ligar a outra", "もう一方をオン"),

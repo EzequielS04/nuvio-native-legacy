@@ -2231,6 +2231,7 @@
   { "Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.", "On: the trailer at the top plays with sound. Off: it plays muted." },
   { "Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre em tela cheia com som.", "On: the trailer that plays by itself on the title page has sound. Off: it plays muted; OK opens it full screen with sound." },
   { "Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.", "On: if the allowed ones have no source within the wait, auto-play uses the others. Off: allowed ones only; with no source in them, the source list opens." },
+  { "Ligados nesta TV", "On on this TV" },
   { "Ligando…", "Linking…" },
   { "Ligar", "Link" },
   { "Ligar a outra", "Turn the other on" },

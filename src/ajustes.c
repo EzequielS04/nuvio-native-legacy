@@ -1760,6 +1760,10 @@ static int guiaDoIndice;   // o guia foi aberto por um cartao da grade: Voltar v
 static int uxChipLinha[3];
 static int uxUltimoItem[AJ_MAX_SECOES];
 static int uxAbrirOp = -1, uxPediuBusca, uxVeioBusca, uxRetornarOp = -1;
+// 2.0.3: ao voltar das listas de addons/plugins, Ajustes reabre na categoria
+// de onde elas sairam, com o foco na linha (e nao no indice).
+static int uxVoltarOp = -1;
+void ajustes_voltar_de_lista(int plugins) { uxVoltarOp = plugins ? AJ_PLUGINS : AJ_ADDONS; }
 static int uxDifs[AJ_N], uxNDifs, uxDifFoco;
 static int uxEditor, uxOp, uxPendente, uxOriginal, uxRodape;
 static int uxRestaurar, uxConfirmar, uxAvisoRisco;
@@ -4291,6 +4295,7 @@ int ajustes_iniciar(void) {
   guiaFechar();
   if (abrirNoGuia) { abrirNoGuia = 0; focarOpcao(AJ_GUIA); guiaAbrir(guiaDaNovidades); guiaDaNovidades = 0; }
   if (uxAbrirOp >= 0) { int op = uxAbrirOp; uxAbrirOp = -1; focarOpcao(op); }
+  if (uxVoltarOp >= 0) { int op = uxVoltarOp; uxVoltarOp = -1; focarOpcao(op); }
   uxCancelar(); uxAviso[0] = 0; uxRetornarOp = -1;
   filAberta = 0; filFoco = 0; filCampo = 0; filPegou = 0; filTopo = 0;
   emEdicao = 0;
@@ -7219,6 +7224,7 @@ static AjPreview familiaPreviaOpcao(int op) {
 void teclado_teste_texto(const char *t);
 void teclado_teste_foco(int f, int c);
 static int ajQuadroAddons;   // captura: a tela de addons no lugar de Ajustes
+static int ajQuadroPlugins;  // captura: a de plugins (foco + 1)
 #endif
 static void ajDesenharTudo(Uint32 agora);
 // Own Settings scale: the virtual canvas and the active drawing factor agree.
@@ -7232,6 +7238,7 @@ static void ajDesenharTudo(Uint32 agora) {
   // as tres ilhas por cima. Ver ajustes_ux_desenho.inc.
 #ifdef AJUSTES_TESTE
   if (ajQuadroAddons) { ajustes_desenhar_addons(ajQuadroAddons - 1); return; }
+  if (ajQuadroPlugins) { AjPluginsVista v = { 0, ajQuadroPlugins - 1, 0, 0, "" }; ajustes_desenhar_plugins(&v); return; }
 #endif
   montarTela();
   if (guiaAberto) { guiaDesenhar(); return; }
@@ -7391,7 +7398,7 @@ int ajustes_teste_quadro(const char *id) {
   scrollY = velY = 0; paginaA = 1;
   filAberta = 0; riscoFolha = 0;
   focarSecao(0); focoIndice = 1;
-  ajArteFundoN = 12; ajMemFixa = 0; ajQuadroAddons = 0; ajVinculoTeste = 0;
+  ajArteFundoN = 12; ajMemFixa = 0; ajQuadroAddons = 0; ajQuadroPlugins = 0; ajVinculoTeste = 0;
   if (teclado_aberto()) { SDL_Event e = { 0 }; e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_ESCAPE; teclado_evento(&e); }
   aj2PoseFixa = 0;
   if (!strncmp(id, "v2-", 3)) {   // Ajustes v2 (ajustes-v2.html): os quadros do mockup
@@ -7530,6 +7537,7 @@ int ajustes_teste_quadro(const char *id) {
       }
     ajQuadroAddons = 2;
   }
+  else if (!strcmp(id, "plugins")) { ajArteFundoN = 3; ajQuadroPlugins = 1; }
   else return 0;
   scrollY = velY = 0;
   return 1;

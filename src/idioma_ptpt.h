@@ -2232,6 +2232,7 @@
   T("Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.", "Ligado: o trailer do topo toca com som. Desligado: toca sem som."),
   T("Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre em tela cheia com som.", "Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre-o em ecrã inteiro com som."),
   T("Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.", "Ligado: sem fonte nos permitidos dentro da espera, a reprodução automática usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre."),
+  T("Ligados nesta TV", "Ligados nesta TV"),
   T("Ligando…", "A ligar…"),
   T("Ligar", "Ligar"),
   T("Ligar a outra", "Ligar a outra"),

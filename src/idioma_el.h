@@ -2232,6 +2232,7 @@
   T("Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.", "Ενεργό: το τρέιλερ επάνω παίζει με ήχο. Ανενεργό: χωρίς ήχο."),
   T("Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre em tela cheia com som.", "Ενεργό: το τρέιλερ που παίζει μόνο του στη σελίδα τίτλου έχει ήχο. Ανενεργό: παίζει χωρίς ήχο· το OK το ανοίγει σε πλήρη οθόνη με ήχο."),
   T("Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.", "Ενεργό: αν τα επιτρεπόμενα δεν έχουν πηγή μέσα στην αναμονή, η αυτόματη αναπαραγωγή χρησιμοποιεί τα άλλα. Ανενεργό: μόνο τα επιτρεπόμενα· χωρίς πηγή σε αυτά, ανοίγει η λίστα πηγών."),
+  T("Ligados nesta TV", "Ενεργά σε αυτή την τηλεόραση"),
   T("Ligando…", "Σύνδεση…"),
   T("Ligar", "Σύνδεση"),
   T("Ligar a outra", "Ενεργοποίηση της άλλης"),
