@@ -160,6 +160,10 @@ static void testar(void) {
   assert(player_controles_visiveis());
   teclaPlayer(SDLK_DOWN);assert(!player_controles_visiveis());
   teclaPlayer(SDLK_DOWN);assert(player_controles_visiveis());
+  // #305: CIMA na barra (topo, sem trecho pulavel) esconde; a tecla seguinte revela.
+  teclaPlayer(SDLK_UP);assert(player_controles_visiveis());   // botoes -> barra
+  teclaPlayer(SDLK_UP);assert(!player_controles_visiveis());  // barra -> esconde
+  teclaPlayer(SDLK_UP);assert(player_controles_visiveis());
   teclaPlayer(SDLK_RIGHT);teclaPlayer(SDLK_RIGHT);teclaPlayer(SDLK_RIGHT);teclaPlayer(SDLK_RETURN);
   assert(player_pediu_fontes());   /* legendas -> audio -> proporcao -> fontes */
   assert(player_carregando());player_encerrar();
