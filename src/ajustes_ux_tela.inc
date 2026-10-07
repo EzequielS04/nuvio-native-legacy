@@ -17,7 +17,7 @@ static const Item TELA[] = {
     ROT("Barra lateral"),
       OPC(AJ_RAIL_MODERNA), OPC(AJ_RAIL), OPC(AJ_MENU_EXPLORAR),
       OPC(AJ_MENU_GUIA), OPC(AJ_MENU_AGENDA), OPC(AJ_MENU_PERFIL),
-      OPC(AJ_RAIL_BLUR), OPC(AJ_DESCOBRIR),
+      OPC(AJ_RAIL_BLUR),
     ROT("Escolha de perfil"), OPC(AJ_PS_FUNDO), OPC(AJ_PS_CONTINUAR),
 
   SEC("Página do título", "O que aparece, notas e dados do título", "aj_file-text"),
@@ -163,7 +163,7 @@ static const Item TELA[] = {
     OPC(AJ_GUIA),
     OPC(AJ_NOVIDADES20),
     OPC(AJ_APOIAR),
-    ROTS("App", ""), OPC(AJ_VERSAO_I), OPC(AJ_ATUALIZAR), OPC(AJ_AVANCADAS),
+    ROTS("App", ""), OPC(AJ_VERSAO_I), OPC(AJ_ATUALIZAR),
     ROTS("Registro", "para quem faz o app"),
       OPC(AJ_VER_REGISTRO), OPC(AJ_ENVIAR_LOG), OPC(AJ_ENVIO_AUTO),
 };
@@ -192,7 +192,7 @@ static int uxAvancada(int op) {
   switch (op) {
     case AJ_HERO_TRANSICAO:
     case AJ_ROTULOS: case AJ_NOME_ADDON: case AJ_SUFIXO_TIPO:
-    case AJ_RAIL_BLUR: case AJ_DESCOBRIR:
+    case AJ_RAIL_BLUR:
     case AJ_CW_FURTHEST:
     case AJ_GRAD_CLASSICO:
     case AJ_PROF_BORDA: case AJ_PROF_BRILHO: case AJ_PROF_COBERTURA:

@@ -22,7 +22,11 @@ if not enum:
 corpo = re.sub(r"//[^\n]*", "", enum.group(1))
 opcoes = [n.strip() for n in corpo.split(",") if n.strip() and n.strip() != "AJ_N"]
 # Retired from the screen on purpose; the enum slot stays (positional valor[]/CHAVE[]).
-RETIRADAS = {"AJ_RELOGIO_POS"}  # 1.8: clock island is always top-right
+RETIRADAS = {
+    "AJ_RELOGIO_POS",  # 1.8: clock island is always top-right (inativa() == 1)
+    "AJ_DESCOBRIR",    # 2.0.3: the web Discover screen does not exist on the TV (inativa() == 1)
+    "AJ_AVANCADAS",    # 2.0.3: lives in the "Avancadas" pill at the top of the index
+}
 opcoes = [op for op in opcoes if op not in RETIRADAS]
 
 tabela = re.search(r"static const Item TELA\[\] = \{(.*?)\n\};", catalogo, re.S)

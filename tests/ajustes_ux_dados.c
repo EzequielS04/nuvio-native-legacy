@@ -389,7 +389,6 @@ static void reorganizacao202(void) {
     { AJ_JF_LIGADO, "Fontes e addons", "Servidores pessoais" },
     { AJ_MDB_CHAVE, "Página do título", "Notas" }, { AJ_FANART_CHAVE, "Cartazes e arte", "De onde vem a arte" },
     { AJ_LEG_LINGUA2, "Idiomas e legendas", "Segunda legenda" },
-    { AJ_AVANCADAS, "Sobre e ajuda", "App" },
   };
   int i, s = 0, n, idiomaAntes = valor[AJ_IDIOMA];
   const char *g;
