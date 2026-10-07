@@ -2191,15 +2191,20 @@ static void *dtsRangeHeaders(const char *raw, int public_only) {
   free(copy);
   return list;
 }
-char *rede_baixar_trecho64_cab(const char *url, const char *headers,
+/* `final` (8192 bytes, optional) receives the address that answered 206 when
+ * at least one redirect was followed, "" otherwise; `cross` says whether that
+ * address is on another origin (credential headers were NOT sent to it). */
+char *rede_baixar_trecho64_final(const char *url, const char *headers,
                               int64_t start, int64_t end, long *size,
                               int64_t *total, int *status,
-                              volatile int *cancelled) {
+                              volatile int *cancelled, char *final, int *cross) {
   char current[8192], range[64], origin[128];
   int hop, public_only = 0;
   if (size) *size = 0;
   if (total) *total = -1;
   if (status) *status = 0;
+  if (final) final[0] = 0;
+  if (cross) *cross = 0;
   if (!url || strlen(url) >= sizeof current || start < 0 || end < start ||
       end - start >= 4 * 1024 * 1024 || !abrir()) return NULL;
   if (strncmp(url, "http://", 7) && strncmp(url, "https://", 8)) return NULL;
@@ -2262,12 +2267,20 @@ char *rede_baixar_trecho64_cab(const char *url, const char *headers,
         (uint64_t)(r.end - r.start + 1) == r.body.n) {
       if (size) *size = (long)r.body.n;
       if (total) *total = r.total;
+      if (final && hop > 0) snprintf(final, 8192, "%s", current);
+      if (cross) *cross = public_only;
       return baldeFinal(&r.body);
     }
     free(r.body.p);
     return NULL;
   }
   return NULL;
+}
+char *rede_baixar_trecho64_cab(const char *url, const char *headers,
+                              int64_t start, int64_t end, long *size,
+                              int64_t *total, int *status,
+                              volatile int *cancelled) {
+  return rede_baixar_trecho64_final(url, headers, start, end, size, total, status, cancelled, NULL, NULL);
 }
 
 #endif  /* __EMSCRIPTEN__ */

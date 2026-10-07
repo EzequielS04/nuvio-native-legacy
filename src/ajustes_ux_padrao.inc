@@ -238,3 +238,4 @@
   100, 100, /* Home spacing: between rows and between titles, 100% = as measured */
   0, /* default aspect ratio: Ultimo usado */
   1, /* also in Continue watching (2.0.2): Desligado (V_LIGA: 1 = Desligado) = one title, one place */
+  1, /* Dolby Vision in MKV (2.0.2, experimental): Desligado */

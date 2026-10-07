@@ -29,6 +29,9 @@ typedef struct {
   int  forcado;       // FlagForced: so letreiros/falas em lingua estrangeira
   int  sdh;           // FlagHearingImpaired (#287): legenda para surdos
   int  canais;        // Audio > Channels (2, 6, 8); 0 quando nao informado
+  // Dolby Vision configuration record (BlockAdditionMapping dvcC/dvvC) of a
+  // video track: the file's own word on profile and layers. dvPerfil 0 = none.
+  int  dvPerfil, dvNivel, dvRpu, dvEl, dvBl, dvCompat;
 } MkvFaixa;
 
 #define MKV_MAX_CAPS 64

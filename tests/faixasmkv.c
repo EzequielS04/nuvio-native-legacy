@@ -117,6 +117,22 @@ int main(int argc, char **argv) {
   ok(!strcmp(faixasmkv_codec("A_DTS/LOSSLESS"), "DTS-HD MA") && !strcmp(faixasmkv_codec("A_AAC/MPEG4/LC"), "AAC") &&
      !faixasmkv_codec("V_MPEGH")[0], "nomes de codec", NULL);
 
+  // Dolby Vision in MKV: the video track's BlockAdditionMapping (dvcC) is the
+  // file's own word on profile and layers. Profile 8.1, level 6, BL+RPU, no EL.
+  { static const unsigned char dv[] = {
+      0x1A, 0x45, 0xDF, 0xA3, 0x80,                      // EBML header (empty)
+      0x16, 0x54, 0xAE, 0x6B, 0x80 | 44,                 // Tracks
+      0xAE, 0x80 | 42,                                   // TrackEntry
+      0xD7, 0x81, 0x01, 0x83, 0x81, 0x01,                // TrackNumber 1, video
+      0x86, 0x80 | 16, 'V','_','M','P','E','G','H','/','I','S','O','/','H','E','V','C',
+      0x41, 0xE4, 0x80 | 15,                             // BlockAdditionMapping
+      0x41, 0xE7, 0x84, 'd','v','c','C',                 // BlockAddIDType
+      0x41, 0xED, 0x85, 0x01, 0x00, 0x10, 0x35, 0x10,    // DOVI record
+      0xEC, 0x80 | 11, 0,0,0,0,0,0,0,0,0,0,0 };          // Void: the probe wants 64 bytes
+    MkvFaixa v[2];
+    int k = mkv_faixas_do_trecho(dv, sizeof dv, v, 2, NULL, 0, NULL);
+    ok(k == 1 && v[0].dvPerfil == 8 && v[0].dvNivel == 6 && v[0].dvRpu && !v[0].dvEl && v[0].dvBl && v[0].dvCompat == 1,
+       "dvcC: perfil 8.1 nivel 6, BL+RPU sem EL", NULL); }
   printf(falhas ? "faixasmkv: %d FALHA(S)\n" : "faixasmkv: tudo ok\n", falhas);
   return falhas != 0;
 }

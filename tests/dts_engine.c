@@ -14,6 +14,13 @@ static void *cancel_later(void *opaque) { usleep(200000); dts_engine_cancel(opaq
 static const char *HEADERS="X-Fixture: yes\nAuthorization: Bearer engine-test";
 static unsigned requests;
 #ifndef DTS_ENGINE_HTTP
+char *rede_baixar_trecho64_cab(const char *,const char *,int64_t,int64_t,long *,int64_t *,int *,volatile int *);
+/* The Dolby Vision path asks for the final address; the fixture has none. */
+char *rede_baixar_trecho64_final(const char *url,const char *headers,int64_t start,int64_t end,long *size,int64_t *total,int *status,volatile int *cancelled,char *final,int *cross) {
+  if(final) final[0]=0;
+  if(cross) *cross=0;
+  return rede_baixar_trecho64_cab(url,headers,start,end,size,total,status,cancelled);
+}
 char *rede_baixar_trecho64_cab(const char *url,const char *headers,int64_t start,int64_t end,long *size,int64_t *total,int *status,volatile int *cancelled) {
   assert(!strcmp(headers,HEADERS));
   assert(start>=0 && end>=start && end-start<1024*1024); __atomic_add_fetch(&requests,1,__ATOMIC_RELAXED);

@@ -103,6 +103,9 @@ static void lerTexto(const unsigned char *p, long n, char *dst, size_t tam) {
 #define ID_FLAGHEARING 0x55ABUL      // FlagHearingImpaired: SDH (#287)
 #define ID_AUDIO       0xE1UL        // Audio (mestre dentro da TrackEntry)
 #define ID_CHANNELS    0x9FUL        // Audio > Channels
+#define ID_BLOCKADDMAP 0x41E4UL      // BlockAdditionMapping (Dolby Vision config)
+#define ID_BLOCKADDTYPE 0x41E7UL     // BlockAddIDType: 'dvcC' / 'dvvC'
+#define ID_BLOCKADDDATA 0x41EDUL     // BlockAddIDExtraData: the DOVI record
 
 // Le os TrackEntry de dentro de um Tracks ja localizado.
 static int lerTracks(const unsigned char *p, long n, MkvFaixa *saida, int max) {
@@ -157,6 +160,34 @@ static int lerTracks(const unsigned char *p, long n, MkvFaixa *saida, int max) {
               r += ai + at;
               if (aid == ID_CHANNELS) f.canais = (int)lerUint(v + r, atam);
               r += atam;
+            }
+          }
+          // DOVIDecoderConfigurationRecord (ETSI/Dolby): version major, minor,
+          // then profile(7) level(6) rpu(1) el(1) bl(1), compatibility id(4).
+          else if (fid == ID_BLOCKADDMAP) {
+            long r = 0;
+            unsigned long tipo = 0;
+            const unsigned char *dado = NULL;
+            long dadoN = 0;
+            while (r < ftam) {
+              int ai = 0, at = 0;
+              unsigned long aid = lerId(v + r, ftam - r, &ai);
+              long atam;
+              if (!aid) break;
+              atam = lerTam(v + r + ai, ftam - r - ai, &at);
+              if (atam < 0 || r + ai + at + atam > ftam) break;
+              r += ai + at;
+              if (aid == ID_BLOCKADDTYPE) tipo = (unsigned long)lerUint(v + r, atam);
+              else if (aid == ID_BLOCKADDDATA) { dado = v + r; dadoN = atam; }
+              r += atam;
+            }
+            if ((tipo == 0x64766343UL || tipo == 0x64767643UL) && dado && dadoN >= 5) {
+              f.dvPerfil = dado[2] >> 1;
+              f.dvNivel  = ((dado[2] & 1) << 5) | (dado[3] >> 3);
+              f.dvRpu    = (dado[3] >> 2) & 1;
+              f.dvEl     = (dado[3] >> 1) & 1;
+              f.dvBl     = dado[3] & 1;
+              f.dvCompat = dado[4] >> 4;
             }
           } }
         q += ftam;

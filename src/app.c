@@ -2407,6 +2407,11 @@ void app_atualizar(float dt, Uint32 agora) {
   // O backend precisa progredir mesmo no login, perfis e transicoes que
   // retornam cedo: seek pendente no Tizen e prazo de recuo DV no webOS.
   video_bombear();
+  // Dolby Vision in MKV handed playback back to the TV player (HDR10).
+  { int dvr = video_dv_recuo_consumir();
+    if (dvr) ilha_avisar("dv-mkv", ILHA_INFO, NULL, dvr == 1
+        ? i18n("A conexão não acompanhou o Dolby Vision. Continuando em HDR10.")
+        : i18n("Dolby Vision não abriu nesta fonte. Continuando em HDR10."), 6000u, 0); }
   player_validar_retido(agora);
   if (tela == TELA_LOGIN) {
     login_atualizar(dt, agora);

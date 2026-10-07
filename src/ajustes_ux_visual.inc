@@ -129,6 +129,7 @@ static const char *ajVisualIcone(int op) {
     case AJ_SELOS_PACOTE_REM: return "aj_list-video";
     case AJ_QUALIDADE: return "aj_monitor-play";
     case AJ_DV: return "aj_monitor-play";
+    case AJ_DV_MKV: return "aj_monitor-play";
     case AJ_ATMOS: return "aj_monitor-play";
     case AJ_PAUSA_OVERLAY: return "aj_circle-play";
     case AJ_PLR_CLASSIF: return "aj_shield";

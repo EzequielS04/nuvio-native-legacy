@@ -31,6 +31,24 @@
 
 static DtsPlayback *dtsSessao;
 static char dtsSaida[64];
+// DOLBY VISION IN MKV (Settings > Playback, experimental). The TV's own URI
+// player turns a Dolby Vision MKV into HDR10 (measured on an LG C9). The same
+// Starfish BUFFERSTREAM path used for DTS conversion, fed by our demux with the
+// file's DolbyHdrInfo, engages Dolby Vision there (DV badge, picture and E-AC-3
+// 5.1 sound confirmed by the owner on the C9, webOS 4.10). The trigger is the
+// file's own dvcC (MKV header probe), never the add-on's label.
+// dvMkv*: what the header says, written by the probe thread and read here;
+// plain ints, the same tolerance faixaLeg already has.
+static volatile int dvSondado, dvMkvPerfil, dvMkvEl, dvMkvBl, dvMkvRpu;
+static char dvAudioCodec[16][16];   // Matroska CodecID of each audio track, file order
+static volatile int dvAudios;
+static int dvHabilitado, dtsModoDv, dvRecuoAviso;
+// Island notice for app.c: 1 = the source could not keep up, 2 = the path did
+// not start. Consumed once.
+int video_dv_recuo_consumir(void) { int v = dvRecuoAviso; dvRecuoAviso = 0; return v; }
+int video_dv_ativo(void) { return dtsSessao && dtsModoDv; }
+static int dvLiberadoNestaTv(void);
+static int dvPronto(void);
 const char *video_dts_saida(void) { return dtsSaida; }
 
 int video_faixa_dts(const VideoFaixa *f) {
@@ -1794,10 +1812,23 @@ static void *lerMkv(void *arg) {
     // saber se o arquivo nao e MKV, se o Range falhou ou se o cabecalho passa
     // dos 2 MB que baixamos.
     marco("mkv: nenhuma faixa lida (nao e MKV, ou Range falhou)");
+    dvSondado = 1;
     fioMkvVivo = 0; return NULL;
   }
 
   completarAudioMkv(fx, n);
+  { int na = 0, achouVideo = 0;
+    for (j = 0; j < n; j++) {
+      if (fx[j].tipo == 1 && !achouVideo) {
+        achouVideo = 1;
+        dvMkvEl = fx[j].dvEl; dvMkvBl = fx[j].dvBl; dvMkvRpu = fx[j].dvRpu;
+        dvMkvPerfil = fx[j].dvPerfil;
+        if (fx[j].dvPerfil)
+          printf("[dv] file: profile=%d level=%d rpu=%d el=%d bl=%d compat=%d\n", fx[j].dvPerfil,
+                 fx[j].dvNivel, fx[j].dvRpu, fx[j].dvEl, fx[j].dvBl, fx[j].dvCompat);
+      } else if (fx[j].tipo == 2 && na < 16) snprintf(dvAudioCodec[na++], sizeof dvAudioCodec[0], "%s", fx[j].codec);
+    }
+    dvAudios = na; dvSondado = 1; }
 
   // SEM MUTEX, e de proposito: este arquivo nao tem um. faixaLeg ja e escrito
   // pelo fio de resposta do luna e lido pelo desenho sem trava nenhuma, e
@@ -1946,6 +1977,8 @@ int video_tocar(const char *url) {
   dtsTentou = 0; dtsRevisao = 0; dtsSaida[0] = 0; dtsNativePending = 0; dtsEstado = 0;
   dtsHabilitado = dts_playback_enabled() && dtsLiberadoNestaTv();
   printf("[dts] fallback %s\n", dtsHabilitado ? "available" : "unavailable");
+  dvSondado = dvMkvPerfil = dvAudios = 0; dtsModoDv = 0;
+  dvHabilitado = dvLiberadoNestaTv();
   fflush(stdout);
   // O modo vale para esta fonte e para os recarregar dela (tocarInterno).
   modoLoad = video_modo_live_consumir();
@@ -1972,6 +2005,10 @@ void video_bombear(void) {
   acbBindRecolher();
   if (ligado) acbConfigurarTipo(dtsSessao != NULL);
   if (dtsSessao) bombearDts();
+  else if (dvHabilitado && !dtsNativePending && !dtsTentou && !modoLoad && urlAtual[0] && dvPronto()) {
+    dtsModoDv = 1;
+    iniciarDts(-1);
+  }
   else if (dtsHabilitado && !dtsNativePending && !dtsTentou && !modoLoad && urlAtual[0]) {
     // SO COM FAIXA DTS CONHECIDA (teste na C9, 06/10): o erro 200 tambem vem
     // de TrueHD e de faixa ainda sem codec; o fallback derrubava a reproducao
@@ -2433,6 +2470,50 @@ static int dtsLiberadoNestaTv(void) {
   fflush(stdout);
   return v;
 }
+// Dolby Vision in MKV: the Settings option, then what this TV can do. webOS 3
+// is out (no proof of the BUFFERSTREAM audio path there); two app deaths with
+// the path open turn it off on this TV, the same counter as DTS conversion.
+static int dvLiberadoNestaTv(void) {
+  int forcado = 0;
+#ifdef NV_DTS_DEBUG
+  forcado = access("/tmp/nuvio-dv-forcar", F_OK) == 0;
+#endif
+  if (!dts_playback_enabled() || (!ajustes_dv_mkv() && !forcado)) return 0;
+  if (webosMaior() < 4) {
+    printf("[dv] Dolby Vision in MKV unavailable on webOS %d\n", webosMaior()); fflush(stdout);
+    return 0;
+  }
+  if (dtsAbertasSemFechar() >= 2) {
+    printf("[dv] Dolby Vision in MKV off: the app died twice with it open\n"); fflush(stdout);
+    return 0;
+  }
+  return 1;
+}
+// The file decides: single-layer profile 5 or 8 (base layer + RPU, no
+// enhancement layer) and a selected audio track the path can feed (E-AC-3 and
+// AC-3 pass through, DTS is converted). Anything else stays with the TV player.
+static int dvPronto(void) {
+  if (fonteMp4) { dvHabilitado = 0; return 0; }
+  if (!dvSondado) {
+    if (mkvPendente && !fioMkvVivo) video_sondar_mkv_agora();
+    return 0;
+  }
+  if (!(dvMkvPerfil == 5 || dvMkvPerfil == 8) || dvMkvEl || !dvMkvBl || !dvMkvRpu) {
+    if (dvMkvPerfil) {
+      printf("[dv] profile %d (el=%d): stays on the TV player\n", dvMkvPerfil, dvMkvEl);
+      fflush(stdout);
+    }
+    dvHabilitado = 0; return 0;
+  }
+  if (audioAtual >= 0 && audioAtual < dvAudios) {
+    const char *c = dvAudioCodec[audioAtual];
+    if (strcmp(c, "A_EAC3") && strcmp(c, "A_AC3") && strncmp(c, "A_DTS", 5)) {
+      printf("[dv] audio %s cannot be fed: stays on the TV player\n", c); fflush(stdout);
+      dvHabilitado = 0; return 0;
+    }
+  }
+  return 1;
+}
 // A CONVERSAO FALHOU: volta ao player nativo na mesma posicao, como se o DTS
 // nunca tivesse sido tentado (video sem o audio recusado, o comportamento da
 // 2.0.0). dtsTentou continua 1, entao nao ha segunda tentativa nesta fonte.
@@ -2473,6 +2554,7 @@ static int iniciarDts(int stream) {
     return 0;
   }
   dtsMarcarAbertas(dtsAbertasSemFechar() + 1);
+  dts_playback_next_dv(dtsModoDv);
   dtsSessao = dts_playback_start(urlAtual, cabsHttp, stream, alvo,
                                paused, expWin, 0, a ? &selected : NULL, ordinal, count);
   if (!dtsSessao) {
@@ -2480,6 +2562,10 @@ static int iniciarDts(int stream) {
     marco("DTS startup failed: software playback unavailable");
     dtsVoltarNativo("converter unavailable");
     return 0;
+  }
+  if (dtsModoDv) {
+    marco("Dolby Vision: MKV path requested");
+    return 1;
   }
   dtsEstado = VIDEO_DTS_PREPARANDO;
   snprintf(dtsSaida, sizeof dtsSaida, "DTS: preparing audio");
@@ -2531,6 +2617,13 @@ static void bombearDts(void) {
       dtsFalhaLogada = 1;
     }
     dtsSaida[0] = 0;
+    if (dtsModoDv) {
+      dvRecuoAviso = !strcmp(st.error, DTS_PLAYBACK_STARVED) ? 1 : 2;
+      dtsModoDv = 0; dvHabilitado = 0;
+      dtsVoltarNativo("dolby vision");
+      dtsEstado = 0;
+      return;
+    }
     dtsVoltarNativo("converter");
     return;
   }
@@ -2604,8 +2697,10 @@ static void bombearDts(void) {
     } else {
       for (i = 0; i < nLeg; i++) if (faixaLeg[i].stream_index == selectedSub) legAtual = i;
     }
-    snprintf(dtsSaida, sizeof dtsSaida, "DTS → AAC Stereo");
-    dtsEstado = VIDEO_DTS_CONVERTIDO;
+    if (!dtsModoDv || !strcmp(st.info.audio_codec, "aac")) {
+      snprintf(dtsSaida, sizeof dtsSaida, "DTS → AAC Stereo");
+      dtsEstado = VIDEO_DTS_CONVERTIDO;
+    } else { dtsSaida[0] = 0; dtsEstado = 0; }
     if (expWin[0]) expJanelaAplicar();
     protegerScreensaver();
   }
@@ -2989,7 +3084,8 @@ void video_escolher_audio(int i) {
   const VideoFaixa *f = video_audio(i);
   if (dtsSessao && f) {
     if (f->stream_index < 0) return;
-    if (!strcmp(f->codec, "dts")) {
+    if (!strcmp(f->codec, "dts") ||
+        (dtsModoDv && (!strcmp(f->codec, "eac3") || !strcmp(f->codec, "ac3")))) {
       dts_playback_seek(dtsSessao, posSeg);
       dts_playback_audio(dtsSessao, f->stream_index);
       audioAtual = i;
@@ -3000,6 +3096,9 @@ void video_escolher_audio(int i) {
       snprintf(lu, sizeof lu, "%s", legUrlAtual);
       /* Match the native list after it arrives; demux ordinals need not match. */
       dtsNativeTarget = target; dtsNativePending = 1;
+      /* A track the Dolby Vision path cannot feed: the TV player takes the
+       * rest of this source (HDR10), and the path does not come back. */
+      if (dtsModoDv) { dtsModoDv = 0; dvHabilitado = 0; }
       if (recarregarMesmaFonte(alvo, -1, -1, lu)) dtsTentou = 0;
       else dtsNativePending = 0;
     }

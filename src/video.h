@@ -168,6 +168,11 @@ const char *video_erro_texto(void);
 // videoInfo. Onde a plataforma nao da o sinal (Tizen), 1: nao afirma nada.
 int video_decoder_anunciou(void);
 int video_dts_legenda_desenhar(double seconds, int delay_ms, float x, float y, float w, float h, float alpha);
+// Dolby Vision in MKV (webOS, Settings > Playback): 1 while our demux feeds
+// the TV with the file's Dolby Vision; video_dv_recuo_consumir says once why
+// it handed playback back to the TV player (1 slow source, 2 did not start).
+int video_dv_ativo(void);
+int video_dv_recuo_consumir(void);
 const char *video_dts_saida(void);  // actual local conversion output, empty for native playback
 int    video_audio_nao_suportado(void);  // uMS errorCode 200: video segue sem som
 int    video_terminou(void); // 1 depois do fim de fluxo (endOfStream) da fonte atual
