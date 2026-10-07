@@ -402,8 +402,8 @@ static const Item ITENS[] = {
     "Sem baixar a qualidade. A ilha diz o que espera." },
   { NULL, "aj_tv-minimal-play", "Player e TV ao vivo",
     "Pular créditos some sozinho. O canal reconecta." },
-  { "Som e imagem", "aj_sparkles", "Dolby Vision em MKV (experimental)",
-    "Só na LG, por enquanto." },
+  { "Som e imagem", "aj_sparkles", "Dolby Vision em MKV nas TVs LG (experimental)",
+    "Só para LG. No Android já toca normalmente." },
   { NULL, "aj_audio-lines", "DTS",
     "5.1 na LG. A Samsung avisa se a TV não toca." },
 };
@@ -430,6 +430,7 @@ static void item(int i, float y, float a) {
   f = txt_linha_corta(TXT_CAPTION, frase, 186, 192, 204, 255, tw);
   txt_desenhar_alpha(f, tx, y + FRASE_DY, 0.92f * a);
   if (txt_largura(TXT_CAPTION, frase) > (int)tw) frasesCortadas++;
+  if (txt_largura(TXT_ILHA_NOME, i18n(ITENS[i].nome)) > (int)tw) frasesCortadas++;
 }
 
 static float grupo(const char *g, float y, float a) {
