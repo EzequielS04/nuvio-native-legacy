@@ -4,12 +4,12 @@ A visual refresh, a lot more control over playback, and faster starts.
 
 ## Added
 
-- **New Home hero.** Smaller accent-colored button, page dots that follow your accent, and a softer gradient over the trailer.
-- **Context menu redone.** The poster turns into an info card with the menu beside it. On large cards the info sits over the image. The menu also works in lists, and the Social panel opens inline.
+- **New Home hero.** Accent-colored button the same size as the title page buttons, page dots that follow your accent, and a softer gradient over the trailer.
+- **Context menu redone.** The poster turns into an info card with the menu beside it. On large cards, and on 4:3 Featured cards, the info sits over the image. The menu also works in lists, and the Social panel opens inline.
 - **Title page "..." button** with Trailer, Explore and Change artwork.
 - **Season progress chart** on series pages, with how far your friends are.
 - **Settings previews** are now generated and animated, in every scene.
-- **Social panel header.** Tabs beside the title, an Edit sheet per profile, and an Agenda tab that lists upcoming episodes by date.
+- **Social panel header.** Tabs beside the title, an Edit sheet per profile, and an Agenda tab that lists upcoming episodes by date, with rows like the Agenda screen. The panel animations follow the clock island.
 - **Watch history target per profile**, with "Send history to the Nuvio account", and a **Social features** switch to turn Social off.
 - **What's New 2.0.2** card.
 - **Friends tab simplified.** A single "Add people" button and your linked accounts in one row.
@@ -24,6 +24,10 @@ A visual refresh, a lot more control over playback, and faster starts.
 - **DTS on LG** can now be converted to stereo or to 5.1.
 - **Dolby Vision in MKV on LG only** (experimental, off by default).
 - **Player:** audio codec shown (#293), forced subtitles (#287), resolution in the sources list, Arabic subtitles (#273).
+- **ASS subtitles on Samsung .tpk** are now drawn by libass, with styles and positioning, on all four packages.
+- **Auto-play add-on order:** off, tie-break or strict.
+- **Faster start options:** play while verifying, warm connections and a parallel check of up to 3 ready debrid sources (on by default), and prepare the source when a title opens (off by default).
+- **Add-on text mode** keeps the add-on's own lines (up to 5), with icons for common emojis and trimmed separators.
 - **Samsung** warns when the TV can't play DTS or TrueHD, and prefers Dolby sources.
 - **LG:** add-on live channels work (#283). CH+ opens Salvos, like on the other platforms.
 - The account sync summary and the Trakt/Simkl link screen are translated.
