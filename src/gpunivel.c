@@ -3,6 +3,9 @@
 // SEM _Thread_local (a .so do Tizen 4/5 recusa TLS, tests/tpk40_tls.sh): tudo
 // aqui roda no fio de desenho, e os estaticos sao so dele.
 #include "gpunivel.h"
+#ifdef NV_ANDROID
+#include "android.h"
+#endif
 #include "gfx.h"
 #include "dados.h"
 #include "perfiltv.h"
