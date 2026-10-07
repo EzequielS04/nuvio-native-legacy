@@ -585,6 +585,19 @@ object NvPlayer {
             recriarSuperficie(0)
         }
     }
+    // Evidencia para "a TV nao acompanha o fps do filme": fps do video, modos que o
+    // painel oferece e o ativo. TCL do dono (06/10): so existe 3840x2160@60, entao
+    // nao ha modo para trocar; o Media3 ja vota Surface.setFrameRate sozinho.
+    private fun logTaxaDeQuadros() {
+        try {
+            val fps = player?.videoFormat?.frameRate ?: -1f
+            val d = activity?.windowManager?.defaultDisplay ?: return
+            val modos = d.supportedModes.joinToString(",") { "${it.modeId}:${it.physicalWidth}x${it.physicalHeight}@${it.refreshRate}" }
+            Log.i(TAG, "[quadro] video=${fps}fps tela=${d.mode.modeId}@${d.refreshRate} modos=[$modos]")
+            val a = player?.audioFormat
+            Log.i(TAG, "[audio] ${a?.sampleMimeType} ${a?.channelCount}ch ${a?.sampleRate}Hz atraso=${atrasoMs}ms")
+        } catch (e: Exception) { Log.w(TAG, "logTaxaDeQuadros: $e") }
+    }
     private fun hdrNaSuperficie() {
         if (!quadroVisto || ultHdr.isEmpty() || ultHdr == "none" || ultHdr == hdrRecriadoPara) return
         val primeira = !hdrRecriado
@@ -673,6 +686,7 @@ object NvPlayer {
             if (!atual(minha)) return
             ev(EV_PRIMEIRO_QUADRO)
             quadroVisto = true
+            logTaxaDeQuadros()
             hdrNaSuperficie()
         }
 
