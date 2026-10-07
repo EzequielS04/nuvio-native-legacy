@@ -3,6 +3,7 @@
 // hero no topo, rail fixa à esquerda e fileiras horizontais de posters. A
 // infraestrutura nativa cuida de cache assíncrono, foco e transições.
 #include "home.h"
+#include "botoes.h"
 #include "cwretido.h"
 #include "focoprof.h"
 #include "posterprov.h"
@@ -3110,12 +3111,14 @@ static void desenhaPontosHero(float xDir, float yc, int n, int atual, float a) {
             1.0f, 1.0f, 1.0f, 0.55f * a);
   gfx_icone((GfxRect){ xDir - seta, yc - seta * 0.5f, seta, seta }, "pl_chevron-right",
             1.0f, 1.0f, 1.0f, 0.55f * a);
+  float dr, dg, db; botao_cor_foco(&dr, &dg, &db);
   for (i = 0; i < m; i++) {
     float k = 1.0f - fabsf((float)(ini + i) - heroPontosPos);
     float pw;
     if (k < 0.0f) k = 0.0f;
     pw = d + (larga - d) * k;
-    gfx_cor((GfxRect){ x, yc - d * 0.5f, pw, d }, 0.5f, 1.0f, 1.0f, 1.0f,
+    gfx_cor((GfxRect){ x, yc - d * 0.5f, pw, d }, 0.5f,
+            1.0f + (dr - 1.0f) * k, 1.0f + (dg - 1.0f) * k, 1.0f + (db - 1.0f) * k,
             (0.34f + 0.61f * k) * a);
     x += pw + gap;
   }
@@ -3909,15 +3912,19 @@ static void desenhaHero(Uint32 agora, float saida) {
         // PILULA COMPACTA (dono, 06/10, referencia da Apple TV): com o foco,
         // branca com o texto escuro; sem ele, a pilula translucida de sempre
         // com o texto claro. ~46 px e o corpo de 24/600 em vez do callout.
-        int tb = btnFoco ? 18 : 245;
+        // Em foco, o preenchimento e a tinta vem do ACENTO (botao_superficie,
+        // a mesma pilula primaria do resto do app, inclusive "Cor da logo"
+        // e vidro) — nunca um branco fixo (dono, 06/10: nao mudava com o acento).
+        int tb = btnFoco ? ajustes_tinta_foco() : 245;
         TxtLinha lb = txt_linha(TXT_ILHA_NOME, rot, tb, tb, tb, 255);
         float bh = btnH;
         float bw = lb.w + 56.0f;
         float by = actionY;
         GfxRect bt = { x, by, bw, bh };
+
         // Raio = metade da ALTURA: o raio do gfx_cor e fracao da altura do
         // retangulo, entao 0,5 e a pilula exata em qualquer largura.
-        if (btnFoco) gfx_cor(bt, 0.5f, 1.0f, 1.0f, 1.0f, 0.96f * aBtn);
+        if (btnFoco) botao_superficie(bt, 1.0f, aBtn);
         else if (ajustes_vidro()) gfx_vidro_painel(bt, 0.5f, 0.55f, aBtn);
         else gfx_cor(bt, 0.5f, 1.0f, 1.0f, 1.0f, 0.18f * aBtn);
         // O TRIANGULO DE REPRODUZIR NAO ENTRA AQUI. Ele e a marca universal de
