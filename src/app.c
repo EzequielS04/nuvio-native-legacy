@@ -620,6 +620,8 @@ static void trocarTela(Tela nova) {
   if (nova != TELA_SOCIAL) socialDoPerfil = 0;
   if (tela == TELA_AJUSTES) ajustes_encerrar();
   if (tela == TELA_LIVETV_DIAG) livetvdiag_encerrar();
+  // #318: a tela pisca e congela logo depois de uma troca de tela (Android).
+  printf("[transicao] tela %d -> %d t=%u\n", (int)tela, (int)nova, (unsigned)SDL_GetTicks());
   tela = nova;
   // Cada tela zera o proprio estado ao ser aberta: voltar para a busca com o
   // texto de duas navegacoes atras seria lixo, nao memoria util.

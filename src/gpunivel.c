@@ -137,6 +137,7 @@ static void logExtensoes(const char *ext) {
 
 #if defined(NV_ANDROID)
 #include <SDL.h>
+#include "android.h"
 // Extensao inteira na lista (sem casar prefixo de outra).
 static int temExt(const char *lista, const char *nome) {
   size_t n = strlen(nome);
@@ -229,10 +230,13 @@ void gpun_iniciar(int w, int h) {
   // bandwidth written back every frame unless discarded below).
   printf("[gl] GL_RENDERER=%s | %s\n", renderer, versaoGl);
   printf("[gl] janela: profundidade=%d stencil=%d\n", (int)db, (int)sb);
-  if (temExt(ext, "GL_EXT_discard_framebuffer"))
+  // #318: o descarte entrou no Android na 2.0.1 e, com ele, gpun_descartar_cor
+  // passou a valer nos FBOs do desfoque (gerados justo quando uma tela nova
+  // mostra arte nova). Fora, como na 2.0.0, ate a prova (android.h).
+  if (temExt(ext, "GL_EXT_discard_framebuffer") && android_318_religar("descarte"))
     *(void **)&descarte = SDL_GL_GetProcAddress("glDiscardFramebufferEXT");
   profStencil = db > 0 || sb > 0;
-  printf("[gl] descarte de alvo: %s%s\n", descarte ? "glDiscardFramebufferEXT" : "nenhum",
+  printf("[gl] descarte de alvo: %s%s\n", descarte ? "glDiscardFramebufferEXT" : "nenhum (#318: desligado como na 2.0.0)",
          descarte && profStencil ? " (+ profundidade/stencil da janela no fim do quadro)" : "");
 #else
   (void)ext; (void)db; (void)sb;

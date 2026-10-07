@@ -5,6 +5,7 @@
 #include <SDL.h>
 #include <stdio.h>
 #include "gl_compat.h"
+#include "android.h"
 
 #ifndef GL_TIME_ELAPSED_EXT
 #define GL_TIME_ELAPSED_EXT           0x88BF
@@ -45,6 +46,11 @@ static int n;
 static float amostras[NAMOSTRAS];   // frames of the current window, for the p90
 
 void gputempo_iniciar(void) {
+  // #318: entrou na 2.0.1; fora ate a prova (android.h).
+  if (!android_318_religar("gputempo")) {
+    printf("[gpu-tempo] desligado (#318, como na 2.0.0)\n");
+    return;
+  }
   if (!SDL_GL_ExtensionSupported("GL_EXT_disjoint_timer_query")) {
     printf("[gpu-tempo] sem GL_EXT_disjoint_timer_query: GPU nao medida\n");
     return;

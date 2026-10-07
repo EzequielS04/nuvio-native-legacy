@@ -1,5 +1,6 @@
 #include "gfx.h"
 #include "tex_cache.h"
+#include "android.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include "gfx_smartphone_png.h"
@@ -2471,7 +2472,7 @@ void gfx_fundo_din_desenhar(const float topo[3], float queda) {
     // um buffer de profundidade na janela.
     if (dinAdiadoOk < 0) {
 #ifdef NV_ANDROID
-      dinAdiadoOk = 1;
+      dinAdiadoOk = android_318_religar("din");   // #318: entrou na 2.0.1 (android.h)
 #else
       dinAdiadoOk = 0;
 #endif
@@ -3286,6 +3287,8 @@ void gfx_borrao_gerar(int via, unsigned int tex, float texAspecto) {
   if (!borFbo[a0] || !tex) return;
   GfxRect cheio = { 0, 0, NV_TELA_W, NV_TELA_H };
   gfx_ambiente_descarregar();   // pendente e da tela, nao deste alvo
+  { static int nLog;   // #318: o desfoque em FBO roda quando a tela nova traz arte nova
+    if (nLog < 40) { nLog++; printf("[transicao] desfoque de fundo (FBO %s) t=%u\n", via ? "home" : "detalhe", (unsigned)SDL_GetTicks()); } }
   ESC_REAL_INI();
   GFX_OUTRO_INI();
   GLint fboAnt = fboLigado(), vpAnt[4];
@@ -3424,6 +3427,8 @@ GLuint gfx_desfocado(GLuint src, const char *chave) {
     }
   if (desfGeradosQuadro >= NV_DESF_POR_QUADRO) return 0;
   gfx_ambiente_descarregar();   // pendente e da tela, nao deste alvo
+  { static int nLog;   // #318: idem, a copia desfocada de um cartaz
+    if (nLog < 40) { nLog++; printf("[transicao] copia desfocada (FBO) t=%u\n", (unsigned)SDL_GetTicks()); } }
   // Vaga: primeiro uma sem fonte, senao a usada ha mais tempo.
   for (i = 0; i < NV_DESF_N; i++)
     if (!desf[i].src) { vago = i; break; }
