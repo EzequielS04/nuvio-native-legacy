@@ -32,6 +32,11 @@
 //     chave GPU+driver+modelo+versao da Tizen, e o proximo arranque COMECA nele
 //     (e continua medindo: so desce). Chave diferente (firmware novo, outra TV)
 //     = recomeca do 0.
+//   - GPU fraca conhecida (ptv_gpu_fraca) sem nada gravado: comeca no 1.
+//   - a chave ganha "4k" com superficie acima de 1080p: o nivel aprendido em
+//     4K (4x os pixels) nao vale para 1080p, e vice-versa.
+//   - NUNCA vira 720p sozinho (pedido do dono, 06/10: "720p e o pior cenario,
+//     e o que fica mais feio"): o maximo automatico e o 2, em 1080p.
 //   - fora do .tpk: nivel 0 sempre (LG e .wgt nao mudam). No Mac,
 //     NUVIO_GPU_NIVEL=N no ambiente forca o nivel, para ver o resultado.
 //
@@ -63,6 +68,13 @@ void gpun_preferencia(int p);
 // Ajuste "Resolucao da interface = 720p": fixa o nivel 3 (desenho interno em
 // 1280x720) e desliga a medida e o "Efeitos visuais" ate o fim da sessao.
 void gpun_forcar_720(void);
+
+// 4K that did not hold (resolucao.h): from the next frame on, the interface is
+// drawn into an internal 1920x1080 target and scaled to the 4K surface in one
+// pass; the adaptive level measures again at 1080p. No-op without a surface
+// above 1080p or with 720p forced. Session-only; main.c remembers it on disk.
+void gpun_alvo_1080(void);
+int  gpun_alvo_1080_ativo(void);
 
 // Laco de quadro: _inicio ANTES do glClear da tela (liga o alvo interno no
 // nivel 2), _fim depois do ultimo desenho e antes do swap (amplia e descarta).

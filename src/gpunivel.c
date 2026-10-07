@@ -41,8 +41,9 @@ static const char *origem = "padrao";
 static char renderer[160] = "?", versaoGl[160] = "?", modelo[96] = "?", tizen[32] = "?";
 static unsigned long chave;
 static int telaW = 1920, telaH = 1080;
-// Alvo interno do nivel 3 (720p).
+// Alvo interno do nivel 3 (720p) ou do recuo de 4K (1920x1080, gpun_alvo_1080).
 static GLuint intFbo, intTex;
+static int alvo1080, prefFixa;
 static int intW, intH, intFalhou, intLigado;
 // Descarte (glInvalidateFramebuffer ou glDiscardFramebufferEXT).
 typedef void (*PfnDescarte)(GLenum, GLsizei, const GLenum *);
@@ -243,6 +244,10 @@ void gpun_iniciar(int w, int h) {
 #endif
   ptv_definir_gpu_fraca(ptv_gpu_fraca(renderer));
   chave = djb2(tizen, djb2(modelo, djb2(versaoGl, djb2(renderer, 5381))));
+  // The level learned on a 4K surface says nothing about 1080p (4x the pixels):
+  // a separate key, so a 4K session that dropped effects does not carry them
+  // to the 1080p one. 1080p keeps the old key (no re-measure after updating).
+  if (telaW > (int)NV_TELA_W) chave = djb2("4k", chave);
 
 #if defined(NV_TPK_NIVEL_FORCADO)
   nivel = NV_TPK_NIVEL_FORCADO;
@@ -258,6 +263,13 @@ void gpun_iniciar(int w, int h) {
   adaptativo = 1;
   origem = "adaptativo";
   ler();
+  // Nothing saved yet and a GPU class known to be weak (Mali-4xx, Midgard,
+  // ptv_gpu_fraca): start at light effects instead of spending the first
+  // measured window janking at full effects. Measuring continues from there.
+  if (!strcmp(origem, "adaptativo") && ptv_gpu_fraca_atual()) {
+    nivel = 1;
+    origem = "GPU fraca: comeca nos efeitos leves";
+  }
 #else
   { const char *e = getenv("NUVIO_GPU_NIVEL");
 #if defined(__APPLE__) || defined(NV_LINUX_DESKTOP)
@@ -283,6 +295,7 @@ void gpun_forcar_720(void) {
 void gpun_preferencia(int p) {
   if (forca720) return;
 #if (defined(NV_TPK) || defined(NV_ANDROID) || defined(NV_WEBOS)) && !defined(NV_TPK_NIVEL_FORCADO)
+  prefFixa = p == 1 || p == 2;
   if (p == 1) { adaptativo = 0; aplicar(0, "ajuste: efeitos completos"); return; }
   if (p == 2) { adaptativo = 0; aplicar(1, "ajuste: efeitos leves"); return; }
   adaptativo = 1; decidido = 0; origem = "adaptativo"; nivel = 0;
@@ -293,6 +306,29 @@ void gpun_preferencia(int p) {
 #endif
 }
 
+void gpun_alvo_1080(void) {
+  if (alvo1080 || forca720 || telaW <= (int)NV_TELA_W) return;
+  alvo1080 = 1;
+  printf("[gpu-nivel] interface 4K -> alvo interno %dx%d ampliado para %dx%d\n",
+         (int)NV_TELA_W, (int)NV_TELA_H, telaW, telaH);
+  // The level measured at 4K was paid for 4x the pixels: measure again at
+  // 1080p, from what this GPU saved for 1080p (the old key), unless the person
+  // fixed "Efeitos visuais".
+  chave = djb2(tizen, djb2(modelo, djb2(versaoGl, djb2(renderer, 5381))));
+#if (defined(NV_TPK) || defined(NV_ANDROID) || defined(NV_WEBOS)) && !defined(NV_TPK_NIVEL_FORCADO)
+  if (!prefFixa) {
+    adaptativo = 1; decidido = 0; origem = "adaptativo"; nivel = 0;
+    aquece = GPUN_ASSENTA_MS; janMs = janEsp = janCpu = totalMs = 0; janN = 0;
+    ler();
+    aplicar(nivel, "interface em 1080p: mede de novo");
+  }
+#else
+  (void)prefFixa;
+#endif
+  fflush(stdout);
+}
+int gpun_alvo_1080_ativo(void) { return alvo1080; }
+
 int gpun_nivel(void) { return nivel; }
 void gpun_definir_nivel(int n) { aplicar(n, "definido por gpun_definir_nivel"); }
 
@@ -301,7 +337,7 @@ void gpun_log_perfil(long memMB, int texMb, int fios, int heroi) {
   printf("[perfil] tpk mem=%ldMB gpu=\"%s\"%s tizen=%s modelo=%s -> tex=%dMB fios=%d heroi=%d"
          " escala=%s efeitos=%s nivel=%d (%s)\n",
          memMB, renderer, ptv_gpu_fraca_atual() ? " (fraca)" : "", tizen, modelo, texMb, fios, heroi,
-         nivel >= 3 ? "1280x720->1920x1080" : "1920x1080",
+         nivel >= 3 ? "1280x720->1920x1080" : alvo1080 ? "1920x1080->4K" : "1920x1080",
          nivel >= 2 ? "minimos" : nivel >= 1 ? "leves" : "cheios", nivel, origem);
   fflush(stdout);
 #else
@@ -319,8 +355,8 @@ static int intPreparar(void) {
   GLenum st;
   if (intFbo) return 1;
   if (intFalhou) return 0;
-  intW = (telaW * 2 + 1) / 3;
-  intH = (telaH * 2 + 1) / 3;
+  if (alvo1080) { intW = (int)NV_TELA_W; intH = (int)NV_TELA_H; }
+  else { intW = (telaW * 2 + 1) / 3; intH = (telaH * 2 + 1) / 3; }
   glGenTextures(1, &intTex);
   glBindTexture(GL_TEXTURE_2D, intTex);
   // RGBA: o alpha e o canal do furo do video (gfx_furo) e tem de chegar a janela.
@@ -337,10 +373,11 @@ static int intPreparar(void) {
   st = glCheckFramebufferStatus(GL_FRAMEBUFFER);
   glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)ant);
   if (st != GL_FRAMEBUFFER_COMPLETE) {
-    printf("[gpu-nivel] alvo interno %dx%d incompleto (0x%x): fica no nivel 1\n", intW, intH, (unsigned)st);
+    printf("[gpu-nivel] alvo interno %dx%d incompleto (0x%x)%s\n", intW, intH, (unsigned)st,
+           alvo1080 ? ": segue na superficie inteira" : ": fica no nivel 1");
     glDeleteFramebuffers(1, &intFbo); glDeleteTextures(1, &intTex);
     intFbo = intTex = 0; intFalhou = 1;
-    aplicar(1, "sem alvo interno");
+    if (!alvo1080) aplicar(1, "sem alvo interno");
     return 0;
   }
   printf("[gpu-nivel] alvo interno %dx%d RGBA -> janela %dx%d\n", intW, intH, telaW, telaH);
@@ -350,7 +387,7 @@ static int intPreparar(void) {
 
 void gpun_quadro_inicio(void) {
   intLigado = 0;
-  if (nivel < 3 || !intPreparar()) return;
+  if ((nivel < 3 && !alvo1080) || !intPreparar()) return;
   glBindFramebuffer(GL_FRAMEBUFFER, intFbo);
   glViewport(0, 0, intW, intH);
   gfx_tamanho_alvo(intW, intH);

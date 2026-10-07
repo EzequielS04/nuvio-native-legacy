@@ -82,6 +82,8 @@
 #include "descoberta.h"
 #include "trakt.h"
 #include "player.h"
+#include "ilha.h"
+#include "resolucao.h"
 #include "trailer.h"
 #include "ponteiro.h"
 #include "entrada_texto.h"
@@ -830,7 +832,7 @@ int main(int argc, char **argv) {
   // tex_escala recebem dw/NV_TELA_W, que e o mesmo caminho pelo qual a previa
   // no Mac (retina) desenha em 2x. Se voltar 1920x1080, a resposta e a mesma da
   // C9 e nao ha o que fazer neste lado.
-  int pedeW, pedeH;
+  int pedeW, pedeH, pediu4k = 0;
 
   // OS DADOS ANTES DA JANELA, e so por causa desta escolha.
   //
@@ -880,6 +882,17 @@ int main(int argc, char **argv) {
   // NV_PEDIR_4K continua existindo para a build de medicao, que precisa pedir
   // sem depender de ajuste gravado.
   { int quer4k = ajustes_4k();
+    // 4K THAT DID NOT HOLD on this TV in an earlier session (resolucao.h):
+    // start at 1080p. Picking 4K again in Settings deletes the file.
+    if (quer4k) {
+      char *recuo = dados_ler(RES_ARQ_RECUO);
+      if (recuo) {
+        free(recuo); quer4k = 0;
+        printf("[4k] esta TV nao aguentou 4K numa sessao anterior: comeca em 1080p "
+               "(escolher 4K de novo em Ajustes tenta outra vez)\n");
+      }
+    }
+    pediu4k = quer4k;
 #ifdef NV_PEDIR_4K
     quer4k = 1;
     printf("[4k] build de medicao: pedindo 3840x2160\n");
@@ -1520,8 +1533,9 @@ int main(int argc, char **argv) {
     gfx_ambiente_preparar();
     fundo_fosco_quadro();   // vidro fosco: a arte borrada do titulo em cena
     fPrep = NV_DT(t0) - fPrep;
-    // Nivel 2: o quadro inteiro vai para o alvo interno de 1280x720 (o clear
-    // abaixo ja limpa ele); gpun_quadro_fim amplia para a janela.
+    // Nivel 3 (so com "720p" escolhido) ou 4K que nao aguentou: o quadro
+    // inteiro vai para o alvo interno (o clear abaixo ja limpa ele);
+    // gpun_quadro_fim amplia para a janela.
     // Mudou "Efeitos visuais" nos Ajustes: aplica no proximo quadro.
     if (ajustes_gpu_efeitos() != gpuPref) { gpuPref = ajustes_gpu_efeitos(); gpun_preferencia(gpuPref); }
 #ifdef NV_TPK
@@ -1710,8 +1724,24 @@ int main(int argc, char **argv) {
       // GPU time of the window, by the GPU's own clock (gputempo.h). Only where
       // the extension exists; the line is what tells a 17 ms frame from a 30 ms
       // one when both show as "33" to the CPU.
-      { double gMed, gPior, gUlt; int gN = gputempo_colher(&gMed, &gPior, &gUlt);
-        if (gN > 0) printf("[gpu-tempo] med=%.1fms pior=%.1fms ult=%.1fms n=%d\n", gMed, gPior, gUlt, gN); }
+      { double gMed = 0, gPior, gUlt; int gN = gputempo_colher(&gMed, &gPior, &gUlt);
+        if (gN > 0) printf("[gpu-tempo] med=%.1fms pior=%.1fms ult=%.1fms n=%d\n", gMed, gPior, gUlt, gN);
+        // 4K WATCH (resolucao.h): the person picked 4K and the TV granted it.
+        // Only the interface counts: no player, no opening, 10 s of warm-up.
+        if (pediu4k && dw > (int)NV_TELA_W && !gpun_alvo_1080_ativo()) {
+          static ResVigia vigia4k;
+          double fpsJan = quadros * 1000.0 / (double)(agora - ultRelato);
+          int valida = SDL_GetTicks() > 10000u && !abertura_ativa() &&
+                       !player_aberto() && !player_mini_ativo();
+          if (res_vigia_amostra(&vigia4k, fpsJan, gN > 0 ? gMed : 0.0, valida)) {
+            printf("[4k] recuo: gpu=%.1fms fps=%.1f em %d relatorios seguidos -> 1080p nesta "
+                   "sessao e nas proximas\n", gN > 0 ? gMed : 0.0, fpsJan, RES_4K_SEGUIDAS);
+            gpun_alvo_1080();
+            dados_gravar(RES_ARQ_RECUO, "1\n");
+            ilha_avisar("res-4k-recuo", ILHA_INFO, NULL,
+                        i18n("Interface em 1080p: esta TV não aguenta 4K"), 8000u, 0);
+          }
+        } }
       if (pior > 33.0) {
         printf("[quadro] pior=%.1fms | ev=%.1f bomb=%.1f(%d tex, %.1fMB)"
                " upd=%.1f clr=%.1f des=%.1f aux=%.1f swap=%.1f\n",

@@ -122,7 +122,7 @@ static void padroesEValores(void) {
   assert(uxValorPadrao(AJ_FOCO_TRAILER) == 1);
   valor[AJ_FOCO_TRAILER] = valorPadrao[AJ_FOCO_TRAILER];
   /* Um valor que o modo seguro suspende continua sendo a preferencia salva. */
-  valor[AJ_RESOLUCAO] = 1;
+  valor[AJ_RESOLUCAO] = RES_4K;
   SEGURO = 1;
   assert(uxDiferente(AJ_RESOLUCAO));
   assert(!ajustes_4k());
