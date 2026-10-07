@@ -15,15 +15,19 @@
 // A CONTA TRAKT E O LOGIN DO SIMKL NA TV, so para as linhas de "Contas
 // ligadas" (o resto do app continua com os de verdade, sem login).
 #define trakt_ativo     shot_trakt_ativo
-#define sessao_token    shot_sessao_token
+#define sessao_token_copiar shot_sessao_token_copiar
+#define sessao_logada shot_sessao_logada
 #define simklauth_token shot_simklauth_token
 #include "../src/recomenda.c"
 #undef trakt_ativo
-#undef sessao_token
+#undef sessao_token_copiar
+#undef sessao_logada
 #undef simklauth_token
 static int contasNaTv;
 int shot_trakt_ativo(void) { return contasNaTv; }
-const char *shot_sessao_token(void) { return contasNaTv ? "tok-shot" : ""; }
+// sessao.c (#203) entrega o token por copia.
+int shot_sessao_token_copiar(char *d, size_t n) { snprintf(d, n, "%s", contasNaTv ? "tok-shot" : ""); return contasNaTv; }
+int shot_sessao_logada(void) { return contasNaTv; }
 const char *shot_simklauth_token(void) { return contasNaTv ? "simkl-shot" : ""; }
 #include "ajustes.h"
 #include "amigoperfil.h"
