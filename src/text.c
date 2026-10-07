@@ -124,7 +124,7 @@ static unsigned char *lerTudo(const char *caminho, size_t *tam) {
 }
 // Pesos de fontes legadas que não têm três faces reais usam síntese. Fontes
 // novas e Inter carregam as faces reais, uma família por vez e sob demanda.
-#define TXT_LEG_N (TXT_LEG_200 - TXT_LEG_50 + 1)
+#define TXT_LEG_N (TXT_LEG_250 - TXT_LEG_50 + 1)
 static TTF_Font *fontesLegendaLGCam[TXT_NCAM][TXT_LEG_N];
 #define fontesLegendaLG (fontesLegendaLGCam[camada])
 static int avisoFallback[TXT_FAMILIA_N];
@@ -300,6 +300,8 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { 56, PESO_REGULAR }, { 60, PESO_REGULAR }, { 64, PESO_REGULAR },
   { 68, PESO_REGULAR }, { 72, PESO_REGULAR }, { 76, PESO_REGULAR },
   { 80, PESO_REGULAR },
+  { 84, PESO_REGULAR }, { 88, PESO_REGULAR }, { 92, PESO_REGULAR },
+  { 96, PESO_REGULAR }, { 100, PESO_REGULAR },   // 210..250% (#335)
   { NV_TOP10_NUM_CORPO, PESO_BOLD },   // numeral do Top 10 da Dinamica
   // Escala das ilhas (text.h). 600 e 800 claros sobre o vidro escuro vao para
   // Bold pela regra optica escrita acima; 400 fica Regular.
@@ -893,7 +895,7 @@ const char *txt_fonte_da_linha(TxtFamilia familia, TxtEstilo estilo, const char 
 
 static TTF_Font *fonteLegendaDe(TxtEstilo estilo, const char *s,
                                 TxtFamilia familia) {
-  if (familia == TXT_FAMILIA_LG && estilo >= TXT_LEG_50 && estilo <= TXT_LEG_200) {
+  if (familia == TXT_FAMILIA_LG && estilo >= TXT_LEG_50 && estilo <= TXT_LEG_250) {
     int i = estilo - TXT_LEG_50;
     if (!fontesLegendaLG[i] && !tentouLegendaLG[i]) {
       tentouLegendaLG[i] = 1;
@@ -944,7 +946,7 @@ static TTF_Font *fonteNegritoReal(TxtFamilia familia, TxtEstilo estilo, TTF_Font
   int i = estilo - TXT_LEG_50;
   if (familia < TXT_FAMILIA_INTER || familia >= TXT_FAMILIA_N ||
       familia == TXT_FAMILIA_LG || familia == TXT_FAMILIA_DROID) return NULL;
-  if (estilo < TXT_LEG_50 || estilo > TXT_LEG_200 || ESTILOS[estilo].peso == PESO_BOLD) return NULL;
+  if (estilo < TXT_LEG_50 || estilo > TXT_LEG_250 || ESTILOS[estilo].peso == PESO_BOLD) return NULL;
   if (!fonte || fonte != fontes[familia][estilo]) return NULL;
   if (!bytesPeso[familia][PESO_BOLD] ||
       bytesPeso[familia][PESO_BOLD] == bytesPeso[familia][PESO_REGULAR]) return NULL;
@@ -1332,7 +1334,7 @@ static void altDe(TxtFamilia familia, TxtEstilo estilo, TTF_Font *f,
   if (familia < TXT_FAMILIA_INTER || familia >= TXT_FAMILIA_N) familia = TXT_FAMILIA_INTER;
   if (!f || estilo < 0 || estilo >= TXT_NFONTES) return;
   if (f == fontes[familia][estilo] || f == fontes[TXT_FAMILIA_INTER][estilo]) return;
-  if (estilo >= TXT_LEG_50 && estilo <= TXT_LEG_200 && f == fontesLegendaLG[estilo - TXT_LEG_50]) return;
+  if (estilo >= TXT_LEG_50 && estilo <= TXT_LEG_250 && f == fontesLegendaLG[estilo - TXT_LEG_50]) return;
   *a = fontes[familia][estilo];
   *b = fontes[TXT_FAMILIA_INTER][estilo];
   if (*b == *a) *b = NULL;
