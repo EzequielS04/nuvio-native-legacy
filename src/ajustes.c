@@ -455,6 +455,10 @@ typedef enum {
   // Digital / AC3 640 kbps). So o caminho webOS que converte DTS no app
   // (src/dts). LOCAL, desta TV. No fim: valor[]/CHAVE[] posicionais.
   AJ_DTS_AC3,
+  // 2.0.2: "Dolby Vision em MKV (experimental)". Ligado = MKV whose dvcC says
+  // profile 5/8 single layer plays through our demux with Dolby Vision (webOS
+  // only, video.c). LOCAL, desta TV; padrao Desligado. No fim: valor[]/CHAVE[].
+  AJ_DV_MKV,
   AJ_N
 } OpcaoId;
 
@@ -1258,6 +1262,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Também em Continuar assistindo",  V_LIGA, 2),             // local: cwRetidoTambemLocal
   ESC("Continuar na escolha de perfil",  V_LIGA, 2),             // local: psContinuarLocal
   ESC("DTS convertido em",               V_DTS_SAIDA, 2),        // local: dtsSaidaLocal
+  ESC("Dolby Vision em MKV (experimental)", V_LIGA, 2),          // local: dvMkvLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1469,6 +1474,7 @@ static const char *CHAVE[] = {
   "cwRetidoTambemLocal",
   "psContinuarLocal",
   "dtsSaidaLocal",
+  "dvMkvLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -2171,6 +2177,7 @@ int ajustes_cw_ordem(void)            { return valor[AJ_CW_ORDEM]; }
 int ajustes_cw_retido_tambem(void)    { return lig(AJ_CW_RETIDO_TAMBEM); }
 int ajustes_ps_continuar(void)        { return lig(AJ_PS_CONTINUAR); }
 int ajustes_dts_ac3(void)             { return valor[AJ_DTS_AC3] == 1; }
+int ajustes_dv_mkv(void)              { return lig(AJ_DV_MKV); }
 // Espaco da Home em fracao do valor medido. Fora da faixa do NUM (arquivo torto)
 // volta para dentro dela; 0 (arquivo sem a chave) nao chega aqui: o padrao e 100.
 float ajustes_espaco_fator(int pct) {
@@ -3781,6 +3788,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_CW_RETIDO_TAMBEM: /* o web nao tem a ilha */
     case AJ_PS_CONTINUAR:   /* o web nao tem este cartao; escolha desta TV */
     case AJ_DTS_AC3:        /* o conversor de DTS e desta TV */
+    case AJ_DV_MKV:         /* o demux e o decoder sao desta TV */
     case AJ_TAM_MAX: case AJ_TAM_MIN: /* o web nao tem a faixa de tamanho */
     case AJ_ESPACO_FILEIRAS: case AJ_ESPACO_TITULOS: /* o web nao tem espacamento */
     case AJ_FONTE_PRAZO:    /* o web nao tem: a rede e os addons sao desta casa */
@@ -4068,6 +4076,8 @@ static void conferirTela(void) {
   for (i = 0; i < AJ_N; i++)
 #if !defined(NV_TPK) && !defined(NV_ANDROID)
     if (i != AJ_GPU_EFEITOS && i != AJ_TRAILER_ZOOM_TPK)
+#else
+    if (i != AJ_DV_MKV)
 #endif
     if (vezes[i] != 1)
       printf("[ajustes] opcao %d (\"%s\") aparece %d vez(es) em TELA\n",
@@ -5035,6 +5045,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_TAM_MIN: return "Na escolha automática, fontes menores que este tamanho ficam para o fim da fila. Se for maior que o tamanho máximo, o mínimo é ignorado. Só vale para arquivos com tamanho conhecido; se só houver fontes fora da faixa, a melhor delas ainda toca.";
     case AJ_DTS_AC3: return "Como o áudio DTS é entregue à TV quando o app o converte (só na LG). Estéreo (AAC) é o modo provado e serve qualquer TV. 5.1 (Dolby Digital) mantém o som surround para barra de som e receiver por ARC/eARC; vale a partir do próximo vídeo.";
     case AJ_PS_CONTINUAR: return "Ligado, cada perfil mostra na escolha de perfil o cartão com o que ele estava assistindo. Desligado, a tela mostra só os perfis.";
+    case AJ_DV_MKV: return "Arquivos MKV em Dolby Vision perfil 5 ou 8 tocam com o Dolby Vision ligado, em vez de HDR10. O áudio Dolby Digital e Dolby Digital Plus vai direto para a TV. Se a conexão não acompanhar, o vídeo continua em HDR10. Só em TVs LG com webOS 4 ou mais novo.";
     case AJ_CW_RETIDO_TAMBEM: return "Quando o título está na ilha ou em Retomar agora, mostra também na fileira Continuar assistindo.";
     case AJ_PLR_CLASSIF: return "Ligado (padrão): no começo do filme, a ilha mostra a classificação indicativa e os avisos do guia parental (violência, nudez, palavrões). Desligado: o player não mostra nada disso.";
     case AJ_RELOGIO_12H: return "Como a hora aparece no relógio, na tela de descanso, no fim do filme e no guia de TV: 18:30 ou 6:30 PM.";
@@ -6711,6 +6722,7 @@ static AjPreview familiaPreviaOpcao(int op) {
   switch (op) {
     case AJ_LEG2_POS: case AJ_LEG2_TAMANHO: case AJ_LEG2_COR: case AJ_LEG2_FUNDO: case AJ_LEG2_BORDA:
     case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: case AJ_LEG_LINGUA: case AJ_LEG_LINGUA2: case AJ_CACHE_SEEK:
+    case AJ_DV_MKV:
     case AJ_LEG_FORCADA:
     case AJ_AUD_LINGUA: case AJ_PAUSA_OVERLAY: case AJ_PLR_CLASSIF: case AJ_FONTE_MANUAL:
     case AJ_FONTE_AUTO: case AJ_FONTE_REPOR: case AJ_FONTE_TEXTO: case AJ_SELOS_CORES:
