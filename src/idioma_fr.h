@@ -3314,6 +3314,7 @@
   T("Painel de Salvos", "Panneau Enregistrés"),
   T("Painel de resultado", "Panneau de résultats"),
   T("Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.", "Panneau affiche un aperçu à côté des options. Liste empile les catégories et les options les unes sous les autres, avec l'explication juste sous la ligne sélectionnée."),
+  T("Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.", "Panneau a l'aperçu à côté ; Liste empile tout l'un sous l'autre."),
   T("Painéis em ilhas, 18 cores, logo novo.", "Panneaux en îlots, 18 couleurs, nouveau logo."),
   T("Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.", "Panneaux, boutons et menus deviennent des îlots translucides qui laissent voir l'image. Désactivé, les mêmes îlots sont opaques. Seul l'aspect change ; rien ne bouge."),
   T("Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.", "Panneaux, boutons et menus deviennent du verre dépoli: fond translucide, bordure fine et focus marqué par un contour blanc, sans lueur colorée. Seul l'aspect change; rien ne bouge."),

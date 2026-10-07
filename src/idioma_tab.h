@@ -3314,6 +3314,7 @@
   { "Painel de Salvos", "Saved panel" },
   { "Painel de resultado", "Results panel" },
   { "Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.", "Panel shows a preview next to the options. List stacks the categories and options one below the other, with the explanation right under the focused row." },
+  { "Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.", "Panel has the preview alongside; List stacks everything one below the other." },
   { "Painéis em ilhas, 18 cores, logo novo.", "Island panels, 18 colors, new logo." },
   { "Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.", "Panels, buttons and menus become translucent islands that let the art show through. Off, the same islands are opaque. Only the look changes; nothing moves." },
   { "Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.", "Panels, buttons and menus turn into frosted glass: translucent fill, a thin border and focus marked by a white outline, with no colored glow. Only the look changes; nothing moves." },

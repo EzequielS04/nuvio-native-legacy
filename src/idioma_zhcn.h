@@ -3315,6 +3315,7 @@
   T("Painel de Salvos", "已保存面板"),
   T("Painel de resultado", "结果面板"),
   T("Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.", "面板在选项旁显示预览。列表把分类和选项上下排列，说明直接显示在选中行的下方。"),
+  T("Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.", "面板在旁边显示预览；列表把所有内容上下排列。"),
   T("Painéis em ilhas, 18 cores, logo novo.", "面板变成岛，18 种颜色，新 Logo。"),
   T("Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.", "面板、按钮和菜单变为可透出背景图的半透明岛。关闭时同样的岛为不透明。只改变外观，位置不变。"),
   T("Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.", "面板、按钮和菜单变成磨砂玻璃质感：半透明填充、细边框，焦点用白色轮廓标示，没有彩色光晕。只改变外观，位置不变。"),

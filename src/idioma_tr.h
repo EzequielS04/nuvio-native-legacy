@@ -3315,6 +3315,7 @@
   T("Painel de Salvos", "Kaydedilenler paneli"),
   T("Painel de resultado", "Sonuç paneli"),
   T("Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.", "Panel, seçeneklerin yanında bir önizleme gösterir. Liste, kategorileri ve seçenekleri alt alta dizer; açıklama seçili satırın hemen altında görünür."),
+  T("Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.", "Panel önizlemeyi yanda gösterir; Liste her şeyi alt alta dizer."),
   T("Painéis em ilhas, 18 cores, logo novo.", "Ada panelleri, 18 renk, yeni logo."),
   T("Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.", "Paneller, düğmeler ve menüler görseli gösteren yarı saydam adacıklara dönüşür. Kapalıyken aynı adacıklar opaktır. Yalnızca görünüm değişir; hiçbir şeyin yeri değişmez."),
   T("Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.", "Paneller, düğmeler ve menüler buzlu cama dönüşür: yarı saydam dolgu, ince kenarlık ve renkli parıltı olmadan beyaz çerçeveyle işaretlenen odak. Yalnızca görünüm değişir; hiçbir şey kaymaz."),

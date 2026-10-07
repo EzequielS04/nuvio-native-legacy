@@ -432,7 +432,7 @@ static int ajEditandoLinha(int op) {
 #define AJ_REGUA_FILA 72.0f
 #define AJ_REGUA_H (4.0f * AJ_REGUA_FILA + 4.0f)
 #define AJ2_FUNDO_BAIXO 237.75f   // 4 + cartao (10 + 150,75 + 10 + 29 + 10) + 24
-static int aj2FocoNaLista(int i) { return i == focoItem && !focoIndice && uxIndice >= 2; }
+static int aj2FocoNaLista(int i) { return i == focoItem && !focoIndice && !uxCabLayout && uxIndice >= 2; }
 // A REGUA EM FILEIRAS: a ordem da TELA (ajustes.c, REGUA_*); o valor gravado
 // continua o indice de V_TEMA. ← → anda na fileira, ↑ ↓ troca de fileira na
 // mesma coluna.

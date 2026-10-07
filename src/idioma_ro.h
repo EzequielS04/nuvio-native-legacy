@@ -3314,6 +3314,7 @@
   T("Painel de Salvos", "Panoul Salvate"),
   T("Painel de resultado", "Panou de rezultate"),
   T("Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.", "Panou arată o previzualizare lângă opțiuni. Listă pune categoriile și opțiunile una sub alta, cu explicația chiar sub rândul selectat."),
+  T("Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.", "Panou are previzualizarea alături; Listă pune totul unul sub altul."),
   T("Painéis em ilhas, 18 cores, logo novo.", "Panouri în insule, 18 culori, logo nou."),
   T("Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.", "Panourile, butoanele și meniurile devin insule translucide care lasă arta să se vadă. Oprit, aceleași insule sunt opace. Se schimbă doar aspectul; nimic nu se mută."),
   T("Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.", "Panourile, butoanele și meniurile devin sticlă mată: fundal translucid, margine subțire și focus marcat printr-un contur alb, fără strălucire colorată. Se schimbă doar aspectul; nimic nu se mută."),

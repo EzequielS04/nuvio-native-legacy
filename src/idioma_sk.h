@@ -3315,6 +3315,7 @@
   T("Painel de Salvos", "Panel Uložených"),
   T("Painel de resultado", "Panel výsledkov"),
   T("Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.", "Panel ukazuje náhľad vedľa možností. Zoznam radí kategórie a možnosti pod seba, s vysvetlením hneď pod vybraným riadkom."),
+  T("Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.", "Panel má náhľad vedľa; Zoznam radí všetko pod seba."),
   T("Painéis em ilhas, 18 cores, logo novo.", "Panely ako ostrovy, 18 farieb, nové logo."),
   T("Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.", "Panely, tlačidlá a ponuky sa stanú priesvitnými ostrovčekmi, cez ktoré vidno obrázok. Vypnuté sú tie isté ostrovčeky nepriehľadné. Mení sa len vzhľad; nič sa nepresúva."),
   T("Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.", "Panely, tlačidlá a ponuky sa zmenia na matné sklo: priesvitná výplň, tenký okraj a fokus označený bielym obrysom, bez farebnej žiary. Mení sa len vzhľad, nič sa nehýbe."),

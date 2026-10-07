@@ -3315,6 +3315,7 @@
   T("Painel de Salvos", "Mentettek panel"),
   T("Painel de resultado", "Eredménypanel"),
   T("Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.", "A Panel előnézetet mutat a lehetőségek mellett. A Lista egymás alá teszi a kategóriákat és a lehetőségeket, a magyarázattal közvetlenül a kijelölt sor alatt."),
+  T("Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.", "A Panel mellette mutatja az előnézetet; a Lista mindent egymás alá tesz."),
   T("Painéis em ilhas, 18 cores, logo novo.", "Szigetpanelek, 18 szín, új logó."),
   T("Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.", "A panelek, gombok és menük áttetsző szigetekké válnak, amelyeken átlátszik a kép. Kikapcsolva ugyanezek a szigetek átlátszatlanok. Csak a megjelenés változik; semmi sem mozdul el."),
   T("Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.", "A panelek, gombok és menük fagyosított üveggé válnak: áttetsző kitöltés, vékony keret, a fókuszt fehér körvonal jelzi, színes ragyogás nélkül. Csak a megjelenés változik, semmi nem mozdul."),

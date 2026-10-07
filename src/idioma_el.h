@@ -3315,6 +3315,7 @@
   T("Painel de Salvos", "Πάνελ Αποθηκευμένα"),
   T("Painel de resultado", "Πάνελ αποτελεσμάτων"),
   T("Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.", "Το Πάνελ δείχνει προεπισκόπηση δίπλα στις επιλογές. Η Λίστα βάζει τις κατηγορίες και τις επιλογές τη μία κάτω από την άλλη, με την εξήγηση ακριβώς κάτω από την επιλεγμένη γραμμή."),
+  T("Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.", "Το Πάνελ έχει την προεπισκόπηση δίπλα· η Λίστα βάζει τα πάντα το ένα κάτω από το άλλο."),
   T("Painéis em ilhas, 18 cores, logo novo.", "Πάνελ ως νησιά, 18 χρώματα, νέο λογότυπο."),
   T("Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.", "Πάνελ, κουμπιά και μενού γίνονται ημιδιαφανή νησάκια που αφήνουν την εικόνα να φαίνεται. Απενεργοποιημένα, τα ίδια νησάκια είναι αδιαφανή. Αλλάζει μόνο η εμφάνιση· τίποτα δεν μετακινείται."),
   T("Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.", "Τα πάνελ, τα κουμπιά και τα μενού γίνονται θαλό γυαλί: ημιδιαφανές γέμισμα, λεπτό περίγραμμα και εστίαση που σημαδεύεται με λευκό περίγραμμα, χωρίς έγχρωμη λάμψη. Αλλάζει μόνο η εμφάνιση· τίποτα δεν μετακινείται."),

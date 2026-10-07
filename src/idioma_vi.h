@@ -3315,6 +3315,7 @@
   T("Painel de Salvos", "Bảng Đã lưu"),
   T("Painel de resultado", "Bảng kết quả"),
   T("Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.", "Bảng hiển thị bản xem trước bên cạnh các tùy chọn. Danh sách xếp các danh mục và tùy chọn từ trên xuống, kèm phần giải thích ngay dưới dòng đang chọn."),
+  T("Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.", "Bảng có bản xem trước bên cạnh; Danh sách xếp mọi thứ từ trên xuống."),
   T("Painéis em ilhas, 18 cores, logo novo.", "Bảng dạng đảo, 18 màu, logo mới."),
   T("Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.", "Bảng, nút và menu thành các đảo trong mờ để hình nền hiện qua. Khi tắt, các đảo đó đục. Chỉ đổi giao diện; không có gì đổi chỗ."),
   T("Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.", "Bảng, nút và menu chuyển thành kính mờ: nền trong mờ, viền mỏng và tiêu điểm được đánh dấu bằng viền trắng, không có ánh sáng màu. Chỉ giao diện thay đổi; không có gì dịch chuyển."),

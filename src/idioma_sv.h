@@ -3315,6 +3315,7 @@
   T("Painel de Salvos", "Panelen Sparat"),
   T("Painel de resultado", "Resultatpanel"),
   T("Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.", "Panel visar en förhandsvisning bredvid alternativen. Lista ställer kategorier och alternativ under varandra, med förklaringen direkt under den markerade raden."),
+  T("Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.", "Panel har förhandsvisningen bredvid; Lista ställer allt under varandra."),
   T("Painéis em ilhas, 18 cores, logo novo.", "Paneler som öar, 18 färger, ny logotyp."),
   T("Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.", "Paneler, knappar och menyer blir genomskinliga öar som låter bilden synas. Av är samma öar ogenomskinliga. Bara utseendet ändras; inget flyttas."),
   T("Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.", "Paneler, knappar och menyer blir frostat glas: genomskinlig fyllning, tunn kant och fokus markerat med en vit kontur, utan färgad glöd. Bara utseendet ändras; inget flyttas."),

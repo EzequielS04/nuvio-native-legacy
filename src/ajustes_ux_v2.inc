@@ -590,6 +590,7 @@ static float aj2CorMedidas(float x, float y, float w, float fim, float a) {
 #define AJ2_G_MAXH  170.0f
 static int guiaNovos(void);
 static float aj2GF[AJ2_NMENU + 1];   // foco animado de cada categoria (indice uxIndice)
+static float aj2CabF;               // #339: foco animado do "Painel | Lista" do cabecalho
 static float aj2TF[AJ2_T_N];         // foco animado de cada alvo do alto
 static GfxRect aj2GradeR(void) {
   float x = aj2X0();
@@ -625,8 +626,10 @@ static const char *aj2TopoIcone(int t) {
   return t == AJ2_T_BUSCA ? "aj_search" : t == AJ2_T_AV ? (lig(AJ_AVANCADAS) ? "aj_eye" : "aj_eye-off")
        : t == AJ2_T_PERFIL ? "aj_user-round" : t == AJ2_T_TOUR ? "aj_sparkles" : "aj_life-buoy";
 }
+static float aj2LayoutSegW(TxtEstilo e, float ico);
 static float aj2TopoLargura(int t) {
   char b[160], d[96];
+  if (t == AJ2_T_LAYOUT) return aj2LayoutSegW(TXT_V3_CHIP_R, 30.0f);
   aj2TopoTexto(t, b, sizeof b, d, sizeof d);
   return 30 + 34 + 16 + (float)txt_largura(t == AJ2_T_BUSCA ? TXT_V3_CHIP_R : TXT_V3_CHIP, b) + (d[0] ? 8 + (float)txt_largura(TXT_V3_CHIP_R, d) : 0) + 32;
 }
@@ -634,12 +637,16 @@ static GfxRect aj2TopoR(int t) {
   GfxRect g = aj2GradeR();
   float cw = aj2GradeColW(), x = g.x + AJ2_G_PAD, y = aj2GradeChipY(), fim = g.x + g.w - AJ2_G_PAD;
   float wb = cw + (cw + AJ2_G_VAO) / 3.0f, wa = aj2TopoLargura(AJ2_T_AV), wp = aj2TopoLargura(AJ2_T_PERFIL);
-  // Em alemao/russo as tres podem nao caber numa fileira: a busca cede primeiro.
-  if (wb + 20 + wa + 20 + wp > fim - x) { wb = fim - x - 40 - wa - wp; if (wb < 300) wb = 300; }
-  if (wb + 20 + wa + 20 + wp > fim - x) { float k = (fim - x - 40 - wb) / (wa + wp); wa *= k; wp *= k; }
+  float wl = aj2TopoLargura(AJ2_T_LAYOUT);
+  // Em alemao/russo as quatro podem nao caber numa fileira: a busca cede
+  // primeiro. O "Painel | Lista" (#339) mora no fim da fileira, encostado a
+  // direita.
+  if (wb + 20 + wa + 20 + wp + 20 + wl > fim - x) { wb = fim - x - 60 - wa - wp - wl; if (wb < 300) wb = 300; }
+  if (wb + 60 + wa + wp + wl > fim - x) { float k = (fim - x - 60 - wb) / (wa + wp + wl); wa *= k; wp *= k; wl *= k; }
   if (t == AJ2_T_BUSCA) return (GfxRect){ x, y, wb, AJ2_G_CHIP };
   if (t == AJ2_T_AV) return (GfxRect){ x + wb + 20, y, wa, AJ2_G_CHIP };
   if (t == AJ2_T_PERFIL) return (GfxRect){ x + wb + 20 + wa + 20, y, wp, AJ2_G_CHIP };
+  if (t == AJ2_T_LAYOUT) return (GfxRect){ fim - wl, y, wl, AJ2_G_CHIP };
   if (t == AJ2_T_TOUR) return (GfxRect){ x, aj2GradeDescY(), 2 * cw + AJ2_G_VAO, AJ2_G_DESC };
   return (GfxRect){ x + 2 * (cw + AJ2_G_VAO), aj2GradeDescY(), cw, AJ2_G_DESC };
 }
@@ -653,6 +660,8 @@ static void aj2GradeAtualizar(float dt) {
     float alvo = focoIndice && uxTopo == j ? 1.0f : 0.0f;
     aj2TF[j] = red ? alvo : aj2Rampa(aj2TF[j], alvo, dt, 140.0f);
   }
+  { float alvo = !focoIndice && uxCabLayout ? 1.0f : 0.0f;
+    aj2CabF = red ? alvo : aj2Rampa(aj2CabF, alvo, dt, 140.0f); }
 }
 static float aj2Suave(float t) { return t * t * (3.0f - 2.0f * t); }
 // A superficie de uma peca da grade: o cinza neutro e, em foco, o acento com o
@@ -678,11 +687,41 @@ static void aj2GradeIcone(const char *ic, float x, float y, float lado, float k)
   if (k < 0.99f) ajIcone(ic, x, y, lado, 0.9f * (1.0f - k));
   if (k > 0.01f) gfx_icone((GfxRect){ x, y, lado, lado }, ic, tinta, tinta, tinta, k);
 }
+// #339: o segmentado "Painel | Lista" (pilula do indice e cabecalho da
+// categoria). Fundo neutro e, em foco, o acento com o halo (a linguagem das
+// pilulas); o lado escolhido ganha uma pilula clara por dentro. Sem
+// animacao: a troca e instantanea, o arranjo inteiro muda junto.
+static const char *aj2LayoutRot(int i) { return i ? "Lista" : "Painel"; }
+static const char *aj2LayoutIco(int i) { return i ? "aj_layout-list" : "aj_layout-dashboard"; }
+static float aj2LayoutSegLado(TxtEstilo e, float ico, int i) { return 22.0f + ico + 10.0f + (float)txt_largura(e, aj2LayoutRot(i)) + 24.0f; }
+static float aj2LayoutSegW(TxtEstilo e, float ico) { return 12.0f + aj2LayoutSegLado(e, ico, 0) + aj2LayoutSegLado(e, ico, 1); }
+static void aj2LayoutSeg(GfxRect r0, TxtEstilo e, float ico, float k) {
+  GfxRect r = aj2GradeSuperficie(r0, r0.h * 0.5f, k, 3.0f, 0.35f);
+  int lista = ajustes_layout_lista(), i;
+  float x = r.x + 6.0f, w0 = aj2LayoutSegW(e, ico), esc = r.w / (w0 > 1 ? w0 : 1);
+  for (i = 0; i < 2; i++) {
+    float lw = aj2LayoutSegLado(e, ico, i) * esc, yc = r.y + r.h * 0.5f, xi = x + 22.0f * esc;
+    GfxRect q = { x, r.y + 6.0f, lw, r.h - 12.0f };
+    // o lado escolhido: branco sobre o neutro; em foco, a tinta do acento (no
+    // acento claro o branco sumiria)
+    if (i == lista) {
+      float ti = ajTinta() / 255.0f;
+      if (k < 0.99f) gfx_cor(q, 0.5f, 1, 1, 1, 0.14f * (1.0f - k));
+      if (k > 0.01f) gfx_cor(q, 0.5f, ti, ti, ti, 0.22f * k);
+    }
+    aj2GradeIcone(aj2LayoutIco(i), xi, yc - ico * 0.5f, ico, k);
+    aj2GradeTexto(e, aj2LayoutRot(i), xi + ico + 10.0f, yc, x + lw - (xi + ico + 10.0f) - 12.0f, i == lista ? 1.0f : 0.55f, k);
+    x += lw;
+  }
+}
 static void aj2GradePilula(int t) {
   float k = aj2Suave(aj2TF[t]);
-  GfxRect r = aj2GradeSuperficie(aj2TopoR(t), AJ2_G_CHIP * 0.5f, k, 3.0f, 0.35f);
+  GfxRect r;
   char b[160], d[96];
-  float x = r.x + 30, yc = r.y + r.h * 0.5f, livre;
+  float x, yc, livre;
+  if (t == AJ2_T_LAYOUT) { aj2LayoutSeg(aj2TopoR(t), TXT_V3_CHIP_R, 30.0f, k); return; }
+  r = aj2GradeSuperficie(aj2TopoR(t), AJ2_G_CHIP * 0.5f, k, 3.0f, 0.35f);
+  x = r.x + 30; yc = r.y + r.h * 0.5f;
   aj2TopoTexto(t, b, sizeof b, d, sizeof d);
   aj2GradeIcone(aj2TopoIcone(t), x, yc - 17, 34, k);
   x += 34 + 16;
@@ -900,6 +939,7 @@ static void aj2DesenharIdxLista(void) {
       if (uxTopo == AJ2_T_BUSCA) desc = "Pelo nome ou pelo que quer mudar";
       else if (uxTopo == AJ2_T_AV) desc = ajudaOpcao(AJ_AVANCADAS);
       else if (uxTopo == AJ2_T_PERFIL) desc = "Perfil em uso nesta TV e o que vale para cada perfil.";
+      else if (uxTopo == AJ2_T_LAYOUT) desc = "Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.";
       else if (uxTopo == AJ2_T_TOUR) desc = "Funções que pouca gente conhece, com OK para ligar cada uma dali mesmo.";
       else if (uxTopo == AJ2_T_RESOLVER) desc = "O que fazer quando algo não funciona, com o ajuste que resolve.";
     }
@@ -923,8 +963,8 @@ static void aj2DesenharGrade(float a) {
   }
   ajIlha(g, 40.0f, 1, 0);
   // As pilulas e os cartoes de descoberta; o em foco por ultimo (halo por cima).
-  for (t = 0; t < AJ2_T_N; t++) if (t != uxTopo || !focoIndice) { if (t <= AJ2_T_PERFIL) aj2GradePilula(t); else aj2GradeDescoberta(t); }
-  if (focoIndice && uxTopo >= 0) { if (uxTopo <= AJ2_T_PERFIL) aj2GradePilula(uxTopo); else aj2GradeDescoberta(uxTopo); }
+  for (t = 0; t < AJ2_T_N; t++) if (t != uxTopo || !focoIndice) { if (t <= AJ2_T_LAYOUT) aj2GradePilula(t); else aj2GradeDescoberta(t); }
+  if (focoIndice && uxTopo >= 0) { if (uxTopo <= AJ2_T_LAYOUT) aj2GradePilula(uxTopo); else aj2GradeDescoberta(uxTopo); }
   if (aj2Lista()) { aj2DesenharIdxLista(); goto fim_grade; }
   // Os grupos: o nome em cima de cada coluna.
   for (gr = 0; gr < 3; gr++) {
@@ -944,6 +984,7 @@ static void aj2DesenharGrade(float a) {
       if (uxTopo == AJ2_T_BUSCA) desc = "Pelo nome ou pelo que quer mudar";
       else if (uxTopo == AJ2_T_AV) desc = ajudaOpcao(AJ_AVANCADAS);
       else if (uxTopo == AJ2_T_PERFIL) desc = "Perfil em uso nesta TV e o que vale para cada perfil.";
+      else if (uxTopo == AJ2_T_LAYOUT) desc = "Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.";
       else if (uxTopo == AJ2_T_TOUR) desc = "Funções que pouca gente conhece, com OK para ligar cada uma dali mesmo.";
       else if (uxTopo == AJ2_T_RESOLVER) desc = "O que fazer quando algo não funciona, com o ajuste que resolve.";
       else if (uxIndice >= 2) {
@@ -1034,6 +1075,13 @@ static void aj2DesenharPagina(float t) {
     if (vb[0]) txt_desenhar_alpha(lv, direita - wv, h.y + h.h * 0.5f - lv.h - (q[0] ? 0 : -lv.h * 0.5f), 0.85f);
     if (q[0]) txt_desenhar_alpha(lq, direita - wq, h.y + h.h * 0.5f + 4.0f, 0.5f);
     direita -= (wq > wv ? wq : wv) + 40.0f; }
+  // #339: o "Painel | Lista" no cabecalho, antes do valor. Cima na primeira
+  // linha chega nele; OK (ou o lado) troca o arranjo na hora.
+  if (uxIndice >= 2) {
+    float sw = aj2LayoutSegW(TXT_V2_24, 26.0f), sh = 60.0f;
+    aj2LayoutSeg((GfxRect){ direita - sw, h.y + (h.h - sh) * 0.5f, sw, sh }, TXT_V2_24, 26.0f, aj2Suave(aj2CabF));
+    direita -= sw + 36.0f;
+  }
   ajKickerAcento(i18n(kick), x + 2.0f, h.y + h.h * 0.5f - 44.0f, 1);
   { TxtLinha tt = ajTxtC(TXT_V2_TIT, nome, direita - x);
     txt_desenhar(tt, x, h.y + h.h * 0.5f - 18.0f); }

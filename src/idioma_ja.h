@@ -3315,6 +3315,7 @@
   T("Painel de Salvos", "保存済みのパネル"),
   T("Painel de resultado", "結果パネル"),
   T("Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.", "パネルはオプションの横にプレビューを表示します。リストはカテゴリとオプションを縦に並べ、選択中の行のすぐ下に説明を表示します。"),
+  T("Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.", "パネルは横にプレビューを表示し、リストはすべてを縦に並べます。"),
   T("Painéis em ilhas, 18 cores, logo novo.", "パネルはアイランドに、18色、新しいロゴ。"),
   T("Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.", "パネル、ボタン、メニューがアートの透ける半透明のアイランドになります。オフでは同じアイランドが不透明に。見た目だけが変わり、配置は変わりません。"),
   T("Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.", "パネル、ボタン、メニューがすりガラス調になります。半透明の塗り、細い縁取り、白い輪郭によるフォーカス表示で、色付きの光は使いません。見た目だけが変わり、配置は変わりません。"),

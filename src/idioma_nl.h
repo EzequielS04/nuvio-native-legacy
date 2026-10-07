@@ -3315,6 +3315,7 @@
   T("Painel de Salvos", "Paneel Bewaard"),
   T("Painel de resultado", "Resultatenpaneel"),
   T("Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.", "Paneel toont een voorbeeld naast de opties. Lijst zet categorieën en opties onder elkaar, met de uitleg direct onder de geselecteerde regel."),
+  T("Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.", "Paneel heeft het voorbeeld ernaast; Lijst zet alles onder elkaar."),
   T("Painéis em ilhas, 18 cores, logo novo.", "Panelen als eilanden, 18 kleuren, nieuw logo."),
   T("Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.", "Panelen, knoppen en menu's worden doorschijnende eilanden waardoor de afbeelding zichtbaar blijft. Uit zijn dezelfde eilanden ondoorzichtig. Alleen het uiterlijk verandert; niets verplaatst."),
   T("Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.", "Panelen, knoppen en menu's worden matglas: doorschijnende vulling, een dunne rand en focus gemarkeerd met een witte omlijning, zonder gekleurde gloed. Alleen het uiterlijk verandert; er beweegt niets."),

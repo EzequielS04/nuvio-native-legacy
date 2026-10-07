@@ -3314,6 +3314,7 @@
   T("Painel de Salvos", "Gespeichert-Panel"),
   T("Painel de resultado", "Ergebnispanel"),
   T("Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.", "Panel zeigt eine Vorschau neben den Optionen. Liste stellt Kategorien und Optionen untereinander, mit der Erklärung direkt unter der ausgewählten Zeile."),
+  T("Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.", "Panel zeigt die Vorschau daneben; Liste stellt alles untereinander."),
   T("Painéis em ilhas, 18 cores, logo novo.", "Panels als Inseln, 18 Farben, neues Logo."),
   T("Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.", "Bedienfelder, Tasten und Menüs werden zu durchscheinenden Inseln, durch die das Bild sichtbar bleibt. Aus sind dieselben Inseln deckend. Nur das Aussehen ändert sich; nichts verschiebt sich."),
   T("Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.", "Panels, Buttons und Menüs werden zu Milchglas: durchscheinender Hintergrund, dünner Rand und Fokus durch eine weiße Kontur, ohne farbiges Leuchten. Es ändert sich nur das Aussehen; nichts wandert."),

@@ -3315,6 +3315,7 @@
   T("Painel de Salvos", "Plošča Shranjeno"),
   T("Painel de resultado", "Plošča rezultatov"),
   T("Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.", "Plošča prikaže predogled ob možnostih. Seznam postavi kategorije in možnosti eno pod drugo, z razlago tik pod izbrano vrstico."),
+  T("Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.", "Plošča ima predogled ob strani; Seznam postavi vse eno pod drugo."),
   T("Painéis em ilhas, 18 cores, logo novo.", "Plošče kot otoki, 18 barv, nov logotip."),
   T("Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.", "Plošče, gumbi in meniji postanejo prosojni otočki, skozi katere se vidi slika. Izklopljeno so isti otočki neprosojni. Spremeni se le videz; nič se ne premakne."),
   T("Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.", "Plošče, gumbi in meniji postanejo motno steklo: prosojno polnilo, tanek rob in fokus, označen z belo obrobo, brez barvnega sijaja. Spremeni se le videz, nič se ne premika."),

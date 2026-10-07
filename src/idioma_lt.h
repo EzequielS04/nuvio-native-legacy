@@ -3315,6 +3315,7 @@
   T("Painel de Salvos", "Išsaugota skydelis"),
   T("Painel de resultado", "Rezultatų skydelis"),
   T("Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.", "Skydelis rodo peržiūrą šalia parinkčių. Sąrašas išdėsto kategorijas ir parinktis vieną po kitos, o paaiškinimas rodomas iškart po pasirinkta eilute."),
+  T("Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.", "Skydelis rodo peržiūrą šalia; Sąrašas viską išdėsto vieną po kito."),
   T("Painéis em ilhas, 18 cores, logo novo.", "Skydeliai kaip salos, 18 spalvų, naujas logotipas."),
   T("Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.", "Skydeliai, mygtukai ir meniu tampa permatomomis salelėmis, pro kurias matosi vaizdas. Išjungus tos pačios salelės nepermatomos. Keičiasi tik išvaizda; niekas nepasislenka."),
   T("Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.", "Skydeliai, mygtukai ir meniu virsta matiniu stiklu: permatomas užpildas, plonas rėmelis ir fokusas, pažymėtas baltu kontūru, be spalvoto švytėjimo. Keičiasi tik išvaizda; niekas nejuda."),

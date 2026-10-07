@@ -3314,6 +3314,7 @@
   T("Painel de Salvos", "Panel de Guardados"),
   T("Painel de resultado", "Panel de resultados"),
   T("Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.", "Panel muestra una vista previa junto a las opciones. Lista pone las categorías y las opciones una debajo de la otra, con la explicación justo debajo de la fila seleccionada."),
+  T("Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.", "Panel tiene la vista previa al lado; Lista pone todo uno debajo del otro."),
   T("Painéis em ilhas, 18 cores, logo novo.", "Paneles en islas, 18 colores, logo nuevo."),
   T("Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.", "Paneles, botones y menús se vuelven islas translúcidas que dejan ver la imagen. Desactivado, las mismas islas son opacas. Solo cambia el aspecto; nada cambia de lugar."),
   T("Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.", "Los paneles, botones y menús se vuelven de cristal esmerilado: fondo translúcido, borde fino y el foco marcado por un contorno blanco, sin brillo de color. Solo cambia el aspecto; nada cambia de lugar."),

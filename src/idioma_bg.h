@@ -3315,6 +3315,7 @@
   T("Painel de Salvos", "Панел Запазено"),
   T("Painel de resultado", "Панел с резултати"),
   T("Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.", "Панел показва преглед до опциите. Списък подрежда категориите и опциите една под друга, с обяснението точно под избрания ред."),
+  T("Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.", "Панел показва прегледа отстрани; Списък подрежда всичко едно под друго."),
   T("Painéis em ilhas, 18 cores, logo novo.", "Панели като острови, 18 цвята, ново лого."),
   T("Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.", "Панелите, бутоните и менютата стават полупрозрачни островчета, през които се вижда картината. Изключено, същите островчета са плътни. Променя се само видът; нищо не се мести."),
   T("Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.", "Панелите, бутоните и менютата се превръщат в матово стъкло: прозрачно запълване, тънка рамка и фокус, отбелязан с бял контур, без цветно сияние. Променя се само видът; нищо не се движи."),

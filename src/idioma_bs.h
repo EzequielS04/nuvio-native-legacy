@@ -3315,6 +3315,7 @@
   T("Painel de Salvos", "Panel Sačuvano"),
   T("Painel de resultado", "Panel rezultata"),
   T("Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.", "Panel prikazuje pregled pored opcija. Lista slaže kategorije i opcije jednu ispod druge, s objašnjenjem odmah ispod odabranog reda."),
+  T("Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.", "Panel ima pregled sa strane; Lista slaže sve jedno ispod drugog."),
   T("Painéis em ilhas, 18 cores, logo novo.", "Paneli kao ostrva, 18 boja, novi logo."),
   T("Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.", "Paneli, dugmad i meniji postaju prozirna ostrva kroz koja se vidi slika. Isključeno, ista ostrva su neprozirna. Mijenja se samo izgled; ništa ne mijenja mjesto."),
   T("Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.", "Paneli, dugmad i meniji pretvaraju se u mat staklo: prozirna ispuna, tanak obrub i fokus označen bijelim rubom, bez obojenog sjaja. Mijenja se samo izgled; ništa se ne pomjera."),

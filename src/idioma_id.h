@@ -3315,6 +3315,7 @@
   T("Painel de Salvos", "Panel Tersimpan"),
   T("Painel de resultado", "Panel hasil"),
   T("Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.", "Panel menampilkan pratinjau di samping opsi. Daftar menyusun kategori dan opsi satu di bawah yang lain, dengan penjelasan tepat di bawah baris yang dipilih."),
+  T("Painel tem a prévia ao lado; Lista põe tudo um embaixo do outro.", "Panel menampilkan pratinjau di samping; Daftar menyusun semuanya dari atas ke bawah."),
   T("Painéis em ilhas, 18 cores, logo novo.", "Panel berbentuk pulau, 18 warna, logo baru."),
   T("Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.", "Panel, tombol, dan menu menjadi pulau tembus pandang yang memperlihatkan gambar. Saat mati, pulau yang sama menjadi buram. Hanya tampilan yang berubah; tidak ada yang berpindah."),
   T("Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.", "Panel, tombol, dan menu berubah menjadi kaca buram: isian tembus pandang, garis tepi tipis, dan fokus ditandai garis tepi putih, tanpa cahaya berwarna. Hanya tampilan yang berubah; tidak ada yang bergeser."),
