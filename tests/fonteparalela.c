@@ -6,6 +6,7 @@
 #include "fonteparalela.h"
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
@@ -31,6 +32,15 @@ static void cena(Cena *c) { memset(c, 0, sizeof *c); pthread_mutex_init(&c->m, N
 static long agora(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec * 1000L + t.tv_nsec / 1000000L; }
 
 static int pronta(int i, void *u) { return ((const int *)u)[i]; }
+
+// 8. `u` no heap, solto pelo ULTIMO fio (fonteparalela_soltando).
+static int soltos;
+static void soltarCena(void *u) {
+  Cena *c = u;
+  pthread_mutex_lock(&c->m); soltos++; pthread_mutex_unlock(&c->m);
+  pthread_mutex_destroy(&c->m);
+  free(c);
+}
 
 int main(void) {
   int fila[8] = { 0, 1, 2, 3, 4, 5, 6, 7 }, tocadas, r;
@@ -92,6 +102,22 @@ int main(void) {
     CONFERE(fonteparalela_prefixo(f3, 4, 3, pronta, cache) == 0, "primeira fora do cache: nada em paralelo");
     CONFERE(fonteparalela_prefixo(f4, 3, 3, pronta, cache) == 1, "uncached no meio corta o prefixo (a seguinte nao pula a fila)");
     CONFERE(fonteparalela_prefixo(fila, 8, 9, pronta, tudo) == FONTEPARALELA_MAX, "teto FONTEPARALELA_MAX"); }
+
+  // 8. A funcao volta com a primeira que serve, mas a segunda ainda confere e
+  // ainda usa `u`. Com u na pilha de quem chamou (o que streams.c fazia), o fio
+  // lia e escrevia num quadro desfeito. soltarU tem de vir so depois do ultimo
+  // fio, e uma vez. Com SANITIZE=1, um free antes da hora vira
+  // heap-use-after-free aqui mesmo.
+  { Cena *h = malloc(sizeof *h);
+    cena(h); h->boa[0] = 1; h->boa[1] = 1; h->ms[1] = 300;
+    soltos = 0;
+    r = fonteparalela_soltando(fila, 2, 2, verificar, falhou, h, &tocadas, 0, soltarCena);
+    CONFERE(r == 0 && soltos == 0, "volta com a primeira e nao solta u com fio no ar (r=%d soltos=%d)", r, soltos);
+    usleep(600000);
+    CONFERE(soltos == 1, "u solto uma vez, depois do ultimo fio (soltos=%d)", soltos);
+    soltos = 0;
+    r = fonteparalela_soltando(fila, 0, 2, verificar, falhou, NULL, &tocadas, 0, NULL);
+    CONFERE(r == -1, "fila vazia sem soltarU"); }
 
   if (falhas) { printf("fonteparalela: %d falha(s)\n", falhas); return 1; }
   printf("fonteparalela: ok\n");

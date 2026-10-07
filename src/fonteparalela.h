@@ -29,6 +29,16 @@
 int fonteparalela(const int *fila, int n, int k, FonteVerificar verificar,
                   FonteFalhou falhou, void *u, int *tocadas, unsigned prazoMs);
 
+// A MESMA, para quando `u` tem de viver ate o ULTIMO fio terminar. Os fios que
+// ainda conferem quando a funcao volta continuam usando `u`; com `u` na pilha de
+// quem chamou, eles liam e escreviam num quadro ja desfeito (o ASAN pegou no
+// Mac: SEGV em verificarOuParar lendo a Conferencia de stream_primeira_boa,
+// cujo fio ja tinha acabado). soltarU(u), se nao NULL, e chamada UMA vez, no
+// fio que soltar a ultima referencia, depois que nenhum fio usa mais `u`.
+int fonteparalela_soltando(const int *fila, int n, int k, FonteVerificar verificar,
+                           FonteFalhou falhou, void *u, int *tocadas, unsigned prazoMs,
+                           void (*soltarU)(void *u));
+
 // Quantas das primeiras da fila entram na conferencia conjunta: o PREFIXO de
 // fila[] (ate `max`) em que pronta(fila[i]) e verdadeiro — fontes ja em cache no
 // debrid. A primeira que nao esta pronta corta a corrida: dai em diante tudo e

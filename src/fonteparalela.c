@@ -16,6 +16,7 @@ struct Par {
   FonteVerificar ver;
   FonteFalhou fal;
   void *u;
+  void (*soltarU)(void *u);
   Item item[FONTEPARALELA_MAX];
 };
 
@@ -25,6 +26,7 @@ static void soltar(Par *p) {
   resto = --p->refs;
   pthread_mutex_unlock(&p->m);
   if (!resto) {
+    if (p->soltarU) p->soltarU(p->u);
     pthread_mutex_destroy(&p->m);
     pthread_cond_destroy(&p->cv);
     free(p);
@@ -46,20 +48,26 @@ static void *trabalho(void *a) {
 
 int fonteparalela(const int *fila, int n, int k, FonteVerificar verificar,
                   FonteFalhou falhou, void *u, int *tocadas, unsigned prazoMs) {
+  return fonteparalela_soltando(fila, n, k, verificar, falhou, u, tocadas, prazoMs, NULL);
+}
+
+int fonteparalela_soltando(const int *fila, int n, int k, FonteVerificar verificar,
+                           FonteFalhou falhou, void *u, int *tocadas, unsigned prazoMs,
+                           void (*soltarU)(void *u)) {
   Par *p;
   int q, venceu = -1;
   struct timespec fim;
   if (tocadas) *tocadas = 0;
-  if (!fila || n < 1 || !verificar) return -1;
+  if (!fila || n < 1 || !verificar) { if (soltarU) soltarU(u); return -1; }
   if (k > n) k = n;
   if (k > FONTEPARALELA_MAX) k = FONTEPARALELA_MAX;
-  if (k < 1) return -1;
+  if (k < 1) { if (soltarU) soltarU(u); return -1; }
   p = calloc(1, sizeof *p);
-  if (!p) return -1;
+  if (!p) { if (soltarU) soltarU(u); return -1; }
   pthread_mutex_init(&p->m, NULL);
   pthread_cond_init(&p->cv, NULL);
   p->k = k; p->refs = 1 + k;
-  p->ver = verificar; p->fal = falhou; p->u = u;
+  p->ver = verificar; p->fal = falhou; p->u = u; p->soltarU = soltarU;
   for (q = 0; q < k; q++) {
     pthread_t t;
     p->item[q].p = p; p->item[q].q = q; p->item[q].indice = fila[q];
