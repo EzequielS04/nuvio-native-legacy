@@ -174,6 +174,8 @@ int ajustes_idioma_ingles(void);
 // _tick: por quadro, recolhe o locale da webOS, que chega de um fio.
 void ajustes_idioma_auto_iniciar(void (*aoMudar)(const char *codigo, int fonte, int notificar));
 void ajustes_idioma_auto_tick(void);
+void ajustes_log_vazar_tudo(void);   // saida do app: nada pendente fica sem sair
+void ajustes_log_vazar(void);   // imprime as rajadas de mudanca paradas (a cada quadro)
 
 // COR DO ANEL DE FOCO, escolhida em "Cor de destaque" ou herdada da conta
 // (selected_theme). Um "tema" neste app e so isto: ver TEMA_ACENTO em

@@ -114,6 +114,7 @@ static void aoSinalTerminar(int sig) {
   (void)sig;
   trailer_fechar();
   video_encerrar();
+  ajustes_log_vazar_tudo();
   fflush(stdout);
   _exit(0);
 }
@@ -1615,6 +1616,7 @@ int main(int argc, char **argv) {
         printf("[esmaecer] %s\n", escuro ? "tela quase apagada (estagio 2)" : "acordou");
         fflush(stdout);
       } }
+    ajustes_log_vazar();
     ajustes_idioma_auto_tick();   // locale da TV (webOS): chega de um fio
     corviva_quadro(dt, ajustes_cor_viva(), ajustes_cor_logo(),
                    ajustes_animacoes_reduzidas());
@@ -2012,6 +2014,7 @@ int main(int argc, char **argv) {
   // Motor P2P embutido: cancela e espera o destroy por ate P2PM_SAIDA_MS; o
   // cache so e apagado depois do destroy (ou no proximo inicio). No-op sem motor.
   p2pmotor_saida();
+  ajustes_log_vazar_tudo();
   corviva_gravar_se_preciso(1);
   tex_encerrar();
   txt_encerrar();

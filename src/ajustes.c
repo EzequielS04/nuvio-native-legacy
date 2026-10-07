@@ -3,6 +3,7 @@
 // cancela. A lista mostra valor e chevron, a ficha explica alcance e padrao.
 // IDs, chaves persistidas e indices de valores continuam os legados.
 #include "ajustes.h"
+#include "ajlog.h"
 #include "horafmt.h"
 #include "ajustes_ux.h"
 #include "trailerfonte.h"   // NV_TRAILER_CONTINUA_DETALHE, nas ajudas do trailer
@@ -1642,6 +1643,33 @@ static const int valorPadrao[] = {
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
+// LOG DE MUDANCA (ajlog.h): gravar() e o unico lugar por onde todo valor muda de
+// verdade, entao ele compara `valor[]` com o que gravou da ultima vez. A origem
+// so existe quando o caminho que chamou diz quem mexeu (ajustes, central,
+// primeira); sem ela (carga, migracao, conta, espelhos) so a sombra se atualiza.
+static int ajSombra[AJ_N];
+static int ajSombraOk;
+static int ajOrigem;   // AjlogOrigem; 0 = silencioso
+static void ajSombraSync(void) { memcpy(ajSombra, valor, sizeof ajSombra); ajSombraOk = 1; }
+static void ajLogDiff(void) {
+  int i;
+  Uint32 agora = SDL_GetTicks();
+  if (!ajSombraOk) { ajSombraSync(); return; }
+  for (i = 0; i < AJ_N; i++) {
+    if (ajSombra[i] == valor[i]) continue;
+    // Espelhos recalculados por quadro: nao sao escolha de ninguem.
+    if (i != AJ_PERFIL_PESQ && i != AJ_FONTE_REGEX_MODELO && ajOrigem && CHAVE[i] && CHAVE[i][0] != '-' &&
+        OPCOES[i].tipo != OP_LEITURA && OPCOES[i].tipo != OP_ACAO)
+      ajlog_mudou(CHAVE[i], ajSombra[i], valor[i], (AjlogOrigem)ajOrigem, agora);
+  }
+  ajSombraSync();
+}
+void ajustes_log_vazar(void) { ajlog_vazar(SDL_GetTicks()); }
+void ajustes_log_vazar_tudo(void) { ajlog_vazar_tudo(); }
+// Roda `chamada` com a origem marcada e a devolve ao silencio.
+#define AJ_COM_ORIGEM(o, chamada) do { ajOrigem = (o); chamada; ajOrigem = 0; } while (0)
+
+
 
 // Pedido de abrir a lista de addons, lido e zerado pelo app.c. A tela nao e
 // aberta daqui porque quem troca de tela e o app.c — ajustes.c nao conhece as
@@ -1799,7 +1827,7 @@ int ajustes_descanso_fonte(void)   { int v = valor[AJ_DESCANSO_FONTE]; return v 
 // #202: -1 = ultimo modo usado; 0..7 = PlrAspecto a aplicar ao abrir o video.
 int ajustes_proporcao_padrao(void) { int v = valor[AJ_PROPORCAO_PADRAO]; return v < 1 || v > 8 ? -1 : v - 1; }
 int ajustes_brilho_player(void)    { int v = valor[AJ_BRILHO_PLAYER]; return v < 0 || v > 3 ? 1 : v; }
-void ajustes_espelhar_enquetes(int ligado) { int n = ligado ? 0 : 1; if (valor[AJ_ENQUETES] != n) { valor[AJ_ENQUETES] = n; gravar(); } }
+void ajustes_espelhar_enquetes(int ligado) { int n = ligado ? 0 : 1; if (valor[AJ_ENQUETES] != n) { valor[AJ_ENQUETES] = n; AJ_COM_ORIGEM(AJLOG_CENTRAL, gravar()); } }
 int ajustes_fonte_hdr(void)        { int v = valor[AJ_FONTE_HDR]; return v < 0 || v > 2 ? 0 : v; }
 int ajustes_fonte_texto_addon(void)   { return valor[AJ_FONTE_TEXTO] == 1; }
 // "Logo do titulo" (dono, 03/10, em teste): o layout do Nuvio com a logo do
@@ -1970,7 +1998,7 @@ int ajustes_saida_player_home(void) { return lig(AJ_RELOGIO) && valor[AJ_SAIDA_P
 int ajustes_manter_video(void) { return ajustes_saida_player_home() && lig(AJ_MANTER_VIDEO) && !SEGURO; }
 int ajustes_selo_visto(void) { return lig(AJ_SELO_VISTO); }
 static void riscoNotar(int op, int antes);
-void ajustes_definir_vidro(int ligado) { int a = valor[AJ_VIDRO]; valor[AJ_VIDRO] = ligado ? 0 : 1; gravar(); riscoNotar(AJ_VIDRO, a); }
+void ajustes_definir_vidro(int ligado) { int a = valor[AJ_VIDRO]; valor[AJ_VIDRO] = ligado ? 0 : 1; AJ_COM_ORIGEM(AJLOG_CENTRAL, gravar()); riscoNotar(AJ_VIDRO, a); }
 #ifdef __EMSCRIPTEN__
 // .wgt: o navegador nao abre socket TCP/UDP (motor impossivel) e o P2P fica
 // escondido la (ajustes_ux_tela.inc), inclusive o do servidor Stremio
@@ -1983,7 +2011,7 @@ int ajustes_p2p_ligado(void) { return lig(AJ_P2P_LIGADO) && !SEGURO; }
 // jellyfin_disponivel() e 0 la). Fica FORA do #ifdef acima: dentro do #else ela
 // sumia do WASM e o link do .wgt falhava (app.c e descoberta.c a chamam).
 int ajustes_jellyfin_ligado(void) { return lig(AJ_JF_LIGADO) && jellyfin_disponivel(); }
-void ajustes_definir_p2p_ligado(int ligado) { int a = valor[AJ_P2P_LIGADO]; valor[AJ_P2P_LIGADO] = ligado ? 0 : 1; gravar(); riscoNotar(AJ_P2P_LIGADO, a); }
+void ajustes_definir_p2p_ligado(int ligado) { int a = valor[AJ_P2P_LIGADO]; valor[AJ_P2P_LIGADO] = ligado ? 0 : 1; AJ_COM_ORIGEM(AJLOG_CENTRAL, gravar()); riscoNotar(AJ_P2P_LIGADO, a); }
 
 // Cor do ANEL DE FOCO. Ver TEMA_ACENTO: um tema aqui e so isto.
 //
@@ -2124,12 +2152,12 @@ int ajustes_salvos_no_simkl(void)     { return valor[AJ_SALVOS_DEST] == AJ_SALVO
 // desligou a TV nao deve ser perguntado de novo.
 void ajustes_definir_salvos_no_trakt(int noTrakt) {
   valor[AJ_SALVOS_DEST] = noTrakt ? 1 : 0;
-  gravar();
+  AJ_COM_ORIGEM(AJLOG_PRIMEIRA, gravar());
 }
 void ajustes_definir_salvos_destino(int destino) {
   if (destino < AJ_SALVOS_LOCAL || destino > AJ_SALVOS_SIMKL) return;
   valor[AJ_SALVOS_DEST] = destino;
-  gravar();
+  AJ_COM_ORIGEM(AJLOG_CENTRAL, gravar());
   desc_repetir();   // o mesmo que a linha de Ajustes faz ao mudar
 }
 int ajustes_data_completa(void)       { return lig(AJ_DET_DATA_CHEIA); }
@@ -2148,8 +2176,8 @@ int   ajustes_livetv_resolucao(void)  { return valor[AJ_LIVETV_RES]; }
 int   ajustes_livetv_formato(void)    { return valor[AJ_LIVETV_FORMATO]; }
 int   ajustes_livetv_modo(void)       { return valor[AJ_LIVETV_MODO]; }
 int   ajustes_livetv_proxy(void)      { return lig(AJ_LIVETV_PROXY); }
-void  ajustes_livetv_aplicar_proxy(int l) { valor[AJ_LIVETV_PROXY] = l ? 0 : 1; gravar(); }
-void  ajustes_livetv_aplicar_modo(int m) { if (m >= 0 && m < 3) { valor[AJ_LIVETV_MODO] = m; gravar(); } }
+void  ajustes_livetv_aplicar_proxy(int l) { valor[AJ_LIVETV_PROXY] = l ? 0 : 1; AJ_COM_ORIGEM(AJLOG_CENTRAL, gravar()); }
+void  ajustes_livetv_aplicar_modo(int m) { if (m >= 0 && m < 3) { valor[AJ_LIVETV_MODO] = m; AJ_COM_ORIGEM(AJLOG_CENTRAL, gravar()); } }
 unsigned ajustes_livetv_espera_ms(void) {
   return valor[AJ_LIVETV_ESPERA] == 1 ? 25000u : valor[AJ_LIVETV_ESPERA] == 2 ? 45000u : 0u;
 }
@@ -2157,7 +2185,7 @@ void  ajustes_livetv_aplicar(int resolucao, int formato, int espera) {
   if (resolucao >= 0 && resolucao < 5) valor[AJ_LIVETV_RES] = resolucao;
   if (formato >= 0 && formato < 3) valor[AJ_LIVETV_FORMATO] = formato;
   if (espera >= 0 && espera < 3) valor[AJ_LIVETV_ESPERA] = espera;
-  gravar();
+  AJ_COM_ORIGEM(AJLOG_CENTRAL, gravar());
 }
 // valor[] guarda decimos de segundo, preso ao intervalo de OPCOES (o disco
 // pode trazer qualquer numero).
@@ -2190,7 +2218,7 @@ int  ajustes_trailer_cartaz(void) {
   // inativa() vem bem mais abaixo no arquivo.
   return lig(AJ_FOCO_TRAILER) && !SEGURO && (lig(AJ_EXPANDIR) || valor[AJ_LANDSCAPE] == 0);
 }
-void ajustes_definir_envio_auto(int ligado) { valor[AJ_ENVIO_AUTO] = ligado ? 0 : 1; gravar(); }
+void ajustes_definir_envio_auto(int ligado) { valor[AJ_ENVIO_AUTO] = ligado ? 0 : 1; AJ_COM_ORIGEM(AJLOG_CENTRAL, gravar()); }
 // ARTE DO DESTAQUE ESCOLHIDA PELO DIAGNOSTICO, e so depois de a pessoa ver a
 // proposta na tela e apertar OK no botao (diagnostico.c): nunca sozinho. Os
 // dois ajustes sao locais (ver somenteDesteAparelho), entao nao ha blob de conta para
@@ -2199,7 +2227,7 @@ void ajustes_definir_destaque(int fonte, int diferente) {
   if (fonte >= 0 && fonte < (int)(sizeof V_HERO_FONTE / sizeof *V_HERO_FONTE))
     valor[AJ_HERO_FUNDO] = fonte;
   valor[AJ_HERO_ARTE_DIF] = diferente ? 0 : 1;
-  gravar();
+  AJ_COM_ORIGEM(AJLOG_CENTRAL, gravar());
 }
 int ajustes_notas_home(void)          { return valor[AJ_NOTAS_HOME] == 0; }
 int ajustes_local_descobrir(void)     { return valor[AJ_DESCOBRIR]; }
@@ -2940,6 +2968,7 @@ void ajustes_dir(const char *dir) {
   if (!f) {
     // Nunca gravou nada: o idioma nasce automatico (o padrao de valor[]).
     valor[AJ_IDIOMA] = 0;
+    ajSombraSync();
     return;
   }
   { int viuIdioma = 0, viuAuto = 0, idiomaGravado = IDIOMA_EN, autoGravado = 0;
@@ -3108,6 +3137,7 @@ void ajustes_dir(const char *dir) {
   // de Ajustes e aberta. tex_iniciar ja rodou (main.c); isto so o corrige.
   if (valor[AJ_TEX_MB] > 0) tex_definir_orcamento_mb(ajustes_tex_mb());
   pstAplicar();
+  ajSombraSync();   // o que veio do disco nao e mudanca de ninguem
 }
 
 static int gravar(void) {
@@ -3145,6 +3175,7 @@ static int gravar(void) {
   // OUTRO modulo pedisse — e num app que so navegou, ate o proximo arranque,
   // onde voltava ao padrao. Na LG o disco e real e nada disto acontecia.
   dados_marcar_sujo(0);
+  ajLogDiff();
   // Provedor de poster ou idioma da interface mudaram? So reconfigura se a
   // configuracao final for outra (reconfigurar zera a memoria de falhas).
   pstAplicar();
@@ -4267,7 +4298,7 @@ int ajustes_iniciar(void) {
   rotulosDeIdioma();
   return 1;
 }
-void ajustes_encerrar(void) { uxCancelar(); uxRetornarOp = -1; guiaFechar(); }
+void ajustes_encerrar(void) { uxCancelar(); uxRetornarOp = -1; guiaFechar(); ajlog_vazar_tudo(); }
 int ajustes_quer_sair(void) { return sair; }
 
 // Valor das linhas so de leitura. O espaco em disco NAO e um numero inventado:
@@ -6010,6 +6041,7 @@ static const char *FR_ALFA_REGEX =
 // de efeitos colaterais para manter iguais.
 // Uma escolha final: persiste uma vez antes dos efeitos externos. Navegar no
 // seletor nunca passa por aqui, inclusive para idiomas e limite de fileiras.
+static int ajOrigemDireto = AJLOG_AJUSTES;   // quem chamou: a tela, ou a Central via ajustes_rapido_passo
 static int definirValorDireto(int op, int novo) {
   int antes;
   if (op < 0 || op >= AJ_N ||
@@ -6022,7 +6054,7 @@ static int definirValorDireto(int op, int novo) {
   antes = valor[op];
   if (novo == antes) return 1;
   valor[op] = novo;
-  if (!gravar()) { valor[op] = antes; return 0; }
+  { int ok; ajOrigem = ajOrigemDireto; ok = gravar(); ajOrigem = 0; if (!ok) { valor[op] = antes; return 0; } }
   if (op == AJ_FIL_LIMITE) {
     fil_ajustar_limite(novo);
     valor[op] = fil_limite_gravado();
@@ -6052,6 +6084,7 @@ static int definirValorDireto(int op, int novo) {
   // Modelo de regex (#202): escolher um troca o padrao; "Personalizado" so
   // deixa o padrao como esta.
   if (op == AJ_FONTE_REGEX_MODELO && novo > 0) fonteregra_definir_regex(fonteregra_modelo(novo));
+  ajSombra[op] = valor[op];   // espelhos acima (limite, pacote) ja valem como gravados
   sync_proteger_ajustes_locais();
   return 1;
 }
@@ -7354,5 +7387,5 @@ const char *ajustes_rapido_valor(int op) { return op >= 0 && op < AJ_N ? textoVa
 int ajustes_rapido_ligado(int op) { return op >= 0 && op < AJ_N && ehInterruptor(op) ? lig(op) : -1; }
 int ajustes_rapido_passo(int op, int dir) {
   if (op < 0 || op >= AJ_N) return 0;
-  return definirValorDireto(op, passoAdiante(op, dir < 0 ? -1 : 1));
+  { int r; ajOrigemDireto = AJLOG_CENTRAL; r = definirValorDireto(op, passoAdiante(op, dir < 0 ? -1 : 1)); ajOrigemDireto = AJLOG_AJUSTES; return r; }
 }
