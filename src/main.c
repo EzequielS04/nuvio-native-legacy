@@ -1,5 +1,6 @@
 // Bootstrap: janela, contexto GL, loop e telemetria. Toda a UI vive nos modulos.
 #include "app_id.h"
+#include "arranque.h"
 #ifdef NV_DTS_DEBUG
 #include "dts/dts_engine.h"
 #include "dts/dts_pipeline.h"
@@ -722,6 +723,8 @@ int main(int argc, char **argv) {
 #endif
                if (freopen(log, "w", stdout)) { fflush(stderr); dup2(fileno(stdout), fileno(stderr)); } } }
   setvbuf(stdout, NULL, _IOLBF, 0);
+  arranque_etapa("main");
+  arranque_relatar();
 #ifdef NV_DTS_DEBUG
   printf("[dts-debug] appId=%s engine=%d nativeAdapter=%d; diagnostic build, TV validation pending\n",
          NV_APP_ID, dts_engine_available(), dts_pipeline_available(0));
@@ -768,6 +771,7 @@ int main(int argc, char **argv) {
   SDL_SetHint(SDL_HINT_EMSCRIPTEN_ASYNCIFY, "0");
 #endif
   NV_ETAPA("SDL_Init");
+  arranque_etapa("SDL_Init");
   if (SDL_Init(SDL_INIT_VIDEO) != 0) { printf("SDL_Init: %s\n", SDL_GetError()); return 1; }
   IMG_Init(IMG_INIT_JPG | IMG_INIT_PNG);
   // Antes de qualquer fio: ver nv_blindar_formatos em sdlcompat.h (issue #65).
@@ -1170,6 +1174,7 @@ int main(int argc, char **argv) {
   printf("[arranque] gfx_iniciar (compila os shaders)\n"); fflush(stdout);
   marco("gfx_iniciar");
   NV_ETAPA("gfx_iniciar (shaders)");
+  arranque_etapa("gfx_iniciar");
   if (!gfx_iniciar()) { printf("[arranque] gfx_iniciar FALHOU\n"); fflush(stdout); return 1; }
   printf("[arranque] gfx_iniciar ok\n"); fflush(stdout);
   // A marca da abertura (#213), ANTES do primeiro quadro: ele ja nasce com ela,
@@ -1247,6 +1252,7 @@ int main(int argc, char **argv) {
   traktauth_carregar_perfil(perfis_ativo());
   simklauth_carregar_perfil(perfis_ativo());
   NV_ETAPA("app_iniciar");
+  arranque_etapa("app_iniciar");
   if (!app_iniciar(dirArte)) return 1;
   NV_ETAPA("addons/catalogo");
   // Cor viva: a paleta da ultima cena volta ANTES do primeiro quadro, entao
@@ -1708,7 +1714,7 @@ int main(int argc, char **argv) {
     // Bandeira PROPRIA e nao `if (!quadros)`: `quadros` zera a cada relatorio
     // de 3 s, entao aquilo carimbaria "primeiro quadro" tres vezes por minuto.
     { static int jaCarimbou;
-      if (!jaCarimbou) { jaCarimbou = 1; nvPrimeiroQuadroFeito = 1; marco("primeiro quadro na tela");
+      if (!jaCarimbou) { jaCarimbou = 1; nvPrimeiroQuadroFeito = 1; arranque_etapa("quadro-1"); marco("primeiro quadro na tela");
         NV_ETAPA("pronto");
 #ifdef __EMSCRIPTEN__
         // Chegou: zera o contador de arranques falhados (tizen-shell.html).
