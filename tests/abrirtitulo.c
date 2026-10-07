@@ -14,7 +14,8 @@
 //      (id do TMDB -> IMDb), e a ficha vem num unico /meta depois.
 //
 //   bash tests/abrirtitulo.sh
-int ajustes_busca_cinemeta(void) { return 1; }
+static int cinemetaLig = 1;
+int ajustes_busca_cinemeta(void) { return cinemetaLig; }
 #include "../src/descoberta.c"
 Uint32 SDL_GetTicks(void) { return 0; }
 #include "../src/progresso.h"
@@ -304,6 +305,15 @@ static int nMeta(void) {
 }
 
 int main(void) {
+  // "Buscar no Cinemeta" desligado: nada do addon Cinemeta na busca (alvos e fileiras locais).
+  cinemetaLig = 1;
+  assert(!desc_busca_base_oculta("https://v3-cinemeta.strem.io"));
+  cinemetaLig = 0;
+  assert(desc_busca_base_oculta("https://v3-cinemeta.strem.io"));
+  assert(desc_busca_base_oculta("https://Cinemeta-Live.example.com/x"));
+  assert(!desc_busca_base_oculta("https://addon.example.com") && !desc_busca_base_oculta("") && !desc_busca_base_oculta(NULL));
+  cinemetaLig = 1;
+
   pthread_t th;
   double t0, tB;
   nFake = 0; nRotas = 0; addonMeta = 0; fakeSoCinemeta = 0; fakeTmdbBasico = 1;

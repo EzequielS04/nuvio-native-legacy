@@ -36,6 +36,7 @@ static const char *ajVisualIcone(int op) {
     case AJ_RAIL_BLUR: return "aj_panel-left";
     case AJ_DESCOBRIR: return "aj_panel-left";
     case AJ_PS_FUNDO: return "aj_users";
+    case AJ_PS_CONTINUAR: return "aj_users";
     case AJ_EXPANDIR: return "aj_maximize-2";
     case AJ_EXPANDIR_ATRASO: return "aj_clock";
     case AJ_BORDA_FOCO: return "aj_maximize-2";

@@ -117,6 +117,7 @@ typedef struct {
   GLuint tex;          // so e consultada no update
 } PSCont;
 static PSCont contCard[CONTA_PERFIL_MAX];
+static int contQuer = 1;   // ultimo valor de ajustes_ps_continuar() visto por contAtualizar
 static int contN = -1;
 static int muralPartN;
 static int muralBurstN;
@@ -579,15 +580,20 @@ static void contMontar(PSCont *k) {
 }
 
 static void contAtualizar(void) {
-  int i, m = perfis_n();
-  if (contN != m) {
-    perfilcont_registrar();
+  int i, m = perfis_n(), quer = ajustes_ps_continuar();
+  // #303: "Continuar na escolha de perfil" desligado = nenhum cartao montado
+  // (nem a textura do cartaz pedida). Trocar o ajuste refaz o conjunto.
+  if (contN != m || quer != contQuer) {
     memset(contCard, 0, sizeof contCard);
-    for (i = 0; i < m && i < CONTA_PERFIL_MAX; i++) {
-      contCard[i].tem = perfilcont_de(perfis_item(i), &contCard[i].c);
-      if (contCard[i].tem) contMontar(&contCard[i]);
+    if (quer) {
+      perfilcont_registrar();
+      for (i = 0; i < m && i < CONTA_PERFIL_MAX; i++) {
+        contCard[i].tem = perfilcont_de(perfis_item(i), &contCard[i].c);
+        if (contCard[i].tem) contMontar(&contCard[i]);
+      }
     }
     contN = m;
+    contQuer = quer;
   }
   // O pedido de textura fica aqui (o desenho so le GLuint), e so para quem esta
   // aparecendo ou sumindo.

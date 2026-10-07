@@ -381,6 +381,7 @@ static void montarTitulos(const char *alvo) {
   for (r = 0; r < cat_n_fileiras() && nc < 64; r++) {
     const CatFileira *cf = cat_fileira(r);
     if (!cf) break;
+    if (desc_busca_base_oculta(cf->base)) continue;   // "Buscar no Cinemeta" desligado
     for (i = 0; i < cf->n && nc < 64; i++) {
       const CatItem *ci = cat_item(cf->ini + i);
       int p, k, dup = 0;

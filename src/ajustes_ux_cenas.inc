@@ -238,7 +238,7 @@ static void ajcCenaPerfis(int op) {
     if (i == f) ajc_foco(cx - d * 0.5f, cy - d * 0.5f, d, d, d * 0.5f, 1);
     ajc_barra(cx - 30, cy + 64, 60, i == f ? 0.8f : 0.35f);
   }
-  if (op == AJ_PS_FUNDO) ajcChaveCanto(ajcLig(op));
+  if (op == AJ_PS_FUNDO || op == AJ_PS_CONTINUAR) ajcChaveCanto(ajcLig(op));
 }
 // Pagina do titulo: o fundo, o "logo", meta, notas e botoes.
 static void ajcCenaTitulo(int op) {
@@ -808,7 +808,7 @@ static void ajcCenaIcone(int op, int sec) {
 static void ajcCenaOpcao(int sec, int op) {
   switch (op) {
     case AJ_HOME_LAYOUT: ajcCenaLayouts(); return;
-    case AJ_PS_FUNDO: ajcCenaPerfis(op); return;
+    case AJ_PS_FUNDO: case AJ_PS_CONTINUAR: ajcCenaPerfis(op); return;
     case AJ_TEMA: case AJ_COR_LOGO: ajcCenaCor(op); return;
     case AJ_FUNDO: ajcCenaFundo(); return;
     case AJ_VIDRO: case AJ_VIDRO_CONTORNO: case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO: ajcCenaVidro(op); return;

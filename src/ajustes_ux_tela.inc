@@ -18,7 +18,7 @@ static const Item TELA[] = {
       OPC(AJ_RAIL_MODERNA), OPC(AJ_RAIL), OPC(AJ_MENU_EXPLORAR),
       OPC(AJ_MENU_GUIA), OPC(AJ_MENU_AGENDA), OPC(AJ_MENU_PERFIL),
       OPC(AJ_RAIL_BLUR), OPC(AJ_DESCOBRIR),
-    ROT("Escolha de perfil"), OPC(AJ_PS_FUNDO),
+    ROT("Escolha de perfil"), OPC(AJ_PS_FUNDO), OPC(AJ_PS_CONTINUAR),
 
   SEC("Página do título", "O que aparece, notas e dados do título", "aj_file-text"),
     ROT("O que aparece"),

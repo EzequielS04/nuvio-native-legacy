@@ -468,6 +468,7 @@ static void refiltrar(void) {
   for (int r = 0; r < nCat && nFil < BU_MAX_FILEIRAS; r++) {
     const CatFileira *cf = cat_fileira(r);
     if (!cf) break;
+    if (desc_busca_base_oculta(cf->base)) continue;   // "Buscar no Cinemeta" desligado
     int achou = 0;
     for (int i = 0; i < cf->n && achou < BU_MAX_POR_FIL; i++) {
       const CatItem *ci = cat_item(cf->ini + i);

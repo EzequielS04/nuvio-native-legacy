@@ -572,6 +572,21 @@ static int baseEhCinemeta(const char *base) {
                   strstr(base, "catalog.nuvio.tv") != NULL);
 }
 
+// #303-bis (Cinemeta ainda aparecia na busca): com "Buscar no Cinemeta" desligado,
+// o que e do addon Cinemeta sai da busca em TODO lugar, nao so dos alvos de
+// rede: tambem das fileiras locais (busca.c, spotlight.c), que varrem as
+// fileiras da Home. Casa pela base (o Cinemeta e "cinemeta" na URL), sem tocar
+// no catalogo do Nuvio.
+int desc_busca_base_oculta(const char *base) {
+  char b[NV_ADDON_URL_MAX];
+  size_t i;
+  if (ajustes_busca_cinemeta() || !base || !base[0]) return 0;
+  for (i = 0; base[i] && i + 1 < sizeof b; i++)
+    b[i] = (char)((base[i] >= 'A' && base[i] <= 'Z') ? base[i] + 32 : base[i]);
+  b[i] = 0;
+  return strstr(b, "cinemeta") != NULL;
+}
+
 static void origemDaBase(const char *base, char *dst, size_t n) {
   int i, k;
   if (!n) return;
@@ -783,7 +798,9 @@ static int consultarAlvo(const AlvoBusca *a, const char *termo,
   // estao la. O alvo do Nuvio tem 5 s e, se falhar, o Cinemeta mais 6.
   // #231: com "Buscar no Cinemeta" desligado, nem o add-on Cinemeta nem a reserva
   // do catalogo do Nuvio (seg_cine < 0) respondem.
-  if (!a->nuvio && !ajustes_busca_cinemeta() && baseEhCinemeta(a->base)) return 0;
+  if (!a->nuvio && !ajustes_busca_cinemeta() &&
+      (baseEhCinemeta(a->base) || desc_busca_base_oculta(a->base) ||
+       !strcasecmp(a->addon, "cinemeta"))) return 0;
   if (a->nuvio) {
     corpo = metaprov_busca_com(a->tipo, termo, METAPROV_NUVIO_S,
                                ajustes_busca_cinemeta() ? 6 : -1,
@@ -849,10 +866,16 @@ static void *fioBusca(void *arg) {
   }
 }
 
+static int cinemetaVisto = 1;   // ultimo valor de ajustes_busca_cinemeta() visto aqui
+
 void desc_buscar(const char *termo) {
   int k, faltam;
   if (!termo) return;
   pthread_mutex_lock(&buscaTrava);
+  // Mudar "Buscar no Cinemeta" com a mesma palavra ainda guardada nao pode
+  // devolver o resultado de antes: o interruptor invalida o termo pedido.
+  { int cine = ajustes_busca_cinemeta() ? 1 : 0;
+    if (cine != cinemetaVisto) { cinemetaVisto = cine; buscaPedido[0] = 0; buscaTermo[0] = 0; } }
   if (!strcmp(termo, buscaPedido)) { pthread_mutex_unlock(&buscaTrava); return; }
   snprintf(buscaPedido, sizeof buscaPedido, "%s", termo);
   geracao++;

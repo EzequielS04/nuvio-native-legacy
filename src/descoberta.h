@@ -179,6 +179,9 @@ int  desc_busca_geracao(void);
 // Registro dos alvos, chamado pelo carregamento dos manifestos. `zerar` repoe
 // so o Cinemeta.
 void desc_alvos_busca_zerar(void);
+// 1 quando "Buscar no Cinemeta" esta desligado e `base` e a de um addon
+// Cinemeta: a busca nao pode mostrar nada dela (alvos de rede e fileiras locais).
+int  desc_busca_base_oculta(const char *base);
 // A primeira volta espera os addons da conta em vez de montar a Home com a
 // lista vazia. `f` devolve 0 (nao espere: sem conta), 1 (espere: perfil ainda
 // nao escolhido) ou 2 (espere ate 10 s). Sem gancho, nao ha espera.
