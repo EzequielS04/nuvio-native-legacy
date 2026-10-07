@@ -125,6 +125,8 @@ static double fillGpuArea(GfxRect r, const float sub[4]) {
   if (x1 <= x0 || y1 <= y0 || telaRealW <= 0 || telaRealH <= 0) return 0.0;
   return (double)(x1 - x0) * (double)(y1 - y0) / ((double)telaRealW * (double)telaRealH);
 }
+/* Pixels do alvo da tela por unidade de layout (1920 de largura): 1 em 1080p, 2 em 4K. */
+float gfx_px_por_unidade(void) { return (float)telaRealW / 1920.0f; }
 void gfx_tamanho_alvo(int w, int h) { telaW = w; telaH = h; telaRealW = w; telaRealH = h; }
 // Tamanho da interface (gfx.h). escAtiva multiplica o retangulo de layout
 // antes de tudo: o SDF, os raios e as espessuras sao fracoes do proprio rect,
