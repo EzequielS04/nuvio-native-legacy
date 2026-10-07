@@ -451,6 +451,10 @@ typedef enum {
   // "Continuar assistindo" de cada perfil aparece na tela de escolha de perfil;
   // Desligado = nao e desenhado. LOCAL, desta TV. No fim: valor[]/CHAVE[] posicionais.
   AJ_PS_CONTINUAR,
+  // DTS convertido em: 0 = Estereo (AAC, padrao, o provado), 1 = 5.1 (Dolby
+  // Digital / AC3 640 kbps). So o caminho webOS que converte DTS no app
+  // (src/dts). LOCAL, desta TV. No fim: valor[]/CHAVE[] posicionais.
+  AJ_DTS_AC3,
   AJ_N
 } OpcaoId;
 
@@ -489,6 +493,7 @@ static const char *V_RELOGIO_12H[] = { "24 horas", "12 horas (AM/PM)" };
 static const char *V_DESCANSO_FONTE[]  = { "Catálogo", "Minha lista e Continuar" };
 static const char *V_BRILHO_PLAYER[] = { "100%", "80%", "65%", "50%" };
 // #202: 0 = o ultimo modo usado (comportamento de sempre); 1..8 = PlrAspecto + 1.
+static const char *V_DTS_SAIDA[] = { "Estéreo (AAC)", "5.1 (Dolby Digital)" };
 static const char *V_PROPORCAO[] = { "Último usado", "Original", "Recortar", "Esticar", "Zoom leve", "Zoom cinema", "Zoom ultra", "Ajustar altura", "Ajustar largura" };
 static const char *V_LOGO_APP[] = { "Novo", "Clássico" };
 static const char *V_ABERTURA[] = { "Padrão", "Só esmaece", "Direto" };
@@ -515,6 +520,14 @@ static const char *V_CACHE_SEEK[] = { "Desligado", "256 MB", "512 MB", "1 GB" };
 // Only the Android player has an app-controlled disk cache (cacheboost.h);
 // LG/Samsung show the row with "Não disponível nesta TV". Compile-time, so the
 // many tests that compile ajustes.c alone need no extra source.
+// DTS -> AC3/AAC conversion lives only in the webOS player (src/dts).
+static int dtsConversaoExiste(void) {
+#if defined(__APPLE__) || defined(NV_LINUX_DESKTOP) || defined(NV_TPK) || defined(NV_ANDROID) || defined(__EMSCRIPTEN__)
+  return 0;
+#else
+  return 1;
+#endif
+}
 static int cacheSeekExiste(void) {
 #ifdef NV_ANDROID
   return 1;
@@ -1244,6 +1257,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Proporção padrão",                V_PROPORCAO, 9),        // local: proporcaoPadraoLocal
   ESC("Também em Continuar assistindo",  V_LIGA, 2),             // local: cwRetidoTambemLocal
   ESC("Continuar na escolha de perfil",  V_LIGA, 2),             // local: psContinuarLocal
+  ESC("DTS convertido em",               V_DTS_SAIDA, 2),        // local: dtsSaidaLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1454,6 +1468,7 @@ static const char *CHAVE[] = {
   "proporcaoPadraoLocal",
   "cwRetidoTambemLocal",
   "psContinuarLocal",
+  "dtsSaidaLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -2155,6 +2170,7 @@ int ajustes_cw_mostrar_nao_exibidos(void)  { return lig(AJ_CW_NAO_EXIBIDOS); }
 int ajustes_cw_ordem(void)            { return valor[AJ_CW_ORDEM]; }
 int ajustes_cw_retido_tambem(void)    { return lig(AJ_CW_RETIDO_TAMBEM); }
 int ajustes_ps_continuar(void)        { return lig(AJ_PS_CONTINUAR); }
+int ajustes_dts_ac3(void)             { return valor[AJ_DTS_AC3] == 1; }
 // Espaco da Home em fracao do valor medido. Fora da faixa do NUM (arquivo torto)
 // volta para dentro dela; 0 (arquivo sem a chave) nao chega aqui: o padrao e 100.
 float ajustes_espaco_fator(int pct) {
@@ -3764,6 +3780,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_PLR_CLASSIF:    /* o web nao tem esta escolha */
     case AJ_CW_RETIDO_TAMBEM: /* o web nao tem a ilha */
     case AJ_PS_CONTINUAR:   /* o web nao tem este cartao; escolha desta TV */
+    case AJ_DTS_AC3:        /* o conversor de DTS e desta TV */
     case AJ_TAM_MAX: case AJ_TAM_MIN: /* o web nao tem a faixa de tamanho */
     case AJ_ESPACO_FILEIRAS: case AJ_ESPACO_TITULOS: /* o web nao tem espacamento */
     case AJ_FONTE_PRAZO:    /* o web nao tem: a rede e os addons sao desta casa */
@@ -4602,6 +4619,7 @@ static int inativa(int op) {
     // fonte ao reproduzir", mas app.c (autoParcialPronto) ainda usa o prazo
     // quando ha fonte lembrada para o titulo, mesmo escolhendo a mao.
     case AJ_CACHE_SEEK:  return !cacheSeekExiste();
+    case AJ_DTS_AC3:     return !dtsConversaoExiste();
     // Som: na Samsung (.wgt) o trailer e sempre mudo (trailerfonte_com_som).
     case AJ_HERO_TRAILER_SOM:
       return !lig(AJ_HERO_TRAILER) || !trailerfonte_com_som(trailerfonte_tizen());
@@ -4742,6 +4760,7 @@ static const char *ajudaOpcao(int op) {
     if (op == AJ_RAIL_BLUR) return "Ative a barra lateral moderna para usar o desfoque.";
     if (op == AJ_HERO_CATALOGOS) return "Ative Mostrar destaque para exibir os catálogos no topo da Home.";
     if (op == AJ_HERO_CHEIO) return "Só vale no layout Moderna. No Padrão o destaque é um banner, e na Dinâmica ele ocupa a largura toda e sobe junto com a rolagem.";
+    if (op == AJ_DTS_AC3) return "Não disponível nesta TV. Só a LG converte o DTS dentro do app.";
     if (op == AJ_CACHE_SEEK) return "Não disponível nesta TV. O player da LG e da Samsung não deixa o app guardar o vídeo em disco.";
     if (op == AJ_DESCOBRIR) return "A tela Descobrir do app web ainda não existe nesta TV. A escolha fica guardada na conta.";
     if ((op >= AJ_CW_OK && op <= AJ_CW_ORDEM) || op == AJ_CW_CONCLUIDO || op == AJ_CW_RETIDO_TAMBEM)
@@ -5014,6 +5033,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_ESPACO_FILEIRAS: return "O espaço vertical entre uma fileira da Home e a seguinte. Com menos cabem mais fileiras na tela, com mais a Home fica mais arejada.";
     case AJ_ESPACO_TITULOS: return "O espaço horizontal entre os cartazes de uma fileira da Home.";
     case AJ_TAM_MIN: return "Na escolha automática, fontes menores que este tamanho ficam para o fim da fila. Se for maior que o tamanho máximo, o mínimo é ignorado. Só vale para arquivos com tamanho conhecido; se só houver fontes fora da faixa, a melhor delas ainda toca.";
+    case AJ_DTS_AC3: return "Como o áudio DTS é entregue à TV quando o app o converte (só na LG). Estéreo (AAC) é o modo provado e serve qualquer TV. 5.1 (Dolby Digital) mantém o som surround para barra de som e receiver por ARC/eARC; vale a partir do próximo vídeo.";
     case AJ_PS_CONTINUAR: return "Ligado, cada perfil mostra na escolha de perfil o cartão com o que ele estava assistindo. Desligado, a tela mostra só os perfis.";
     case AJ_CW_RETIDO_TAMBEM: return "Quando o título está na ilha ou em Retomar agora, mostra também na fileira Continuar assistindo.";
     case AJ_PLR_CLASSIF: return "Ligado (padrão): no começo do filme, a ilha mostra a classificação indicativa e os avisos do guia parental (violência, nudez, palavrões). Desligado: o player não mostra nada disso.";
@@ -6287,6 +6307,7 @@ static const char *textoValor(int op) {
     return (v >= 0 && v < nLingua && V_LINGUA[v]) ? V_LINGUA[v] : "Da conta";
   }
   if (op == AJ_CACHE_SEEK && !cacheSeekExiste()) return "Não disponível nesta TV";
+  if (op == AJ_DTS_AC3 && !dtsConversaoExiste()) return "Não disponível nesta TV";
   if (op == AJ_SELOS_PACOTE) {
     int v = valor[op];
     return v > 0 && v <= selospacote_n() ? selospacote_nome(v - 1) : "Do Nuvio";
@@ -6696,7 +6717,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_FONTE_PRIORIDADE: case AJ_FONTE_HDR:
     case AJ_SELOS_PACOTE:
     case AJ_REACAO_CREDITOS:
-    case AJ_FONTE_PRAZO: case AJ_TAM_MAX: case AJ_TAM_MIN: case AJ_PROPORCAO_PADRAO:
+    case AJ_FONTE_PRAZO: case AJ_TAM_MAX: case AJ_TAM_MIN: case AJ_PROPORCAO_PADRAO: case AJ_DTS_AC3:
     case AJ_FONTE_ESCOPO: case AJ_FONTE_ADDONS_PERM: case AJ_FONTE_PLUGINS_PERM: case AJ_FONTE_OUTROS:
     case AJ_FONTE_REGEX: case AJ_FONTE_REGEX_PADRAO: case AJ_FONTE_REGEX_MODELO:
       return AJPV_REPRO;

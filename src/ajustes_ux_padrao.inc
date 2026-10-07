@@ -239,3 +239,4 @@
   0, /* default aspect ratio: Ultimo usado */
   1, /* also in Continue watching (2.0.2): Desligado (V_LIGA: 1 = Desligado) = one title, one place */
   0, /* continue on the profile picker (#303): Ligado (V_LIGA: 0 = Ligado) = as before */
+  0, /* DTS converted to: Estereo (AAC) = the proven path */

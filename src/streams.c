@@ -718,8 +718,27 @@ static long qualidade(const Stream *s, int modo) {
   return q;
 }
 
+#ifdef NV_TPK
+// SAMSUNG NAO TOCA DTS NEM TRUEHD (#313; specs oficiais 2018+). Fonte cujo
+// unico audio anunciado e DTS/DTS-HD/TrueHD abre mudo no .tpk. O selo vem do
+// nome do arquivo: Atmos fica de fora (pode ser DD+ ou TrueHD) e qualquer selo
+// Dolby Digital junto do DTS (nome com os dois) tira a multa. Pesa mais que um
+// degrau de resolucao (10000) para o 1080p com AC3 passar na frente do 4K mudo,
+// e continua longe das multas de cache/origem (>= 140000): so desempata a fila.
+static long penalAudioTv(const Stream *s) {
+  uint64_t recusa = badges_bit("a-dts") | badges_bit("a-dtshd") | badges_bit("a-dtshdma") |
+                              badges_bit("a-dtsx") | badges_bit("a-truehd") | badges_bit("a-truehd-dv");
+  uint64_t toca = badges_bit("a-dd") | badges_bit("a-ddp") | badges_bit("a-dd-dv") |
+                            badges_bit("a-atmos") | badges_bit("a-atmos-dv");
+  return (s->badges & recusa) && !(s->badges & toca) ? 20000 : 0;
+}
+#endif
+
 static long pontos(const Stream *s) {
   long p = 0;
+#ifdef NV_TPK
+  p -= penalAudioTv(s);
+#endif
   // DOLBY VISION SO VALE PONTO EM MP4 — e isto e medida, nao teoria.
   //
   // Marcado no aparelho do dono (LG C9, webOS 4.10) tocando um MKV que o addon
