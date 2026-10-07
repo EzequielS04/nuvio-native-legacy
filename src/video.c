@@ -4,6 +4,7 @@
 #include "esmaecer.h"
 #include "video_escala.h"
 #include "video_reconexao.h"
+#include "video_seekretry.h"
 #include "idioma.h"
 #include "linguas.h"
 #include <SDL2/SDL.h>
@@ -204,6 +205,8 @@ static Uint32 seekEm;
 // Seek diagnostics (#246): when the last "seek" went out, whether seekDone has
 // come back, and the seekable/trickable flags the uMS reported. Log only.
 static Uint32 seekEnvEm;
+static NvSeekRetry seekRetry;
+static Uint32 seekRetryEm;   // != 0: reenviar seekAlvo quando o relogio passar disto
 static int    seekEnvAlvo, seekEnvAviso;
 static int    srcSeekable = -1, srcTrickable = -1;
 // Declarada aqui porque video_bombear a chama antes da definicao. O clang do
@@ -267,6 +270,7 @@ int  video_falhou(void) { return 0; }
 const char *video_erro_texto(void) { return ""; }
 int  video_decoder_anunciou(void) { return 1; }
 int  video_audio_nao_suportado(void) { return 0; }
+int  video_seek_desistiu(void) { return 0; }
 int  video_terminou(void) { return 0; }
 int  video_conflito_recurso(void) { return 0; }
 unsigned video_bufferando_ms(void) { return SIM.bufferandoMs; }
@@ -909,6 +913,7 @@ static int eventoPayload(const char *p, unsigned minhaSessao) {
     printf("[video] seek to %ds done in %ums\n", seekEnvAlvo, (unsigned)(SDL_GetTicks() - seekEnvEm));
     fflush(stdout);
     seekEnvEm = 0;
+    nv_seek_ok(&seekRetry);
   }
   if (strstr(p, "sourceInfo")) {
     { const char *q = strstr(p, "\"seekable\":");
@@ -1304,6 +1309,20 @@ static int eventoPayload(const char *p, unsigned minhaSessao) {
       legAoCarregar   = legAtual;
       snprintf(legUrlAoCarregar, sizeof legUrlAoCarregar, "%s", legUrlAtual);
       marco("pipeline morreu: recarregando");
+    } else if (nv_seek_e_recusa(js_num(p, NULL, "errorCode", -1), strstr(p, "seek Failure") != NULL)) {
+      // SEEK RECUSADO NAO E FONTE MORTA (#246, registro 54650): tenta de novo
+      // com espera e, esgotado, segue tocando de onde esta.
+      unsigned w = nv_seek_recusado(&seekRetry);
+      if (w) {
+        char m2[64];
+        seekRetryEm = (SDL_GetTicks() + w) | 1;
+        snprintf(m2, sizeof m2, "seek recusado: nova tentativa %d/%d em %u ms",
+                 seekRetry.falhas, NV_SEEK_MAX, w);
+        marco(m2);
+      } else {
+        seekRetryEm = 0; seekEnvEm = 0;
+        marco("seek recusado: desistiu, segue tocando de onde esta");
+      }
     } else if (!recuperando) {
       // Qualquer outro erro: pode ser a rede caindo com o episodio andando.
       // Quem decide entre reconectar e `falhou` e o video_bombear.
@@ -2073,6 +2092,10 @@ void video_bombear(void) {
     Uint32 q = seekEm; seekEm = 0; (void)q;
     seekAgora(seekAlvo);
   }
+  if (seekRetryEm && (int)(SDL_GetTicks() - seekRetryEm) >= 0) {
+    seekRetryEm = 0;
+    if (!seekEm && pronto) seekAgora(seekAlvo);   // novo seek do dono tem prioridade
+  }
   if (seekEnvEm && !seekEnvAviso && SDL_GetTicks() - seekEnvEm >= 3000) {
     seekEnvAviso = 1;
     printf("[video] seek to %ds: no seekDone after 3000 ms; pipeline at %dms, seekable=%d trickable=%d\n",
@@ -2425,6 +2448,7 @@ static void pararSessao(void) {
   audioAoCarregar = legAoCarregar = -1;
   legUrlAoCarregar[0] = 0;
   pausaPedida = 0; seekEm = 0; mkvPendente = 0;
+  nv_seek_zerar(&seekRetry); seekRetryEm = 0;
   pausaConfirmada = 0;
   if (ligado && midia[0] && !tinhaDts) {
     snprintf(b, sizeof b, "{\"mediaId\":\"%s\"}", midia);
@@ -3023,6 +3047,7 @@ int    video_falhou(void)   { return falhou; }
 const char *video_erro_texto(void) { return erroTexto; }
 int    video_decoder_anunciou(void) { return viuVideo; }
 int    video_audio_nao_suportado(void) { return audioNaoSup; }
+int    video_seek_desistiu(void) { return seekRetry.desistiu; }
 int    video_terminou(void) { return terminou; }
 int    video_conflito_recurso(void) { return 0; }
 unsigned video_bufferando_ms(void) {
