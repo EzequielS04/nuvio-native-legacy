@@ -306,6 +306,22 @@ static void ass_iniciar_locked(int sistema) {
     }
     if (access(fallbackFont, R_OK) != 0 && access("/system/fonts/Roboto-Regular.ttf", R_OK) == 0)
       snprintf(fallbackFont, sizeof fallbackFont, "%s", "/system/fonts/Roboto-Regular.ttf");
+#elif defined(NV_TPK)
+    /* .tpk (Samsung): SDL_GetBasePath e o diretorio do host .NET, nao o do
+     * pacote. O host passa a arte em NUVIO_TPK_ARTE (src/tpk.c) e fonts/ fica
+     * ao lado de art/ (a mesma conta do txt_iniciar). Sem fontconfig e sem
+     * pasta de sistema: as fontes sao as do app, entregues ao libass em memoria. */
+    {
+      const char *env = getenv("NUVIO_TPK_ARTE");
+      if (env && env[0]) {
+        char r[640];
+        snprintf(r, sizeof r, "%s/../fonts", env);
+        if (access(r, R_OK) == 0) {
+          snprintf(fontDir, sizeof fontDir, "%s", r);
+          snprintf(fallbackFont, sizeof fallbackFont, "%s/InterDisplay-Regular.ttf", r);
+        }
+      }
+    }
 #else
     if (access("/usr/share/fonts", R_OK) == 0)
       snprintf(fontDir, sizeof fontDir, "%s", "/usr/share/fonts");
@@ -320,6 +336,9 @@ static void ass_iniciar_locked(int sistema) {
     if (base) { snprintf(assPastaFontesApp, sizeof assPastaFontesApp, "%sfonts", base); SDL_free(base); }
     if (access(assPastaFontesApp, R_OK))
       snprintf(assPastaFontesApp, sizeof assPastaFontesApp, "%s", "deploy/app/fonts");
+#ifdef NV_TPK
+    if (fontDir[0] && strstr(fontDir, "/../fonts")) snprintf(assPastaFontesApp, sizeof assPastaFontesApp, "%s", fontDir);
+#endif
   }
   snprintf(assPastaFontes, sizeof assPastaFontes, "%s", fontDir);
   ass_carregar_pasta_locked();
