@@ -2033,6 +2033,7 @@ static void pecasAddon(const char *ini, size_t n, LinhaAddon *L) {
     for (k = 0; q + k < ate; k++) { size_t l2; if (emojiIcone(q + k, &l2)) break; }
     snprintf(seg, sizeof seg, "%.*s", (int)(k < sizeof seg - 1 ? k : sizeof seg - 1), q);
     nv_limpar_texto(seg, L->tx[L->n], sizeof L->tx[0], NV_LIMPA_UMA_LINHA);
+    nv_aparar_separadores(L->tx[L->n]);   // "31.4 GB | 43.2 Mbps |" -> sem o | solto
     if (ic || L->tx[L->n][0]) L->ic[L->n++] = ic;
     p = q + k;
   }
@@ -3009,18 +3010,6 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
     // AINDA HA ADDON RESPONDENDO, com fonte ja na lista (#221): a lista vai
     // crescer, e quem escolhe agora escolhe entre o que chegou. Na linha do
     // contexto, no acento, para nao disputar com o titulo nem com a ajuda.
-    // A ORDEM DOS ADD-ONS no automatico (2.0.2): "Ordem: A › B › C", na mesma
-    // linha, antes do "Buscando" (que so entra se sobrar largura).
-    if (ajustes_fonte_ordem_uso() && rw-360-cw > 120) {
-      char lista[FR_ORDEM_MAX * 24], tOrdem[sizeof lista + 32];
-      TxtLinha lo;
-      fonteregra_ordem_texto(lista, sizeof lista);
-      snprintf(tOrdem, sizeof tOrdem, "%s: %s", i18n("Ordem"), lista);
-      lo = txt_linha_corta(TXT_HERO_META,tOrdem,160,160,158,255,rw-360-cw);
-      if (cw > 0) gfx_cor((GfxRect){tx+cw-13.5f,oy+74+ch*.5f-2.5f,5,5},.5f,.5f,.5f,.49f,anim);
-      txt_desenhar_alpha(lo,tx+cw,oy+72,anim);
-      cw += (float)lo.w + 22.0f; ch = 18.0f;
-    }
     if (n > 0 && addons_ocupado() && rw-360-cw > 80) {
       if (cw > 0) gfx_cor((GfxRect){tx+cw-13.5f,oy+74+ch*.5f-2.5f,5,5},.5f,.5f,.5f,.49f,anim);
       txt_desenhar_alpha(txt_linha_corta(TXT_HERO_META,"Buscando mais fontes…",ai,(int)(ag*255),(int)(ab*255),255,rw-360-cw),tx+cw,oy+72,anim);
