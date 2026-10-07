@@ -148,7 +148,7 @@ void colfileiras_sincronizar(void) {
     if (fil_oculta(grupo) || catordem_oculta(grupo, grupo)) continue;
     for (int j = 0; j < f->nSources; j++) {
       char chave[FIL_CHAVE];
-      if (chaveFonte(&f->sources[j], chave))
+      if (chaveFonte(&f->sources[j], chave) && !fil_adicionada_na_tv(chave))   // #327
         for (int k = 0; k < q; k++)
           if (!strcmp(ordenadas[k], chave)) dentro[k] = 1;
     }

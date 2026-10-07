@@ -194,6 +194,8 @@ void fil_colecao_catalogo_removido(const char *chave);
 void fil_colecao_catalogo_restaurado(const char *chave);
 // Scope only account-derived automatic flags; does not clear personal settings.
 int fil_conta_dono(const char *usuario);
+int  fil_linha_sem_addon(int i); // #327: nenhum addon ligado declara mais este catalogo
+int  fil_adicionada_na_tv(const char *chave); // #327: adicionada a mao, vence a colecao
 int  fil_estado_chave(const char *chave);   // -1 = desconhecida
 int  fil_n_na_home(void);
 int  fil_n_fila(void);
