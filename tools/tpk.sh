@@ -68,7 +68,8 @@ docker image inspect nuvio-tpk-sdk >/dev/null 2>&1 ||
   docker build --platform linux/arm/v5 -t nuvio-tpk-sdk tools/tpk/
 
 if [ ! -f "$CACHE/prefix/lib/libSDL2.a" ] || [ ! -f "$CACHE/prefix/lib/libSDL2_ttf.a" ] ||
-   [ ! -f "$CACHE/prefix/lib/libwebp.a" ] || [ ! -f "$CACHE/prefix/lib/.sdlimage-webp" ]; then
+   [ ! -f "$CACHE/prefix/lib/libwebp.a" ] || [ ! -f "$CACHE/prefix/lib/.sdlimage-webp" ] ||
+   [ ! -f "$CACHE/prefix/lib/libass.a" ] || [ ! -f "$CACHE/prefix/lib/.ttf-freetype-externo" ]; then
   echo "[deps] SDL2/SDL2_image/SDL2_ttf estaticos (demora na primeira vez)"
   mkdir -p "$CACHE/src"
   for u in https://github.com/libsdl-org/SDL/releases/download/release-2.30.9/SDL2-2.30.9.tar.gz \
@@ -77,6 +78,14 @@ if [ ! -f "$CACHE/prefix/lib/libSDL2.a" ] || [ ! -f "$CACHE/prefix/lib/libSDL2_t
            https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.4.0.tar.gz; do
     d="$CACHE/src/$(basename "$u" .tar.gz)"
     [ -d "$d" ] || curl -fsSL "$u" | tar xz -C "$CACHE/src"
+  done
+  # libass e as suas dependencias (mesmas versoes do webOS, tools/build-ass-arm.sh): .tar.xz
+  for u in https://download-mirror.savannah.gnu.org/releases/freetype/freetype-2.13.3.tar.xz \
+           https://github.com/fribidi/fribidi/releases/download/v1.0.16/fribidi-1.0.16.tar.xz \
+           https://github.com/harfbuzz/harfbuzz/releases/download/10.4.0/harfbuzz-10.4.0.tar.xz \
+           https://github.com/libass/libass/releases/download/0.17.5/libass-0.17.5.tar.xz; do
+    d="$CACHE/src/$(basename "$u" .tar.xz)"
+    [ -d "$d" ] || curl -fsSL "$u" | tar x -C "$CACHE/src"
   done
   cp tools/tpk/deps.sh "$CACHE/deps.sh"
   docker run --rm --platform linux/arm/v5 -v "$CACHE:/w" nuvio-tpk-sdk sh /w/deps.sh
@@ -96,10 +105,14 @@ P2P_VOL=""
 [ -n "$NV_P2P_DIR" ] && P2P_VOL="-v $NV_P2P_DIR:/p2p"
 docker run --rm --platform linux/arm/v5 --env-file "$ENVF" $P2P_VOL \
   -e NUVIO_P2P_MOTOR="${NV_P2P_DIR:+1}" \
-  -e NUVIO_EXTRA_CFLAGS="${NUVIO_EXTRA_CFLAGS:-}" \
+  -e NUVIO_EXTRA_CFLAGS="${NUVIO_EXTRA_CFLAGS:-}" -e NV_TPK_SEM_ASS="${NV_TPK_SEM_ASS:-}" \
   -v "$RAIZ":/work -v "$CACHE/prefix":/deps -w /work nuvio-tpk-sdk sh -c '
   set -e
   mkdir -p /tmp/o
+  # ASS pelo libass (#ass-tpk): o mesmo backend do webOS (src/assrender.c). NV_TPK_SEM_ASS=1
+  # volta ao texto simples (diagnostico). O libass e estatico, com FreeType/HarfBuzz/FriBidi.
+  ASS_CFLAGS="-DNV_ASS_LIBASS"; ASS_LIBS="-lass -lharfbuzz -lfribidi -lfreetype"
+  if [ "${NV_TPK_SEM_ASS:-}" = 1 ]; then ASS_CFLAGS=""; ASS_LIBS="-lfreetype"; fi
   # As -D vao num arquivo de resposta do gcc (@/tmp/flags): assim o xargs -P
   # abaixo compila em paralelo sem reabrir o problema de aspas das chaves.
   # A LISTA DE CHAVES E FECHADA, e nao "tudo o que o env.sh imprimir": o que
@@ -121,7 +134,7 @@ docker run --rm --platform linux/arm/v5 --env-file "$ENVF" $P2P_VOL \
   P2P_CFLAGS=""
   [ "${NUVIO_P2P_MOTOR:-}" = "1" ] && P2P_CFLAGS="-DNV_P2P_MOTOR -DNV_P2P_MOTOR_DLOPEN -I/p2p/include"
   ls src/*.c src/dts/*.c | grep -v "src/video_tizen.c" | xargs -P 6 -I{} sh -c \
-    "gcc $CFLAGS -c {} -o /tmp/o/\$(basename {} .c).o -DNV_TPK -include src/tpk.h -fvisibility=hidden -Wno-unused-result $NUVIO_EXTRA_CFLAGS $P2P_CFLAGS \$(case {} in src/p2pmotor_motor.c) echo -D_GNU_SOURCE;; src/p2pmotor.c) echo -D_FILE_OFFSET_BITS=64;; esac) @/tmp/flags -I/deps/include -I/deps/include/SDL2" 
+    "gcc $CFLAGS -c {} -o /tmp/o/\$(basename {} .c).o -DNV_TPK $ASS_CFLAGS -include src/tpk.h -fvisibility=hidden -Wno-unused-result $NUVIO_EXTRA_CFLAGS $P2P_CFLAGS \$(case {} in src/p2pmotor_motor.c) echo -D_GNU_SOURCE;; src/p2pmotor.c) echo -D_FILE_OFFSET_BITS=64;; esac) @/tmp/flags -I/deps/include -I/deps/include/SDL2" 
   # SDL e zlib ESTATICOS: a TV nao tem libSDL2 garantida, e a libz entra junto
   # para nao depender da versao do aparelho. GLES/EGL/dl/pthread/m sao do
   # sistema (API nativa publica do Tizen). libwebp tambem estatica (o Tizen nao
@@ -129,7 +142,7 @@ docker run --rm --platform linux/arm/v5 --env-file "$ENVF" $P2P_VOL \
   # por dlopen em execucao, como na LG (rede.c, jpegrapido.c, webp.c).
   gcc -shared -o /work/build/tpk/libnuvio.so /tmp/o/*.o -Wl,--no-undefined \
     -Wl,-soname,libnuvio.so -Wl,--exclude-libs,ALL \
-    -L/deps/lib -lSDL2_ttf -lSDL2_image -lwebpdemux -lwebp -lsharpyuv -lSDL2 /usr/lib/arm-linux-gnueabi/libz.a \
+    -L/deps/lib -lSDL2_ttf -lSDL2_image -lwebpdemux -lwebp -lsharpyuv -lSDL2 $ASS_LIBS /usr/lib/arm-linux-gnueabi/libz.a \
     -lGLESv2 -ldl -lpthread -lm -lrt
   echo "  $(ls -la /work/build/tpk/libnuvio.so | awk "{print \$5}") bytes"
   objdump -T /work/build/tpk/libnuvio.so | grep -oE "GLIBC_[0-9.]+" | sort -uV | tail -1 | sed "s/^/  glibc minima: /"
@@ -150,7 +163,7 @@ docker run --rm --platform linux/arm/v5 --env-file "$ENVF" $P2P_VOL \
   # p2pmotor_motor.c entra sempre aqui: o 4/5 NUNCA leva o motor (a UEP barra
   # .so de arquivo), entao ele e recompilado SEM -DNV_P2P_MOTOR (sem P2P_CFLAGS).
   { grep -l NV_TPK40 src/*.c src/dts/*.c; echo src/p2pmotor_motor.c; } | sort -u | grep -v "src/video_tizen.c" | xargs -P 6 -I{} sh -c \
-    "gcc $CFLAGS -c {} -o /tmp/o40/\$(basename {} .c).o -DNV_TPK -DNV_TPK40 -include src/tpk.h -fvisibility=hidden -Wno-unused-result $NUVIO_EXTRA_CFLAGS \$(case {} in src/p2pmotor.c) echo -D_FILE_OFFSET_BITS=64;; esac) @/tmp/flags -I/deps/include -I/deps/include/SDL2"
+    "gcc $CFLAGS -c {} -o /tmp/o40/\$(basename {} .c).o -DNV_TPK -DNV_TPK40 $ASS_CFLAGS -include src/tpk.h -fvisibility=hidden -Wno-unused-result $NUVIO_EXTRA_CFLAGS \$(case {} in src/p2pmotor.c) echo -D_FILE_OFFSET_BITS=64;; esac) @/tmp/flags -I/deps/include -I/deps/include/SDL2"
   OBJ40=""
   for o in /tmp/o/*.o; do
     b=$(basename "$o")
@@ -158,7 +171,7 @@ docker run --rm --platform linux/arm/v5 --env-file "$ENVF" $P2P_VOL \
   done
   gcc -shared -o /work/build/tpk/libnuvio-tpk40.so $OBJ40 -Wl,--no-undefined \
     -Wl,-soname,libnuvio.so -Wl,--exclude-libs,ALL -Wl,--hash-style=both \
-    -L/deps/lib -lSDL2_ttf -lSDL2_image -lwebpdemux -lwebp -lsharpyuv -lSDL2 /usr/lib/arm-linux-gnueabi/libz.a \
+    -L/deps/lib -lSDL2_ttf -lSDL2_image -lwebpdemux -lwebp -lsharpyuv -lSDL2 $ASS_LIBS /usr/lib/arm-linux-gnueabi/libz.a \
     -lGLESv2 -ldl -lpthread -lm -lrt
   echo "  $(ls -la /work/build/tpk/libnuvio-tpk40.so | awk "{print \$5}") bytes"
   # CONFERENCIA que o carregador de ELF do host exige (ele recusa o contrario):
