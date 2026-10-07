@@ -103,6 +103,13 @@ static Uint32 resultadoQuando;
 static int resultadoCacheavel;
 static FontecacheEscopo fioEscopo;
 static char pendId[64], pendTipo[16];
+// A ORIGEM DO PEDIDO QUE FICOU NA FILA. Zapear com uma busca de canal ainda no
+// ar enfileira o canal novo (pendId), mas app.c zera a origem logo depois de
+// addons_buscar: ao tirar o pedido da fila alvoBase estava vazio e a consulta
+// ia a TODOS os add-ons de fontes. MEDIDO no relato #283 (2.0.2, LG): o canal
+// do Fenix TV, que sozinho levava 0,3-0,5 s, passou a esperar ProwJack (16,4 s),
+// UnioFlix (9,1 s) e tres timeouts de 12 s. A origem acompanha o pedido.
+static char pendBase[NV_ADDON_URL_MAX];
 static int pendRenovar;
 // O alvo corrente esta sendo buscado pelo PREFETCH do guia (fontecache.c), e
 // nao por `fio`: addons_buscar o encontrou a caminho e resolveu esperar em vez
@@ -519,6 +526,8 @@ AddEstado addons_estado(void) {
       snprintf(tipo, sizeof tipo, "%s", pendTipo);
       pendId[0] = 0;
       pendRenovar = 0;
+      snprintf(alvoBase, sizeof alvoBase, "%s", pendBase);
+      pendBase[0] = 0;
       if (renovar) addons_buscar_renovar(id, tipo);
       else addons_buscar(id, tipo);
       return ADD_BUSCANDO;
@@ -2439,6 +2448,7 @@ static void buscarPedido(const char *imdb, const char *tipo, int forcar) {
       snprintf(pendId, sizeof pendId, "%s", imdb);
       snprintf(pendTipo, sizeof pendTipo, "%s", tipo ? tipo : "movie");
       pendRenovar = forcar;
+      pendBase[0] = 0;
       return;
     }
     resumo.valido = 0;
@@ -2462,6 +2472,7 @@ static void buscarPedido(const char *imdb, const char *tipo, int forcar) {
       snprintf(pendId, sizeof pendId, "%s", imdb);
       snprintf(pendTipo, sizeof pendTipo, "%s", tipo ? tipo : "movie");
       pendRenovar = forcar;
+      snprintf(pendBase, sizeof pendBase, "%s", alvoBase);
     }
     return;
   }
