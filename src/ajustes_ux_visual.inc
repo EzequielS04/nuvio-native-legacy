@@ -26,6 +26,7 @@ static const char *ajVisualIcone(int op) {
     case AJ_CW_ORDEM: return "aj_rotate-ccw-clock";
     case AJ_CW_NAO_EXIBIDOS: return "aj_rotate-ccw-clock";
     case AJ_CW_FURTHEST: return "aj_rotate-ccw-clock";
+    case AJ_CW_RETIDO_TAMBEM: return "aj_rotate-ccw-clock";
     case AJ_RAIL_MODERNA: return "aj_panel-left";
     case AJ_RAIL: return "aj_panel-left";
     case AJ_MENU_EXPLORAR: return "aj_panel-left";

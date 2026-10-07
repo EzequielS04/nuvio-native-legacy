@@ -1543,6 +1543,7 @@ static void tocarCanal(const CatItem *it) {
 // sem rede (cwfrente.h) — a home so remonta a fileira, sem refazer o resto.
 static void cwRetidoSincronizar(void) {
   char antes[64];
+  cw_retido_tambem_definir(ajustes_cw_retido_tambem());
   snprintf(antes, sizeof antes, "%s", cw_retido());
   if (!cw_retido_definir(cw_retido_escolher(ajustes_relogio_ligado(), ilhacart_vivo_imdb(),
                                             home_retomar_imdb())))

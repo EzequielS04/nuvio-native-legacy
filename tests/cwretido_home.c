@@ -181,6 +181,14 @@ int main(void) {
   conferir("dispensado: tt300 na frente", "tt300 tt100 tt200:2:4");
   assert(!naHome("last_session"));
   puts("ok  o cartao dispensado sai e o titulo entra na frente");
+  // "Tambem em Continuar assistindo" (2.0.2): ligado, a retencao nao exclui nada.
+  assert(!ajustes_cw_retido_tambem());
+  assert(cw_retido_definir("tt300") && cw_retido_exclui("tt300"));
+  { unsigned r0 = cw_retido_rev(); cw_retido_tambem_definir(1);
+    assert(cw_retido_rev() != r0 && !cw_retido_exclui("tt300")); cw_retido_tambem_definir(1);
+    cw_retido_tambem_definir(0); assert(cw_retido_exclui("tt300")); }
+  assert(cw_retido_definir(cw_retido_escolher(0, "", home_retomar_imdb())));
+  puts("ok  com a opcao ligada o titulo retido nao sai da fileira");
   // Republicacao (rede/catalogo): o cartao NAO volta.
   cw[0] = *cat_item(cat_indice_por_imdb("tt300")); cw[1] = *cat_item(0); cw[2] = *cat_item(1);
   cat_trocar_continuar(cw, 3);

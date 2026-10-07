@@ -185,7 +185,7 @@ static void ajcCenaHome(int op) {
       o.marca = AJC_M_RAIL; break;
     default:
       if ((op == AJ_CW_LIGADO || op == AJ_CW_OK || op == AJ_CW_ESTILO || op == AJ_CW_THUMB ||
-          op == AJ_CW_BLUR_PROX || op == AJ_CW_ORDEM || op == AJ_CW_NAO_EXIBIDOS || op == AJ_CW_FURTHEST)) {
+          op == AJ_CW_BLUR_PROX || op == AJ_CW_ORDEM || op == AJ_CW_NAO_EXIBIDOS || op == AJ_CW_FURTHEST || op == AJ_CW_RETIDO_TAMBEM)) {
         o.hero = 0; o.cw = op == AJ_CW_LIGADO ? ajcLig(op) : 1; o.marca = AJC_M_CW;
       }
       break;
