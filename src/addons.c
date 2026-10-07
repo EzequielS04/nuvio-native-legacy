@@ -35,7 +35,11 @@
 // agora sao o mesmo numero, e o corte, se um dia voltar a acontecer, e dito.
 // 32 e nao 16 (30/09): o app oficial passou a 32, e quem tem muitos addons
 // perdia justamente os de legenda, que costumam ser os ultimos da lista.
-#define ADD_MAX 32
+// 64 e nao 32 (#203, 07/10): nos logs 2.0.x, 44 de 464 pessoas leram EXATAMENTE
+// 32 linhas da conta e nenhuma leu 33 ou mais — o monte no teto, nao uma
+// distribuicao. Quem tem mais de 32 perdia o resto sem aviso (o de legenda,
+// tipicamente o ultimo). O teto de lerAddons (sync.c) e o mesmo numero.
+#define ADD_MAX 64
 #define ADD_PREF_MAX 8
 #define ADD_PREF_TAM 24
 

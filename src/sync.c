@@ -51,7 +51,7 @@ void servidores_esquecer_todos(void);   // servidores.c: wipe every profile's to
 #include <errno.h>
 #include <sys/stat.h>
 
-#define SY_ADD_MAX   32   // o mesmo teto de ADD_MAX (addons.c)
+#define SY_ADD_MAX   64   // o mesmo teto de ADD_MAX (addons.c)
 // URL lida da conta ANTES de caber em AddonRemoto: maior que o limite de
 // proposito, para o log dizer o tamanho de verdade em vez de "nao coube".
 #define SY_URL_LEITURA (NV_ADDON_URL_MAX * 4)
@@ -500,6 +500,16 @@ static int lerAddons(const char *r) {
                          ? (strcmp(b, "false") != 0) : 1;
     k++;
   }
+  // O TETO CORTAVA EM SILENCIO (#203): o laco para em SY_ADD_MAX sem contar o
+  // resto. Contar aqui tambem trava o push (addonsDeFora), que senao
+  // substituiria a lista da conta por esta, mais curta, e apagaria os addons
+  // que nao couberam.
+  for (; p; p = js_prox(js_fim(p))) {
+    const char *f = js_fim(p);
+    if (js_texto(p, f, "url", url, sizeof url)) fora++;
+  }
+  if (fora) printf("[sync] addons: %d da conta ficaram de fora (maximo %d, ou URL grande demais)\n",
+                   fora, SY_ADD_MAX);
   addonsDeFora = fora;
   return k;
 }
