@@ -68,6 +68,9 @@ int spainel_pediu_agenda(void);
 // Para os testes: abre direto numa aba (0 Salvos, 1 Atividade, 2 Amigos,
 // 3 Avisos), com o foco na primeira linha da lista.
 void spainel_ir_aba(int aba);
+// Testes: a aba aberta e o indice do foco (< 0: abas ou barra).
+int spainel_aba_atual(void);
+int spainel_foco_indice(void);
 // Abre (se preciso) na aba Atividade e poe o foco no primeiro evento de amigo
 // do titulo `imdb` (a lista rola ate ele). Sem evento desse titulo, so a aba.
 void spainel_abrir_titulo(const char *imdb);

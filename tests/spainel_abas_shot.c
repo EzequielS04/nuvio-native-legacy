@@ -289,6 +289,16 @@ int main(int argc, char **argv) {
   quadros(90, NULL);
   snprintf(bmp, sizeof bmp, "%s-1-salvos.bmp", saida);
   quadros(1, bmp);
+  // SETAS COM O FOCO NA LISTA trocam de aba (estilo lista: direita = proxima).
+  { int f0 = spainel_foco_indice(), a0 = spainel_aba_atual();
+    assert(f0 >= 0 && a0 == 0);
+    painelTecla(SDLK_RIGHT);
+    assert(spainel_aba_atual() == 1 && spainel_foco_indice() >= 0);
+    quadros(40, NULL);
+    painelTecla(SDLK_LEFT);
+    assert(spainel_aba_atual() == 0 && spainel_foco_indice() >= 0);
+    quadros(40, NULL);
+    printf("setas na lista: ok\n"); }
   // A TROCA DE ABA com a seta: tres quadros durante o deslize (~80, 180, 330 ms).
   painelTecla(SDLK_UP); painelTecla(SDLK_UP); painelTecla(SDLK_RIGHT);
   quadros(4, NULL);

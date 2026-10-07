@@ -529,6 +529,8 @@ int spainel_aberto(void)  { return aberto; }
 static int abaExiste(int a);
 static void trocarAba(int nova);
 static int nVisiveis(void);
+int spainel_aba_atual(void) { return aba; }
+int spainel_foco_indice(void) { return foco; }
 void spainel_ir_aba(int a) {
   if (!aberto) spainel_abrir();
   if (a < SP_ABA_SALVOS || a >= SP_ABA_N || !abaExiste(a)) return;
@@ -2261,6 +2263,13 @@ static void editarTecla(SDL_Keycode k) {
   }
 }
 
+// Troca de aba pelas setas com o foco NA LISTA: o foco cai no mesmo indice da
+// aba nova se ele existe, senao no primeiro item (trocarAba o poe nas abas).
+static void trocarAbaDaLista(int d) {
+  int antes = foco, nova = proximaAba(aba, d);
+  trocarAba(nova);
+  if (aba == nova && nVisiveis() > 0) foco = antes < nVisiveis() ? antes : 0;
+}
 void spainel_evento(const SDL_Event *e) {
   SDL_Keycode k;
   if (!aberto) return;
@@ -2320,7 +2329,6 @@ void spainel_evento(const SDL_Event *e) {
       spsConta(social[foco].tipo)) {
     int d = k == SDLK_RIGHT ? 1 : -1;
     if (foco + d >= 0 && foco + d < nSocial && spsConta(social[foco + d].tipo)) { foco += d; return; }
-    if (k == SDLK_RIGHT) return;
   }
   if (k == SDLK_LEFT) {
     if (temAbas() && foco == SP_FOCO_ABAS && editLapis) { editLapis = 0; return; }
@@ -2331,6 +2339,8 @@ void spainel_evento(const SDL_Event *e) {
     if (foco == SP_FOCO_BARRA && barraFoco > 0) { barraFoco--; return; }
     if (aba == SP_ABA_SALVOS && foco > 0 && foco < nLinhas &&
         linhas[foco - 1].fila == linhas[foco].fila) { foco--; return; }
+    // COM O FOCO NA LISTA a esquerda (na primeira coluna) volta uma aba.
+    if (foco >= 0 && temAbas() && !ctx_aberto() && proximaAba(aba, -1) != aba) { trocarAbaDaLista(-1); return; }
     spainel_fechar(); return;
   }
   if (k == SDLK_RIGHT) {
@@ -2343,6 +2353,8 @@ void spainel_evento(const SDL_Event *e) {
     else if (foco == SP_FOCO_BARRA) { if (barraFoco + 1 < nChips()) barraFoco++; }
     else if (aba == SP_ABA_SALVOS && foco >= 0 && foco + 1 < nLinhas &&
              linhas[foco + 1].fila == linhas[foco].fila) foco++;
+    // COM O FOCO NA LISTA a direita (na ultima coluna) avanca uma aba.
+    else if (foco >= 0 && temAbas() && !ctx_aberto() && proximaAba(aba, 1) != aba) trocarAbaDaLista(1);
     return;
   }
   if (k == SDLK_DOWN || k == SDLK_UP) { pedCol = 0; alcCol = -1; }
