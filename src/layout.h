@@ -150,7 +150,7 @@
 #define NV_HERO_BOTAO_H   68.0f
 // Botao do destaque da home em pilula COMPACTA (dono, 06/10, referencia da
 // Apple TV): branco com texto escuro, ~46 px. Vale para os tres layouts.
-#define NV_HERO_BOTAO_COMPACTO_H 46.0f
+#define NV_HERO_BOTAO_COMPACTO_H 72.0f   // = NV_DETW2_BTN_H (primario do detalhe)
 #define NV_HERO_NBOTOES      3
 // MEDIDO no app web: .home-modern-hero-media em x=555, y=0, 1421x670, com a
 // arte em object-fit:cover. Os degrades que dissolvem a borda esquerda e a base

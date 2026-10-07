@@ -3922,7 +3922,7 @@ static void desenhaHero(Uint32 agora, float saida) {
         // 24/600 com ajustes_tinta_foco, mais pesado e fora da pilula do app.
         TxtLinha lb = txt_linha(TXT_DET_BOTAO, rot, 245, 245, 245, 255);
         float bh = btnH;
-        float bw = lb.w + 56.0f;
+        float bw = lb.w + 38.0f * 2;   // NV_DETW2_BTN_PADX, igual ao detalhe
         float by = actionY;
         GfxRect bt = { x, by, bw, bh };
 
