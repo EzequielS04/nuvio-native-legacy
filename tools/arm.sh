@@ -40,11 +40,11 @@ ARES="${NUVIO_ARES_PACKAGE:-../NuvioWeb-0.3.38-beta/node_modules/.bin/ares-packa
 CONTAINER_RUNTIME="${NUVIO_CONTAINER_RUNTIME:-docker}"
 BUILD_PLATFORM="${NUVIO_BUILD_PLATFORM:-linux/arm64}"
 SDK_IMAGE="${NUVIO_SDK_IMAGE:-nuvio-webos-sdk}"
-# DTS (PR #259): o FFmpeg mora na IMAGEM, e so imagem reconstruida depois do
-# PR o tem. Sem NUVIO_DTS_FFMPEG a build olha a imagem: com o FFmpeg leva a
-# conversao, sem ele sai sem (e diz), em vez de parar o deploy de todo dia
-# ate alguem reconstruir a imagem. 1 exige, 0 recusa.
-DTS_ENABLED="${NUVIO_DTS_FFMPEG:-auto}"
+# DTS (PR #259): o FFmpeg mora na IMAGEM. Por padrao a build exige a
+# conversao e falha se o FFmpeg estiver ausente; reconstrua a imagem nesse caso.
+# NUVIO_DTS_FFMPEG=0 compila sem conversao; auto consulta a imagem e permite
+# compilar sem ela quando o FFmpeg nao estiver disponivel.
+DTS_ENABLED="${NUVIO_DTS_FFMPEG:-1}"
 case "$DTS_ENABLED" in 0|1|auto) ;; *) echo 'NUVIO_DTS_FFMPEG deve ser 0, 1 ou auto' >&2; exit 2;; esac
 if [ "$DTS_ENABLED" = auto ]; then
   if "$CONTAINER_RUNTIME" run --rm --platform "$BUILD_PLATFORM" "$SDK_IMAGE" \

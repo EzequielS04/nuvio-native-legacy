@@ -30,18 +30,23 @@ struct Native {
   bool (*volume)(SF *,const char *) = nullptr;
   ~Native() { if (lib) dlclose(lib); }
   template<typename T> bool symbol(T &out, const char *name) {
-    out = reinterpret_cast<T>(dlsym(lib, name)); return out != nullptr;
+    out = reinterpret_cast<T>(dlsym(lib, name));
+    if (!out) fprintf(stderr, "[dts] firmware symbol missing: %s\n", name);
+    return out != nullptr;
   }
   bool open() {
     lib = dlopen("libplayerAPIs.so", RTLD_NOW | RTLD_LOCAL);
     if (!lib) lib = dlopen("libplayerAPIs.so.1", RTLD_NOW | RTLD_LOCAL);
-    if (!lib) return false;
+    if (!lib) {
+      fprintf(stderr, "[dts] firmware library load failed: %s\n", dlerror());
+      return false;
+    }
 #if _GLIBCXX_USE_CXX11_ABI
     const char *feed_symbol = "_ZN17StarfishMediaAPIs4FeedB5cxx11EPKc";
 #else
     const char *feed_symbol = "_ZN17StarfishMediaAPIs4FeedEPKc";
 #endif
-    symbol(volume,"_ZN17StarfishMediaAPIs9setVolumeEPKc"); /* Optional. */
+    volume = reinterpret_cast<decltype(volume)>(dlsym(lib,"_ZN17StarfishMediaAPIs9setVolumeEPKc")); /* Optional. */
     return symbol(ctor,"_ZN17StarfishMediaAPIsC1EPKc") &&
       symbol(dtor,"_ZN17StarfishMediaAPIsD1Ev") &&
       symbol(load,"_ZN17StarfishMediaAPIs4LoadEPKcPFvixS1_PvES2_") &&

@@ -880,14 +880,14 @@ static int eventoPayload(const char *p, unsigned minhaSessao) {
     const char *q;
     nAudio = nLeg = 0;
     vidAtmos = 0;
-    // Percorre audioTrackInfo item a item. O sourceInfo e um objeto so, entao
-    // andar pelos "{" depois da chave do vetor e o suficiente aqui.
-    q = strstr(p, "\"audioTrackInfo\"");
+    // Empty strings/arrays mean no tracks. Stay inside each track array so
+    // the following videoTrackInfo cannot be mistaken for audio.
+    q = js_array(p, NULL, "audioTrackInfo");
     if (q) {
-      const char *fimVet = strchr(q, ']');
-      const char *o = strchr(q, '{');
-      while (o && nAudio < NV_FAIXA_MAX && (!fimVet || o < fimVet)) {
-        const char *fo = strchr(o, '}');
+      const char *o = q;
+      while (o && *o == '{' && nAudio < NV_FAIXA_MAX) {
+        const char *fo = js_fim(o);
+        if (!fo) break;
         VideoFaixa *f = &faixaAudio[nAudio];
         char cod[16] = "", ch[8] = "", imm[16] = "";
         memset(f, 0, sizeof *f);
@@ -930,7 +930,7 @@ static int eventoPayload(const char *p, unsigned minhaSessao) {
                  imm[0] ? "Atmos" : "",
                  (imm[0] && ch[0]) ? " " : "", ch);
         nAudio++;
-        o = fo ? strchr(fo, '{') : NULL;
+        o = js_prox(fo);
       }
     }
     // DIAGNOSTICO: despeja o sourceInfo CRU uma vez por titulo. A TV nao
@@ -944,12 +944,12 @@ static int eventoPayload(const char *p, unsigned minhaSessao) {
         if (fd) { fputs(p, fd); fclose(fd); despejou = 1; }
       } }
 
-    q = strstr(p, "\"subtitleTrackInfo\"");
+    q = js_array(p, NULL, "subtitleTrackInfo");
     if (q) {
-      const char *fimVet = strchr(q, ']');
-      const char *o = strchr(q, '{');
-      while (o && nLeg < NV_FAIXA_MAX && (!fimVet || o < fimVet)) {
-        const char *fo = strchr(o, '}');
+      const char *o = q;
+      while (o && *o == '{' && nLeg < NV_FAIXA_MAX) {
+        const char *fo = js_fim(o);
+        if (!fo) break;
         VideoFaixa *f = &faixaLeg[nLeg];
         memset(f, 0, sizeof *f);
         f->numero = (int)numeroDe(o, "\"trackNum\":");
@@ -970,7 +970,7 @@ static int eventoPayload(const char *p, unsigned minhaSessao) {
         else
           snprintf(f->rotulo, sizeof f->rotulo, i18n("Legenda %d"), f->numero + 1);
         nLeg++;
-        o = fo ? strchr(fo, '{') : NULL;
+        o = js_prox(fo);
       }
     }
     printf("[video] faixas: audio=%d legenda=%d atmos=%d\n", nAudio, nLeg, vidAtmos);
@@ -1724,6 +1724,33 @@ double video_creditos(void) {
   return 0.0;
 }
 
+/* LG can omit an unsupported audio track entirely from sourceInfo. Recover
+ * its identity only when the file has a single audio track; a filtered list
+ * with several tracks does not tell us which one native playback selected. */
+static void completarAudioMkv(const MkvFaixa *fx, int n) {
+  const MkvFaixa *audio = NULL;
+  int count = 0;
+  for (int i = 0; i < n; i++) {
+    if (fx[i].tipo == 2) { audio = &fx[i]; count++; }
+  }
+  if (count != 1 || nAudio > 1 || (nAudio && faixaAudio[0].codec[0])) return;
+  VideoFaixa *f = &faixaAudio[0];
+  if (!nAudio) {
+    memset(f, 0, sizeof *f);
+    f->stream_index = f->stream_id = -1;
+    f->ordinalMkv = 0;
+    audioAtual = 0;
+  }
+  snprintf(f->codec, sizeof f->codec, "%s", !strncmp(audio->codec, "A_DTS", 5) ? "dts" : audio->codec);
+  if (!f->idioma[0] && strcmp(audio->idioma, "und"))
+    snprintf(f->idioma, sizeof f->idioma, "%s", audio->idioma);
+  if (!f->canais) f->canais = audio->canais;
+  snprintf(f->rotulo, sizeof f->rotulo, "%s", audio->nome[0] ? audio->nome : audio->codec);
+  nAudio = 1;
+  printf("[dts] MKV recovered single audio track: codec=%s channels=%d\n", f->codec, f->canais);
+  fflush(stdout);
+}
+
 static void *lerMkv(void *arg) {
   MkvFaixa fx[MKV_MAX_FAIXAS];
   MkvCap   caps[MKV_MAX_CAPS];
@@ -1761,6 +1788,8 @@ static void *lerMkv(void *arg) {
     marco("mkv: nenhuma faixa lida (nao e MKV, ou Range falhou)");
     fioMkvVivo = 0; return NULL;
   }
+
+  completarAudioMkv(fx, n);
 
   // SEM MUTEX, e de proposito: este arquivo nao tem um. faixaLeg ja e escrito
   // pelo fio de resposta do luna e lido pelo desenho sem trava nenhuma, e
@@ -1907,6 +1936,8 @@ int video_tocar(const char *url) {
   dvRecuado = 0;
   dtsTentou = 0; dtsRevisao = 0; dtsSaida[0] = 0; dtsNativePending = 0; dtsEstado = 0;
   dtsHabilitado = dts_playback_enabled() && dtsLiberadoNestaTv();
+  printf("[dts] fallback %s\n", dtsHabilitado ? "available" : "unavailable");
+  fflush(stdout);
   // O modo vale para esta fonte e para os recarregar dela (tocarInterno).
   modoLoad = video_modo_live_consumir();
   nv_recon_zerar(&recon);
@@ -1970,7 +2001,7 @@ void video_bombear(void) {
   // sonda nao custa rede: dispara logo, e a legenda automatica decide no
   // sourceInfo em vez de esperar os 20 s de buffer.
   if (mkvPendente && !fioMkvVivo && urlAtual[0] &&
-      (bufferSeg - posSeg >= 20.0 || mkvass_cabecalho(urlAtual, NULL, NULL)))
+      ((audioNaoSup && !nAudio) || bufferSeg - posSeg >= 20.0 || mkvass_cabecalho(urlAtual, NULL, NULL)))
     video_sondar_mkv_agora();
   // Avanco pendente que ja repousou.
   if (seekEm && SDL_GetTicks() >= seekEm) {
