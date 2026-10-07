@@ -1316,7 +1316,10 @@ static void *rodar(void *u) {
   sincronizarPlugins();
   // Sempre, nao so quando `sujoProgresso`: linhas migradas do formato antigo
   // nascem pendentes sem ninguem ter marcado nada.
-  if (syncprog_empurrar() >= 0) sujoProgresso = 0;
+  // "Enviar histórico para a conta Nuvio" desligado neste perfil: o progresso
+  // nao sobe (o pull continua, a conta pode ter coisa de outra TV).
+  if (!ajustes_hist_conta()) sujoProgresso = 0;
+  else if (syncprog_empurrar() >= 0) sujoProgresso = 0;
   // O JORNAL DA CONTA (vistos e Salvos marcados nesta TV): DEPOIS do pull,
   // como o resto. E a repeticao de quem falhou offline — cada ciclo tenta de
   // novo o que ainda nao teve 2xx.

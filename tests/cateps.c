@@ -26,6 +26,8 @@
 // os simbolos que ele pede (addons, rede, trakt...) viram dubles abaixo. Os
 // cat_* NAO viram duble: este arquivo existe exatamente para exercitar os de
 // verdade do catalogo.c.
+int ajustes_social(void) { return 1; }
+int ajustes_hist_conta(void) { return 1; }
 int ajustes_busca_cinemeta(void) { return 1; }
 #include "../src/descoberta.c"
 #include "../src/progresso.h"

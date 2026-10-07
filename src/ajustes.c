@@ -459,6 +459,13 @@ typedef enum {
   // profile 5/8 single layer plays through our demux with Dolby Vision (webOS
   // only, video.c). LOCAL, desta TV; padrao Desligado. No fim: valor[]/CHAVE[].
   AJ_DV_MKV,
+  // 2.0.2 (pedido de quem tem 2 perfis): por PERFIL desta TV, nao da conta.
+  // AJ_HIST_CONTA: Ligado (padrao) = o que se assiste neste perfil sobe para a
+  // conta Nuvio (progresso e vistos); Desligado = so vai para Trakt/Simkl.
+  // AJ_SOCIAL: Ligado (padrao) = amigos, atividade e recomendacoes; Desligado
+  // tira tudo isso do app e para as chamadas de rede do social. No fim:
+  // valor[]/CHAVE[] posicionais.
+  AJ_HIST_CONTA, AJ_SOCIAL,
   AJ_N
 } OpcaoId;
 
@@ -1263,6 +1270,8 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Continuar na escolha de perfil",  V_LIGA, 2),             // local: psContinuarLocal
   ESC("DTS convertido em",               V_DTS_SAIDA, 2),        // local: dtsSaidaLocal
   ESC("Dolby Vision em MKV (experimental)", V_LIGA, 2),          // local: dvMkvLocal
+  ESC("Enviar histórico para a conta Nuvio", V_LIGA, 2),          // por perfil: histContaLocal
+  ESC("Recursos sociais",                V_LIGA, 2),             // por perfil: socialLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1475,6 +1484,8 @@ static const char *CHAVE[] = {
   "psContinuarLocal",
   "dtsSaidaLocal",
   "dvMkvLocal",
+  "histContaLocal",
+  "socialLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -2179,6 +2190,8 @@ int ajustes_cw_retido_tambem(void)    { return lig(AJ_CW_RETIDO_TAMBEM); }
 int ajustes_ps_continuar(void)        { return lig(AJ_PS_CONTINUAR); }
 int ajustes_dts_ac3(void)             { return valor[AJ_DTS_AC3] == 1; }
 int ajustes_dv_mkv(void)              { return lig(AJ_DV_MKV); }
+int ajustes_hist_conta(void)          { return lig(AJ_HIST_CONTA); }
+int ajustes_social(void)              { return lig(AJ_SOCIAL); }
 // Espaco da Home em fracao do valor medido. Fora da faixa do NUM (arquivo torto)
 // volta para dentro dela; 0 (arquivo sem a chave) nao chega aqui: o padrao e 100.
 float ajustes_espaco_fator(int pct) {
@@ -3790,6 +3803,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_PS_CONTINUAR:   /* o web nao tem este cartao; escolha desta TV */
     case AJ_DTS_AC3:        /* o conversor de DTS e desta TV */
     case AJ_DV_MKV:         /* o demux e o decoder sao desta TV */
+    case AJ_HIST_CONTA: case AJ_SOCIAL: /* por perfil desta TV (perfilLocal); o web nao tem */
     case AJ_TAM_MAX: case AJ_TAM_MIN: /* o web nao tem a faixa de tamanho */
     case AJ_ESPACO_FILEIRAS: case AJ_ESPACO_TITULOS: /* o web nao tem espacamento */
     case AJ_FONTE_PRAZO:    /* o web nao tem: a rede e os addons sao desta casa */
@@ -3827,10 +3841,18 @@ static int somenteDesteAparelho(int op) {
 // A copia por perfil guarda SO o que e do perfil: o que a conta tambem guarda
 // (o mesmo conjunto que ajustes_mesclar_blob considera). O que descreve esta
 // TV (somenteDesteAparelho, idioma, fonte da interface) nao muda com o perfil.
+// O que e do PERFIL mas a conta nao guarda (o web nao tem estas escolhas):
+// onde o historico vai e se o social existe. Entram na copia por perfil
+// (ajustes-p<N>.txt) e continuam FORA do blob (somenteDesteAparelho).
+static int perfilLocal(int i) {
+  return i == AJ_CW_FONTE || i == AJ_SALVOS_DEST || i == AJ_HIST_CONTA || i == AJ_SOCIAL;
+}
+
 static int dePerfil(int i) {
   if (OPCOES[i].tipo == OP_LEITURA || OPCOES[i].tipo == OP_ACAO) return 0;
   if (!CHAVE[i] || CHAVE[i][0] == '-') return 0;
   if (i == AJ_FONTE_UI || i == AJ_IDIOMA) return 0;
+  if (perfilLocal(i)) return 1;
   return !somenteDesteAparelho(i);
 }
 
@@ -5049,6 +5071,8 @@ static const char *ajudaOpcao(int op) {
     case AJ_TAM_MIN: return "Na escolha automática, fontes menores que este tamanho ficam para o fim da fila. Se for maior que o tamanho máximo, o mínimo é ignorado. Só vale para arquivos com tamanho conhecido; se só houver fontes fora da faixa, a melhor delas ainda toca.";
     case AJ_DTS_AC3: return "Como o áudio DTS é entregue à TV quando o app o converte (só na LG). Estéreo (AAC) é o modo provado e serve qualquer TV. 5.1 (Dolby Digital) mantém o som surround para barra de som e receiver por ARC/eARC; vale a partir do próximo vídeo.";
     case AJ_PS_CONTINUAR: return "Ligado, cada perfil mostra na escolha de perfil o cartão com o que ele estava assistindo. Desligado, a tela mostra só os perfis.";
+    case AJ_HIST_CONTA: return "Ligado (padrão): o que você assiste neste perfil sobe para a conta Nuvio, com o progresso e os vistos. Desligado: nada disso é enviado à conta; o Trakt e o Simkl vinculados a este perfil continuam recebendo. Vale só para este perfil.";
+    case AJ_SOCIAL: return "Ligado (padrão): amigos, atividade deles e recomendações. Desligado: tudo isso some, com a fileira de amigos da Home, e o app para de falar com o serviço social. Salvos e Avisos continuam. Vale só para este perfil.";
     case AJ_DV_MKV: return "Arquivos MKV em Dolby Vision perfil 5 ou 8 tocam com o Dolby Vision ligado, em vez de HDR10. O áudio Dolby Digital e Dolby Digital Plus vai direto para a TV. Se a conexão não acompanhar, o vídeo continua em HDR10. Só em TVs LG com webOS 4 ou mais novo.";
     case AJ_CW_RETIDO_TAMBEM: return "Quando o título está na ilha ou em Retomar agora, mostra também na fileira Continuar assistindo.";
     case AJ_PLR_CLASSIF: return "Ligado (padrão): no começo do filme, a ilha mostra a classificação indicativa e os avisos do guia parental (violência, nudez, palavrões). Desligado: o player não mostra nada disso.";
@@ -5163,7 +5187,7 @@ static const char *efeitoOpcao(int op) {
       // sem explicacao. Mesma frase de simkl.h, que as outras telas usam.
       if (valor[op] == AJ_CWF_SIMKL && !simklauth_token()[0])
         return "Vincule o Simkl em Ajustes: sem o vínculo, a fileira fica vazia.";
-      return "Vale só nesta TV. Ao mudar, a fileira é remontada na hora.";
+      return "Vale para este perfil. Ao mudar, a fileira é remontada na hora.";
     case AJ_IDIOMA:
       return "Ao mudar, as fileiras são remontadas para os títulos saírem no idioma novo.";
     case AJ_TRAILER_ZOOM_TPK:
@@ -5867,7 +5891,7 @@ static int definirValorDireto(int op, int novo) {
   if (op == AJ_FONTE_UI) txt_definir_fonte_interface((TxtFamilia)novo);
   if (op == AJ_TAMANHO_UI) gfx_escala_ui_definir(ajustes_tamanho_ui());
   if (op == AJ_ICONE_APP) iconeapp_aplicar_plataforma();
-  if (op == AJ_CW_FONTE || op == AJ_SALVOS_DEST) desc_repetir();
+  if (op == AJ_CW_FONTE || op == AJ_SALVOS_DEST || op == AJ_SOCIAL) desc_repetir();
   // A fonte decide so esta fileira: refaz-la, alem do ciclo completo (#244).
   if (op == AJ_CW_FONTE) desc_refazer_continuar();
   if (op == AJ_CW_ORDEM || op == AJ_CW_NAO_EXIBIDOS || op == AJ_CW_CONCLUIDO || op == AJ_CW_RETIDO_TAMBEM)
@@ -6779,7 +6803,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
     case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR: case AJ_ADDONS_PRINCIPAL: case AJ_ENQUETES:
       return AJPV_CONTA;
-    case AJ_SALVOS_DEST: case AJ_TRAKT: case AJ_SIMKL: case AJ_DISCORD:
+    case AJ_SALVOS_DEST: case AJ_TRAKT: case AJ_SIMKL: case AJ_DISCORD: case AJ_HIST_CONTA: case AJ_SOCIAL:
       return AJPV_RASTREIO;
     case AJ_VERSAO_I: case AJ_ATUALIZAR: case AJ_ENVIAR_LOG: case AJ_GUIA: case AJ_NOVIDADES20: case AJ_APOIAR:
     case AJ_ENVIO_AUTO: case AJ_VER_REGISTRO:

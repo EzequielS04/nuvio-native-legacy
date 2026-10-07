@@ -549,7 +549,7 @@ int main(void) {
   assert(AJ_PLR_CLASSIF == AJ_LEG_FORCADA + 1 && AJ_PLR_CLASSIF == AJ_FONTE_ESCOPO - 1 && !strcmp(CHAVE[AJ_PLR_CLASSIF], "classifPlayerLocal") && valorPadrao[AJ_PLR_CLASSIF] == 0);
   assert(AJ_PROPORCAO_PADRAO == AJ_FONTE_ESCOPO + 9 && AJ_PROPORCAO_PADRAO == AJ_ESPACO_TITULOS + 1 && !strcmp(CHAVE[AJ_PROPORCAO_PADRAO], "proporcaoPadraoLocal") && valorPadrao[AJ_PROPORCAO_PADRAO] == 0 && OPCOES[AJ_PROPORCAO_PADRAO].n == 9 && ajustes_proporcao_padrao() == -1 && somenteDesteAparelho(AJ_PROPORCAO_PADRAO) && !dePerfil(AJ_PROPORCAO_PADRAO));
   // 2.0.2: "Tambem em Continuar assistindo". Local, last, default OFF (= one title, one place), once on screen.
-  assert(AJ_CW_RETIDO_TAMBEM == AJ_N - 4 && AJ_DV_MKV == AJ_N - 1 && AJ_CW_RETIDO_TAMBEM == AJ_PROPORCAO_PADRAO + 1 && AJ_CW_RETIDO_TAMBEM == AJ_FONTE_ESCOPO + 10 && AJ_DV_MKV == AJ_FONTE_ESCOPO + 13);
+  assert(AJ_CW_RETIDO_TAMBEM == AJ_PROPORCAO_PADRAO + 1 && AJ_CW_RETIDO_TAMBEM == AJ_FONTE_ESCOPO + 10 && AJ_DV_MKV == AJ_FONTE_ESCOPO + 13);
   assert(!strcmp(CHAVE[AJ_CW_RETIDO_TAMBEM], "cwRetidoTambemLocal") && OPCOES[AJ_CW_RETIDO_TAMBEM].n == 2 && valorPadrao[AJ_CW_RETIDO_TAMBEM] == 1);
   assert(somenteDesteAparelho(AJ_CW_RETIDO_TAMBEM) && !dePerfil(AJ_CW_RETIDO_TAMBEM));
   { int vz = 0, k; for (k = 0; k < AJ_N_TELA; k++) if (TELA[k].tipo == IT_OPC && TELA[k].op == AJ_CW_RETIDO_TAMBEM) vz++; assert(vz == 1); }
@@ -557,6 +557,15 @@ int main(void) {
   assert(!strcmp(CHAVE[AJ_DV_MKV], "dvMkvLocal") && OPCOES[AJ_DV_MKV].n == 2 && valorPadrao[AJ_DV_MKV] == 1 && !ajustes_dv_mkv());
   assert(somenteDesteAparelho(AJ_DV_MKV) && !dePerfil(AJ_DV_MKV));
   { int vz = 0, k; for (k = 0; k < AJ_N_TELA; k++) if (TELA[k].tipo == IT_OPC && TELA[k].op == AJ_DV_MKV) vz++; assert(vz == 1); }
+  // 2.0.2: "Enviar histórico para a conta Nuvio" and "Recursos sociais". Per PROFILE on this
+  // TV (ajustes-p<N>.txt) but never in the account blob; default ON; last; once on screen.
+  assert(AJ_HIST_CONTA == AJ_FONTE_ESCOPO + 14 && AJ_SOCIAL == AJ_FONTE_ESCOPO + 15 && AJ_SOCIAL == AJ_N - 1);
+  assert(!strcmp(CHAVE[AJ_HIST_CONTA], "histContaLocal") && !strcmp(CHAVE[AJ_SOCIAL], "socialLocal"));
+  assert(OPCOES[AJ_HIST_CONTA].n == 2 && OPCOES[AJ_SOCIAL].n == 2 && valorPadrao[AJ_HIST_CONTA] == 0 && valorPadrao[AJ_SOCIAL] == 0);
+  assert(ajustes_hist_conta() && ajustes_social());
+  assert(somenteDesteAparelho(AJ_HIST_CONTA) && dePerfil(AJ_HIST_CONTA) && somenteDesteAparelho(AJ_SOCIAL) && dePerfil(AJ_SOCIAL));
+  assert(somenteDesteAparelho(AJ_CW_FONTE) && dePerfil(AJ_CW_FONTE) && somenteDesteAparelho(AJ_SALVOS_DEST) && dePerfil(AJ_SALVOS_DEST));
+  { int a = 0, b = 0, k; for (k = 0; k < AJ_N_TELA; k++) if (TELA[k].tipo == IT_OPC) { a += TELA[k].op == AJ_HIST_CONTA; b += TELA[k].op == AJ_SOCIAL; } assert(a == 1 && b == 1); }
   // #303: "Continuar na escolha de perfil". Local, last, default ON (= today), once on screen, findable.
   assert(AJ_PS_CONTINUAR == AJ_CW_RETIDO_TAMBEM + 1 && AJ_PS_CONTINUAR == AJ_FONTE_ESCOPO + 11);
   assert(!strcmp(CHAVE[AJ_PS_CONTINUAR], "psContinuarLocal") && OPCOES[AJ_PS_CONTINUAR].n == 2 && valorPadrao[AJ_PS_CONTINUAR] == 0 && ajustes_ps_continuar());

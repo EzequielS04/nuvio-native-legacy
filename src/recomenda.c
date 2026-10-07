@@ -283,7 +283,9 @@ static void socNovoCarregar(void);
 static void socNovoRegistrado(const char *nome, const char *exib, int alcance);
 static void avisarAlcance(void);
 
-int recomenda_ativo(void) { return NV_REC_URL[0] != 0; }
+// "Recursos sociais" desligado (por perfil, ajustes.h) tira o servico inteiro:
+// nenhuma chamada de rede, nenhuma tela. Cada funcao daqui ja começa por esta.
+int recomenda_ativo(void) { return NV_REC_URL[0] != 0 && ajustes_social(); }
 int recomenda_aberta(void) { return cartaoAberto; }
 
 const char *recomenda_modelo(int i) {

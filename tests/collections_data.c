@@ -1,6 +1,8 @@
 // Exercises the real paged reader with a fake network, including stale responses.
 #include <assert.h>
 #include <unistd.h>
+int ajustes_social(void) { return 1; }
+int ajustes_hist_conta(void) { return 1; }
 int ajustes_busca_cinemeta(void) { return 1; }
 #include "../src/descoberta.c"
 // descoberta.c passou a traduzir os rotulos que monta ("Filme", "Serie", a

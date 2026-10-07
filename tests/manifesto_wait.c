@@ -1,4 +1,6 @@
 // Exercise the actual manifest consumer and worker, without network access.
+int ajustes_social(void) { return 1; }
+int ajustes_hist_conta(void) { return 1; }
 int ajustes_busca_cinemeta(void) { return 1; }
 #include "../src/descoberta.c"
 #include <assert.h>

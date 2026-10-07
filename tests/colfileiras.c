@@ -15,6 +15,8 @@
 // Sem o conserto, o passo 3 nao casa e os catalogos da colecao viram fileira.
 #include <assert.h>
 #include <unistd.h>
+int ajustes_social(void) { return 1; }
+int ajustes_hist_conta(void) { return 1; }
 int ajustes_busca_cinemeta(void) { return 1; }
 #include "../src/descoberta.c"
 #include "jellyfin_stub.inc"

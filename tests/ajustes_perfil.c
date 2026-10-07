@@ -21,13 +21,22 @@ int main(void) {
   // Sem ajustes.txt, o ajuste novo nasce LIGADO (V_LIGA: 0 = Ligado).
   assert(ajustes_addons_do_principal() == 1);
 
-  // Perfil 1: destaque desligado, 4K pedido.
+  // Perfil 1: destaque desligado, 4K pedido. 2.0.2: ele manda o historico so
+  // para o Simkl e nao quer o social; o perfil 2 e o contrario.
+  valor[AJ_CW_FONTE] = AJ_CWF_SIMKL;
+  valor[AJ_SALVOS_DEST] = AJ_SALVOS_SIMKL;
+  valor[AJ_HIST_CONTA] = 1;     // Desligado
+  valor[AJ_SOCIAL] = 1;         // Desligado
   valor[AJ_HERO] = 1;
   valor[AJ_RESOLUCAO] = RES_4K;
   valor[AJ_ADDONS_PRINCIPAL] = 0;
   ajustes_perfil_guardar(1);
 
   // O perfil 2 mexe nas duas coisas.
+  valor[AJ_CW_FONTE] = AJ_CWF_CONTA;
+  valor[AJ_SALVOS_DEST] = AJ_SALVOS_LOCAL;
+  valor[AJ_HIST_CONTA] = 0;
+  valor[AJ_SOCIAL] = 0;
   valor[AJ_HERO] = 0;
   valor[AJ_RESOLUCAO] = 0;
   valor[AJ_ADDONS_PRINCIPAL] = 1;
@@ -38,10 +47,14 @@ int main(void) {
   assert(valor[AJ_HERO] == 1);
   assert(valor[AJ_RESOLUCAO] == 0);
   assert(valor[AJ_ADDONS_PRINCIPAL] == 1);   // ajuste desta TV, nao do perfil
+  assert(valor[AJ_CW_FONTE] == AJ_CWF_SIMKL && valor[AJ_SALVOS_DEST] == AJ_SALVOS_SIMKL);
+  assert(!ajustes_hist_conta() && !ajustes_social());
 
   // E o 2 de novo.
   assert(ajustes_perfil_restaurar(2) == 1);
   assert(valor[AJ_HERO] == 0);
+  assert(valor[AJ_CW_FONTE] == AJ_CWF_CONTA && valor[AJ_SALVOS_DEST] == AJ_SALVOS_LOCAL);
+  assert(ajustes_hist_conta() && ajustes_social());
 
   // Perfil nunca usado aqui: nada muda.
   valor[AJ_HERO] = 1;

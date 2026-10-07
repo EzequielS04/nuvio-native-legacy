@@ -2167,6 +2167,8 @@ static void sincronizarFileiras(void) {
     // esvazia, tira. E o que renderModernHomeLayout faz quando
     // computeContinueWatchingRenderState devolve a fileira desligada.
     if (!strcmp(cf->chave, "continue_watching") && !ajustes_cw_ligado()) continue;
+    // "Recursos sociais" desligado: a fileira de amigos nao existe.
+    if (!strcmp(cf->chave, "social_activity") && !ajustes_social()) continue;
     // A fileira pode ser republicada depois de uma montagem em que o destaque
     // usou índices compostos. Limpar a marca evita que uma linha comum herde
     // silenciosamente os índices daquela montagem anterior.
@@ -2314,7 +2316,7 @@ static void sincronizarFileiras(void) {
   }
   int socialExiste=0;
   for(int i=0;i<destino;i++)if(fileiras[i].tipo==FILEIRA_SOCIAL)socialExiste=1;
-  if(!socialExiste && destino<MAX_FIL) {
+  if(!socialExiste && destino<MAX_FIL && ajustes_social()) {
     int pos=destino>0?1:0;
     memmove(fileiras+pos+1,fileiras+pos,(destino-pos)*sizeof *fileiras);
     Fileira *s=&fileiras[pos];memset(s,0,sizeof *s);

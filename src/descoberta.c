@@ -3592,6 +3592,8 @@ static void publicarParcial(CatItem **lote, int *cap, int n,
 typedef struct { pthread_t fio; int viva, n; CatItem itens[8]; } SocialFio;
 static void *fioSocial(void *u) {
   SocialFio *f = (SocialFio *)u;
+  // "Recursos sociais" desligado: sem feed do Trakt, sem amigos do Nuvio.
+  if (!ajustes_social()) { f->n = 0; return NULL; }
   f->n = trakt_social(f->itens, 8);
   f->n = recomenda_social_mesclar(f->itens, f->n, 8);
   return NULL;

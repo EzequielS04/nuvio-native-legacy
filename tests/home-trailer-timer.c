@@ -52,6 +52,8 @@ static char lastSource[128];
 int cat_n(void) { return 1; }
 const CatItem *cat_item(int i) { return i == 0 ? &item : NULL; }
 
+int ajustes_social(void) { return 1; }
+int ajustes_hist_conta(void) { return 1; }
 int ajustes_hero_ligado(void) { return 1; }
 int ajustes_trailer_hero(void) { return trailerSetting; }
 static int somSetting;

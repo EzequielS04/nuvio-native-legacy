@@ -105,6 +105,9 @@ void perfis_esquecer(void)       { ativo = 1; escolhido = 0; }
 const ContaPerfil *perfis_item(int i) { (void)i; return NULL; }
 // Ajustes por perfil (ajustes.c) e a arte escolhida (arteescolha.c) nao entram
 // neste teste; o sync so os chama.
+const char *i18n(const char *s) { return s; }
+int ajustes_social(void) { return 1; }
+int ajustes_hist_conta(void) { return 1; }
 void ajustes_perfil_guardar(int perfil) { (void)perfil; }
 int  ajustes_perfil_restaurar(int perfil) { (void)perfil; return 0; }
 void ajustes_perfil_esquecer(void) { }

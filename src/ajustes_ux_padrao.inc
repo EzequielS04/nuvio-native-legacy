@@ -241,3 +241,5 @@
   0, /* continue on the profile picker (#303): Ligado (V_LIGA: 0 = Ligado) = as before */
   0, /* DTS converted to: Estereo (AAC) = the proven path */
   1, /* Dolby Vision in MKV (2.0.2, experimental): Desligado */
+  0, /* send history to the Nuvio account (2.0.2, per profile): Ligado */
+  0, /* social features (2.0.2, per profile): Ligado */

@@ -742,7 +742,7 @@ static void ajcCenaAoVivo(int op) {
 }
 // Conta, perfis e servicos de lista.
 static void ajcCenaConta(int op) {
-  if (op == AJ_SYNC || op == AJ_TRAKT || op == AJ_SIMKL || op == AJ_CW_FONTE || op == AJ_SALVOS_DEST) {
+  if (op == AJ_SYNC || op == AJ_TRAKT || op == AJ_SIMKL || op == AJ_CW_FONTE || op == AJ_SALVOS_DEST || op == AJ_HIST_CONTA || op == AJ_SOCIAL) {
     // duas telas trocando o progresso pela nuvem
     float f = ajc_fase(2.4f);
     ajc_tv(40, 120, 180, 101, 1); ajc_cartaz(44, 124, 172, 93, 1, 1); ajc_progresso(56, 200, 148, 0.4f + 0.3f * ajc_onda(4.8f), 1);

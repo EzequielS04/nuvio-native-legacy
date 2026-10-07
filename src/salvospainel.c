@@ -919,6 +919,7 @@ static int temSocial(void) { return recomenda_ativo(); }
 // A Atividade existe quando ha de onde ela vir: o servico, ou o Trakt ja ter
 // trazido gente (socialvis.h).
 static int temAtividade(void) {
+  if (!ajustes_social()) return 0;   // "Recursos sociais" desligado: sem abas de gente
   return temSocial() || socialvis_n_eventos() > 0 || socialvis_n_amigos() > 0;
 }
 static int abaExiste(int a) {

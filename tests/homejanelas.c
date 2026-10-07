@@ -29,6 +29,8 @@ int  prog_removido_vence(const char *imdb, long long instanteMs) { (void)imdb; (
 int  cat_tirar_continuar(const char *imdb) { (void)imdb; return 0; }
 int arte_reserva_episodios(const char *imdb, const char *corpo) { (void)imdb; (void)corpo; return 0; }
 
+int ajustes_social(void) { return 1; }
+int ajustes_hist_conta(void) { return 1; }
 int ajustes_busca_cinemeta(void) { return 1; }
 #include "../src/descoberta.c"
 #include "jellyfin_stub.inc"

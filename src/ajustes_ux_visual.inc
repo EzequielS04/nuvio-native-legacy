@@ -204,6 +204,8 @@ static const char *ajVisualIcone(int op) {
     case AJ_SIMKL: return "aj_plug";
     case AJ_SALVOS_DEST: return "aj_plug";
     case AJ_CW_FONTE: return "aj_plug";
+    case AJ_HIST_CONTA: return "aj_cloud";
+    case AJ_SOCIAL: return "aj_user-round";
     case AJ_DEBRID_RD: return "aj_key-round";
     case AJ_DEBRID_TB: return "aj_key-round";
     case AJ_DEBRID_PM: return "aj_key-round";
