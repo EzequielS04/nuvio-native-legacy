@@ -43,6 +43,11 @@ static volatile int dvSondado, dvMkvPerfil, dvMkvEl, dvMkvBl, dvMkvRpu;
 static char dvAudioCodec[16][16];   // Matroska CodecID of each audio track, file order
 static volatile int dvAudios;
 static int dvHabilitado, dtsModoDv, dvRecuoAviso;
+// The audio track a Dolby Vision session of this URL last played (file
+// ordinal + language). Leaving the film and resuming the same source reopens
+// it natively with the TV's default track; the path starts on this one.
+static char dvMemUrl[1024], dvMemIdioma[8];
+static int dvMemOrd = -1;
 // Island notice for app.c: 1 = the source could not keep up, 2 = the path did
 // not start. Consumed once.
 int video_dv_recuo_consumir(void) { int v = dvRecuoAviso; dvRecuoAviso = 0; return v; }
@@ -2510,6 +2515,11 @@ static int dvPronto(void) {
     }
     dvHabilitado = 0; return 0;
   }
+  if (dvMemOrd >= 0 && dvMemOrd < nAudio && dvMemOrd != audioAtual && !strcmp(urlAtual, dvMemUrl) &&
+      (!dvMemIdioma[0] || !faixaAudio[dvMemOrd].idioma[0] || ling_casa(faixaAudio[dvMemOrd].idioma, dvMemIdioma))) {
+    printf("[dv] audio track %d restored for this source\n", dvMemOrd + 1); fflush(stdout);
+    video_escolher_audio(dvMemOrd);
+  }
   if (audioAtual >= 0 && audioAtual < dvAudios) {
     const char *c = dvAudioCodec[audioAtual];
     if (strcmp(c, "A_EAC3") && strcmp(c, "A_AC3") && strncmp(c, "A_DTS", 5)) {
@@ -2651,8 +2661,12 @@ static void bombearDts(void) {
     vidTaxa = st.info.fps_den ? st.info.fps_num / st.info.fps_den : 30;
     vuiPrim = st.info.color_primaries; vuiTrans = st.info.color_transfer;
     vuiMatriz = st.info.color_matrix; vidDV = st.info.dovi_profile != 0;
-    /* Source metadata configures playback; only native videoInfo proves HDR. */
-    snprintf(vidHdr, sizeof vidHdr, "%s", "none"); vidAtmos = 0; viuVideo = 0;
+    /* Source metadata configures playback; only native videoInfo proves HDR.
+     * A reload of the same session (seek, track switch) keeps what the TV
+     * already reported: paused after a seek, videoInfo only comes back on
+     * play, and the Dolby Vision badge used to vanish until then. */
+    if (initial) { snprintf(vidHdr, sizeof vidHdr, "%s", "none"); vidAtmos = 0; }
+    viuVideo = 0;
     nAudio = nLeg = 0;
     for (i = 0; i < st.info.n_tracks; i++) {
       const DtsTrack *t = &st.info.tracks[i];
@@ -2701,6 +2715,11 @@ static void bombearDts(void) {
         dts_playback_subtitle(dtsSessao, faixaLeg[match].stream_index);
     } else {
       for (i = 0; i < nLeg; i++) if (faixaLeg[i].stream_index == selectedSub) legAtual = i;
+    }
+    if (dtsModoDv && audioAtual >= 0 && audioAtual < nAudio) {
+      snprintf(dvMemUrl, sizeof dvMemUrl, "%s", urlAtual);
+      snprintf(dvMemIdioma, sizeof dvMemIdioma, "%s", faixaAudio[audioAtual].idioma);
+      dvMemOrd = audioAtual;
     }
     if (!dtsModoDv || !strcmp(st.info.audio_codec, "aac")) {
       snprintf(dtsSaida, sizeof dtsSaida, "DTS → AAC Stereo");

@@ -2199,7 +2199,7 @@ char *rede_baixar_trecho64_final(const char *url, const char *headers,
                               int64_t *total, int *status,
                               volatile int *cancelled, char *final, int *cross) {
   char current[8192], range[64], origin[128];
-  int hop, public_only = 0;
+  int hop, public_only = 0, downgraded = 0;
   if (size) *size = 0;
   if (total) *total = -1;
   if (status) *status = 0;
@@ -2238,7 +2238,7 @@ char *rede_baixar_trecho64_final(const char *url, const char *headers,
     curl_setopt(c, OPT_XFERINFOFUNCTION, dtsRangeProgress);
     curl_setopt(c, OPT_XFERINFODATA, &r);
     curl_setopt(c, OPT_NOPROGRESS, (long)0);
-    list = dtsRangeHeaders(headers, public_only);
+    list = downgraded ? NULL : dtsRangeHeaders(headers, public_only);
     if (list) curl_setopt(c, OPT_HTTPHEADER, list);
     result = curl_perform(c);
     if (curl_getinfo) {
@@ -2257,8 +2257,19 @@ char *rede_baixar_trecho64_final(const char *url, const char *headers,
       if (strncmp(redirected, "http://", 7) && strncmp(redirected, "https://", 8)) return NULL;
       if (!dtsRangeOrigin(redirected, host, sizeof host)) return NULL;
       if (strcmp(host, origin)) public_only = 1;
-      /* Never send credentials over a redirect from HTTPS to HTTP. */
-      if (!strncmp(current, "https://", 8) && !strncmp(redirected, "http://", 7)) return NULL;
+      /* HTTPS -> HTTP: followed (debrid CDNs answer on plain HTTP: Real-Debrid
+       * via Debridio, where the TV's own player plays), but NO caller header
+       * goes to the downgraded hop or anything after it: not credentials, not
+       * even Referer/User-Agent/Origin. Only the URL travels. */
+      if (!strncmp(current, "https://", 8) && !strncmp(redirected, "http://", 7)) {
+        static int logged;
+        downgraded = public_only = 1;
+        if (!logged) {
+          logged = 1;
+          printf("[rede] range: HTTPS redirect to HTTP followed without request headers\n");
+          fflush(stdout);
+        }
+      }
       snprintf(current, sizeof current, "%s", redirected);
       continue;
     }
