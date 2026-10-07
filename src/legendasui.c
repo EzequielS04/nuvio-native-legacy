@@ -143,12 +143,14 @@ static int nCand;
 static int nEmbVivo(void) { int n = video_n_legenda(); return n > NV_FAIXA_MAX ? NV_FAIXA_MAX : n < 0 ? 0 : n; }
 static void capturar(void) {
   const VideoFaixa *emb[NV_FAIXA_MAX];
-  Legenda add[LEG_MAX];
+  Legenda *add = NULL;
   int nE = nEmbVivo(), nA = 0, i;
   for (i = 0; i < nE; i++) emb[i] = video_legenda(i);
   // Live channels have no addon subtitles (faixas.c, tests/faixas_canal).
-  if (!player_id_canal()[0]) nA = addons_legendas_copiar(add, LEG_MAX, NULL, NULL);
+  if (!player_id_canal()[0] && (add = malloc(sizeof *add * LEG_MAX)))
+    nA = addons_legendas_copiar(add, LEG_MAX, NULL, NULL);
   nCand = legendasui_montar(emb, nE, add, nA, cand, LEGUI_MAX_CAND);
+  free(add);
 }
 
 static void idPrimario(char out[24]) {

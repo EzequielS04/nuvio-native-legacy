@@ -990,18 +990,21 @@ typedef struct {
 typedef struct { LegBusca *B; int i; } LegFio;
 
 static void publicarLegendas(LegBusca *B, int final) {
-  Legenda achadas[LEG_MAX] = {{0}};
+  Legenda *achadas;
   int n;
   if (B->manter && !final) return;
+  achadas = calloc(LEG_MAX, sizeof *achadas);
+  if (!achadas) return;
   pthread_mutex_lock(&B->m);
   n = distribuirLegendas(B->lotes, B->nLotes, B->nGrupos, achadas);
   pthread_mutex_unlock(&B->m);
   pthread_mutex_lock(&legTrava);
   if (!legParar && B->geracao == legGeracao) {
-    memcpy(legs, achadas, sizeof achadas);
+    memcpy(legs, achadas, sizeof legs);
     nLegs = n;
   }
   pthread_mutex_unlock(&legTrava);
+  free(achadas);
 }
 
 static void *buscarUmAddon(void *u) {
