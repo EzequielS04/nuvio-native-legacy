@@ -184,6 +184,8 @@ int  stream_proxima_sem_perda(int atual);
 int  stream_automatico_canal(void);
 // Exclui uma candidata que ja foi entregue ao player e travou no pipeline.
 // A exclusao vale so para a lista atual; uma resposta nova limpa a memoria.
+// 1 = a fonte `indice` existe e ainda nao foi descartada pelo automatico nesta lista.
+int  stream_automatico_disponivel(int indice);
 int  stream_automatico_excluir(int indice);
 // Exclui tambem as IRMAS da candidata (mesmo addon e mesmo rotulo), mas so
 // quando sobra outra candidata: quando o player nao conectou numa, as outras

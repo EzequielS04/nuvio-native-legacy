@@ -51,4 +51,15 @@ int fa_acao(int abertaIdx, int pubIdx, int estado, int playerFalhou);
 // recomeca a contagem); 0 = a aberta antes (se houver) tem de ser desfeita.
 int fa_ja_tocando(int abertaIdx, int escolhida);
 
+// FONTE PREPARADA AO ABRIR O TITULO (opcional): quando a escolha feita na pagina
+// do titulo ainda serve a um Play. Sem estado nem rede: o fio principal passa o
+// que sabe. 1 = serve (abre sem conferir de novo); 0 = descarta e o Play escolhe
+// como sempre. So serve para o MESMO alvo (titulo e episodio), a MESMA lista, a
+// MESMA fonte lembrada, enquanto o link vale e a fonte ainda esta no automatico.
+#define FA_PREPARADA_VALE_MS 45000u
+#define FA_LINK_VALE_MS 60000u
+typedef struct { const char *alvo; unsigned lista; int lembrada, idx; unsigned idadeMs; } FaPreparada;
+typedef struct { const char *alvo; unsigned lista; int lembrada, n, idxDisponivel; unsigned idadeListaMs; } FaAgora;
+int fa_preparada_vale(const FaPreparada *p, const FaAgora *a);
+
 #endif

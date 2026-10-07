@@ -149,6 +149,28 @@ int main(void) {
   CONFERE(fa_acao(-1, 0, FA_OK, 0) == FA_ACAO_NADA, "ja concluida antes de abrir: nao abre");
   CONFERE(fa_acao(-1, 0, FA_RUIM, 0) == FA_ACAO_NADA, "ja reprovada antes de abrir: nao abre");
 
+  // 8. Fonte preparada ao abrir o titulo: so serve ao MESMO Play.
+  { FaPreparada p = { "tt1:1:2", 9, 3, 4, 1000 };
+    FaAgora a = { "tt1:1:2", 9, 3, 12, 1, 5000 };
+    CONFERE(fa_preparada_vale(&p, &a), "mesmo alvo, lista e lembrada: serve");
+    a.alvo = "tt1:1:3";
+    CONFERE(!fa_preparada_vale(&p, &a), "outro episodio nao serve");
+    a.alvo = "tt1:1:2"; a.lista = 10;
+    CONFERE(!fa_preparada_vale(&p, &a), "lista trocada nao serve");
+    a.lista = 9; a.lembrada = -1;
+    CONFERE(!fa_preparada_vale(&p, &a), "outra fonte lembrada nao serve");
+    a.lembrada = 3; a.idxDisponivel = 0;
+    CONFERE(!fa_preparada_vale(&p, &a), "descartada pelo automatico nao serve");
+    a.idxDisponivel = 1; a.n = 4;
+    CONFERE(!fa_preparada_vale(&p, &a), "indice fora da lista nao serve");
+    a.n = 12; p.idadeMs = FA_PREPARADA_VALE_MS + 1;
+    CONFERE(!fa_preparada_vale(&p, &a), "preparada velha nao serve");
+    p.idadeMs = 1000; a.idadeListaMs = FA_LINK_VALE_MS + 1;
+    CONFERE(!fa_preparada_vale(&p, &a), "link da lista envelhecido nao serve");
+    p.idx = -1; a.idadeListaMs = 0;
+    CONFERE(!fa_preparada_vale(&p, &a) && !fa_preparada_vale(NULL, &a), "sem fonte nao serve");
+  }
+
   if (falhas) { printf("fonteantecipa: %d falha(s)\n", falhas); return 1; }
   printf("fonteantecipa: ok\n");
   return 0;

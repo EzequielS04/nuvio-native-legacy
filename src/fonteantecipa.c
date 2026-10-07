@@ -1,5 +1,6 @@
 #include "fonteantecipa.h"
 #include <pthread.h>
+#include <string.h>
 
 static pthread_mutex_t trava = PTHREAD_MUTEX_INITIALIZER;
 static unsigned rodada;
@@ -72,4 +73,11 @@ int fa_acao(int abertaIdx, int pubIdx, int estado, int playerFalhou) {
 
 int fa_ja_tocando(int abertaIdx, int escolhida) {
   return abertaIdx >= 0 && escolhida == abertaIdx;
+}
+
+int fa_preparada_vale(const FaPreparada *p, const FaAgora *a) {
+  if (!p || !a || !p->alvo || !a->alvo) return 0;
+  return !strcmp(p->alvo, a->alvo) && p->lista == a->lista && p->lembrada == a->lembrada &&
+         p->idx >= 0 && p->idx < a->n && a->idxDisponivel &&
+         p->idadeMs <= FA_PREPARADA_VALE_MS && a->idadeListaMs <= FA_LINK_VALE_MS;
 }

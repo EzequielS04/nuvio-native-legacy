@@ -249,7 +249,7 @@ static _Atomic int fonteEscolhida = -2;   // release/acquire entre verificacao e
 // nenhum fio de rede le player_id_canal(), que pode mudar durante um zap.
 static _Atomic unsigned stalkerGeracao;
 enum { FJOB_IDLE, FJOB_RUNNING, FJOB_DONE };
-enum { FJOB_NONE, FJOB_ADDON, FJOB_CANAL, FJOB_STALKER };
+enum { FJOB_NONE, FJOB_ADDON, FJOB_CANAL, FJOB_STALKER, FJOB_PREPARO };
 typedef struct {
   _Atomic int estado;
   int tipo;
@@ -475,7 +475,7 @@ static int iniciarFonteJob(int tipo, unsigned geracao, const char *id, int renov
 }
 static int pedirFonteJob(int tipo, unsigned geracao, const char *id, int renovando) {
   // Toda escolha de VOD abre uma rodada nova da fonte aberta antes do veredito.
-  if (tipo == FJOB_ADDON) fa_nova_rodada();
+  if (tipo == FJOB_ADDON || tipo == FJOB_PREPARO) fa_nova_rodada();
   int r = iniciarFonteJob(tipo, geracao, id, renovando);
   if (r == 1) {
     fontePendenteTipo = tipo;
@@ -1106,6 +1106,11 @@ static void avisoCanalXtreamMini(void) {
   glem_aviso_curto(t);
 }
 
+// Preparar a fonte ao abrir o titulo (ver prepararAoAbrir, mais abaixo).
+static int preparoRodando, preparoEspera, preparoLembradaPlay, preparoLembradaRod;
+static void preparoGuardar(const char *alvo, unsigned lista, int idx);
+static int  preparoUsar(const char *alvoPlay, int lembrada, int *idx);
+
 // Um unico worker pode existir. O fio de desenho so junta depois de DONE;
 // enquanto RUNNING, uma troca invalida por geracao e agenda o pedido seguinte.
 // Assim Xtream (sincrono) nao espera Stalker e addon nao reutiliza o handle.
@@ -1128,8 +1133,27 @@ static void processarFonteJob(void) {
   snprintf(id, sizeof id, "%s", job->id);
   snprintf(url, sizeof url, "%s", job->url);
   atomic_store_explicit(&job->estado, FJOB_IDLE, memory_order_release);
+  if (tipo == FJOB_PREPARO) {
+    // Resposta do preparo (ver prepararAoAbrir): guarda, e se o Play ja estava
+    // esperando por ela, entrega no ato. Nunca passa pelo bloco generico.
+    preparoRodando = 0;
+    preparoGuardar(id, geracao, resultado);
+    if (preparoEspera) {
+      char alvoP[64];
+      int idx;
+      preparoEspera = 0;
+      alvoPlayer(alvoP, sizeof alvoP);
+      if (aguardandoFonte == 2 && preparoUsar(alvoP, preparoLembradaPlay, &idx)) {
+        fonteEscolhida = idx;
+        limparFontePendente();   // o pedido normal que esperava na fila nao e mais preciso
+        printf("[fonte] preparada ao abrir: o Play esperou por ela e abriu\n");
+        fflush(stdout);
+      }
+    }
+  }
   aplicar = geracao == fontePedidoGeracao &&
             geracao == atomic_load_explicit(&stalkerGeracao, memory_order_acquire);
+  if (tipo == FJOB_PREPARO) aplicar = 0;   // a resposta do preparo ja foi tratada acima
   if (tipo == FJOB_STALKER) {
     const char *idAtual = player_id_canal();
     mesmoId = idAtual[0] && !strcmp(id, idAtual);
@@ -1436,6 +1460,67 @@ static void processarTorrentJob(void) {
 // alguns links respondem HTTP 200 e o uMS fica em load sem erro. Se o
 // automatico caiu nesse caso, tira a candidata da fila e verifica a proxima;
 // escolha manual fica intacta.
+// PREPARAR A FONTE AO ABRIR O TITULO (opcional, desligado de fabrica). Com a
+// busca de fontes completa e a pagina do titulo aberta, roda a MESMA escolha do
+// Play (stream_primeira_boa, num job FJOB_PREPARO) e guarda o resultado; o Play
+// seguinte, se a lista, o episodio e a fonte lembrada forem os mesmos e o link
+// ainda valer, toma a fonte pronta e abre na hora. Custo avisado na ajuda: o
+// arquivo entra no painel do debrid mesmo que a pessoa nao assista.
+static struct { int tem, idx, lembrada; unsigned lista; Uint32 quando; char alvo[64]; } preparo;
+static void preparoGuardar(const char *alvo, unsigned lista, int idx) {
+  memset(&preparo, 0, sizeof preparo);
+  if (idx < 0) return;
+  snprintf(preparo.alvo, sizeof preparo.alvo, "%s", alvo);
+  preparo.lista = lista; preparo.idx = idx; preparo.lembrada = preparoLembradaRod;
+  preparo.quando = SDL_GetTicks(); preparo.tem = 1;
+  { const Stream *s = stream_item(idx);
+    printf("[fonte] preparada ao abrir: \"%s\" (%d)\n", s ? s->rotulo : "?", idx);
+    fflush(stdout); }
+}
+// 1 e *idx quando a preparada serve a ESTE Play; consome (vale uma vez).
+static int preparoUsar(const char *alvoPlay, int lembrada, int *idx) {
+  int ok;
+  if (!preparo.tem) return 0;
+  { FaPreparada fp = { preparo.alvo, preparo.lista, preparo.lembrada, preparo.idx, SDL_GetTicks() - preparo.quando };
+    FaAgora fa = { alvoPlay, stream_lista_geracao(), lembrada, stream_n(),
+                   stream_automatico_disponivel(preparo.idx), stream_idade_ms() };
+    ok = fa_preparada_vale(&fp, &fa); }
+  if (!ok) {
+    printf("[fonte] preparada ao abrir descartada (lista, episodio ou fonte lembrada mudaram, ou o link envelheceu)\n");
+    fflush(stdout);
+    preparo.tem = 0;
+    return 0;
+  }
+  *idx = preparo.idx;
+  preparo.tem = 0;
+  return 1;
+}
+static void prepararAoAbrir(void) {
+  const CatItem *ci;
+  char alvo[64], base[24];
+  static char feito[64];
+  static unsigned feitoGer;
+  unsigned g;
+  int lembrada;
+  if (!ajustes_fonte_preparar() || ajustes_fonte_manual() || player_aberto() || aguardandoFonte ||
+      !detail_aberto() || preparoRodando) return;
+  if (addons_estado() == ADD_BUSCANDO || stream_n() < 1 || stream_n_candidatas() < 1) return;
+  ci = cat_item(detail_indice());
+  if (!ci || !ci->imdb[0]) return;
+  idDoAlvo(ci, alvo, sizeof alvo);
+  if (!stream_lista_do_alvo(alvo)) return;
+  g = stream_lista_geracao();
+  if (!strcmp(feito, alvo) && feitoGer == g) return;
+  idBaseDoTitulo(base, sizeof base);
+  lembrada = base[0] ? fontepref_escolher(base) : -1;
+  stream_preferir(lembrada);
+  preparoLembradaRod = lembrada;
+  if (iniciarFonteJob(FJOB_PREPARO, g, alvo, 0) != 0) return;   // ocupado: tenta no proximo quadro
+  snprintf(feito, sizeof feito, "%s", alvo);
+  feitoGer = g;
+  preparoRodando = 1;
+  marco("fonte: preparando ao abrir o titulo");
+}
 // AQUECER CONEXOES (aquecer.h). Sem efeito no .wgt (o navegador cuida das dele).
 // Na pagina do titulo: a API do debrid; quando a lista de fontes chega ou cresce:
 // o host de cada uma das primeiras. Nunca resolve link nem cria arquivo.
@@ -3557,6 +3642,7 @@ void app_atualizar(float dt, Uint32 agora) {
         addons_buscar_legendas(alvo, ci->tipo);
       } }
     aquecerQuandoChegarem();
+    prepararAoAbrir();
     // "Assistir do comeco" (issue #46) segue o MESMO caminho do primario; a
     // unica diferenca e a trava de retomada, armada depois de o episodio ficar
     // definitivo — player_do_inicio sobrevive as re-chamadas tardias de
@@ -3733,8 +3819,21 @@ void app_atualizar(float dt, Uint32 agora) {
         aguardandoFonte = 0;
         folhaParaTocar = 1;
         nomeParaFolha(); stream_folha_abrir();
-      } else if (pedirFonteJob(FJOB_ADDON, geracao, NULL, 0) < 0) {
-        aguardandoFonte = 0; player_erro_fonte();
+      } else {
+        char alvoP[64];
+        int idx;
+        alvoPlayer(alvoP, sizeof alvoP);
+        if (preparoUsar(alvoP, lembrada, &idx)) {
+          // A fonte ja foi escolhida e conferida ao abrir o titulo: o Play abre
+          // na hora, sem nova conferencia nem novo arquivo no debrid.
+          fonteEscolhida = idx;
+          printf("[fonte] preparada ao abrir: usada, o Play abriu sem conferir de novo\n");
+          fflush(stdout);
+        } else {
+          preparoEspera = preparoRodando;    // um preparo em curso pode responder por este Play
+          preparoLembradaPlay = lembrada;
+          if (pedirFonteJob(FJOB_ADDON, geracao, NULL, 0) < 0) { aguardandoFonte = 0; player_erro_fonte(); }
+        }
       }
     }
   }
