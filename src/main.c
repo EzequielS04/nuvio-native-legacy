@@ -1161,6 +1161,14 @@ int main(int argc, char **argv) {
 #endif
   rede_discord_ca(discordCa);
   rede_preparar();
+#ifdef NV_TPK
+  // SAMSUNG: nunca Dolby Vision (regra do dono; o Player do Tizen falha no
+  // Prepare, 42% dos picks DV nos logs 2.0.2). HDR10/HDR10+ por modelo nao tem
+  // API antes de tocar: -1 = desconhecido, nao penaliza. Android informa a
+  // tela pelo NvPlayer (nativeTela); webOS nao tem consulta antes do pipeline.
+  stream_definir_tela(-1, 0);
+  printf("[video] tpk tela hdr=-1 dv=0\n");
+#endif
   // NIVEL DE GPU (gpunivel.h): le GL_*, marca a GPU fraca no perfil e decide
   // o nivel de partida ANTES de tex_iniciar, que tira o perfil do aparelho.
   gpun_iniciar(dw, dh);
