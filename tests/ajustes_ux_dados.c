@@ -441,7 +441,7 @@ static void reorganizacao202(void) {
 static void autoplay202(const char *dir) {
   // #202: o auto-play do oficial depois do Apoiar. Escopo e regex por PERFIL
   // (o escopo com a chave do oficial na conta); listas e padrao sao acoes.
-  assert(AJ_FONTE_ESCOPO == AJ_PLR_CLASSIF + 1 && AJ_FONTE_REGEX_MODELO == AJ_N - 3);
+  assert(AJ_FONTE_ESCOPO == AJ_PLR_CLASSIF + 1 && AJ_FONTE_REGEX_MODELO == AJ_N - 4);
   assert(!strcmp(CHAVE[AJ_FONTE_ESCOPO], "streamAutoPlaySource") && OPCOES[AJ_FONTE_ESCOPO].n == 3 && valorPadrao[AJ_FONTE_ESCOPO] == 0);
   { char sn[64]; camelParaSnake(CHAVE[AJ_FONTE_ESCOPO], sn, sizeof sn); assert(!strcmp(sn, "stream_auto_play_source")); }
   assert(dePerfil(AJ_FONTE_ESCOPO) && dePerfil(AJ_FONTE_OUTROS) && dePerfil(AJ_FONTE_REGEX));
