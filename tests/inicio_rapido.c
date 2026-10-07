@@ -81,10 +81,10 @@ static void abertura(void) {
   CHECK(inicio_abre_prazo_ms(&g) == INICIO_ABRE_COM_DADO_MS);
   g.desdeMs = 30001;
   CHECK(inicio_abre_vencida(&g));
-  // Sem sinal e com proxima que nao e pior: 8 s.
-  g.dadoChegando = 0; g.desdeMs = 7999;
+  // Sem sinal e com proxima que nao e pior: prazo curto.
+  g.dadoChegando = 0; g.desdeMs = INICIO_ABRE_SEM_SINAL_MS - 1;
   CHECK(!inicio_abre_vencida(&g));
-  g.desdeMs = 8001;
+  g.desdeMs = INICIO_ABRE_SEM_SINAL_MS + 1;
   CHECK(inicio_abre_vencida(&g));
   CHECK(inicio_abre_prazo_ms(&g) == INICIO_ABRE_SEM_SINAL_MS);
   // Proxima pior (1080p depois de um 4K): nao vence por tempo antes dos 30 s.

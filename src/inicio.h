@@ -11,12 +11,13 @@
 #define NV_INICIO_H
 
 // --- WATCHDOG DE ABERTURA (filme/serie, fonte automatica) -----------------------
-// Sem nenhum sinal de vida o prazo e CURTO; com dado chegando (buffer subindo) o
+// Sem nenhum sinal de vida o prazo e CURTO (15 s: um MKV 4K de 10 GB levou
+// 10,7-12,5 s para ficar pronto numa TCL, ver fontevolta.h); com dado chegando (buffer subindo) o
 // longo de sempre. O curto so vale quando a proxima candidata nao e PIOR que a
 // atual (mesma resolucao e Dolby Vision, ou melhor): trocar de fonte por
 // demora para cair num 1080p seria baixar a qualidade por pressa, e isso so a
 // pessoa decide. Sem proxima, nao ha para onde ir: o longo.
-#define INICIO_ABRE_SEM_SINAL_MS 8000u
+#define INICIO_ABRE_SEM_SINAL_MS 15000u
 #define INICIO_ABRE_COM_DADO_MS  30000u
 
 typedef struct {
