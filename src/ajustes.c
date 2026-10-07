@@ -6885,17 +6885,17 @@ static void ajDesenharTudo(Uint32 agora) {
   { TraEstado ta = traktauth_estado();
     SmkEstado sa = simklauth_estado();
 #ifdef AJUSTES_TESTE
-    if (ajVinculoTeste) desenhaVinculo("o Trakt", "8F3K2QPA", "https://trakt.tv/activate", NULL, 1); else
+    if (ajVinculoTeste) desenhaVinculo("Trakt", "8F3K2QPA", "https://trakt.tv/activate", NULL, 1); else
 #endif
     if (ta == TRA_PEDINDO || ta == TRA_AGUARDANDO || ta == TRA_ERRO)
-      desenhaVinculo("o Trakt", traktauth_codigo(), traktauth_url(),
+      desenhaVinculo("Trakt", traktauth_codigo(), traktauth_url(),
                      traktauth_erro(), ta == TRA_AGUARDANDO);
     else if (sa == SMK_PEDINDO || sa == SMK_AGUARDANDO || sa == SMK_ERRO)
-      desenhaVinculo("o Simkl", simklauth_codigo(), simklauth_url(),
+      desenhaVinculo("Simkl", simklauth_codigo(), simklauth_url(),
                      simklauth_erro(), sa == SMK_AGUARDANDO);
     else { DisEstado da = discord_estado();
       if (da == DIS_PEDINDO || da == DIS_AGUARDANDO || da == DIS_ERRO)
-        desenhaVinculo("o Discord", discord_codigo(), discord_url(),
+        desenhaVinculo("Discord", discord_codigo(), discord_url(),
                        discord_erro(), da == DIS_AGUARDANDO); } }
 
   // A modal de digitacao e a ultima: ela e sempre a pergunta mais recente da

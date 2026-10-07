@@ -460,7 +460,7 @@ static void *fioPoll(void *u) {
     }
     free(resp);
   } else if (!strcmp(status, "expired") || !strcmp(status, "cancelled")) {
-    snprintf(erro, sizeof erro, "o codigo expirou");
+    snprintf(erro, sizeof erro, "o código expirou");
     estado = SES_ERRO;
   }
   passoPronto = 1;
@@ -656,7 +656,7 @@ void sessao_passo(unsigned agoraMs) {
   if (estado == SES_AGUARDANDO) {
     if (!loginComecouMs) loginComecouMs = agoraMs;
     if (agoraMs - loginComecouMs > LOGIN_LIMITE_MS) {
-      snprintf(erro, sizeof erro, "o codigo expirou");
+      snprintf(erro, sizeof erro, "o código expirou");
       estado = SES_ERRO;
       codigo[0] = 0;
       return;

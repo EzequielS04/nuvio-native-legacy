@@ -436,11 +436,11 @@ static void *fioPoll(void *u) {
     pollMs += 5000u;
     if (pollMs > 60000u) pollMs = 60000u;
   } else if (st == 409) {
-    snprintf(erro, sizeof erro, "este codigo ja foi usado");
+    snprintf(erro, sizeof erro, "este código já foi usado");
     esquecerFluxo();
     estado = TRA_ERRO;
   } else if (st == 410) {
-    snprintf(erro, sizeof erro, "o codigo expirou");
+    snprintf(erro, sizeof erro, "o código expirou");
     esquecerFluxo();
     estado = TRA_ERRO;
   } else if (st == 418) {
@@ -629,7 +629,7 @@ void traktauth_passo(unsigned agoraMs) {
   if (estado != TRA_AGUARDANDO) return;
   if (!comecouMs) comecouMs = agoraMs;
   if (expiraEm && (long)time(NULL) >= expiraEm) {
-    snprintf(erro, sizeof erro, "o codigo expirou");
+    snprintf(erro, sizeof erro, "o código expirou");
     esquecerFluxo();
     estado = TRA_ERRO;
     return;

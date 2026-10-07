@@ -31,6 +31,7 @@ void servidores_esquecer_todos(void);   // servidores.c: wipe every profile's to
 #include "syncprog.h"
 #include "contapend.h"
 #include "ajustes.h"
+#include "idioma.h"
 #include "catordem.h"
 #include "catordemcache.h"
 #include "contacache.h"
@@ -1257,10 +1258,10 @@ static void *rodar(void *u) {
     soLeituraDaCopia(foraCiclo > 0 ? foraCiclo : 0);
     contacache_data(copiaQuandoCiclo, d, sizeof d);
     if (copiaCiclo)
-      snprintf(resumo, sizeof resumo, "servidor da conta fora do ar (HTTP %d) · usando a cópia de %s",
+      snprintf(resumo, sizeof resumo, i18n("servidor da conta fora do ar (HTTP %d) · usando a cópia de %s"),
                foraCiclo > 0 ? foraCiclo : 0, d);
     else
-      snprintf(resumo, sizeof resumo, "servidor da conta fora do ar (HTTP %d) · sem cópia salva",
+      snprintf(resumo, sizeof resumo, i18n("servidor da conta fora do ar (HTTP %d) · sem cópia salva"),
                foraCiclo > 0 ? foraCiclo : 0);
     estado = SYNC_PRONTO;
     fioPronto = 1;
@@ -1327,9 +1328,9 @@ static void *rodar(void *u) {
 
   { int pend = contapend_pendentes();
     char sufixo[48] = "";
-    if (pend > 0) snprintf(sufixo, sizeof sufixo, " · %d pendentes", pend);
+    if (pend > 0) snprintf(sufixo, sizeof sufixo, i18n(" · %d pendentes"), pend);
   snprintf(resumo, sizeof resumo,
-           "%d addons · %d progressos · %d vistos · %d na lista · %d coleções%s%s",
+           i18n("%d addons · %d progressos · %d vistos · %d na lista · %d coleções%s%s"),
            nAddonsRem, syncprog_puxadas(), cVistos < 0 ? 0 : cVistos,
            cBiblio < 0 ? 0 : cBiblio, cColecoes < 0 ? 0 : cColecoes,
            temTraktRem ? " · Trakt" : "", sufixo); }
@@ -1713,7 +1714,9 @@ int  sync_usando_copia(void)  { return foraHttp && usandoCopia; }
 long sync_copia_quando(void)  { return copiaQuando; }
 int  sync_addons_fora(void)   { return foraHttp ? addonsFora : 0; }
 SyncEstado  sync_estado(void)      { return estado; }
-const char *sync_resumo(void)      { return resumo; }
+// As frases fixas (resumo guarda o portugues) passam pela tabela aqui; as com
+// numero ja foram montadas com o formato traduzido.
+const char *sync_resumo(void)      { return i18n(resumo); }
 unsigned    sync_ultimo_ok(void)   { return ultimoOk; }
 void        sync_sujar_progresso(void) { sujoProgresso = 1; }
 void        sync_sujar_addons(void) {
