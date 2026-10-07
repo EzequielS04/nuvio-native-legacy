@@ -1849,7 +1849,9 @@ void cat_definir(const CatItem *lista, int qtd) {
 
 void cat_republicar_fileiras(const CatFileira *novasFils, int nNovas) {
   int k, q, v = 0;
-  if (!novasFils || nNovas < 1 || n < 1) return;
+  // nNovas == 0 e valido (#319): tirar a ultima fileira tem de esvaziar a tela;
+  // com o guarda antigo (< 1) a fileira de addon removido ficava publicada.
+  if (!novasFils || nNovas < 0 || n < 1) return;
   q = nNovas > CAT_FIL_MAX ? CAT_FIL_MAX : nNovas;
   catTravar();
   // A JANELA QUE ESTA PUBLICADA VENCE A DA MONTAGEM, para a mesma chave. Quem

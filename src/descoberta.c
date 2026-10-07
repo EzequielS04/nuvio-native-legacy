@@ -4015,19 +4015,32 @@ static void *montar(void *u) {
     //     meio, os ids dela ainda estao vazios e nada casaria;
     //   - todo addon tem o id do manifesto: um que nao respondeu nesta volta
     //     teria as fileiras dele tomadas por fantasma.
+    // #319: ADDON DESLIGADO NAO TEM MANIFESTO LIDO (nao entra na volta), e
+    // contava como "sem manifesto": com UM addon desligado na conta a poda
+    // ficava adiada para sempre ("poda adiada: 1 addon(s) sem manifesto" no log
+    // S3R7Q0, Pluto TV desligado) e nenhum fantasma saia. So o addon LIGADO sem
+    // id e uma volta incompleta; o desligado casa pela base (doAddon) e as
+    // linhas dele nao valem nada para a home de qualquer jeito.
     { const char *ids[16], *bases[16];
+      int ativos[16];
       int na = addons_n(), q, semId = 0;
       if (na > 16) na = 16;
       for (q = 0; q < na; q++) {
         ids[q] = addons_id_manifesto(q); bases[q] = addons_base(q);
-        if (!ids[q] || !ids[q][0]) semId++;
+        ativos[q] = addons_ativo(q);
+        if (ativos[q] && (!ids[q] || !ids[q][0])) semId++;
       }
       if (addons_versao() != versaoManifestos)
         printf("[fileiras] poda adiada: a lista de addons mudou durante a volta\n");
       else if (semId)
         printf("[fileiras] poda adiada: %d addon(s) sem manifesto lido nesta volta\n", semId);
-      else if (fil_podar_catalogos(ids, bases, na, addons_perfil_da_lista()))
-        fil_gravar_registro(); }
+      else {
+        int perfilLista = addons_perfil_da_lista();
+        if (fil_podar_catalogos(ids, bases, na, perfilLista)) fil_gravar_registro();
+        // As que ficaram (com escolha da pessoa) deixam de ocupar vaga.
+        { int m = fil_marcar_sem_addon(ids, bases, ativos, na, perfilLista);
+          if (m) printf("[fileiras] %d fileira(s) de addon removido/desligado fora da conta de vagas\n", m); }
+      } }
 
     // ALVOS DE BUSCA. Independem da ordem/filtro das FILEIRAS da home: um
     // catalogo pode estar desativado na home e ainda assim ser bom para
@@ -4795,10 +4808,54 @@ static void repetirInterno(void) {
   fflush(stdout);
 }
 
+// #319: A LISTA DE ADDONS MUDOU (removido na conta, desligado na TV): AS FILEIRAS
+// DELES SAEM DA TELA NA HORA, sem esperar o ciclo de rede (~20 s na TV, e a
+// Home de uma abertura vinda do cache — catalogo-rede.bin — tem as fileiras do
+// conjunto antigo ate la). So fileira de catalogo de addon (base != "") e
+// candidata; as fixas (continuar, social, servidores pessoais) nao tem base.
+// Casa pela base, a mesma que a montagem gravou em CatFileira.base. Sem lista
+// (nenhum addon conhecido) nada sai: lista vazia e "ainda nao sei", nao "tirei
+// todos". O ciclo que vem depois publica o conjunto certo por cima.
+static int baseDeAddonLigado(const char *base) {
+  int i, n = addons_n();
+  for (i = 0; i < n; i++)
+    if (addons_ativo(i) && !strcmp(addons_base(i), base)) return 1;
+  return 0;
+}
+int desc_tirar_fileiras_de_addons_ausentes(void) {
+  static CatFileira publicadas[CAT_FIL_MAX], restam[CAT_FIL_MAX];
+  int i, np = 0, nr = 0, tirou = 0;
+  if (addons_n() < 1) return 0;
+  { int n = cat_n_fileiras();
+    for (i = 0; i < n && np < CAT_FIL_MAX; i++) {
+      const CatFileira *f = cat_fileira(i);
+      if (f) publicadas[np++] = *f;
+    } }
+  for (i = 0; i < np; i++) {
+    if (publicadas[i].base[0] && !baseDeAddonLigado(publicadas[i].base)) { tirou++; continue; }
+    restam[nr++] = publicadas[i];
+  }
+  if (!tirou) return 0;
+  // A volta em curso e dona de filsMontadas: mexer nele aqui corre contra ela, e
+  // ela termina publicando o conjunto novo de qualquer jeito.
+  if (!buscando) {
+    int w = 0;
+    for (i = 0; i < nFileirasMontadas; i++)
+      if (!filsMontadas[i].base[0] || baseDeAddonLigado(filsMontadas[i].base))
+        filsMontadas[w++] = filsMontadas[i];
+    nFileirasMontadas = w;
+  }
+  cat_republicar_fileiras(restam, nr);
+  printf("[desc] %d fileira(s) de addon removido/desligado sairam da tela na hora\n", tirou);
+  fflush(stdout);
+  return tirou;
+}
+
 // Ver descoberta.h e listaLidaNaVolta. So a LISTA mudou: a volta que ainda nao
 // a leu vai ler a nova, e o Trakt que ela ja buscou continua valendo.
 void desc_repetir_addons(void) {
   int atendido;
+  desc_tirar_fileiras_de_addons_ausentes();
   pthread_mutex_lock(&listaTrava);
   atendido = buscando && !listaLidaNaVolta;
   if (atendido) { geracaoPedida++; repetirAoFim = 1; }

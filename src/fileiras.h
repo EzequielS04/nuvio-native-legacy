@@ -225,6 +225,12 @@ unsigned fil_perfil_geracao(void);
 int  fil_podar_catalogos(const char *const *ids, const char *const *bases, int n,
                          int perfilDaLista);
 
+// #319: marca (so em memoria) as linhas de catalogo cujo addon saiu da conta ou
+// foi desligado, para elas nao ocuparem vaga do limite nem aparecerem na home.
+// `ativos[k]` = addon k ligado. Devolve quantas linhas mudaram de estado.
+int  fil_marcar_sem_addon(const char *const *ids, const char *const *bases,
+                          const int *ativos, int n, int perfilDaLista);
+
 // O addon (id do manifesto, ou base sem id) e NOVO para este perfil nesta TV:
 // nenhuma fileira dele veio do arquivo do perfil e nenhuma carrega escolha. E o
 // que decide a vaga garantida (cota_vaga_garantida, cotacat.h).

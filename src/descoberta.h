@@ -60,6 +60,9 @@ void desc_repetir_silencioso(void);
 // pedido e atendido por ela — sem jogar fora o Trakt que ela ja buscou. Se ja
 // leu, e o mesmo que desc_repetir. Chamar do fio principal.
 void desc_repetir_addons(void);
+// #319: tira da tela, sem rede, as fileiras de addon removido ou desligado.
+// Devolve quantas saíram.
+int desc_tirar_fileiras_de_addons_ausentes(void);
 // Refaz so a fileira "Continuar assistindo", fora do ciclo completo (issue
 // #38). Fio proprio: remontar a fileira faz rede. Pedido repetido enquanto um
 // fio ja roda vira UMA rodada a mais no fim, nao uma fila.

@@ -48,7 +48,7 @@ void addonsui_abrir(void) {
 // um ciclo e nao cinco. O ciclo leva ~20 s nesta TV, entao a diferenca nao e
 // teorica.
 int addonsui_quer_sair(void) {
-  if (sair && mexeu) { mexeu = 0; desc_repetir(); }
+  if (sair && mexeu) { mexeu = 0; desc_tirar_fileiras_de_addons_ausentes(); desc_repetir(); }
   return sair;
 }
 

@@ -44,6 +44,7 @@ typedef struct {
   int  doDisco;        // veio do arquivo: o perfil ja viu esta fileira antes
   int  ocultaConta;    // current account visibility; not a personal preference
   int  emColecao;      // visible collection owns this source; runtime projection
+  int  semAddon;       // runtime only: no ENABLED add-on declares this catalog any more (#319)
   int  visPessoal;     // explicit TV add/remove, persisted as an optional line
 } Linha;
 
@@ -440,7 +441,7 @@ void fil_definir_hero_fonte(const char *chave) {
 static int posicaoLigada(int i) {
   int k, p = 0;
   for (k = 0; k < i && k < nLinhas; k++)
-    if (!linhas[k].oculta && !linhas[k].ocultaConta && !linhas[k].emColecao &&
+    if (!linhas[k].oculta && !linhas[k].ocultaConta && !linhas[k].emColecao && !linhas[k].semAddon &&
         fil_origem_de(linhas[k].chave) == FIL_ORIGEM_CATALOGO) p++;
   return p;
 }
@@ -452,7 +453,7 @@ static int posicaoLigada(int i) {
 static void ocultarAlem(int n) {
   int i, p = 0;
   for (i = 0; i < nLinhas; i++) {
-    if (linhas[i].oculta || linhas[i].ocultaConta || linhas[i].emColecao ||
+    if (linhas[i].oculta || linhas[i].ocultaConta || linhas[i].emColecao || linhas[i].semAddon ||
         fil_origem_de(linhas[i].chave) != FIL_ORIGEM_CATALOGO) continue;
     if (p >= n) { linhas[i].oculta = OC_PESSOA; linhas[i].fila = 0; }
     p++;
@@ -503,7 +504,7 @@ int fil_estado(int i) {
   int r = FIL_FORA;
   pthread_mutex_lock(&trava);
   garantir();
-  if (i >= 0 && i < nLinhas && !linhas[i].oculta && !linhas[i].ocultaConta && !linhas[i].emColecao)
+  if (i >= 0 && i < nLinhas && !linhas[i].oculta && !linhas[i].ocultaConta && !linhas[i].emColecao && !linhas[i].semAddon)
     r = fil_origem_de(linhas[i].chave) != FIL_ORIGEM_CATALOGO ||
         posicaoLigada(i) < limite ? FIL_NA_HOME : FIL_NA_FILA;
   pthread_mutex_unlock(&trava);
@@ -520,7 +521,7 @@ int fil_estado_chave(const char *chave) {
   pthread_mutex_lock(&trava);
   garantir();
   i = achar(chave);
-  if (i >= 0) r = linhas[i].oculta || linhas[i].ocultaConta || linhas[i].emColecao ? FIL_FORA
+  if (i >= 0) r = linhas[i].oculta || linhas[i].ocultaConta || linhas[i].emColecao || linhas[i].semAddon ? FIL_FORA
                 : (fil_origem_de(linhas[i].chave) != FIL_ORIGEM_CATALOGO ||
                    posicaoLigada(i) < limite ? FIL_NA_HOME : FIL_NA_FILA);
   pthread_mutex_unlock(&trava);
@@ -531,7 +532,7 @@ int fil_n_na_home(void) {
   int i, p = 0, livres = 0;
   pthread_mutex_lock(&trava);
   garantir();
-  for (i = 0; i < nLinhas; i++) if (!linhas[i].oculta && !linhas[i].ocultaConta && !linhas[i].emColecao) {
+  for (i = 0; i < nLinhas; i++) if (!linhas[i].oculta && !linhas[i].ocultaConta && !linhas[i].emColecao && !linhas[i].semAddon) {
     if (fil_origem_de(linhas[i].chave) == FIL_ORIGEM_CATALOGO) p++;
     else livres++;
   }
@@ -543,7 +544,7 @@ int fil_n_capacidade(void) {
   pthread_mutex_lock(&trava);
   garantir();
   for (int i = 0; i < nLinhas; i++)
-    if (!linhas[i].oculta && !linhas[i].ocultaConta && !linhas[i].emColecao &&
+    if (!linhas[i].oculta && !linhas[i].ocultaConta && !linhas[i].emColecao && !linhas[i].semAddon &&
         fil_origem_de(linhas[i].chave) == FIL_ORIGEM_CATALOGO) p++;
   int n = p < limite ? p : limite;
   pthread_mutex_unlock(&trava);
@@ -555,7 +556,7 @@ int fil_n_fila(void) {
   pthread_mutex_lock(&trava);
   garantir();
   for (i = 0; i < nLinhas; i++)
-    if (!linhas[i].oculta && !linhas[i].ocultaConta && !linhas[i].emColecao &&
+    if (!linhas[i].oculta && !linhas[i].ocultaConta && !linhas[i].emColecao && !linhas[i].semAddon &&
         fil_origem_de(linhas[i].chave) == FIL_ORIGEM_CATALOGO) p++;
   pthread_mutex_unlock(&trava);
   return p > limite ? p - limite : 0;
@@ -605,7 +606,7 @@ void fil_normalizar(void) {
   pthread_mutex_lock(&trava);
   garantir();
   for (i = 0; i < nLinhas; i++) {
-    if (linhas[i].oculta || linhas[i].ocultaConta || linhas[i].emColecao) continue;
+    if (linhas[i].oculta || linhas[i].ocultaConta || linhas[i].emColecao || linhas[i].semAddon) continue;
     if (fil_origem_de(linhas[i].chave) != FIL_ORIGEM_CATALOGO) {
       if (linhas[i].fila) { linhas[i].fila = 0; mudou = 1; }
       continue;
@@ -699,6 +700,36 @@ int fil_podar_catalogos(const char *const *ids, const char *const *bases, int n,
   pthread_mutex_unlock(&trava);
   if (fora) { printf("[fileiras] %d fileira(s) de addon que ja nao existe sairam da lista\n", fora); fflush(stdout); }
   return fora;
+}
+
+// #319: A ROW WHOSE ADD-ON WAS REMOVED OR SWITCHED OFF KEEPS ITS PLACE IN THE
+// TABLE (the person may have chosen something about it, and fil_podar_catalogos
+// never drops those), but it must stop being part of the Home. posicaoLigada
+// counts every row that is not hidden, so such a row used to eat one of the
+// `limite` slots: the real rows after it fell into the queue and the Home was
+// shorter than the limit with nothing visible in the gap. `ativos[k]` = the
+// add-on is enabled. Only ENABLED add-ons keep rows alive. Returns how many rows changed state.
+// Runtime only, never written to the file: re-enabling the add-on brings the
+// row back exactly as the person left it.
+int fil_marcar_sem_addon(const char *const *ids, const char *const *bases,
+                         const int *ativos, int n, int perfilDaLista) {
+  int i, mudou = 0;
+  pthread_mutex_lock(&trava);
+  garantir();
+  if (perfilDaLista <= 0 || perfilDaLista != perfil) {
+    pthread_mutex_unlock(&trava);
+    return 0;
+  }
+  for (i = 0; i < nLinhas; i++) {
+    int vivo = 0, k;
+    if (fil_origem_de(linhas[i].chave) != FIL_ORIGEM_CATALOGO) continue;
+    for (k = 0; k < n && !vivo; k++)
+      if (ativos[k] && doAddon(linhas[i].chave, ids[k], bases[k])) vivo = 1;
+    if (linhas[i].semAddon != !vivo) { linhas[i].semAddon = !vivo; mudou++; }
+  }
+  if (mudou) revisao++;
+  pthread_mutex_unlock(&trava);
+  return mudou;
 }
 
 // O ADDON E NOVO PARA ESTE PERFIL NESTA TV? E a pergunta da vaga garantida
@@ -876,6 +907,7 @@ static void registrar(const char *chave, const char *titulo,
     grava = 1;
   }
   linhas[i].vista = 1;
+  linhas[i].semAddon = 0;   // an add-on declared it again
   // O PRIMEIRO A REGISTRAR MANDA NO NOME, e nao o ultimo. Sao dois
   // registradores: a descoberta com o nome do catalogo (ja com customTitles) e
   // a home com o nome que ela desenha, que para meia dezena de chaves conhecidas
@@ -927,7 +959,7 @@ int fil_escolhida(const char *chave) {
   pthread_mutex_lock(&trava);
   garantir();
   i = achar(chave);
-  if (i >= 0 && !linhas[i].oculta && !linhas[i].ocultaConta && !linhas[i].emColecao) {
+  if (i >= 0 && !linhas[i].oculta && !linhas[i].ocultaConta && !linhas[i].emColecao && !linhas[i].semAddon) {
     int p = posicaoLigada(i);
     if (p < limite || linhas[i].fila) r = p;
   }
@@ -1085,7 +1117,7 @@ const char *fil_titulo(int i) {
   if (i < 0 || i >= nLinhas) return "";
   return linhas[i].titulo[0] ? linhas[i].titulo : linhas[i].chave;
 }
-int fil_linha_oculta(int i) { return (i >= 0 && i < nLinhas && (linhas[i].oculta || linhas[i].ocultaConta || linhas[i].emColecao)) ? 1 : 0; }
+int fil_linha_oculta(int i) { return (i >= 0 && i < nLinhas && (linhas[i].oculta || linhas[i].ocultaConta || linhas[i].emColecao || linhas[i].semAddon)) ? 1 : 0; }
 int fil_linha_tipo(int i)   { return (i >= 0 && i < nLinhas) ? linhas[i].tipo : FIL_TIPO_AUTO; }
 int fil_linha_tam(int i)    { return (i >= 0 && i < nLinhas) ? linhas[i].tam : FIL_TAM_PADRAO; }
 
@@ -1372,7 +1404,7 @@ int fil_mover(int i, int direcao) {
     // ligadas na ordem.
     j = i + dir;
     while (j >= 0 && j < nLinhas &&
-           (linhas[j].oculta || linhas[j].ocultaConta || linhas[j].emColecao)) j += dir;
+           (linhas[j].oculta || linhas[j].ocultaConta || linhas[j].emColecao || linhas[j].semAddon)) j += dir;
     if (j >= 0 && j < nLinhas) {
       Linha t = linhas[i]; linhas[i] = linhas[j]; linhas[j] = t;
       // A partir do primeiro movimento a ordem local EXISTE e passa a vencer
