@@ -113,13 +113,15 @@ static int aplicarUma(VideoFaixa *f, const MkvFaixa *m, int ordinal) {
              (meio[0] || poeCh) ? SEP : "", meio,
              (meio[0] && poeCh) ? " " : "", poeCh ? ch : "");
   } else {
-    // LETREIROS (FlagForced, "Forced", "Signs & Songs"): a pessoa precisa
-    // saber que essa nao traduz o dialogo. O nome do arquivo, quando ele ja
-    // diz isso ("Forced"), e o que o .wgt mostra; so a flag vira "Letreiros".
+    // LETREIROS/FORCADA (FlagForced, "Forced", "Signs & Songs"): a pessoa
+    // precisa saber que essa nao traduz o dialogo. O nome do arquivo, quando
+    // ele ja diz isso ("Forced"), e o que o .wgt mostra; so a flag vira
+    // "Forçada" (#287: a flag e de forcada, nao de placas).
     int letreiro = ling_letreiro(m->nome, m->forcado);
     f->letreiro = letreiro;
+    f->tipoLeg = ling_tipo_legenda(m->nome, m->forcado, m->sdh);
     if (letreiro && !(m->nome[0] && ling_letreiro(m->nome, 0)))
-      snprintf(rot, sizeof rot, "%s%s%s", base, SEP, i18n("Letreiros"));
+      snprintf(rot, sizeof rot, "%s%s%s", base, SEP, i18n(ling_tipo_legenda_rotulo(f->tipoLeg)));
     else if (nomeUtil(m))
       snprintf(rot, sizeof rot, "%s%s%s", base, SEP, m->nome);
     else

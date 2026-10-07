@@ -168,6 +168,32 @@ int main(void) {
   assert(strstr(sub, "OpenSubtitles") && strstr(sub, "2 versões"));
   subDe("s|-", sub, sizeof sub);                                          // ... and says why
   assert(strstr(sub, "Embutida como secundária: indisponível"));
+  // #287: the kind next to "Embutida". The plain pt track sits next to a
+  // signs one of the same language, so it reads as the full one.
+  subDe("p|Português|E", sub, sizeof sub);
+  assert(strstr(sub, "Embutida") && strstr(sub, "Legenda completa"));
+  subDe("p|Português|E*", sub, sizeof sub);
+  assert(strstr(sub, "Embutida") && strstr(sub, "Letreiros") && !strstr(sub, "completa"));
+
+  // --- #287: forced / SDH / full, each its own row with its own label ---
+  { LegUiCand c[8]; const VideoFaixa *pe[4]; int n, k;
+    VideoFaixa sal[4]; memcpy(sal, emb, sizeof sal);
+    faixa(0, 3, "pt", "Português", "S_TEXT/UTF8", 0);
+    faixa(1, 4, "pt", "Português · Forced", "S_TEXT/UTF8", 1); emb[1].tipoLeg = LING_LEG_FORCADA;
+    faixa(2, 5, "en", "English SDH", "S_TEXT/UTF8", 0); emb[2].tipoLeg = LING_LEG_SDH;
+    faixa(3, 6, "en", "English · Full", "S_TEXT/UTF8", 0); emb[3].tipoLeg = LING_LEG_COMPLETA;
+    for (k = 0; k < 4; k++) pe[k] = &emb[k];
+    n = legendasui_montar(pe, 4, NULL, 0, c, 8);
+    assert(n == 4 && c[0].indice == 0 && c[3].indice == 1);              // forced listed last, as before
+    assert(c[0].completaPar && !strcmp(legendasui_tipo_rotulo(&c[0]), "Legenda completa"));
+    assert(!strcmp(legendasui_tipo_rotulo(&c[3]), "Forçada"));
+    assert(!strcmp(legendasui_tipo_rotulo(&c[1]), "SDH") && !c[1].completaPar);
+    assert(!strcmp(legendasui_tipo_rotulo(&c[2]), "Legenda completa"));
+    { char o[16]; chaveOrigem(&c[3], o, sizeof o); assert(!strcmp(o, "E:F"));
+      chaveOrigem(&c[1], o, sizeof o); assert(!strcmp(o, "E:S"));
+      chaveOrigem(&c[0], o, sizeof o); assert(!strcmp(o, "E")); }
+    { LegUiCand a; memset(&a, 0, sizeof a); assert(!legendasui_tipo_rotulo(&a)); }   // addons: nothing
+    memcpy(emb, sal, sizeof sal); }
 
   // --- #202: a row with several versions opens THAT language's versions ---
   { int r, ant;

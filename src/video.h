@@ -208,6 +208,9 @@ typedef struct {
   // Faixa so de LETREIROS ("Signs", "Songs", "Signs & Songs", FlagForced): nao
   // traduz o dialogo. A folha rotula como tal e lista por ultimo.
   int  letreiro;
+  // LING_LEG_* (#287): forcada, letreiros, SDH, completa ou comum. A lista
+  // mostra ao lado de "Embutida"; a escolha automatica pesa. 0 = comum/nao se sabe.
+  int  tipoLeg;
   int canais;        // original audio channels, 0 unknown
   int stream_index;  // source demux index for DTS sessions, -1 in native webOS
   int stream_id;     // original container track ID, -1 when unknown
