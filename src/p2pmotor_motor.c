@@ -228,6 +228,7 @@ static int stats(void *m, P2pmStats *s) {
   s->ram_usada = st.memory_cache_used_bytes;
   s->disco_motor = st.disk_cache_used_bytes;
   s->baixando_bps = st.download_rate_bytes_per_second;
+  s->baixado = st.total_payload_download_bytes;
   s->pares = st.connected_peers;
   return 0;
 }
