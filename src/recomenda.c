@@ -65,6 +65,17 @@
 #define REC_ESPERA_MS      2000u   // sem identidade ainda: tentar de novo logo
 #define REC_CONTATOS_MS  600000u   // a lista de contatos muda devagar
 #define REC_TEMPO_REDE       12    // segundos por requisicao
+// RECUO QUANDO O SERVIDOR NAO RESPONDE (#203). 36 pessoas viam o Worker passar
+// de 12 s entre 22h e 1h; cada TV insistia a cada 60 s, somando carga a um
+// servidor que ja estava lento. Cada falha seguida (sem resposta ou 5xx)
+// dobra a espera, ate 8x (8 min); a primeira resposta boa volta ao normal.
+// Roda no fio proprio: nada disso toca a interface.
+#define REC_RECUO_MAX        3
+static int recFalhas;
+static void recMarcarRede(int st) {
+  if (st >= 200 && st < 500) recFalhas = 0;
+  else if (recFalhas < REC_RECUO_MAX) recFalhas++;
+}
 
 // Cartao de abertura, com a mesma pegada do de atualizacao.c.
 // LARGO E COM O CARTAZ MENOR, e a medida saiu da primeira captura: com 1120 de
@@ -1428,6 +1439,7 @@ static int registrar(const char **cab) {
     } }
   url("/v1/eu");
   r = rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, corpoEu, &st);
+  recMarcarRede(st);
   if (r && st >= 200 && st < 300) {
     alc = (int)js_num(r, r + strlen(r), "alcance", -1.0);
     js_texto_raiz(r, "nome", nome, sizeof nome);
@@ -1880,6 +1892,7 @@ static int lerRecs(const char **cab) {
     snprintf(fioUrl + k, sizeof fioUrl - k, "%lld", desde); }
   r = rede_baixar_etag(fioUrl, REC_TEMPO_REDE, cabs, &st,
                        etagNovo, sizeof etagNovo);
+  recMarcarRede(st);
   // 304: nada mudou desde a ultima vez, e e o caso comum. Sem corpo, sem
   // trabalho, e o ETag guardado continua valendo.
   if (st == 304) { free(r); return 1; }
@@ -3612,7 +3625,10 @@ static int fioLaco(void *arg) {
     SDL_UnlockMutex(mtx);
     if (agir) {
       int falou = ciclo();
-      proximoMs = SDL_GetTicks() + (falou ? REC_INTERVALO_MS : REC_ESPERA_MS);
+      // Jitter de ate ~12% para as TVs nao baterem juntas no servidor.
+      Uint32 passo = falou ? (REC_INTERVALO_MS << recFalhas) : REC_ESPERA_MS;
+      if (falou) passo += (SDL_GetTicks() * 2654435761u >> 16) % (passo / 8);
+      proximoMs = SDL_GetTicks() + passo;
     }
     // 200 ms e a granularidade de reacao a um envio ou a abertura da aba. Com
     // a sondagem em 60 s, o laco acorda 300 vezes para fazer uma requisicao —

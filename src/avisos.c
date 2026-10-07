@@ -456,7 +456,9 @@ static const char *agoraTextoAuto(const char *marca) {
 #ifdef __EMSCRIPTEN__
 static char *logAtual;
 #endif
+static unsigned ultimoHashAuto;   // so muda depois de um envio que o servidor aceitou
 static void *enviarRegistro(void *u) {
+  unsigned hAuto = 0;
   static char aut[2200], via[40], chave[160];
   const char *cab[5];
   char *texto = NULL, *corpo, *resp;
@@ -479,6 +481,16 @@ static void *enviarRegistro(void *u) {
       fclose(f);
     } }
 #endif
+  // ENVIO AUTOMATICO SEM NOVIDADE NAO SOBE (#203). Parado no menu o log nao
+  // cresce, e a TV reenviava os mesmos 200 KB a cada 5 min: o D1 recebia
+  // ~2 GB/dia e as escritas atrasavam as outras rotas. Mesmo texto da ultima
+  // vez que subiu com sucesso = nada a fazer.
+  if (u == &AUTO_ATUAL && texto) {
+    size_t k;
+    hAuto = 2166136261u;
+    for (k = 0; k < nTexto; k++) hAuto = (hAuto ^ (unsigned char)texto[k]) * 16777619u;
+    if (hAuto == ultimoHashAuto) { free(texto); envioEstado = 0; return NULL; }
+  }
   if (!idHead(cab, aut, sizeof aut, via, sizeof via, chave, sizeof chave)) {
     if (!automatico) { pthread_mutex_lock(&trava); envMotivo = AVISOS_ENVIO_CONTA; envHttp = 0; pthread_mutex_unlock(&trava); }
     free(texto); envioEstado = automatico ? 0 : 3; return NULL;
@@ -516,6 +528,7 @@ static void *enviarRegistro(void *u) {
     Uint32 t0 = SDL_GetTicks();
     snprintf(url, sizeof url, "%s/v1/registro", NV_REC_URL);
     resp = rede_postar_st(url, 30, cab, corpo, &status);
+    if (u == &AUTO_ATUAL && status >= 200 && status < 300) ultimoHashAuto = hAuto;
     if (!automatico) {
       char id[32], cod[8] = "";
       int ok = status >= 200 && status < 300;
@@ -1650,9 +1663,9 @@ void avisos_envio_auto_passo(Uint32 agora) {
   // Depois dos 5 primeiros minutos, 5 em 5 tambem no Tizen: a cada minuto o
   // registro inteiro (ate 200 KB) subia de novo — 18 envios em 16 minutos de
   // uma TV so nos logs de 24/09, quase todos repetindo o que ja tinha ido.
-  proximo = agora + (agora < 300000 ? 60000 : 300000);
+  proximo = agora + (agora < 300000 ? 60000 : agora < 1800000 ? 300000 : 900000);
 #else
-  proximo = agora + 300000;
+  proximo = agora + (agora < 1800000 ? 300000 : 900000);   // 15 min depois da meia hora (#203)
 #endif
   envAutoProximo = proximo;
   lerLogAtual();
