@@ -8,6 +8,7 @@
 #include "js.h"
 #include "marco.h"
 #include "ondever.h"
+#include "addonstats.h"
 #include "fontecache.h"
 #include "sessao.h"
 #include "perfis.h"
@@ -619,14 +620,66 @@ int addons_faltam_tipo(char *nomes, unsigned tam, int *plugins) {
 
 int addons_faltam(char *nomes, unsigned tam) { return addons_faltam_tipo(nomes, tam, NULL); }
 
+// QUEM NAO SEGURA MAIS A DECISAO AUTOMATICA (#202, addonstats.h). A espera de
+// Ajustes ("Espera pelos add-ons") vale como limite do "lento": um add-on que
+// nesta TV passa dela na maioria das buscas quase nunca chega a tempo, e
+// esperar por ele so gasta o prazo inteiro. 0 = ninguem e ignorado (Instantaneo
+// nao espera ninguem; "Todos os add-ons" e a pessoa pedindo para esperar).
+// Ele segue sendo consultado e, quando responde, entra na lista como sempre.
+static unsigned espDecisaoMs;
+void addons_definir_espera_decisao(int ms) { espDecisaoMs = ms > 0 ? (unsigned)ms : 0; }
+static int naoSegura(const char *nome) {
+  return nome && nome[0] && addonstats_ignoravel(nome, espDecisaoMs);
+}
+
+int addons_faltam_decisivos(void) {
+  int i, k = 0;
+  if (!addons_busca_parcial()) return 0;
+  pthread_mutex_lock(&progTrava);
+  for (i = 0; i < nAddon && i < ADD_MAX; i++)
+    if (progEstado[i] == 1 && !naoSegura(addon[i].nome)) k++;
+  for (i = 0; i < ADD_EXTRA_MAX; i++)
+    if (progEstadoEx[i] == 1 && !naoSegura(progNomeEx[i])) k++;
+  pthread_mutex_unlock(&progTrava);
+  return k;
+}
+
+// O que a ilha do player diz sobre a espera (inicio.h): o primeiro que a
+// decisao ainda espera, e o primeiro que desistiu nesta busca.
+void addons_inicio_info(AddonsInicioInfo *o) {
+  int i;
+  memset(o, 0, sizeof *o);
+  if (!addons_busca_parcial()) return;
+  pthread_mutex_lock(&progTrava);
+  for (i = 0; i < nAddon && i < ADD_MAX; i++) {
+    if (progEstado[i] == 1 && !naoSegura(addon[i].nome)) {
+      if (!o->pendentes++) {
+        snprintf(o->pendente, sizeof o->pendente, "%s", addon[i].nome);
+        o->pendenteMudo = addonstats_mudo_seguidas(addon[i].nome) > 0;
+      }
+    } else if (progEstado[i] == 3 && !o->semResposta++)
+      snprintf(o->semRespostaNome, sizeof o->semRespostaNome, "%s", addon[i].nome);
+  }
+  for (i = 0; i < ADD_EXTRA_MAX; i++) {
+    if (progEstadoEx[i] == 1 && !naoSegura(progNomeEx[i])) {
+      if (!o->pendentes++) {
+        snprintf(o->pendente, sizeof o->pendente, "%s", progNomeEx[i]);
+        o->pendenteMudo = addonstats_mudo_seguidas(progNomeEx[i]) > 0;
+      }
+    } else if (progEstadoEx[i] == 3 && !o->semResposta++)
+      snprintf(o->semRespostaNome, sizeof o->semRespostaNome, "%s", progNomeEx[i]);
+  }
+  pthread_mutex_unlock(&progTrava);
+}
+
 int addons_pendente_antes(int idx) {
   int i, r = 0;
   if (!addons_busca_parcial()) return 0;
   pthread_mutex_lock(&progTrava);
   for (i = 0; i < idx && i < nAddon && i < ADD_MAX; i++)
-    if (progEstado[i] == 1) { r = 1; break; }
+    if (progEstado[i] == 1 && !naoSegura(addon[i].nome)) { r = 1; break; }
   for (i = 0; !r && i < idx - ADD_MAX && i < ADD_EXTRA_MAX; i++)
-    if (progEstadoEx[i] == 1) r = 1;
+    if (progEstadoEx[i] == 1 && !naoSegura(progNomeEx[i])) r = 1;
   pthread_mutex_unlock(&progTrava);
   return r;
 }
@@ -651,9 +704,9 @@ int addons_pendente_grupo_min(int (*f)(const char *nome, int plugin, void *u), v
   if (!f || !addons_busca_parcial()) return m;
   pthread_mutex_lock(&progTrava);
   for (i = 0; i < nAddon && i < ADD_MAX; i++)
-    if (progEstado[i] == 1) { int g = f(addon[i].nome, 0, u); if (g >= 0 && g < m) m = g; }
+    if (progEstado[i] == 1 && !naoSegura(addon[i].nome)) { int g = f(addon[i].nome, 0, u); if (g >= 0 && g < m) m = g; }
   for (i = 0; i < ADD_EXTRA_MAX; i++)
-    if (progEstadoEx[i] == 1) { int g = f(progNomeEx[i], 1, u); if (g >= 0 && g < m) m = g; }
+    if (progEstadoEx[i] == 1 && !naoSegura(progNomeEx[i])) { int g = f(progNomeEx[i], 1, u); if (g >= 0 && g < m) m = g; }
   pthread_mutex_unlock(&progTrava);
   return m;
 }
@@ -1721,6 +1774,7 @@ typedef struct {
   Stream *achados;
   int    n;
   int    respondeu;           // 1 = veio corpo (mesmo com 0 fontes)
+  unsigned ms;                // do disparo da consulta ate a resposta (addonstats)
 } BaldeFonte;
 
 // O QUE A ULTIMA BUSCA REAL VIU, para a folha de fontes vazia dizer a causa
@@ -1780,10 +1834,30 @@ static const char *tipoCanalDeclarado(int i) {
   return NULL;
 }
 
+#define ADD_PRAZO_VOD_S 30   // 1a rodada de filme/serie; a 2a soma mais 30 = 60 s do oficial
+// O QUE A SEGUNDA TENTATIVA DE UM ADD-ON MUDO CUSTA (#202). Medido no D1:
+// 396 linhas "sem resposta: segunda tentativa (30 s)" — quem nao respondeu em
+// 30 s ganhava mais 30 s, e a busca completa so fechava depois. Quem ja foi
+// mudo na ultima busca desta TV tenta de novo por 10 s; mudo as ultimas tres
+// vezes nem tenta (addonstats.h). Responder rapido na segunda continua
+// possivel para quem so estava frio (AIOStreams, #182): a primeira falha dele
+// nao o marca como mudo seguido.
+static int semSegunda(int i) {
+  return addon[i].mudoSeg >= 2 || addonstats_segunda_s(addon[i].nome, ADD_PRAZO_VOD_S) == 0;
+}
+static int prazoDoAddon(const Consulta *c, int i) {
+  int s = c->timeout > 0 ? c->timeout : 12;
+  if (c->rodada == 2) {
+    int m = addonstats_segunda_s(addon[i].nome, s);
+    if (m > 0) s = m;
+  }
+  return s;
+}
+
 static void *fioFontes(void *u) {
   Consulta *c = u;
   for (;;) {
-    int meu, i, n;
+    int meu, i, n, prazoS;
     char url[NV_ADDON_PEDIDO_MAX], idUrl[768], *corpo;
     const char *t1, *t2;
     Stream *achados;
@@ -1806,9 +1880,10 @@ static void *fioFontes(void *u) {
       if (dec && !strcmp(dec, c->tipoAlt)) { t1 = c->tipoAlt; t2 = c->tipo; } }
     // Prazo da consulta (c->timeout): 30 s para filme/serie, 12 s para canal e
     // prefetch. Ver ADD_PRAZO_VOD_S em consultar().
+    prazoS = prazoDoAddon(c, i);
     corpo = pedidoCoube(i, nv_addon_url(url, sizeof url, addon[i].base, "/stream/%s/%s.json",
                                     t1, idUrl), sizeof url) && idUrl[0]
-            ? rede_baixar(url, c->timeout > 0 ? c->timeout : 12) : NULL;
+            ? rede_baixar(url, prazoS) : NULL;
     achados = NULL; n = 0;
     if (corpo) n = stream_extrair(corpo, addon[i].nome, &achados);
     // CANAL AO VIVO TEM DOIS NOMES DE TIPO NO PROTOCOLO, e addons diferentes
@@ -1838,7 +1913,7 @@ static void *fioFontes(void *u) {
       char *alt;
       alt = pedidoCoube(i, nv_addon_url(url, sizeof url, addon[i].base, "/stream/%s/%s.json",
                                     t2, idUrl), sizeof url) && idUrl[0]
-            ? rede_baixar(url, c->timeout > 0 ? c->timeout : 12) : NULL;
+            ? rede_baixar(url, prazoS) : NULL;
       if (alt) {
         Stream *a2 = NULL;
         int n2 = stream_extrair(alt, addon[i].nome, &a2);
@@ -1860,16 +1935,17 @@ static void *fioFontes(void *u) {
       // o nome do addon). Prazo junto: diz se foi a 1a ou a 2a rodada.
       { const char *erro = rede_ultimo_erro();
         printf("[addons] %s: sem resposta (%u ms, prazo %d s)%s%s\n", addon[i].nome,
-               (unsigned)(SDL_GetTicks() - c->inicio), c->timeout > 0 ? c->timeout : 12,
+               (unsigned)(SDL_GetTicks() - c->inicio), prazoS,
                erro && erro[0] ? ": " : "", erro ? erro : ""); }
       // Desistiu de vez quando nao ha segunda chance pela frente: a mesma regra
       // de segundaChance (mudoSeg ainda e o da consulta anterior aqui).
       if (c->progresso)
-        progMarcar(i, NULL, 0, c->rodada == 2 || addon[i].mudoSeg >= 2 ? 3 : 1);
+        progMarcar(i, NULL, 0, c->rodada == 2 || semSegunda(i) ? 3 : 1);
       continue;
     }
     if (c->progresso) progMarcar(i, achados, n, 2);
     c->baldes[meu].respondeu = 1;
+    c->baldes[meu].ms = (unsigned)(SDL_GetTicks() - c->inicio);
     c->baldes[meu].n = n;
     c->baldes[meu].achados = achados;
     // O TEMPO DE CADA ADDON NO LOG (#221): sem ele o D1 so dava o total da
@@ -1933,10 +2009,9 @@ static const char *tipoAlternativo(const char *tipo) {
 // filme/serie, #202), antes de a
 // lista ser publicada. Custo limitado: um addon que falha nas duas rodadas
 // duas consultas seguidas deixa de ganhar a segunda (mudoSeg).
-#define ADD_PRAZO_VOD_S 30   // 1a rodada de filme/serie; a 2a soma mais 30 = 60 s do oficial
 static void segundaChance(Consulta *c, int fios) {
   Consulta c2;
-  int q, m = 0, criados = 0;
+  int q, m = 0, criados = 0, pulados = 0;
   pthread_t f[ADD_FIOS];
   int *orig;
   if (c->cancelado && c->cancelado(c->ctx)) return;
@@ -1946,7 +2021,8 @@ static void segundaChance(Consulta *c, int fios) {
   if (!orig || !c2.baldes) { free(orig); free(c2.baldes); return; }
   for (q = 0; q < c->nBaldes; q++) {
     int i = c->baldes[q].idx;
-    if (c->baldes[q].respondeu || addon[i].mudoSeg >= 2) continue;
+    if (c->baldes[q].respondeu) continue;
+    if (semSegunda(i)) { pulados++; continue; }
     c2.baldes[m].idx = i; orig[m++] = q;
   }
   if (m > 0) {
@@ -1955,7 +2031,10 @@ static void segundaChance(Consulta *c, int fios) {
     c2.timeout = c->timeout > 20 ? c->timeout : 20;
     c2.progresso = c->progresso; c2.rodada = 2; c2.inicio = c->inicio;
     pthread_mutex_init(&c2.trava, NULL);
-    printf("[addons] %d sem resposta: segunda tentativa (%d s)\n", m, c2.timeout);
+    printf("[addons] %d sem resposta: segunda tentativa (%d s%s)", m, c2.timeout,
+           pulados ? "; " : "");
+    if (pulados) printf("%d mudo(s) seguidos pulado(s)", pulados);
+    printf("\n");
     fflush(stdout);
     if (fios > ADD_FIOS) fios = ADD_FIOS;
     for (q = 0; q < fios && q < m; q++)
@@ -2018,6 +2097,9 @@ static int cancelaExtra(void *u) {
 static void avisoExtra(void *u, int k, const char *nome, int estado, const void *fontes, int n) {
   PedidoExtra *p = u;
   if (!p->progresso) return;
+  // Scraper que terminou (2) ou desistiu (3): entra na memoria de latencia.
+  if ((estado == 2 || estado == 3) && nome && !(p->cancelado && p->cancelado(p->ctx)))
+    addonstats_registrar(nome, (unsigned)(SDL_GetTicks() - progInicio), estado == 2);
   progMarcarEx(k, nome, (const Stream *)fontes, n, estado);
 }
 typedef struct { PedidoExtra *pai; OrigemExtra f; Stream *l; int n; } UmaOrigem;
@@ -2058,6 +2140,15 @@ static void *fioExtra(void *u) {
         if (o[i].n > 0) { memcpy(l + k, o[i].l, sizeof(Stream) * (size_t)o[i].n); k += o[i].n; }
       p->l = l; p->n = k;
     }
+  }
+  // Scraper que o corte (30 s) deixou sem resposta: mudo nesta busca. Cancelada
+  // a busca, nao prova nada.
+  if (p->progresso && !(p->cancelado && p->cancelado(p->ctx))) {
+    pthread_mutex_lock(&progTrava);
+    for (i = 0; i < ADD_EXTRA_MAX; i++)
+      if (progEstadoEx[i] == 1 && progNomeEx[i][0])
+        addonstats_registrar(progNomeEx[i], (unsigned)(SDL_GetTicks() - progInicio), 0);
+    pthread_mutex_unlock(&progTrava);
   }
   for (i = 0; i < nOrigensExtra; i++) free(o[i].l);
   return NULL;
@@ -2185,6 +2276,14 @@ static int consultar(const char *id, const char *tipo, const char *base, int fio
     // Junta NA ORDEM DOS ADDONS, que e a ordem em que o dono os instalou.
     for (q = 0; q < c.nBaldes; q++) {
       int k = c.baldes[q].n;
+      // A LATENCIA DESTA BUSCA fica na memoria desta TV (addonstats.h): so a
+      // busca real e nao cancelada — prefetch e busca interrompida nao provam
+      // nada sobre o add-on.
+      if (c.progresso && !(c.cancelado && c.cancelado(c.ctx)))
+        addonstats_registrar(addon[c.baldes[q].idx].nome,
+                             c.baldes[q].respondeu ? c.baldes[q].ms
+                                                   : (unsigned)(SDL_GetTicks() - c.inicio),
+                             c.baldes[q].respondeu);
       if (c.baldes[q].respondeu) addon[c.baldes[q].idx].mudoSeg = 0;
       else {
         addon[c.baldes[q].idx].mudoSeg++;
@@ -2217,6 +2316,7 @@ static int consultar(const char *id, const char *tipo, const char *base, int fio
   free(c.baldes);
   pthread_mutex_destroy(&c.trava);
   if (temExtra) pthread_join(fioEx, NULL);
+  if (progresso) addonstats_salvar();
   if (extra.n > 0) {
     Stream *tmp = realloc(achados, sizeof(Stream) * (size_t)(n + extra.n));
     if (tmp) { achados = tmp; memcpy(achados + n, extra.l, sizeof(Stream) * (size_t)extra.n); n += extra.n; }

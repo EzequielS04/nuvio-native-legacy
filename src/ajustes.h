@@ -53,6 +53,9 @@ void ajustes_abrir_no_vidro(void);
 // O "Reconectar" do modal do Trakt na ilha (02/10): pousa na linha do Trakt,
 // onde o OK comeca o pareamento.
 void ajustes_abrir_no_trakt(void);
+// Fontes e addons > Escolha da fonte, na linha "Espera pelos add-ons": o destino
+// do OK na explicacao da espera na ilha do player (#202).
+void ajustes_abrir_na_espera_fonte(void);
 // GUIA DE USO (Ajustes › Sobre e ajuda): a proxima abertura vai direto ao
 // guia. `daNovidades` = 1 quando quem abriu foi o cartao da 1.8.0: o guia
 // ganha "Voltar às novidades" e o Voltar dele devolve ao cartao

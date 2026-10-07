@@ -1634,12 +1634,13 @@ static int focoItem = 0;
 static int focoOp = -1;
 // Pedido do cartao de novidades ("Experimentar a cor viva"): a proxima
 // abertura pousa na linha da cor, dentro de Aparencia (ver ajustes_iniciar).
-static int abrirNaCor, abrirNaFonte, abrirNoLayout, abrirNoVidro, abrirNoTrakt;
+static int abrirNaCor, abrirNaFonte, abrirNoLayout, abrirNoVidro, abrirNoTrakt, abrirNaEspera;
 void ajustes_abrir_na_cor(void) { abrirNaCor = 1; }
 void ajustes_abrir_na_fonte(void) { abrirNaFonte = 1; }
 void ajustes_abrir_no_layout(void) { abrirNoLayout = 1; }
 void ajustes_abrir_no_vidro(void) { abrirNoVidro = 1; }
 void ajustes_abrir_no_trakt(void) { abrirNoTrakt = 1; }
+void ajustes_abrir_na_espera_fonte(void) { abrirNaEspera = 1; }
 static int abrirNoGuia, guiaDaNovidades, pediuNovidades;
 void ajustes_abrir_no_guia(int daNovidades) { abrirNoGuia = 1; guiaDaNovidades = daNovidades ? 1 : 0; }
 int  ajustes_pediu_novidades(void) { int v = pediuNovidades; pediuNovidades = 0; return v; }
@@ -4163,6 +4164,9 @@ int ajustes_iniciar(void) {
   if (abrirNoLayout) { abrirNoLayout = 0; focarOpcao(AJ_HOME_LAYOUT); }
   if (abrirNoVidro) { abrirNoVidro = 0; focarOpcao(AJ_VIDRO); }
   if (abrirNoTrakt) { abrirNoTrakt = 0; focarOpcao(AJ_TRAKT); }
+  // #202: o OK da explicacao de espera na ilha do player cai na linha que manda
+  // nela, dentro de Fontes e addons > Escolha da fonte.
+  if (abrirNaEspera) { abrirNaEspera = 0; focarOpcao(AJ_FONTE_PRAZO); }
   // "Abrir o guia" do cartao da 1.8.0: a linha do guia em Sobre e ajuda e o
   // guia aberto por cima dela (Voltar devolve ao cartao).
   guiaFechar();

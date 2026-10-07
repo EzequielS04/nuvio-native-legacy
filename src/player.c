@@ -295,6 +295,7 @@ static Uint32 inicioImagem = 0;
 // So log; nao decide nada.
 static Uint32 abertoEm;
 static int    medirAbertura, tocouMedido;
+static Uint32 loadEm;          // quando a URL foi entregue ao pipeline (0 = ainda nao)
 // Quando os selos do guia parental entraram na tela. Ver a nota no desenho.
 static Uint32 pgDesde;
 // AS DUAS VARIAVEIS DE MIDIA. Todo o resto do arquivo le so daqui — quando o
@@ -560,6 +561,18 @@ void player_aprender_creditos(void) {
   if (c && c->imdb[0] && epT > 0 && comVideo && video_pronto())
     cred_aprender(c->imdb, duracaoSeg, posSeg, credFonteAtual);
 }
+// A EXPLICACAO DA ESPERA NA ILHA (#202, inicio.h). app.c diz por quadro, ja
+// traduzida, o que a abertura esta esperando; vazio = nada a dizer. Com texto,
+// o cartao "Abrindo fonte" ganha uma linha e o OK abre Ajustes > Fontes e
+// addons > Escolha da fonte (player_pediu_ajustes_fonte). Transitoria: some
+// sozinha quando a abertura acaba, e nunca segura nada.
+static char motivoInicio[112];
+static int pedAjFonte;
+void player_definir_motivo_inicio(const char *texto) {
+  snprintf(motivoInicio, sizeof motivoInicio, "%s", texto ? texto : "");
+}
+int player_pediu_ajustes_fonte(void) { int v = pedAjFonte; pedAjFonte = 0; return v; }
+Uint32 player_aberto_ha_ms(void) { return aberto && abertoEm ? SDL_GetTicks() - abertoEm : 0; }
 int player_pediu_fontes(void) { int p = pedFontes; pedFontes = 0; return p; }
 int player_pediu_proximo(int *t,int *e) {
   if(!pedProxT||!pedProxE)return 0;
@@ -1264,7 +1277,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
   memset(&zapEst, 0, sizeof zapEst); bannerAV = 0.0f; botaoAV = 0; infoAV = 0; pedRecarregar = 0;
   avLat0 = -1.0; avAtraso = 0.0; avPausaDesde = 0;
   retomadaAplicada=0; semRetomada=0;
-  abertoEm = SDL_GetTicks(); medirAbertura = 1; tocouMedido = 0;
+  abertoEm = SDL_GetTicks(); medirAbertura = 1; tocouMedido = 0; loadEm = 0;
 #ifdef NV_ANDROID
   retomarSeg = 0.0; retomadaNaPreparacao = 0;
 #endif
@@ -1291,6 +1304,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
   // F07: seek cache for this open (live channels never; the backend also
   // refuses HLS/DASH). Arms only the next video_tocar: trailers stay uncached.
   cacheboost_backend_cache(ehCanal() ? 0 : ajustes_cache_seek_mb());
+  loadEm = SDL_GetTicks();
   { char px[96];
     comVideo = (url && *url && video_tocar(proxyts_resolver(url, px, sizeof px))); }
   mkvass_video_aberto(comVideo);
@@ -1368,6 +1382,7 @@ static int prebuscaCabe(const char *url) {
 
 static void tocarFonte(const char *url) {
   marco("abrir: url ao pipeline");
+  loadEm = SDL_GetTicks();   // #202: do pipeline ao primeiro quadro ("[player] load->1o quadro")
   video_definir_reconexao(!ehCanal());
   video_definir_modo_live(ehCanal() ? ajustes_livetv_modo() : 0);
   cacheboost_backend_cache(ehCanal() ? 0 : ajustes_cache_seek_mb());   // F07, ver player_abrir
@@ -2536,6 +2551,7 @@ void player_evento(const SDL_Event *e) {
   if (player_carregando() && !ehCanal() && !stream_folha_aberta()) {
     if (k == SDLK_DOWN) { abrindoExp = 1; return; }
     if (k == SDLK_UP && abrindoExp) { abrindoExp = 0; return; }
+    if ((k == SDLK_RETURN || k == SDLK_KP_ENTER) && motivoInicio[0]) { pedAjFonte = 1; return; }
   }
 
   // PAINEL DE PAUSA: com ele de pe, a tecla e DELE. Vem antes de tudo o que
@@ -2796,6 +2812,9 @@ void player_atualizar(float dt, Uint32 agora) {
     if (medirAbertura && !ehCanal()) {
       printf("[player] pronto em %u ms desde a abertura (retomada %d%%)\n",
              (unsigned)(SDL_GetTicks() - abertoEm), retomarPct);
+      // O TRECHO QUE O LOG NAO SEPARAVA (#202): da URL entregue ao pipeline ate
+      // a imagem. O resto do "pronto em" e busca, verificacao e debrid.
+      if (loadEm) printf("[player] load->1o quadro %u ms\n", (unsigned)(SDL_GetTicks() - loadEm));
       fflush(stdout);
     }
   }
@@ -3790,7 +3809,12 @@ static float alturaExpandido(void) {
   h += 24.0f + 14.0f + 4.0f + 22.0f;
   return h;
 }
-static float alturaCarregando(void) { return abrindoExp ? alturaExpandido() : ABR_COMPACTO_H; }
+// A linha da explicacao (inicio.h), embaixo do cartao: texto a esquerda e a
+// dica "OK Ajustes" na ponta. So existe com motivo, e a altura acompanha.
+#define ABR_MOTIVO_H 40.0f
+static float alturaCarregando(void) {
+  return (abrindoExp ? alturaExpandido() : ABR_COMPACTO_H) + (motivoInicio[0] ? ABR_MOTIVO_H : 0.0f);
+}
 // A mola que cruza o compacto e o expandido (chamada por quadro, fora do corpo).
 static void abrindoAtualizar(Uint32 agora) {
   float dt = abrindoUlt ? (float)(agora - abrindoUlt) / 1000.0f : 1.0f / 60.0f;
@@ -3798,6 +3822,17 @@ static void abrindoAtualizar(Uint32 agora) {
   if (dt > 0.1f) dt = 0.1f;
   if (ajustes_animacoes_reduzidas()) abrindoT = abrindoExp ? 1.0f : 0.0f;
   else abrindoT = anim_mola(abrindoT, abrindoExp ? 1.0f : 0.0f, dt, 12.0f);
+}
+static void motivoDesenhar(GfxRect r, float a) {
+  float x = r.x + 18.0f, w = r.w - 36.0f, yc = r.y + r.h - 22.0f - ABR_MOTIVO_H * 0.5f + 6.0f;
+  const char *k[1] = { "OK" }, *rt[1] = { "Ajustes" };
+  float dw = 150.0f;
+  TxtLinha l;
+  if (!motivoInicio[0]) return;
+  gfx_cor((GfxRect){ x, yc - ABR_MOTIVO_H * 0.5f, w, 1.0f }, 0.0f, 1, 1, 1, 0.07f * a);
+  l = txt_linha_corta(TXT_G19M, motivoInicio, 255, 196, 90, 235, w - dw - 24.0f);
+  txt_desenhar_alpha(l, x + 6.0f, yc + 4.0f - (float)l.h * 0.5f, a);
+  plrui_dicas(k, rt, 1, x + w - 6.0f, yc + 4.0f, 1, a * 0.85f);
 }
 static void corpoCarregando(GfxRect r, float a, void *u) {
   float x = r.x + 18.0f, w = r.w - 36.0f, y = r.y + 22.0f;
@@ -3902,6 +3937,7 @@ static void corpoCarregando(GfxRect r, float a, void *u) {
         }
       } }
   }
+  motivoDesenhar(r, a);
 }
 
 // O MODAL DO ERRO: o motivo (36/700), a dica e os dois botoes. ESQUERDA e

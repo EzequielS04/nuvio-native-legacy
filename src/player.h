@@ -27,6 +27,13 @@ void player_aprender_creditos(void);
 int player_indice(void);
 const char *player_linha_episodio(void);
 int player_pediu_fontes(void);
+// A explicacao da espera na ilha do player (inicio.h, #202): texto ja traduzido
+// por quadro, "" = nada. O OK no cartao de abertura com texto pede Ajustes >
+// Fontes e addons > Escolha da fonte; o app.c consome com este.
+void player_definir_motivo_inicio(const char *texto);
+int  player_pediu_ajustes_fonte(void);
+// Ha quantos ms o player abriu (o Play); 0 fechado. Para o log do inicio (#202).
+Uint32 player_aberto_ha_ms(void);
 int player_pediu_proximo(int *temporada, int *episodio);
 const CatEp *player_proximo_episodio(void);
 // A REGRA DO CARTAO DE PROXIMO EPISODIO, isolada do estado do player para

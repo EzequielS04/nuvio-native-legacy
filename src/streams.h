@@ -172,6 +172,10 @@ float stream_selos_fileira(const Stream *s, float x, float y, float maxW, float 
 
 // Indice do stream que o modo automatico escolhe, ou -1 se a lista esta vazia.
 int  stream_automatico(void);
+// A candidata que o automatico usaria se `atual` falhar (e nao esta excluida)
+// existe e NAO e pior que ela: mesma resolucao ou maior, Dolby Vision igual ou
+// melhor. 0 = nao ha proxima, ou a proxima baixaria a qualidade (#202).
+int  stream_proxima_sem_perda(int atual);
 // O mesmo sem as regras de auto-play (#202): canal ao vivo.
 int  stream_automatico_canal(void);
 // Exclui uma candidata que ja foi entregue ao player e travou no pipeline.
