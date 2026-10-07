@@ -2,6 +2,14 @@
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
+#include <ctype.h>
+
+// strcasestr is a GNU extension the webOS toolchain does not declare.
+static const char *achaSemCaixa(const char *h, const char *n) {
+  size_t ln = strlen(n);
+  for (; *h; h++) if (!strncasecmp(h, n, ln)) return h;
+  return ln ? NULL : h;
+}
 
 // Prefixos, comparados SEM maiusculas, o mais especifico primeiro
 // ("audio/eac3" antes de "eac3" nao importa; "A_DTS/LOSSLESS" antes de "A_DTS").
@@ -26,7 +34,7 @@ static const struct { const char *pre, *nome; } T[] = {
 const char *audioinfo_codec(const char *c) {
   size_t i;
   if (!c || !*c) return "";
-  if (strcasestr(c, "dts-hd ma") || strcasestr(c, "dtshd_ma") || strcasestr(c, "dts_hd_ma"))
+  if (achaSemCaixa(c, "dts-hd ma") || achaSemCaixa(c, "dtshd_ma") || achaSemCaixa(c, "dts_hd_ma"))
     return "DTS-HD MA";
   for (i = 0; i < sizeof T / sizeof *T; i++)
     if (!strncasecmp(c, T[i].pre, strlen(T[i].pre))) return T[i].nome;
