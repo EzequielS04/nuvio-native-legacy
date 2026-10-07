@@ -11,6 +11,7 @@
 //   2. detalhe — camada sobre a tela corrente
 //   3. menu    — camada sobre a tela corrente
 //   4. a tela corrente (home, busca, biblioteca ou ajustes)
+#include "arranque.h"
 #include "celbotao.h"
 #include "central.h"
 #include "teclado.h"
@@ -1913,27 +1914,38 @@ int app_iniciar(const char *dirArte) {
   const char *preview = getenv("NUVIO_UI_PREVIEW");
   uiPreview = preview && !strcmp(preview, "1");
 #endif
+  arranque_etapa("app_iniciar/ajustes_recursos");
   ajustes_recursos(dirArte);
+  arranque_etapa("app_iniciar/login_recursos");
   login_recursos(dirArte);
+  arranque_etapa("app_iniciar/diagnostico_recuperar_checkpoint");
   diagnostico_recuperar_checkpoint();
+  arranque_etapa("app_iniciar/stream_fit_fonte_metadados");
   stream_fit_fonte_metadados(fitRuntimeMeta);
+  arranque_etapa("app_iniciar/home_iniciar");
   homePronta = home_iniciar(dirArte);
+  arranque_etapa("app_iniciar/novidades148_dir");
   novidades148_dir(dirArte);
   novidades170_dir(dirArte);
   novidades180_dir(dirArte);
+  arranque_etapa("app_iniciar/novidades20_dir");
   novidades20_dir(dirArte);
   novidades201_dir(dirArte);
   novidades202_dir(dirArte);
+  arranque_etapa("app_iniciar/apoio_dir");
   apoio_dir(dirArte);
   if (!homePronta)
     printf("[app] sem arte no pacote: a home so aparece depois do primeiro sync\n");
+  arranque_etapa("app_iniciar/menu_iniciar");
   menu_iniciar();
+  arranque_etapa("app_iniciar/perfil_iniciar");
   perfil_iniciar();
   // ANTES do primeiro sync e da primeira descoberta: salvos_aplicar_catalogo
   // marca `naLista` no catalogo do cache, entao o painel e a Biblioteca ja
   // abrem certos no primeiro quadro. Ler depois faria a lista local piscar.
   // A LISTA E DO PERFIL (salvos-p<N>.txt); perfis_carregar_ativo ja rodou.
   salvos_perfil(perfis_ativo());
+  arranque_etapa("app_iniciar/salvos_iniciar");
   salvos_iniciar();
   // O JORNAL DA CONTA (contapend.h): todo "+"/tirar vira entrada por perfil, e
   // o pull da biblioteca e dos vistos respeita o que a pessoa mudou aqui.
@@ -1943,23 +1955,32 @@ int app_iniciar(const char *dirArte) {
   // Trakt que a Biblioteca levou para a Home so vira fileira quando lst_iniciar
   // reinjeta a pasta dela em colecoes.c; chamando isto so ao ABRIR a Biblioteca,
   // a fileira sumiria da home a cada reinicio ate a pessoa passar por la.
+  arranque_etapa("app_iniciar/lst_iniciar");
   lst_iniciar();
+  arranque_etapa("app_iniciar/agenda_iniciar");
   agenda_iniciar();
   // A FONTE LEMBRADA, do mesmo jeito e pelo mesmo motivo: ela e lida antes do
   // primeiro Reproduzir, que pode acontecer segundos depois do arranque quando
   // a pessoa abre direto no "Continuar assistindo".
+  arranque_etapa("app_iniciar/ondever_iniciar");
   ondever_iniciar();
+  arranque_etapa("app_iniciar/fontepref_iniciar");
   fontepref_iniciar();
+  arranque_etapa("app_iniciar/addonstats_ler");
   addonstats_ler();   // #202: latencia de cada add-on NESTA TV (addonstats.h)
   // A ARTE ESCOLHIDA A MAO (#142) tambem, antes do primeiro destaque: sem ela
   // lida, o hero abriria na foto automatica e trocaria no quadro seguinte.
+  arranque_etapa("app_iniciar/arteesc_iniciar");
   arteesc_iniciar();
   // MESMA RAZAO, OUTRA LISTA: o cache de recomendacoes guarda titulo e poster,
   // entao a aba Social do painel AZUL desenha no primeiro quadro, antes de
   // existir catalogo e antes de a rede responder. Isto nao abre conexao — quem
   // faz isso e recomenda_verificar, la embaixo, com a home ja de pe.
+  arranque_etapa("app_iniciar/recomenda_iniciar");
   recomenda_iniciar();
+  arranque_etapa("app_iniciar/ilhasinais_iniciar");
   ilhasinais_iniciar();  // a saude da rede passa a ouvir os pedidos (ilha, 02/10)
+  arranque_etapa("app_iniciar/atividade_iniciar");
   atividade_iniciar();   // a fila de POST /v1/atividade que nao saiu (atividade.h)
   // O envio da atividade segue o nivel de privacidade (alcance) do Social: a
   // funcao e chamada agora e a cada mudanca; "nao perguntado" chega como 0.
@@ -1976,6 +1997,8 @@ int app_iniciar(const char *dirArte) {
     tela = TELA_HOME;
     // Com sessao gravada o ciclo comeca no arranque: e ele que traz os addons
     // e o Trakt da pessoa, sem os quais a home mostra so o que veio no pacote.
+    arranque_etapa("app_iniciar/sync_iniciar");
+    arranque_etapa("app_iniciar/sync_iniciar");
     sync_iniciar();
     // A ESCOLHA DE PERFIL ABRE AQUI, e nao daqui a alguns segundos.
     //
@@ -1993,6 +2016,7 @@ int app_iniciar(const char *dirArte) {
     if (perfis_precisa_escolher()) {
       tela = TELA_ESCOLHA_PERFIL;
       perfilAntes = perfis_ativo();
+      arranque_etapa("app_iniciar/perfilsel_iniciar");
       perfilsel_iniciar();
     } else {
       // NO CHOOSER = THE CHOICE IS ALREADY MADE (#228). A restored session
@@ -2003,12 +2027,15 @@ int app_iniciar(const char *dirArte) {
       // (no such guard) played. Registros 23154 (Q80A) and 41271 (S90C): one
       // profile, gate stuck on top-overlay. If the sync later finds a second
       // profile, the chooser opens via perfilsel_iniciar, which resets this.
+      arranque_etapa("app_iniciar/perfilsel_continuar_ativo");
       perfilsel_continuar_ativo();
     }
   } else {
     tela = TELA_LOGIN;
+    arranque_etapa("app_iniciar/login_iniciar");
     login_iniciar();
   }
+  arranque_etapa("app_iniciar/fim");
   return 1;
 }
 

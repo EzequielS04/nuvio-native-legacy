@@ -1,5 +1,6 @@
 #ifndef NV_QUEDA_H
 #define NV_QUEDA_H
+#include <stdio.h>
 // ONDE O APP MORREU. "A sessao anterior nao se despediu" (avisos.c) diz que
 // houve queda, nao onde: na 2.0.0 duas TVs webOS 5+ somaram 12 quedas e o log
 // nao tinha uma linha sobre o motivo. Aqui o sinal fatal grava, num arquivo
@@ -16,4 +17,10 @@ void queda_armar(const char *arquivo);
 // Le o relato da sessao anterior, imprime as linhas "[queda] ..." e apaga o
 // arquivo. Devolve 1 se havia relato.
 int  queda_relatar(const char *arquivo);
+// Segundo destino do MESMO relato: o tratador grava nos dois (so open/write).
+// O rastro do arranque (arranque.c) rearma o tratador depois, para outro
+// arquivo; a queda no meio do app_iniciar tem de continuar achavel no de /tmp.
+void queda_espelho(const char *arquivo);
+// O mesmo que queda_relatar, escrevendo em `saida` (ex.: open_memstream).
+int  queda_relatar_em(const char *arquivo, FILE *saida);
 #endif

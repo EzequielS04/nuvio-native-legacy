@@ -1264,6 +1264,7 @@ int main(int argc, char **argv) {
 #endif
   rede_discord_ca(discordCa);
   rede_preparar();
+  arranque_enviar();   // #317: se a sessao anterior morreu no arranque, conta isso ao servidor (1x)
   // NIVEL DE GPU (gpunivel.h): le GL_*, marca a GPU fraca no perfil e decide
   // o nivel de partida ANTES de tex_iniciar, que tira o perfil do aparelho.
   gpun_iniciar(dw, dh);
@@ -1357,6 +1358,7 @@ int main(int argc, char **argv) {
   NV_ETAPA("app_iniciar");
   arranque_etapa("app_iniciar");
   if (!app_iniciar(dirArte)) return 1;
+  arranque_etapa("app_iniciar ok");
   NV_ETAPA("addons/catalogo");
   // Cor viva: a paleta da ultima cena volta ANTES do primeiro quadro, entao
   // quem usa o tema dinamico ja abre o app na cor do ultimo titulo.

@@ -15,4 +15,11 @@
 void arranque_etapa(const char *nome);
 // Chamar logo depois do freopen do log, ainda no inicio de main().
 void arranque_relatar(void);
+// Depois de rede_preparar e antes de app_iniciar: se a sessao anterior morreu
+// no arranque, manda UMA vez o rastro + relato de queda ao servidor de logs
+// (sem conta, teto de 4 s) — so com o envio automatico ligado. #317.
+void arranque_enviar(void);
+// avisos_iniciar rearma o tratador para outro arquivo; isto mantem a copia
+// fixa de /tmp tambem escrita.
+void arranque_espelhar_queda(void);
 #endif
