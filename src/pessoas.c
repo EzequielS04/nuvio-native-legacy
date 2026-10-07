@@ -20,6 +20,7 @@
 //    frase + o que fazer), e nao uma linha de rodape que some em 4 s.
 #include "pessoas.h"
 #include "recomenda.h"
+#include "recenviar.h"
 #include "teclado.h"
 #include "gfx.h"
 #include "text.h"
@@ -65,7 +66,7 @@ enum { PG_MENU = 0, PG_LISTA, PG_CARTAO, PG_PEDIDOS, PG_BLOQ, PG_PERFIL, PG_GEN 
 // O que cada linha faz ao OK.
 enum { A_NADA = 0,
        A_BUSCAR, A_GOSTO, A_PEDIDOS, A_PERFIL, A_BLOQUEADOS,
-       A_COMUNIDADE, A_MAIS,           // a lista da comunidade e "Ver mais"
+       A_COMUNIDADE, A_MAIS, A_CODIGO,           // a lista da comunidade e "Ver mais"
        A_PESSOA,                       // abre o cartao de quem esta na linha
        A_PEDIR, A_CANCELAR, A_ACEITAR, A_RECUSAR, A_BLOQUEAR, A_DESBLOQ,
        A_P_PESQ, A_P_APELIDO, A_P_BIO, A_P_GEN, A_P_FOTO, A_P_REC, A_P_ATIV,
@@ -291,6 +292,14 @@ static void montar(void) {
   nL = 0;
   if (pagina == PG_MENU) {
     nova(T_BUSCA, A_BUSCAR, "");
+    // O CODIGO NA MESMA FOLHA (06/10, "tudo mais junto"): o painel tem um botao
+    // so, "Adicionar pessoas", e aqui estao as duas formas — buscar e digitar
+    // o codigo de um amigo — com o codigo de quem esta olhando logo ali.
+    { const char *cod = recomenda_meu_codigo();
+      Linha *l = navL(A_CODIGO, "aj_user-plus", "Adicionar por código", NULL);
+      if (l) {
+        if (cod[0]) snprintf(l->sub, sizeof l->sub, i18n("O seu código é %s"), cod);
+        else snprintf(l->sub, sizeof l->sub, "%s", i18n("Digite o código de um amigo")); } }
     if (np > 0) {
       secao("Pedidos de amizade", np);
       for (i = 0; i < np && i < 3; i++) { RecPessoa p; if (recomenda_pedido(i, &p)) pessoaL(&p); }
@@ -542,6 +551,11 @@ static void aplicar(void) {
       if (recomenda_listar_pedidos()) opAtual = A_PEDIDOS;
       return;
     case A_PERFIL: carregarRascunho(); irPara(PG_PERFIL); return;
+    case A_CODIGO:
+      // A folha do codigo e outra modal: esta se fecha antes de abri-la.
+      aberto = 0;
+      recenviar_abrir_amigos();
+      return;
     case A_BLOQUEADOS:
       irPara(PG_BLOQ);
       if (recomenda_listar_bloqueados()) opAtual = A_BLOQUEADOS;
@@ -1143,7 +1157,7 @@ static float selosGeneros(float x, float y, float larg, unsigned m, float a) {
 static const char *chapeuDe(void) { return pagina == PG_CARTAO ? "Perfil" : "Amigos"; }
 static const char *tituloDe(void) {
   switch (pagina) {
-    case PG_MENU:    return "Encontrar pessoas";
+    case PG_MENU:    return "Adicionar pessoas";
     case PG_LISTA:   return tituloLista(listaOrigem);
     case PG_PEDIDOS: return "Pedidos de amizade";
     case PG_BLOQ:    return "Pessoas bloqueadas";
@@ -1154,7 +1168,7 @@ static const char *tituloDe(void) {
 }
 static const char *subDe(void) {
   switch (pagina) {
-    case PG_MENU:    return "Ache amigos pelo apelido ou pelo código de 6 letras que eles te passarem.";
+    case PG_MENU:    return "Busque pelo nome ou @apelido, ou digite o código de 6 letras de um amigo.";
     case PG_LISTA:   return listaOrigem == 3 ? "Quem ligou o Perfil pesquisável, com atividade mais recente primeiro."
                           : listaOrigem == 2 ? "Quem tem títulos ou gêneros em comum com você."
                           : "";
