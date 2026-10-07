@@ -1185,7 +1185,9 @@ static void ilhaCtx(GfxRect p, float raioPx, float a) {
   float raio = raioPx / p.h;
   gfx_sombra_sob((GfxRect){ p.x - 18.0f, p.y - 8.0f, p.w + 36.0f, p.h + 40.0f }, 1.0f, 0, 0.5f,
                  0, 0, 0, .42f * a, p, raioPx, vid ? 0.0f : .98f * a);
-  if (vid) gfx_vidro_folha(p, raio, a);
+  // O vidro le a textura assada e deixava o texto da fileira aparecer por
+  // tras; uma base quase solida por baixo (a cor do modo sem vidro) fecha.
+  if (vid) { gfx_cor(p, raio, .071f, .075f, .086f, .93f * a); gfx_vidro_folha(p, raio, a); }
   else gfx_cor(p, raio, .071f, .075f, .086f, .98f * a);
   gfx_luz_canto(p, raio, p.w * .25f, -p.h * .25f, p.w * .9f, 1, 1, 1, (vid ? .06f : .04f) * a);
 }
@@ -1612,8 +1614,9 @@ static void ctx_desenharCorpo_(Uint32 agora) {
   const CatItem *ci;
   const char *mensagem = NULL;
   float a = anim, alt, x, y, cab, grupoH;
-  int i, comLogo, infoOn;
+  int i, comLogo, infoOn, morph = 0;
   CtxInfoGeo geo;
+  CtxCartaoGeo cg;
   CtxInfoEstado est;
   (void)agora;
   infoDesenhada = 0;
@@ -1670,7 +1673,7 @@ static void ctx_desenharCorpo_(Uint32 agora) {
   }
 
   { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-    gfx_cor(tela, 0.0f, 0, 0, 0, 0.55f * a); }
+    gfx_cor(tela, 0.0f, 0, 0, 0, 0.74f * a); }
 
   infoOn = infoPossivel(ci);
   est.salvo = tituloSalvo(ci);
@@ -1695,7 +1698,19 @@ static void ctx_desenharCorpo_(Uint32 agora) {
   // A EXTENSAO muda o lugar do menu: os dois juntos ao lado do cartaz (ou no
   // meio), e o grupo inteiro dentro da tela. Ver ctxinfo_geometria.
   memset(&geo, 0, sizeof geo);
+  memset(&cg, 0, sizeof cg);
   grupoH = alt;
+  // O CARTAZ VIRA O CARTAO: com cartaz focado o cartao de informacoes e o
+  // proprio cartaz crescido (ctxinfo_cartao_geo) e o menu fica colado a ele.
+  morph = infoOn && temCartaz && !doPainel;
+  if (morph) {
+    float hAlvo = ctxinfo_altura(ci, &est, CTXI_CARTAO_W < cartazRect.w ? cartazRect.w : CTXI_CARTAO_W);
+    if (hAlvo < alt) hAlvo = alt;
+    if (infoH < 1.0f || ajustes_animacoes_reduzidas()) infoH = hAlvo;
+    else infoH += (hAlvo - infoH) * 0.22f;
+    ctxinfo_cartao_geo(&cartazRect, infoH, CTX_W, &cg);
+    x = cg.menuX; y = cg.cartao.y; grupoH = cg.cartao.h;
+  } else
   if (infoOn) {
     float pedido = doPainel && dicaCx >= 0.0f ? dicaCx : -1.0f;
     ctxinfo_geometria(temCartaz && !doPainel ? &cartazRect : NULL, x, pedido, CTX_W, &geo);
@@ -1725,6 +1740,38 @@ static void ctx_desenharCorpo_(Uint32 agora) {
   // recorte, veus, rotulo, logo, anel), em pixels reais — nada de refazer a
   // arte aqui com outro aspecto. So o que nao e da home (Biblioteca) cai na
   // arte solta abaixo.
+  if (morph) {
+    // O CARTAZ CRESCE ATE O CARTAO. `e` anda com a mola de abertura, entao
+    // fechar desfaz o mesmo caminho de volta ate o cartaz. A arte do cartaz
+    // some na primeira metade e o conteudo so acende no fim (ele e posto na
+    // caixa final: antes disso a caixa ainda nao o contem).
+    float e = a < 0.0f ? 0.0f : a > 1.0f ? 1.0f : a;
+    GfxRect P = cartazRect, C = cg.cartao, r;
+    float raioP = ajustes_raio_poster_px() / gfx_escala_ui(), raioPx, sa, ca, artA;
+    r.x = P.x + (C.x - P.x) * e; r.y = P.y + (C.y - P.y) * e;
+    r.w = P.w + (C.w - P.w) * e; r.h = P.h + (C.h - P.h) * e;
+    raioPx = raioP + (CTX_ILHA_RAIO - raioP) * e;
+    if (raioPx > 0.5f * (r.h < r.w ? r.h : r.w)) raioPx = 0.5f * (r.h < r.w ? r.h : r.w);
+    sa = anim_clamp(e * 3.0f, 0.0f, 1.0f);
+    ca = anim_clamp((e - 0.8f) / 0.2f, 0.0f, 1.0f);
+    artA = 1.0f - anim_clamp((e - 0.15f) / 0.55f, 0.0f, 1.0f);
+    ilhaCtx(r, raioPx, sa);
+    if (artA > 0.01f && cartazArte[0]) {
+      GLuint t = tex_obter_larg(cartazArte, P.w * gfx_escala_ui());
+      if (t) {
+        gfx_tex_aspect_atual = tex_aspecto(cartazArte);
+        gfx_rect(r, t, GFX_CARD, 0, 0, 0, raioPx / r.h, 0, 0, 0, artA);
+        gfx_tex_aspect_atual = 0.0f;
+      }
+    }
+    if (ca > 0.01f) ctxinfo_desenhar(ci, &est, C.x, C.y, C.w, sa, ca);
+    infoDesenhada = 1; infoLadoUlt = cg.lado;
+    infoCaixa = C;
+    menuCaixa = (GfxRect){ cg.menuX, y, CTX_W, alt };
+    // O menu sai da borda do cartao, acendendo depois dele.
+    x -= (float)cg.lado * (1.0f - e) * 40.0f;
+    a = anim_clamp((e - 0.35f) / 0.65f, 0.0f, 1.0f);
+  } else
   if (temCartaz && !doPainel && !cartazFixo && cartaoDaHome()) {
     /* feito */
   } else
@@ -1749,13 +1796,13 @@ static void ctx_desenharCorpo_(Uint32 agora) {
     float ca = a * anim_clamp((e - 0.3f) / 0.7f, 0.0f, 1.0f);
     ilhaCtx((GfxRect){ ix, y, geo.infoW, infoH }, CTX_ILHA_RAIO, sa);
     ctxinfo_desenhar(ci, &est, ix, y, geo.infoW, sa, ca);
-    infoDesenhada = 1; infoLadoUlt = geo.lado;
+    infoDesenhada = 1; infoLadoUlt = -geo.lado;
     infoCaixa = (GfxRect){ geo.infoX, y, geo.infoW, infoH };
     menuCaixa = (GfxRect){ geo.menuX, y, CTX_W, alt };
   }
 
   // Entra deslizando 16 px a partir do lado do poster, como as folhas do app.
-  x += (1.0f - a) * (temCartaz && !doPainel && x < cartazRect.x ? 16.0f : -16.0f);
+  if (!morph) x += (1.0f - a) * (temCartaz && !doPainel && x < cartazRect.x ? 16.0f : -16.0f);
   ilhaCtx((GfxRect){ x, y, CTX_W, alt }, CTX_ILHA_RAIO, a);
 
   // CABECALHO: o nome e, embaixo, o que o titulo e ("Serie · 2024 · ...") —

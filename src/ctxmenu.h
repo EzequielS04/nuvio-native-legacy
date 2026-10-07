@@ -26,9 +26,11 @@ int  ctx_aberto(void);
 void ctx_evento(const SDL_Event *e);
 void ctx_atualizar(float dt, Uint32 agora);
 void ctx_desenhar(Uint32 agora);
-// A EXTENSAO DE INFORMACOES no ultimo quadro desenhado: 1 e as caixas (tela
-// virtual) da extensao e do menu, e o lado (+1 = a extensao a direita do
-// menu). 0 = nao foi desenhada. Para os testes de layout.
+// O CARTAO DE INFORMACOES no ultimo quadro desenhado (o cartaz crescido, ou a
+// ilha de informacoes quando nao ha cartaz): 1 e as caixas (tela virtual) do
+// cartao e do menu, e o lado. Com cartaz, lado +1 = o menu a DIREITA do cartao,
+// -1 = a esquerda (o mesmo vale sem cartaz: lado e onde fica o MENU). 0 = nao foi
+// desenhado. Para os testes de layout.
 int  ctx_info_caixa(GfxRect *info, GfxRect *menu, int *lado);
 // O titulo do menu aberto (NULL no menu de lista/estilo ou fechado).
 const CatItem *ctx_titulo(void);

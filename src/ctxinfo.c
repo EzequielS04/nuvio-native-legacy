@@ -79,6 +79,27 @@ void ctxinfo_geometria(const GfxRect *cartaz, float menuXPadrao, float centroX,
     if (g->infoW < CTXI_W_SOLTA) { g->infoW = 0.0f; g->lado = 0; } }
 }
 
+void ctxinfo_cartao_geo(const GfxRect *poster, float h, float menuW, CtxCartaoGeo *g) {
+  const float W = NV_TELA_W, H = NV_TELA_H, B = CTXI_BORDA, G = CTXI_GAP;
+  float w = CTXI_CARTAO_W < poster->w ? poster->w : CTXI_CARTAO_W;
+  float total = w + G + menuW, x;
+  if (h < poster->h) h = poster->h;
+  memset(g, 0, sizeof *g);
+  if (poster->x + total <= W - B) {
+    x = poster->x; g->lado = 1; g->menuX = x + w + G;
+  } else if (poster->x + poster->w - total >= B) {
+    x = poster->x + poster->w - w; g->lado = -1; g->menuX = x - G - menuW;
+  } else {
+    // Nenhum lado leva os dois: prende o grupo na tela, do lado com mais chao.
+    int dir = (W - B - (poster->x + poster->w)) >= (poster->x - B);
+    float gx = dir ? poster->x : poster->x + poster->w - total;
+    gx = prender(gx, B, W - B - total);
+    g->lado = dir ? 1 : -1;
+    if (dir) { x = gx; g->menuX = gx + w + G; } else { g->menuX = gx; x = gx + menuW + G; }
+  }
+  g->cartao = (GfxRect){ x, prender(poster->y, B, H - B - h > B ? H - B - h : B), w, h };
+}
+
 // --------------------------------------------------------------------- dados
 static int ehSerie(const CatItem *ci) { return ci && !strcmp(ci->tipo, "series"); }
 static int temId(const CatItem *ci) { return ci && ci->imdb[0] == 't' && ci->imdb[1] == 't'; }

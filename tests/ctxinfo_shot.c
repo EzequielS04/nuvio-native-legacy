@@ -145,6 +145,21 @@ static void geometria(void) {
   ctxinfo_geometria(&c, 1230, -1, 420, &g);
   confere("sem lugar dos dois lados: do outro lado do cartaz",
           g.separada && g.lado == -1 && g.infoX + g.infoW <= 720 - 29);
+  { CtxCartaoGeo cg;
+    c = (GfxRect){ 104, 400, 260, 390 };
+    ctxinfo_cartao_geo(&c, 500, 420, &cg);
+    confere("cartao: cresce do cartaz a esquerda, menu a direita",
+            cg.lado == 1 && cg.cartao.x == 104 && cg.menuX == 104 + CTXI_CARTAO_W + CTXI_GAP &&
+            cg.cartao.y == 400 && cg.cartao.h == 500);
+    c = (GfxRect){ 1620, 300, 260, 390 };
+    ctxinfo_cartao_geo(&c, 520, 420, &cg);
+    confere("cartao: ultima coluna, cresce para a esquerda e o menu vai a esquerda",
+            cg.lado == -1 && cg.cartao.x + cg.cartao.w == 1880 &&
+            cg.menuX + 420 + CTXI_GAP == cg.cartao.x);
+    c = (GfxRect){ 700, 900, 260, 390 };
+    ctxinfo_cartao_geo(&c, 520, 420, &cg);
+    confere("cartao: preso entre as margens de cima e de baixo",
+            cg.cartao.y + cg.cartao.h <= 1080 - 48 + 0.5f && cg.cartao.y >= 48); }
   ctxinfo_geometria(NULL, 750, -1, 420, &g);
   confere("sem cartaz: o grupo centrado na tela",
           g.lado == 1 && g.menuX + (420 + CTXI_GAP + CTXI_W) * 0.5f > 959 &&
@@ -178,11 +193,12 @@ static void conferir(const char *rotulo, int ladoEsperado, const char *deve) {
   ctxinfo_texto(ctx_titulo(), NULL, t, sizeof t);
   printf("%s[extensao %.0f,%.0f %.0fx%.0f | menu %.0f,%.0f | lado %d]\n", t, ri.x, ri.y, ri.w, ri.h,
          rm.x, rm.y, lado);
-  snprintf(msg, sizeof msg, "%s: a extensao abre do lado %s", rotulo,
+  snprintf(msg, sizeof msg, "%s: o menu fica do lado %s do cartao", rotulo,
            ladoEsperado > 0 ? "direito" : "esquerdo");
   confere(msg, tem && lado == ladoEsperado);
   snprintf(msg, sizeof msg, "%s: sem sobrepor o menu, dentro da tela", rotulo);
-  confere(msg, tem && (lado > 0 ? ri.x >= rm.x + rm.w - 0.5f : ri.x + ri.w <= rm.x + 0.5f) &&
+  confere(msg, tem && (lado > 0 ? rm.x >= ri.x + ri.w - 0.5f : rm.x + rm.w <= ri.x + 0.5f) &&
+               rm.x >= 0.0f && rm.x + rm.w <= 1920.5f &&
                ri.x >= 0.0f && ri.x + ri.w <= 1920.5f && ri.y >= 0.0f && ri.y + ri.h <= 1080.5f);
   snprintf(msg, sizeof msg, "%s: mostra \"%s\"", rotulo, deve);
   confere(msg, strstr(t, deve) != NULL);
