@@ -1330,6 +1330,12 @@ static int lerTracks(Fio *f, const unsigned char *p, long n) {
       return 1;
     }
     if (!ehAss || !priv) return -1;
+    // O libass sobe aqui, com a faixa ASS ja achada, e nao quando o fio nasce:
+    // o aquecimento le a pasta de fontes inteira para a memoria (106 MB na C9,
+    // 2-12 s e +65-120 MB de RSS na webOS) e antes rodava em toda pre-busca,
+    // mesmo para MP4 e MKV sem ASS. 2.0.1: 35 de 38 pessoas com "[ass] libass
+    // iniciado" nunca carregaram uma faixa ASS nesse log.
+    assrender_preaquecer();
     return montarCabecalho(f, priv, privN) ? 1 : -1;
   }
   return 0;
@@ -3143,7 +3149,6 @@ static int iniciarFio(const char *url, int numeroFaixa, int herdar, int segurar,
   f->prebusca = escolher != NULL;
   f->escolher = escolher;
   f->fracIni = fracIni > 0.0 && fracIni < 1.0 ? fracIni : 0.0;
-  assrender_preaquecer();
   pthread_mutex_lock(&S.trava);
   // Tentativa nova da MESMA url (mkvass_retomar): herda o que ela ensinou —
   // url final, uma conexao so, janela menor. Escolha nova: comeca do zero,
