@@ -1287,7 +1287,10 @@ int addons_adicionar(const char *nome, const char *urlManifest) {
   int i;
   if (!urlManifest || !*urlManifest) return 0;
   // Antes de normalizar: o que nao cabe nao entra, nem cortado (addonurl.h).
-  if (!nv_addon_url_cabe(nome, strlen(urlManifest))) return 0;
+  // #203: URL grande vira apelido (addonurl.h) em vez de ser recusada.
+  { static char ap[NV_ADDON_URL_MAX];   // so o fio principal instala
+    if (!nv_addon_url_guardar(nome, urlManifest, ap, sizeof ap)) return 0;
+    urlManifest = ap; }
   if (nAddon >= ADD_MAX) {
     printf("[addons] nao coube: a lista ja tem %d\n", ADD_MAX);
     fflush(stdout);

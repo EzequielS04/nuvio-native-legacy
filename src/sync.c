@@ -54,7 +54,7 @@ void servidores_esquecer_todos(void);   // servidores.c: wipe every profile's to
 #define SY_ADD_MAX   64   // o mesmo teto de ADD_MAX (addons.c)
 // URL lida da conta ANTES de caber em AddonRemoto: maior que o limite de
 // proposito, para o log dizer o tamanho de verdade em vez de "nao coube".
-#define SY_URL_LEITURA (NV_ADDON_URL_MAX * 4)
+#define SY_URL_LEITURA (NV_ADDON_URL_MAX * 8)   // 16 KB: URL grande vira apelido (addonurl.h, #203)
 
 static pthread_t fio;
 static int fioVivo, fioPronto;
@@ -137,7 +137,7 @@ static int addonsGuardar(AddonsPendencia *p) {
   jsw_ci(&w, "profile", p->perfil); jsw_cs(&w, "edit", p->edicao);
   jsw_chave(&w, "addons"); jsw_arr_ini(&w);
   for (i = 0; i < p->n; i++) {
-    jsw_obj_ini(&w); jsw_cs(&w, "url", p->lista[i].url);
+    jsw_obj_ini(&w); jsw_cs(&w, "url", nv_longa_bruto(p->lista[i].url) ? nv_longa_bruto(p->lista[i].url) : p->lista[i].url);
     jsw_cs(&w, "name", p->lista[i].nome);
     jsw_cb(&w, "enabled", p->lista[i].ativo); jsw_obj_fim(&w);
   }
@@ -167,7 +167,7 @@ static int addonsLer(AddonsPendencia *p, const char *texto) {
   const char *fim, *a, *f, *s;
   char dono[80], habilitado[8];
   int n = 0;
-  if (!texto || strlen(texto) > 140000 || *texto != '{') return 0;
+  if (!texto || strlen(texto) > 1200000 || *texto != '{') return 0;
   fim = js_fim(texto);
   if (fim <= texto || fim[-1] != '}') return 0;
   for (s = fim; *s && (unsigned char)*s <= ' '; s++) {}
@@ -184,8 +184,8 @@ static int addonsLer(AddonsPendencia *p, const char *texto) {
     // vez de entrar cortada — esta lista e a que vai ser EMPURRADA para a conta.
     { static char url[SY_URL_LEITURA];   // sob addonsTrava (addonsRestaurar)
       if (!js_texto_raiz_em(a, f, "url", url, sizeof url) ||
-          !nv_addon_url_cabe("edicao local", strlen(url))) return 0;
-      snprintf(p->lista[n].url, sizeof p->lista[n].url, "%s", url); }
+          strlen(url) >= sizeof url - 1 ||
+          !nv_addon_url_guardar("edicao local", url, p->lista[n].url, sizeof p->lista[n].url)) return 0; }
     if (!p->lista[n].url[0] ||
         !js_bruto(a, f, "enabled", habilitado, sizeof habilitado) ||
         (strcmp(habilitado, "true") && strcmp(habilitado, "false"))) return 0;
@@ -492,8 +492,12 @@ static int lerAddons(const char *r) {
     // A URL QUE NAO CABE NAO ENTRA CORTADA (#201). js_texto corta em silencio
     // no tamanho do destino, e era aqui que a URL do Comet (870) virava 599: o
     // addon recebia meia configuracao e respondia como se ela fosse valida.
-    if (!nv_addon_url_cabe(addonsRem[k].nome, strlen(url))) { fora++; continue; }
-    snprintf(addonsRem[k].url, sizeof addonsRem[k].url, "%s", url);
+    // #203: a que passa de NV_ADDON_URL_MAX (AIOLists tem 2 a 8 KB) vira
+    // apelido; so some quando passa dos 16 KB da leitura ou a tabela enche.
+    if (strlen(url) >= sizeof url - 1 ||
+        !nv_addon_url_guardar(addonsRem[k].nome, url, addonsRem[k].url, sizeof addonsRem[k].url)) {
+      fora++; continue;
+    }
     // Ausente conta como LIGADO: e assim que o web le, e um addon que some por
     // causa de um campo que o servidor nao mandou e pior que um a mais.
     addonsRem[k].ativo = js_bruto(p, f, "enabled", b, sizeof b)
@@ -610,7 +614,7 @@ static void empurrarAddons(void) {
   jsw_arr_ini(&w);
   for (i = 0; i < n; i++) {
     jsw_obj_ini(&w);
-    jsw_cs(&w, "url", atuais[i].url);
+    jsw_cs(&w, "url", nv_longa_bruto(atuais[i].url) ? nv_longa_bruto(atuais[i].url) : atuais[i].url);
     jsw_ci(&w, "sort_order", i);
     jsw_cb(&w, "enabled", atuais[i].ativo);
     if (atuais[i].nome[0]) jsw_cs(&w, "name", atuais[i].nome);
