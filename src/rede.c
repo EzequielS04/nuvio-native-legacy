@@ -1,4 +1,7 @@
 #include "rede.h"
+#ifdef NV_ANDROID
+#include "android.h"
+#endif
 #include "negcache.h"
 #include "negcache.inc"
 #include <pthread.h>
@@ -1339,6 +1342,8 @@ static int abrir(void) {
 #ifdef NV_ANDROID
   // Android: o sistema nao oferece libcurl a apps; ela vai no APK (jniLibs) com
   // o nome "libcurl.so", e o dlopen por nome acha na pasta nativa do app.
+  android_etapa("rede_preparar: dlopen libcurl");
+  printf("[rede] dlopen libcurl.so\n"); fflush(stdout);
   h = dlopen("libcurl.so", RTLD_NOW);
   if (!h)
 #endif
@@ -1380,7 +1385,16 @@ static int abrir(void) {
     pthread_mutex_unlock(&abrirTrava);
     return 0;
   }
+#ifdef NV_ANDROID
+  // #266: a Shield (Tegra) para em "rede_preparar" sem imprimir mais nada; a
+  // libcurl 8 + mbedTLS 3.6 inicia o PSA/entropia aqui dentro. Marca cada lado.
+  android_etapa("rede_preparar: curl_global_init");
+  printf("[rede] curl_global_init\n"); fflush(stdout);
+#endif
   if (curl_global) curl_global(3 /* CURL_GLOBAL_DEFAULT */);
+#ifdef NV_ANDROID
+  printf("[rede] curl_global_init ok\n"); fflush(stdout);
+#endif
   // DEPOIS do global_init e ANTES de soltar a trava: a partir daqui qualquer fio
   // pode entrar em curl_easy_perform, e e la que o OpenSSL comeca a ser usado.
 #ifndef NV_ANDROID   // libcurl do APK nao usa libcrypto 1.0 (e dlopen de libcrypto.so seria do sistema)

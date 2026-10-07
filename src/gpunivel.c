@@ -14,6 +14,9 @@
 #ifdef NV_TPK
 #include <dlfcn.h>
 #include "tpk_egl.h"
+#ifdef NV_ANDROID
+#include "android.h"
+#endif
 #endif
 
 #define GPUN_NIVEL_AUTO_MAX 2   // efeitos minimos; o 3 (720p) so forcado, ver gpun_medir
@@ -197,9 +200,18 @@ void gpun_iniciar(int w, int h) {
   GLint db = 0, sb = 0;
   telaW = w > 0 ? w : 1920;
   telaH = h > 0 ? h : 1080;
+#ifdef NV_ANDROID
+  // #266: marca onde a Shield trava dentro de "rede_preparar" (as consultas GL
+  // logo apos o primeiro SwapWindow sao a outra suspeita).
+  android_etapa("gpun_iniciar: glGetString");
+  printf("[gl] consultando o driver\n"); fflush(stdout);
+#endif
   snprintf(renderer, sizeof renderer, "%s", glTxt(GL_RENDERER));
   snprintf(versaoGl, sizeof versaoGl, "%s", glTxt(GL_VERSION));
   ext = glTxt(GL_EXTENSIONS);
+#ifdef NV_ANDROID
+  android_etapa("gpun_iniciar: GL_DEPTH_BITS");
+#endif
   glGetIntegerv(GL_DEPTH_BITS, &db);
   glGetIntegerv(GL_STENCIL_BITS, &sb);
 #ifdef NV_TPK
