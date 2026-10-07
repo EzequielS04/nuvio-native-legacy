@@ -200,6 +200,7 @@ async function codigoLivre(db) {
 // O NOME QUE SAI (`pessoa.nome`) E RECALCULADO AQUI, sempre: exibicao digitada >
 // nome do perfil (ou da conta, no Trakt) > "Amigo #<rowid>". Todas as consultas
 // antigas leem `pessoa.nome`, entao nenhuma delas volta a mostrar UUID.
+const VISTO_PASSO = 120;
 async function registrar(env, quem, extra) {
   const t = agora();
   // `descobrivel` e `alcance` SAEM DAQUI E NAO ENTRAM: so as rotas proprias
@@ -207,7 +208,7 @@ async function registrar(env, quem, extra) {
   // escolha da pessoa por omissao do cliente.
   let ja = await env.DB.prepare(
     "SELECT rowid AS n, id, nome, codigo, avatar, descobrivel, nome_conta, nome_perfil, " +
-    "exibicao, avatar_perfil, alcance FROM pessoa WHERE id = ?"
+    "exibicao, avatar_perfil, alcance, visto FROM pessoa WHERE id = ?"
   ).bind(quem.id).first();
   if (!ja) {
     const codigo = await codigoLivre(env.DB);
@@ -235,9 +236,18 @@ async function registrar(env, quem, extra) {
     : (avatarPerfil || "");
   const p = { ...ja, nome_conta: nomeConta, nome_perfil: nomePerfil };
   const nome = resolverNome(p, quem.id);
-  await env.DB.prepare(
-    "UPDATE pessoa SET nome = ?, avatar = ?, visto = ?, nome_conta = ?, nome_perfil = ?, avatar_perfil = ? WHERE id = ?"
-  ).bind(nome, avatar, t, nomeConta, nomePerfil, avatarPerfil, quem.id).run();
+  // ESCRITA SO QUANDO MUDA ALGO (#203). Toda requisicao autenticada gravava
+  // aqui (~170 mil escritas/dia no D1, que serializa escritas e as faz esperar
+  // atras dos logs de 150 KB). Sem mudanca de nome/foto, `visto` so e
+  // renovado de 2 em 2 minutos: nada no servico le `visto` com precisao
+  // menor que isso (so ordena "ativo recente").
+  const mudou = nome !== ja.nome || avatar !== ja.avatar || nomeConta !== (ja.nome_conta || "") ||
+    nomePerfil !== (ja.nome_perfil || "") || avatarPerfil !== (ja.avatar_perfil || "");
+  if (mudou || !(ja.visto > 0) || t - ja.visto >= VISTO_PASSO) {
+    await env.DB.prepare(
+      "UPDATE pessoa SET nome = ?, avatar = ?, visto = ?, nome_conta = ?, nome_perfil = ?, avatar_perfil = ? WHERE id = ?"
+    ).bind(nome, avatar, t, nomeConta, nomePerfil, avatarPerfil, quem.id).run();
+  }
   return {
     id: quem.id, nome, codigo, avatar, descobrivel: ja.descobrivel ? 1 : 0,
     exibicao: ja.exibicao || "", alcance: Number.isInteger(ja.alcance) ? ja.alcance : -1,
@@ -619,16 +629,37 @@ async function rotaVisto(env, quem, corpo) {
 // qualquer jeito; fica 30 dias e sai na limpeza diaria.
 const REGISTRO_MAX = 200 * 1024;
 // codigoRegistro (o codigo de seis caracteres do recibo): ver src/codigo.js.
-const REGISTRO_RETENCAO = 30 * 24 * 3600;
+// 14 dias (eram 30): o D1 chegou a 8,5 GB de 10 GB com ~2 GB/dia de logs (#203).
+const REGISTRO_RETENCAO = 14 * 24 * 3600;
+// ENVIO AUTOMATICO NAO EMPILHA (#203). A TV manda o log "(auto)" a cada 1-5 min
+// e cada envio virava uma linha nova de ate 200 KB: 13,7 mil linhas e 2 GB por
+// dia, quase tudo o mesmo trecho repetido. Um "(auto)" da MESMA pessoa/versao/
+// plataforma dentro desta janela e a mesma sessao: o texto novo (a cauda mais
+// recente) substitui o anterior. "(anterior)", manual e crash continuam
+// inserindo, que sao os que o dono le.
+const REGISTRO_AUTO_JANELA = 15 * 60;
 async function rotaRegistro(env, quem, corpo) {
   const versao = String(corpo?.versao || "").slice(0, 32);
   const plataforma = String(corpo?.plataforma || "").slice(0, 16);
   const quando = String(corpo?.quando || "").slice(0, 40);
   let texto = String(corpo?.texto || "");
   if (texto.length > REGISTRO_MAX) texto = texto.slice(texto.length - REGISTRO_MAX);
-  const res = await env.DB.prepare(
+  const t = agora();
+  let res = null;
+  if (/\(auto\)$/.test(quando)) {
+    const ant = await env.DB.prepare(
+      "SELECT id FROM registro WHERE criado > ? AND pessoa = ? AND plataforma = ? AND versao = ? " +
+      "AND quando LIKE '%(auto)' ORDER BY criado DESC LIMIT 1"
+    ).bind(t - REGISTRO_AUTO_JANELA, quem.id, plataforma, versao).first();
+    if (ant?.id) {
+      await env.DB.prepare("UPDATE registro SET texto = ?, quando = ?, criado = ? WHERE id = ?")
+        .bind(texto, quando, t, ant.id).run();
+      res = { meta: { last_row_id: ant.id } };
+    }
+  }
+  if (!res) res = await env.DB.prepare(
     "INSERT INTO registro (pessoa, versao, plataforma, quando, texto, criado) VALUES (?, ?, ?, ?, ?, ?)"
-  ).bind(quem.id, versao, plataforma, quando, texto, agora()).run();
+  ).bind(quem.id, versao, plataforma, quando, texto, t).run();
   // RECIBO: a TV (avisos_enviar_diagnostico -> extrairRegistroId) so da o
   // envio por concluido se o corpo trouxer o id da linha gravada; sem ele o
   // registro dizia "HTTP 200 (sem recibo desta execucao)" com o envio feito.
@@ -642,15 +673,24 @@ async function rotaRegistro(env, quem, corpo) {
 
 const ARRANQUE_MAX = 64 * 1024;
 const ARRANQUE_DIA = 300;
+let arranqueMemo = null;
 async function rotaArranque(req, env) {
   const bruto = await req.text();
   if (bruto.length > 2 * ARRANQUE_MAX) return erro("grande demais", 413);
   let corpo = {};
   try { corpo = JSON.parse(bruto.trim() || "{}"); } catch { return erro("json invalido", 400); }
-  const n = await env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM registro WHERE pessoa LIKE 'arranque:%' AND criado > ?"
-  ).bind(agora() - 24 * 3600).first();
-  if ((n?.n || 0) >= ARRANQUE_DIA) return erro("limite diario", 429);
+  // A contagem varria ~14 mil linhas de `registro` por envio. Guarda-se o
+  // resultado por 60 s neste isolate (o teto e de protecao, nao de precisao);
+  // a migracao 014 ainda a torna uma leitura so de indice.
+  const t0 = agora();
+  if (!arranqueMemo || arranqueMemo.db !== env.DB || t0 - arranqueMemo.em >= 60) {
+    const n = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM registro WHERE pessoa LIKE 'arranque:%' AND criado > ?"
+    ).bind(t0 - 24 * 3600).first();
+    arranqueMemo = { db: env.DB, em: t0, n: n?.n || 0 };
+  }
+  if (arranqueMemo.n >= ARRANQUE_DIA) return erro("limite diario", 429);
+  arranqueMemo.n++;
   const tv = String(corpo?.tv || "?").replace(/[^\w.:-]/g, "").slice(0, 64) || "?";
   let texto = String(corpo?.texto || "");
   if (texto.length > ARRANQUE_MAX) texto = texto.slice(texto.length - ARRANQUE_MAX);
@@ -867,10 +907,17 @@ export default {
     await env.DB.batch([
       env.DB.prepare("DELETE FROM rec WHERE criado < ?").bind(t - RETENCAO),
       env.DB.prepare("DELETE FROM sessao WHERE expira < ?").bind(t),
-      env.DB.prepare("DELETE FROM registro WHERE criado < ?").bind(t - REGISTRO_RETENCAO),
       ...limpezaAmigos(env, t),
       ...limpezaSocial(env, t),
     ]);
+    // `registro` em pedacos: um DELETE unico de milhares de linhas de 150 KB
+    // segura o unico escritor do D1 por muito tempo (#203).
+    for (let i = 0; i < 40; i++) {
+      const r = await env.DB.prepare(
+        "DELETE FROM registro WHERE id IN (SELECT id FROM registro WHERE criado < ? LIMIT 200)"
+      ).bind(t - REGISTRO_RETENCAO).run();
+      if ((r.meta?.changes || 0) < 200) break;
+    }
     // Separado de proposito: sem a migracao 010 aplicada, a tabela `sala` nao
     // existe e o lote inteiro (90 dias de retencao) falharia junto.
     try { await env.DB.batch(limpezaSala(env, t)); } catch {}
