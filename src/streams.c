@@ -1676,6 +1676,22 @@ static int grupoRes(const Stream *s) {
   else r = 3;
   return r * 2 + (ehHdr(s) ? 0 : 1);
 }
+// A resolucao e a faixa de brilho da PROPRIA fileira (#202): a fonte "Melhor
+// para esta TV" fica acima de todos os cabecalhos de grupo e nao dizia a
+// resolucao, e o dono pediu o rotulo dentro da linha em foco. Sai como texto
+// universal ("4K", "1080p", "DV", "HDR10", "SDR"), sem palavra para traduzir.
+static void rotuloQualidade(const Stream *s, char *res, size_t nr, char *faixa, size_t nf, int *hdr) {
+  static const char *const RES[FOLHA_RES] = { "4K", "1080p", "720p", "SD" };
+  uint64_t b = s->badges;
+  snprintf(res, nr, "%s", RES[grupoRes(s) / 2]);
+  *hdr = ehHdr(s);
+  if (s->dolbyVision || (b & (badges_bit("v-dv") | badges_bit("a-atmos-dv") | badges_bit("a-truehd-dv") | badges_bit("a-dd-dv")))) snprintf(faixa, nf, "DV");
+  else if (b & badges_bit("v-hdr10plus")) snprintf(faixa, nf, "HDR10+");
+  else if (b & badges_bit("v-hdr10")) snprintf(faixa, nf, "HDR10");
+  else if (b & badges_bit("v-hlg")) snprintf(faixa, nf, "HLG");
+  else if (*hdr) snprintf(faixa, nf, "HDR");
+  else snprintf(faixa, nf, "SDR");
+}
 static int *ordem;
 static float *linhaY, *linhaH;
 static int ordemCap, nOrdem;
@@ -2913,6 +2929,23 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
     // na LG e o container que vale escolher (ver pontos()).
     logos=logosDa(s,tira);
     { float t=sel?.78f:.52f, lw=0, mpW=0;
+      // ROTULO DE QUALIDADE no inicio da fileira (#202): "4K · HDR10". A
+      // resolucao no branco da linha, a faixa no champanhe do HDR ou no cinza
+      // do SDR (as cores do cabecalho do grupo), e o resto da fileira anda
+      // para a direita por ele.
+      float tx0=tx, txtW0=txtW;
+      { char rs[16], fx[16]; int hd;
+        rotuloQualidade(s,rs,sizeof rs,fx,sizeof fx,&hd);
+        int cr=sel?240:200;
+        TxtLinha lr=txt_linha(TXT_HERO_META,rs,cr,cr,cr-2,255);
+        TxtLinha ls=txt_linha(TXT_HERO_META,"·",100,100,98,255);
+        TxtLinha lf=hd ? txt_linha(TXT_HERO_META,fx,(int)(120+(ai-120)*.45f),(int)(120+(ag*255-120)*.45f),(int)(118+(ab*255-118)*.45f)+18,255)
+                       : txt_linha(TXT_HERO_META,fx,sel?170:140,sel?170:140,sel?168:138,255);
+        float lx2=tx;
+        txt_desenhar_alpha(lr,lx2,cy+(FOLHA_SELO_H-lr.h)*.5f,anim); lx2+=lr.w+9;
+        txt_desenhar_alpha(ls,lx2,cy+(FOLHA_SELO_H-ls.h)*.5f,anim); lx2+=ls.w+9;
+        txt_desenhar_alpha(lf,lx2,cy+(FOLHA_SELO_H-lf.h)*.5f,anim); lx2+=lf.w+26;
+        tx0=lx2; txtW0=txtW-(lx2-tx); if(txtW0<80) txtW0=80; }
       int ehMp4=!strcmp(containerDa(s),"MP4");
       TxtLinha mp;
       if(ehMp4){ mp=txt_linha(TXT_HERO_META,"MP4",ai,(int)(ag*255),(int)(ab*255),255); mpW=mp.w+18; }
@@ -2924,33 +2957,33 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
       // cada selo na peca da cor do seu grupo; desligada (o padrao do Glass
       // UI), todos na mesma tinta branca.
       if(selosPacoteVisiveis((Stream *)s)) {
-        lw=desenharSelosPacote(s,tx,cy,txtW-mpW,FOLHA_SELO_H,
+        lw=desenharSelosPacote(s,tx0,cy,txtW0-mpW,FOLHA_SELO_H,
                                ajustes_selos_coloridos()?anim*(sel?1.0f:.85f):anim,t,1);
         // O Crave (servico canadense) nao esta em nenhum dos dois pacotes
         // embutidos: sai pela arte antiga para nao ser perdido.
         if(selospacote_ativo()<0 && (logos&badges_bit("p-crave"))) {
-          float cw=badges_desenhar_tom(badges_bit("p-crave"),tx+(lw>0?lw+16:0),cy,txtW-mpW-lw-16,FOLHA_SELO_H,t,t,t,anim);
+          float cw=badges_desenhar_tom(badges_bit("p-crave"),tx0+(lw>0?lw+16:0),cy,txtW0-mpW-lw-16,FOLHA_SELO_H,t,t,t,anim);
           if(cw>0) lw+=(lw>0?16:0)+cw; }
       } else if(logos) lw=ajustes_selos_coloridos()
-        ? badges_desenhar_selos(logos,tx,cy,txtW-mpW,FOLHA_SELO_H,anim*(sel?1.0f:.85f))
-        : badges_desenhar_tom(logos,tx,cy,txtW-mpW,FOLHA_SELO_H,t,t,t,anim);
+        ? badges_desenhar_selos(logos,tx0,cy,txtW0-mpW,FOLHA_SELO_H,anim*(sel?1.0f:.85f))
+        : badges_desenhar_tom(logos,tx0,cy,txtW0-mpW,FOLHA_SELO_H,t,t,t,anim);
       else if(!ehMp4){ char d[sizeof s->descricao];
         snprintf(d,sizeof d,"%s",s->descricao);
         for(char *p=d;*p;p++)if((unsigned char)*p<32)*p=' ';
         int c=sel?180:130;
-        txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,d,c,c,c,255,txtW),tx,cy+(FOLHA_SELO_H-26)*.5f,anim); }
-      if(ehMp4){ txt_desenhar_alpha(mp,tx+(lw>0?lw+18:0),cy+(FOLHA_SELO_H-mp.h)*.5f,anim); lw+=(lw>0?18:0)+mp.w; }
+        txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,d,c,c,c,255,txtW0),tx0,cy+(FOLHA_SELO_H-26)*.5f,anim); }
+      if(ehMp4){ txt_desenhar_alpha(mp,tx0+(lw>0?lw+18:0),cy+(FOLHA_SELO_H-mp.h)*.5f,anim); lw+=(lw>0?18:0)+mp.w; }
       // O IDIOMA, em texto no fim da fileira (nao ha logo para ele).
       { const char *id=idiomaDa(s);
         if(id){ int c=sel?230:190;
           TxtLinha li=txt_linha(TXT_HERO_META,id,c,c,c,255);
-          if(lw+18+li.w<=txtW){ txt_desenhar_alpha(li,tx+(lw>0?lw+18:0),cy+(FOLHA_SELO_H-li.h)*.5f,anim); lw+=(lw>0?18:0)+li.w; } } }
+          if(lw+18+li.w<=txtW0){ txt_desenhar_alpha(li,tx0+(lw>0?lw+18:0),cy+(FOLHA_SELO_H-li.h)*.5f,anim); lw+=(lw>0?18:0)+li.w; } } }
       // FORA DO CACHE: o debrid ainda vai baixar; tocar agora da o clipe de
       // aviso (ver o toast em app.c). Discreto, no fim da fileira — e uma
       // condicao da fonte, nao um defeito dela.
       if(s->foraCache){ int c=sel?185:140;
         TxtLinha lf=txt_linha(TXT_HERO_META,"Fora do cache",c,c-6,c-14,255);
-        if(lw+18+lf.w<=txtW) { txt_desenhar_alpha(lf,tx+(lw>0?lw+18:0),cy+(FOLHA_SELO_H-lf.h)*.5f,anim); lw+=(lw>0?18:0)+lf.w; } } }
+        if(lw+18+lf.w<=txtW0) { txt_desenhar_alpha(lf,tx0+(lw>0?lw+18:0),cy+(FOLHA_SELO_H-lf.h)*.5f,anim); lw+=(lw>0?18:0)+lf.w; } } }
     cy+=FOLHA_SELO_H+12;
     // O ARQUIVO, so na linha em foco: e o que distingue duas fontes iguais
     // (grupo de release, versao), e em toda linha era ruido.
