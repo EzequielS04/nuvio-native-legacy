@@ -79,6 +79,7 @@
 #include "svdesenho.h"
 #include "amigostitulo.h"
 #include "amigostitulo_ui.h"
+#include "temporadas_grafico.h"
 static void ponteiroDetalhe(int r, int c);   // ponteiro do Magic Remote (#99)
 static int moverFileira(int dy);
 static void heroReiniciar(void);
@@ -158,7 +159,7 @@ static void heroReiniciar(void);
 #define FR_COL_W    1040.0f
 #define FR_COL_GAP    96.0f
 
-#define N_SECOES    16
+#define N_SECOES    17
 // Trilho do segmentado de temporadas (.seg): 5 px de folga em volta dos itens.
 #define DET_SEG_PAD   5.0f
 #define N_ELENCO    6
@@ -542,7 +543,10 @@ typedef enum { SEC_TEMPORADAS, SEC_EPISODIOS, SEC_ABAS_INFO, SEC_ELENCO, SEC_REL
                // COLECAO do filme (#194): logo abaixo das recomendacoes, as
                // duas respondem "o que ver depois deste".
                SEC_COLECAO, SEC_COMENTARIOS,
-               SEC_ESTUDIOS, SEC_FRASES, SEC_DETALHES } TipoSecao;
+               SEC_ESTUDIOS, SEC_FRASES, SEC_DETALHES,
+               // SEU PROGRESSO (grafico de temporadas, temporadas_grafico.h):
+               // so na serie, entre os episodios e as Notas.
+               SEC_PROGTEMP } TipoSecao;
 // A ORDEM DO FILME no Glass UI (mockup "Detalhe", 03/10): Trailers e extras,
 // Elenco, Notas, O que estao dizendo, Mais como este, Colecao, Frases, Ficha
 // tecnica e Producao. Ela NAO e a ordem do enum, porque o enum tambem e a
@@ -557,12 +561,12 @@ static const int ORDEM_FILME[] = {
   SEC_NOTAS, SEC_TEMPORADAS, SEC_EPISODIOS, SEC_ABAS_INFO, SEC_ELENCO, SEC_RELACIONADOS,
   SEC_AUD_ARCO, SEC_AUD_RADAR, SEC_AUD_DIGITAL, SEC_NOTAS_EP,
   SEC_TRAILERS, SEC_COLECAO, SEC_COMENTARIOS,
-  SEC_ESTUDIOS, SEC_FRASES, SEC_DETALHES };
+  SEC_ESTUDIOS, SEC_FRASES, SEC_DETALHES, SEC_PROGTEMP };
 // NUMEROS DA TEMPORADA (Glass UI 1.8, mockup "Notas e graficos"): os tres
 // graficos da serie viraram UM bloco logo depois das Notas. Ele usa a fileira
 // SEC_AUD_ARCO (SEC_NUMEROS); RADAR, DIGITAL e NOTAS_EP ficaram sem colunas.
 static const int ORDEM_SERIE[] = {
-  SEC_TEMPORADAS, SEC_EPISODIOS, SEC_NOTAS, SEC_AUD_ARCO, SEC_ABAS_INFO, SEC_ELENCO,
+  SEC_TEMPORADAS, SEC_EPISODIOS, SEC_PROGTEMP, SEC_NOTAS, SEC_AUD_ARCO, SEC_ABAS_INFO, SEC_ELENCO,
   SEC_RELACIONADOS, SEC_AUD_RADAR, SEC_AUD_DIGITAL, SEC_NOTAS_EP,
   SEC_TRAILERS, SEC_COLECAO, SEC_COMENTARIOS,
   SEC_ESTUDIOS, SEC_FRASES, SEC_DETALHES };
@@ -582,6 +586,7 @@ static float epExtraAltura(void);
 static float epAppleExtra(void);
 static float notasBloco(void);
 static float notasTopoSerie(void);
+static float progTopoSerie(void);
 static float numerosTopoSerie(void);
 static float alturaSecao(int r);
 static float epTempY(void);
@@ -764,6 +769,34 @@ static void irParaTemporada(int c, int moverFoco) {
   if (moverFoco && epVisiveis() > 0) { foco.fileira = SEC_EPISODIOS; foco.coluna = 0; }
 }
 
+// OK NUMA COLUNA DO GRAFICO "Seu progresso": a pagina passa para aquela
+// temporada e o foco sobe para a fileira de episodios, no primeiro episodio
+// que voce ainda nao viu (o primeiro de todos se ja viu a temporada inteira).
+static void progAbrirTemporada(int col) {
+  const TgDados *d = tgraf_dados(idx);
+  const CatItem *ci = cat_item(idx);
+  int k, c, q;
+  if (!ci || col < 0 || col >= d->n) return;
+  for (k = 0; k < ci->nTemporadas; k++) if (ci->temporadas[k] == d->t[col].numero) break;
+  if (k >= ci->nTemporadas) return;
+  temporada = k;
+  foco.colunaLembrada[SEC_TEMPORADAS] = k;
+  irParaTemporada(k, 0);
+  q = epVisiveis();
+  if (q < 1) return;
+  for (c = 0; c < q; c++) {
+    const CatEp *e = cat_episodio(idx, epAbsoluto(c));
+    if (e && vistoep_estado(ci->imdb, e->temporada, e->episodio) != 1) break;
+  }
+  if (c >= q) c = 0;
+  foco.nColunas[SEC_EPISODIOS] = q;
+  foco.colunaLembrada[SEC_PROGTEMP] = col;
+  foco.fileira = SEC_EPISODIOS; foco.coluna = c;
+  epAncora = c; foco.colunaLembrada[SEC_EPISODIOS] = c;
+  { const CatEp *ep = cat_episodio(idx, epAbsoluto(c));
+    comEpT = ep ? ep->temporada : 0; comEpE = ep ? ep->episodio : 0; }
+}
+
 // Troca de temporada pela PONTA da fileira de episodios (dir=+1 direita,
 // -1 esquerda). Devolve 1 se trocou. So age quando o foco ja esta na ultima
 // (dir>0) ou primeira (dir<0) coluna e existe temporada do outro lado.
@@ -856,11 +889,13 @@ static void recalcularLayout(void) {
       }
       // NUMEROS DA TEMPORADA logo depois das Notas; o titulo e do proprio bloco.
       if (r == SEC_NUMEROS) topoSec[r] = conteudoSec[r] = numerosTopoSerie();
+      if (r == SEC_PROGTEMP) topoSec[r] = conteudoSec[r] = progTopoSerie();
       alvoSec[r] = (r == SEC_ABAS_INFO) ? NV_DETP_ALVO_ABAS
                                         : NV_DETP_ALVO_FILEIRA;
     }
     alvoSec[SEC_NOTAS] = alvoQueCabe(alturaSecao(SEC_NOTAS));
     alvoSec[SEC_NUMEROS] = alvoQueCabe(alturaSecao(SEC_NUMEROS));
+    alvoSec[SEC_PROGTEMP] = alvoQueCabe(alturaSecao(SEC_PROGTEMP));
     docFim = NV_DETP_FIM;
     // SECAO DO TRAKT NA SERIE: empilhada abaixo do elenco, como na referencia.
     // Era o "falta a secao do trakt na de series" — ela existia so em filme.
@@ -1731,7 +1766,12 @@ static float epAppleExtra(void) { return epApple() ? epCardH() - 414.0f : 0.0f; 
 // elenco; 0 enquanto as notas nao chegaram.
 // Topo do cabecalho: fundo dos cartoes de episodio + o vao antes das notas (60,
 // o mesmo de vaoAntes).
-static float notasTopoSerie(void) { return epRowY() + epCardH() + 60.0f; }
+// O GRAFICO DE TEMPORADAS ("Seu progresso") vem antes das Notas e as empurra.
+static float progTopoSerie(void) { return epRowY() + epCardH() + 60.0f; }
+static float progBloco(void) {
+  return secaoN(SEC_PROGTEMP) > 0 ? alturaSecao(SEC_PROGTEMP) + 60.0f : 0.0f;
+}
+static float notasTopoSerie(void) { return progTopoSerie() + progBloco(); }
 // Fim das Notas (= topo dos Numeros da temporada, que vem logo depois).
 static float numerosTopoSerie(void) {
   float y = notasTopoSerie();
@@ -1742,7 +1782,8 @@ static float numerosTopoSerie(void) {
 // Notas + Numeros da temporada empurram abas e elenco juntos.
 static float notasBloco(void) {
   float fim;
-  if (!ehSerie() || (secaoN(SEC_NOTAS) <= 0 && secaoN(SEC_NUMEROS) <= 0)) return 0.0f;
+  if (!ehSerie() || (secaoN(SEC_NOTAS) <= 0 && secaoN(SEC_NUMEROS) <= 0 &&
+                     secaoN(SEC_PROGTEMP) <= 0)) return 0.0f;
   fim = numerosTopoSerie();
   if (secaoN(SEC_NUMEROS) > 0) fim += alturaSecao(SEC_NUMEROS) + NV_DETF_SEC_GAP;
   return fim - NV_DETP_G_ABAS - epAppleExtra();
@@ -1784,6 +1825,7 @@ static float alturaSecao(int r) {
     case SEC_FRASES:    return frasesAberta ? frasesAlt : CHAMADA_H;
     case SEC_NOTAS:     return notasui_fontes_altura(notasDados());
     case SEC_NOTAS_EP:  return 0.0f;
+    case SEC_PROGTEMP:  return tgraf_altura();
   }
   return 0.0f;
 }
@@ -1937,6 +1979,14 @@ static int secaoN(int r) {
     // A grade de episodios virou o cartao "Notas por episodio" do bloco acima.
     case SEC_NOTAS_EP:
       return 0;
+    // SEU PROGRESSO: uma coluna por temporada do grafico; esquerda/direita
+    // anda nelas e OK leva a fileira de episodios para aquela temporada.
+    case SEC_PROGTEMP: {
+      const TgDados *d;
+      if (!ehSerie()) return 0;
+      d = tgraf_dados(idx);
+      return tgraf_existe(d) ? (d->n < N_ITENS ? d->n : N_ITENS) : 0;
+    }
   }
   return 0;
 }
@@ -2480,6 +2530,8 @@ void detail_evento(const SDL_Event *e) {
     } else if (foco.fileira == SEC_COLECAO) {
       // O mini card abre a LISTA da saga; e la que se escolhe a parte.
       abrirListaColecao();
+    } else if (foco.fileira == SEC_PROGTEMP) {
+      progAbrirTemporada(foco.coluna);
     } else if (foco.fileira == SEC_TEMPORADAS && dur >= NV_HOLD_MS) {
       // PRESSAO LONGA NA ABA: o menu da temporada (issue #108, "Pressing
       // 'Season' brings up option to mark all as watched"). O toque curto
@@ -2793,6 +2845,7 @@ static float larguraItem(int r, int c) {
     case SEC_AUD_DIGITAL:
     case SEC_NOTAS:
     case SEC_NOTAS_EP:
+    case SEC_PROGTEMP:
     case SEC_FRASES:      return NV_TELA_W - NV_DETP_X * 2;
     case SEC_COLECAO:     return COL_CARD_W;
     default:              return NV_DETP_EL_W;
@@ -2822,7 +2875,8 @@ static float xItem(int r, int c) {
     // lado: sao posicoes dentro de um grafico que ocupa a faixa inteira. Todas
     // comecam em NV_DETP_X, e quem marca a escolhida e serieaud_selecionar.
     // Frases idem, com a coluna unica.
-    if (EH_AUD(r) || r == SEC_FRASES || r == SEC_NOTAS || r == SEC_NOTAS_EP) continue;
+    if (EH_AUD(r) || r == SEC_FRASES || r == SEC_NOTAS || r == SEC_NOTAS_EP ||
+        r == SEC_PROGTEMP) continue;
     if (r == SEC_TEMPORADAS) x += larguraTemporada(k) + NV_DETP_TEMP_GAP;
     else x += larguraAbaInfo(k) + NV_DETP_ABA_SEP * 2 + 9.0f;  // 9 = largura do "|"
   }
@@ -2945,14 +2999,14 @@ static void revalidarIdx(void) {
 // ficam no heroi (mockup "detalhe-retomar"): a pagina fica no topo, com a arte.
 static int focoNoTopo(void) { return 0; }
 
-static float blocoAnt[2] = { -1.0f, -1.0f };   // Notas / Numeros no quadro anterior
+static float blocoAnt[3] = { -1.0f, -1.0f, -1.0f };   // Notas / Numeros / Progresso no quadro anterior
 
 void detail_atualizar(float dt, Uint32 agora) {
   // `agora` ficou sem uso quando o repouso da troca de temporada saiu (ver a
   // nota mais abaixo). Fica na assinatura porque ela e a mesma de todas as
   // telas e app.c chama todas do mesmo jeito.
   (void)agora;
-  if (!aberto) { blocoAnt[0] = blocoAnt[1] = -1.0f; return; }
+  if (!aberto) { blocoAnt[0] = blocoAnt[1] = blocoAnt[2] = -1.0f; return; }
   // SAINDO: interrompe os dois fios antes mesmo de a mola terminar. Chamar todo
   // quadro nao custa nada (e um flag sob mutex) e evita precisar de uma borda:
   // `saindo` tambem e ligado por caminhos que nao passam pelo Voltar, como o
@@ -3127,6 +3181,12 @@ void detail_atualizar(float dt, Uint32 agora) {
     epAncora = foco.coluna;
     { const CatEp *ep = cat_episodio(idx, epAbsoluto(foco.coluna));
       if (ep) { comEpT = ep->temporada; comEpE = ep->episodio; } }
+  }
+
+  // "Seu progresso" entra pela coluna da temporada escolhida na pagina.
+  if (ehSerie() && foco.fileira != SEC_PROGTEMP) {
+    int c = tgraf_coluna(tgraf_dados(idx), temporadaEm(temporada));
+    if (c >= 0) foco.colunaLembrada[SEC_PROGTEMP] = c;
   }
 
   // SELETOR DE COMENTARIOS: a fonte troca no OK, NAO ao passar o foco.
@@ -3332,7 +3392,8 @@ void detail_atualizar(float dt, Uint32 agora) {
         // posicao DENTRO de um desenho de largura fixa, nao um item que possa
         // sair da tela. Sem esta linha a regra geral abaixo empurrava a secao
         // inteira 24 px para a esquerda assim que o foco saia da coluna 0.
-        else if (EH_AUD(r) || r == SEC_FRASES || r == SEC_NOTAS || r == SEC_NOTAS_EP) alvo = 0.0f;
+        else if (EH_AUD(r) || r == SEC_FRASES || r == SEC_NOTAS || r == SEC_NOTAS_EP ||
+                 r == SEC_PROGTEMP) alvo = 0.0f;
         else if (foco.coluna == 0) alvo = 0.0f;
         else if (x + w > alvo + vista - 24.0f) alvo = x + w - vista + 24.0f;
         else if (x < alvo + 24.0f)             alvo = x - 24.0f;
@@ -3361,9 +3422,9 @@ void detail_atualizar(float dt, Uint32 agora) {
   // onde estava na tela) em vez de a mola arrastar a pagina depois.
   // O MESMO vale para os NUMEROS DA TEMPORADA (serie), que nascem logo abaixo
   // das Notas quando a lista de episodios do Trakt chega.
-  { static const int BLOCOS[2] = { SEC_NOTAS, SEC_NUMEROS };
+  { static const int BLOCOS[3] = { SEC_NOTAS, SEC_NUMEROS, SEC_PROGTEMP };
     int kb;
-    for (kb = 0; kb < 2; kb++) {
+    for (kb = 0; kb < 3; kb++) {
       int sec = BLOCOS[kb];
       float bloco = secaoN(sec) > 0
           ? conteudoSec[sec] - topoSec[sec] + alturaSecao(sec) + NV_DETF_SEC_GAP
@@ -3838,6 +3899,7 @@ static void heroReiniciar(void) {
   textogate_reiniciar(&gateHero);
   notasui_reiniciar();
   serieaud_bloco_reiniciar();
+  tgraf_reiniciar();
   sinVisto[0] = sinAnt[0] = 0; sinVistoInit = 0; sinTrocaDesde = 0;
   hSinVis = 0.0f; hSinInit = 0; hSinTick = 0;
   metaEsqVisto = 0; metaChegouEm = 0;
@@ -6387,6 +6449,7 @@ static void desenhaSecao(int r, float a, Uint32 agora) {
     case SEC_AUD_DIGITAL:
     case SEC_NOTAS:
     case SEC_NOTAS_EP:
+    case SEC_PROGTEMP:
     case SEC_TRAILERS:
     case SEC_RELACIONADOS:
     case SEC_FRASES:
@@ -6426,6 +6489,13 @@ static void desenhaSecao(int r, float a, Uint32 agora) {
   // porque nao pertence a nenhuma pilula: e uma linha por FILEIRA. Em filme
   // secaoN(SEC_TEMPORADAS) ja devolveu 0 e nao se chega aqui.
   if (r == SEC_TEMPORADAS) resumoTemporada(NV_DETP_X, y, a);
+  // O grafico e UM desenho; as colunas focaveis sao posicoes dentro dele.
+  if (r == SEC_PROGTEMP) {
+    tgraf_desenhar(tgraf_dados(idx), NV_DETP_X, y, NV_TELA_W - NV_DETP_X * 2,
+                   nivel >= 1 && foco.fileira == SEC_PROGTEMP ? foco.coluna : -1,
+                   temporadaEm(temporada), a, agora);
+    return;
+  }
 
   for (int c = 0; c < n && c < N_ITENS; c++) {
     float f = animFoco[r][c];
