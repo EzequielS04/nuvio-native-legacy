@@ -4296,9 +4296,59 @@ int ajustes_quer_sair(void) { return sair; }
 // O ROTULO DA LINHA. Quase todos sao fixos (OPCOES[]); AJ_ATUALIZAR muda com
 // o que se sabe: com versao nova e "Atualizar o aplicativo" (abre o cartao),
 // sem ela e "Procurar atualização" (consulta agora).
+// 2.0.3 (M2, estudo ajustes-ux): ROTULO EM LINGUAGEM COMUM. Onde o nome da
+// linha era jargao ou marca ("Coincidencia por regex", "Background do hero"), a
+// linha passa a dizer o que faz. O nome antigo continua em OPCOES[] e aparece
+// no inspetor como "Nome tecnico", entra no indice da busca e nas trilhas do
+// guia; nada no disco ou na conta depende do rotulo.
+static const char *rotuloNovo(int op) {
+  switch (op) {
+    case AJ_FONTE_HDR: return "Dolby Vision e HDR";
+    case AJ_ATMOS: return "Preferir som Dolby Atmos";
+    case AJ_FONTE_MANUAL: return "Escolher a fonte você mesmo";
+    case AJ_FONTE_PRIORIDADE: return "O que o Nuvio prioriza";
+    case AJ_FONTE_PRAZO: return "Quanto espera pelos add-ons";
+    case AJ_TAM_MAX: return "Tamanho máximo do arquivo";
+    case AJ_TAM_MIN: return "Tamanho mínimo do arquivo";
+    case AJ_PLR_CLASSIF: return "Classificação indicativa no player";
+    case AJ_SAIDA_PLAYER: return "Ao sair no meio do filme";
+    case AJ_FONTE_REGEX: return "Filtrar fontes pelo nome (regex)";
+    case AJ_FONTE_REGEX_PADRAO: return "Padrão do filtro";
+    case AJ_FONTE_REGEX_MODELO: return "Modelo pronto do filtro";
+    case AJ_DTS_AC3: return "Converter DTS para a TV ouvir";
+    case AJ_CACHE_SEEK: return "Guardar o trecho baixado no disco";
+    case AJ_LEG_FORCADA: return "Só os letreiros quando o áudio já é no seu idioma";
+    case AJ_TMDB_IDIOMA: return "Idioma dos dados do título";
+    case AJ_HERO_FUNDO: return "Imagem de fundo do destaque";
+    case AJ_GRAD_CLASSICO: return "Realce antigo no cartaz em foco";
+    case AJ_LARGURA_DP: return "Largura do cartaz";
+    case AJ_RAIO_DP: return "Cantos do cartaz";
+    case AJ_TMDB_LIGADO: return "Dados do TMDB";
+    case AJ_MDB_LIGADO: return "Notas do MDBList";
+    case AJ_STALKER_PORTAL: return "Portal com MAC (Stalker)";
+    case AJ_LIVETV_PROXY: return "Repassar o canal pelo app (proxy)";
+    case AJ_LIVETV_MODO: return "Modo do player dos canais";
+    case AJ_ESPACO: return "Imagens guardadas na memória";
+    case AJ_NOTAS_HOME: return "Nota do IMDb nos cartazes";
+    case AJ_SUFIXO_TIPO: return "Filme ou série no nome da fileira";
+    case AJ_NOME_ADDON: return "Nome do addon na fileira";
+    default: return NULL;
+  }
+}
 static const char *rotuloOpcao(int op) {
   if (op == AJ_ATUALIZAR && !atualizacao_nova()[0]) return "Procurar atualização";
+  if (rotuloNovo(op)) return rotuloNovo(op);
   return OPCOES[op].rotulo;
+}
+// O nome de antes (OPCOES[]), so quando a linha ganhou um rotulo novo.
+static const char *rotuloTecnico(int op) {
+  return op >= 0 && op < AJ_N && rotuloNovo(op) ? OPCOES[op].rotulo : NULL;
+}
+// A trilha do guia ainda diz o nome antigo de algumas linhas: troca pelo novo.
+static const char *rotuloAtualDoAntigo(const char *s) {
+  int k;
+  for (k = 0; k < AJ_N; k++) if (rotuloNovo(k) && !strcmp(OPCOES[k].rotulo, s)) return rotuloNovo(k);
+  return s;
 }
 
 // SERVIDORES PESSOAIS (jellyfin.h). Texto das linhas: so dado de exibicao
@@ -5330,8 +5380,84 @@ static const char *efeitoOpcao(int op) {
         : "OK abre o vínculo, com QR e código. As setas laterais não fazem nada nesta linha.";
     case AJ_ADDONS: case AJ_DISCORD: case AJ_PLUGINS:
       return "OK abre. As setas laterais não fazem nada nesta linha.";
+    // 2.0.3 (M2): o "O que muda" das linhas do mockup v3 e das que dependem
+    // de outra (a pessoa liga e nao ve nada: #232, #177, #229).
+    case AJ_QUALIDADE:
+      return "A escolha automática fica com fontes até esta resolução. Automática não põe limite.";
+    case AJ_LEG_FORCADA:
+      return "Ao abrir um vídeo com áudio no seu idioma, a legenda forçada é escolhida; sem ela, nenhuma.";
+    case AJ_FONTE_REGEX:
+      return "Preferir sobe para o topo as fontes que casam com o padrão; Exigir esconde as outras.";
+    case AJ_FONTE_MANUAL:
+      return "Ligado, a lista de fontes abre a cada play. Desligado, o Nuvio escolhe sozinho com as regras logo abaixo.";
+    case AJ_CW_THUMB:
+      return "Desfocar o próximo episódio só funciona com esta opção ligada.";
+    case AJ_NT_TOMATES: case AJ_NT_AUDIENCIA: case AJ_NT_META: case AJ_NT_METAUSER:
+    case AJ_NT_TMDB: case AJ_NT_LETTER: case AJ_NT_MAL: case AJ_NT_EBERT: case AJ_NT_SCORE:
+      return "Esta nota vem do MDBList: ligar aqui liga também a consulta ao MDBList.";
+    case AJ_HERO_TRAILER:
+      return "O som do trailer no destaque é uma opção à parte, em Som e imagem.";
     default: return NULL;
   }
+}
+
+// A FRASE DE BENEFICIO (2.0.3, M2): uma linha sob o rotulo da linha em foco,
+// "o que isto faz por voce" (mockup v3, tela 02). Onde a primeira frase da
+// ajuda ja diz isso, ela e usada (ja traduzida); onde a ajuda abre listando
+// valores ("Equilibrio: ...") ou e longa demais, a frase e propria.
+static const char *beneficioProprio(int op) {
+  switch (op) {
+    case AJ_QUALIDADE: return "O teto de resolução das fontes que o Nuvio escolhe.";
+    case AJ_FONTE_HDR: return "Se fontes com HDR ou Dolby Vision passam na frente das outras.";
+    case AJ_DV: return "Deixa tocar fontes em Dolby Vision quando a TV aceita.";
+    case AJ_ATMOS: return "Fontes com som Dolby Atmos passam na frente.";
+    case AJ_FONTE_PRIORIDADE: return "O critério da escolha automática: equilíbrio, qualidade ou começar rápido.";
+    case AJ_FONTE_PRAZO: return "Quanto tempo o Nuvio espera os add-ons antes de escolher.";
+    case AJ_PLR_CLASSIF: return "No começo do filme, a ilha mostra a classificação e os avisos.";
+    case AJ_SAIDA_PLAYER: return "O filme pode ficar na ilha do relógio para você voltar depois.";
+    case AJ_LEG_FORCADA: return "Placas e falas em outra língua aparecem; o resto, não.";
+    case AJ_BUSCA_CINEMETA: return "A busca também consulta o Cinemeta se o catálogo do Nuvio falhar.";
+    case AJ_HOME_LAYOUT: return "Como a Home se organiza: Moderna, Padrão ou Dinâmica.";
+    case AJ_HERO_FUNDO: return "De onde vem a arte grande do destaque e da página do título.";
+    case AJ_HERO_ARTE_DIF: return "O destaque pode usar outra arte que não a do cartaz.";
+    case AJ_HERO_TRAILER: return "Com o foco parado no destaque, o trailer toca no lugar da arte.";
+    case AJ_FOCO_TRAILER: return "Com o foco parado num cartaz, o trailer toca no destaque.";
+    case AJ_RESOLUCAO: return "Automática começa em 1080p e só usa 4K se a TV aguentar.";
+    case AJ_PERFIL_PESQ: return "Deixa amigos acharem você pela busca.";
+    case AJ_HIST_CONTA: return "O que você assiste neste perfil vai para a conta Nuvio.";
+    case AJ_SOCIAL: return "Amigos, a atividade deles e recomendações.";
+    case AJ_LIVETV_DIAG: return "Testa a rede, a conta e vários canais de uma vez.";
+    case AJ_LIVETV_RES: return "Qual versão do canal entra primeiro: FHD, HD ou SD.";
+    case AJ_XTREAM_CONTA: return "Se a assinatura está ativa, quando vence e quantas telas usa.";
+    case AJ_PERFIL_EDITAR: return "Apelido, bio e o que os amigos veem no seu perfil.";
+    case AJ_SELO_VISTO: return "Um check no cartaz do que você já assistiu.";
+    case AJ_CW_ORDEM: return "Em que ordem a retomada mostra os títulos.";
+    case AJ_FONTE_REGEX: return "Sobe ou exige fontes cujo nome casa com um padrão.";
+    case AJ_DTS_AC3: return "Para TVs que não tocam DTS: o som é convertido na hora.";
+    case AJ_CACHE_SEEK: return "Guarda o que já baixou para voltar no filme sem esperar.";
+    default: return NULL;
+  }
+}
+// A primeira frase de `s` (ja traduzida): ate ". ", "! ", "? " ou "。".
+static const char *primeiraFrase(const char *s, char *b, size_t n) {
+  size_t i, fim = 0;
+  if (!s) { b[0] = 0; return b; }
+  for (i = 0; s[i] && i + 1 < n; i++) {
+    unsigned char c = (unsigned char)s[i];
+    if ((c == '.' || c == '!' || c == '?') && (s[i + 1] == ' ' || !s[i + 1])) { fim = i + 1; break; }
+    if (c == 0xE3 && (unsigned char)s[i + 1] == 0x80 && (unsigned char)s[i + 2] == 0x82) { fim = i + 3; break; }
+  }
+  if (!fim) fim = i;
+  if (fim >= n) fim = n - 1;
+  memcpy(b, s, fim); b[fim] = 0;
+  return b;
+}
+static const char *ajudaOpcao(int op);
+static const char *uxBeneficio(int op) {
+  static char b[400];
+  const char *p = beneficioProprio(op);
+  if (p) return i18n(p);
+  return primeiraFrase(i18n(ajudaOpcao(op)), b, sizeof b);
 }
 
 

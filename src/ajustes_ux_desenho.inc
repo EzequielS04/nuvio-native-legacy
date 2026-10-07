@@ -337,10 +337,11 @@ static GfxRect ajInspR(void) { return (GfxRect){ ajInspX(), AJI_MARGEM, NV_VTELA
 #define AJ2_EDITOR_DX  (252.0f / AJ2_S)   // 300
 static float aj2X0(void) { return (48.0f + ajustes_rail_largura_fixa()) / AJ2_S; }
 // A3: linhas compactas (58 + 2 de vao, rotulo 24), o dobro de linhas na tela.
-#define AJ2_LN_H        58.0f
+#define AJ2_LN_H        60.0f   // 2.0.3: 48 px no mockup v3 a 80%
 #define AJ2_LN_GAP       2.0f
 #define AJ2_LN_SUB      76.0f   // linha com a segunda linha ("Depende de: ...")
-#define AJ2_LN_LINHA1   58.0f   // a primeira linha de uma linha que abre
+#define AJ2_LN_LINHA1   60.0f   // a primeira linha de uma linha que abre
+#define AJ2_LN_BEN      31.0f   // cada linha da frase de beneficio (2.0.3)
 static float aj2N1;
 static GfxRect aj2MenuR(void) {
   float n = aj2N1 < 0 ? 0 : aj2N1 > 1 ? 1 : aj2N1;
@@ -573,6 +574,16 @@ static void aj2Regua(GfxRect ln, float y, float a) {
     }
   }
 }
+// A FRASE DE BENEFICIO da linha em foco (2.0.3): ate duas linhas, medida na
+// largura da linha.
+static const char *uxBeneficio(int op);
+static float ajBeneficioLargura(void) { return aj2ListaR().w - 36.0f - 44.0f; }
+static float ajBeneficioH(int op) {
+  float h;
+  if (op < 0) return 0;
+  h = txt_bloco(TXT_V3_BEN, uxBeneficio(op), 0, 0, 0, 0, -4000, ajBeneficioLargura(), AJ2_LN_BEN, 0, 2);
+  return h < 1.0f ? 0.0f : h > 2 * AJ2_LN_BEN ? 2 * AJ2_LN_BEN : h;
+}
 static float ajLinhaH(int i) {
   int op = TELA[i].op;
   float h = AJ2_LN_H, baixo = 0;
@@ -586,7 +597,12 @@ static float ajLinhaH(int i) {
   if (op == AJ_FUNDO && aj2FocoNaLista(i)) baixo += AJ2_FUNDO_BAIXO;
   if (!aj2TemInsp() && aj2FocoNaLista(i) && op != AJ_FUNDO && !(op == AJ_TEMA && ajEditandoLinha(op)))
     baixo += aj2AjudaAltura(op, fr.w - 44.0f - 60.0f) + 20.0f;
-  if (baixo > 0) h = AJ2_LN_LINHA1 + 20.0f + baixo;
+  if (baixo > 0) return AJ2_LN_LINHA1 + 20.0f + baixo;
+  // 2.0.3: a linha em foco ganha a frase de beneficio embaixo do rotulo.
+  if (h == AJ2_LN_H && aj2TemInsp() && aj2FocoNaLista(i) && op != AJ_GUIA) {
+    float b = ajBeneficioH(op);
+    if (b > 0) h = AJ2_LN_LINHA1 - 6.0f + b + 12.0f;
+  }
   return h;
 }
 
@@ -895,13 +911,14 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
   GfxRect ln = { fr.x + 18.0f, y, fr.w - 36.0f, h };
   int desligada = inativa(op), emFoco = f > 0.5f, ed = ajEditandoLinha(op);
   int sub = (desligada && uxRequisito(op) >= 0 && aj2FocoNaLista(item)) || op == AJ_GUIA;
-  int abre = h > 102.0f;
+  int abre = h > AJ2_LN_SUB + 0.5f && !(aj2TemInsp() && aj2FocoNaLista(item) && op != AJ_FUNDO && !(op == AJ_TEMA && ed));
+  int beneficio = !sub && aj2TemInsp() && aj2FocoNaLista(item) && op != AJ_FUNDO && !(op == AJ_TEMA && ed) && h > AJ2_LN_H + 0.5f;
   float aT = a * (desligada ? 0.45f : 1.0f), aTx = a * aj2TextoLista;
-  float xDir = ln.x + ln.w - 22.0f, yc = abre ? y + AJ2_LN_LINHA1 * 0.5f : y + h * 0.5f;
+  float xDir = ln.x + ln.w - 22.0f, yc = (abre || beneficio) ? y + AJ2_LN_LINHA1 * 0.5f : y + h * 0.5f;
   float cauda = 0;
   // O valor usa o que o rotulo deixa (A3: a linha e larga; cortar o valor com
   // espaco sobrando era o "Back to home (minimize..." da captura em Montserrat).
-  float rotFim = ln.x + 22.0f + (float)txt_largura(emFoco ? TXT_V2_LN_B : TXT_V2_LN, rotuloOpcao(op)) + 28.0f;
+  float rotFim = ln.x + 22.0f + (float)txt_largura(emFoco ? TXT_V3_LN_B : TXT_V3_LN, rotuloOpcao(op)) + 28.0f;
 #define AJ_VMAX(xx) ((xx) - rotFim < 160.0f ? 160.0f : (xx) - rotFim)
   if (a <= 0.004f) return;
   // O texto da lista some quando o editor entra por cima (a lista fica so
@@ -936,8 +953,8 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
         marca_formato((FormatoMarca)fv, x - mw, yc - 15.0f, 30.0f, 1, 1, 1, (emFoco ? 0.85f : 0.6f) * aT);
         x -= mw;
       } else {
-        TxtLinha t = ajTxtC(TXT_V2_24, v, AJ_VMAX(x) - (op == AJ_TEMA ? 30.0f : 0.0f));
-        txt_desenhar_alpha(t, x - t.w, yc - t.h * 0.5f, (emFoco ? 0.9f : 0.55f) * aT);
+        TxtLinha t = ajTxtC(TXT_V3_VAL, v, AJ_VMAX(x) - (op == AJ_TEMA ? 30.0f : 0.0f));
+        txt_desenhar_alpha(t, x - t.w, yc - t.h * 0.5f, (emFoco ? 0.95f : 0.72f) * aT);
         x -= t.w;
         if (op == AJ_TEMA) {
           float sr, sg, sb;
@@ -952,8 +969,8 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
     float x = xDir;
     if (!desligada) { aj2Chevron(x, yc, (emFoco ? 0.7f : 0.32f) * aT); x -= 22.0f + 12.0f; }
     if (st && st[0]) {
-      TxtLinha t = ajTxtC(TXT_V2_24, st, AJ_VMAX(x) - (ajEstadoLigado(op) ? 18.0f : 0.0f));
-      txt_desenhar_alpha(t, x - t.w, yc - t.h * 0.5f, 0.55f * aT);
+      TxtLinha t = ajTxtC(TXT_V3_VAL, st, AJ_VMAX(x) - (ajEstadoLigado(op) ? 18.0f : 0.0f));
+      txt_desenhar_alpha(t, x - t.w, yc - t.h * 0.5f, (emFoco ? 0.9f : 0.62f) * aT);
       x -= t.w;
       if (ajEstadoLigado(op)) {
         float ar, ag, ab;
@@ -979,14 +996,14 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
       snprintf(vb, sizeof vb, i18n("%d de %d MB"), (int)(bytes / 1048576), (int)(teto / 1048576));
       v = vb;
     }
-    { TxtLinha t = ajTxtC(TXT_V2_24, v, AJ_VMAX(x));
-      txt_desenhar_alpha(t, x - t.w, yc - t.h * 0.5f, (emFoco ? 0.85f : 0.42f) * aT);
+    { TxtLinha t = ajTxtC(TXT_V3_VAL, v, AJ_VMAX(x));
+      txt_desenhar_alpha(t, x - t.w, yc - t.h * 0.5f, (emFoco ? 0.85f : 0.5f) * aT);
       x -= t.w; }
     cauda = xDir - x;
   }
   // ROTULO, marca do formato, ponto de "diferente do padrao", "AVANCADO".
   { float tx = ln.x + 22.0f, maxW = ln.w - 44.0f - cauda - 16.0f, tyc = yc;
-    TxtLinha r = ajTxtC(emFoco ? TXT_V2_LN_B : TXT_V2_LN, rotuloOpcao(op), maxW);
+    TxtLinha r = ajTxtC(emFoco ? TXT_V3_LN_B : TXT_V3_LN, rotuloOpcao(op), maxW);
     float rx;
     if (sub) tyc = y + 12.0f + 16.0f;
     if (sub) {
@@ -1028,6 +1045,10 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
       if (rx + 14 + w < tx + maxW) ajCaps(TXT_G16B, "Avançado", 1.9f, rx + 14, tyc - 10, 0.38f * aT);
     }
   }
+  // 2.0.3: a frase de beneficio (mockup v3: "Ate onde a fonte pode ir...").
+  if (beneficio)
+    txt_bloco_corta(TXT_V3_BEN, uxBeneficio(op), 243, 242, 239, ln.x + 22.0f, y + AJ2_LN_LINHA1 - 8.0f,
+                    ajBeneficioLargura(), AJ2_LN_BEN, 0.62f * aT, 2);
   // O QUE VEM EMBAIXO numa linha que abre.
   if (abre) {
     float by = y + AJ2_LN_LINHA1 + 20.0f;
@@ -1058,8 +1079,8 @@ static void ajDesenharGrupo(int item, float y, float a) {
     if (maisItem[sec] >= 0 && item > maisItem[sec]) {
       char b[200];
       snprintf(b, sizeof b, i18n("Mais opções · %s"), i18n(TELA[item].titulo));
-      t = ajTxtC(TXT_V2_GRUPO, b, w - 44.0f);
-    } else t = ajTxt(TXT_V2_GRUPO, TELA[item].titulo); }
+      t = ajTxtC(TXT_V3_GRP, b, w - 44.0f);
+    } else t = ajTxt(TXT_V3_GRP, TELA[item].titulo); }
   txt_desenhar_alpha(t, x + 22, yc - t.h * 0.5f, a);
   if (TELA[item].sub && TELA[item].sub[0]) {
     TxtLinha c = ajTxtC(TXT_V2_24, TELA[item].sub, w - 44.0f - t.w - 24.0f);

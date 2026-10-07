@@ -235,7 +235,10 @@ static float guiaTrilha(const char *onde, float x, float y, float w, float a) {
       char *q = strstr(p, " › ");
       size_t l = q ? (size_t)(q - p) : strlen(p);
       while (l && p[l - 1] == ' ') l--;
-      snprintf(seg[n++], sizeof seg[0], "%.*s", (int)l, p);
+      { char cru[120];
+        snprintf(cru, sizeof cru, "%.*s", (int)l, p);
+        // 2.0.3: o rotulo novo da linha, se o guia ainda diz o antigo.
+        snprintf(seg[n++], sizeof seg[0], "%s", rotuloAtualDoAntigo(cru)); }
       if (!q) break;
       p = q + strlen(" › ");
     }

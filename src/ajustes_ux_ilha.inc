@@ -58,11 +58,22 @@ static int ajDicasDe(int op, AjDica *d) {
 // kicker 18 com icone 24, titulo 40/700, ajuda 26 (linha 1,45), meta 24 e as
 // dicas 22 (tecla 18) no rodape.
 static float aj2Meta(const char *k, const char *v, float x, float y, float w, float a) {
-  TxtLinha lk = ajTxt(TXT_V2_26, k);
-  TxtLinha lv = ajTxtC(TXT_V2_26, v, w - lk.w - 24);
+  TxtLinha lk = ajTxt(TXT_V3_INSP, k);
+  TxtLinha lv = ajTxtC(TXT_V3_INSP, v, w - lk.w - 24);
   gfx_cor((GfxRect){ x, y, w, 1 }, 0, 1, 1, 1, 0.07f * a);
   txt_desenhar_alpha(lk, x, y + 14 + (29 - lk.h) * 0.5f, 0.45f * a);
   txt_desenhar_alpha(lv, x + w - lv.w, y + 14 + (29 - lv.h) * 0.5f, 0.85f * a);
+  return 14 + 29 + 14;
+}
+// "Recomendado ......... 4K ✓" (mockup v3): o padrao de fabrica com o check.
+static float aj2MetaRecomendado(const char *v, float x, float y, float w, float a) {
+  TxtLinha lk = ajTxt(TXT_V3_INSP, "Recomendado");
+  TxtLinha lv = ajTxtC(TXT_V3_INSP, v, w - lk.w - 60);
+  gfx_cor((GfxRect){ x, y, w, 1 }, 0, 1, 1, 1, 0.07f * a);
+  txt_desenhar_alpha(lk, x, y + 14 + (29 - lk.h) * 0.5f, 0.45f * a);
+  txt_desenhar_alpha(lv, x + w - lv.w - 34, y + 14 + (29 - lv.h) * 0.5f, 0.85f * a);
+  { float ar, ag, ab; ajustes_acento(&ar, &ag, &ab);
+    gfx_icone((GfxRect){ x + w - 24, y + 14 + 2.5f, 24, 24 }, "aj_check", 0.55f + 0.45f * ar, 0.55f + 0.45f * ag, 0.55f + 0.45f * ab, a); }
   return 14 + 29 + 14;
 }
 static float aj2Ef(const char *icone, const char *s, float x, float y, float w, float a) {
@@ -128,8 +139,13 @@ static void ajDesenharInspetor(void) {
       if (ph > 0) y += ph;
     } }
   y += 30.0f;
-  // Kicker: a categoria (na lista de diferencas, de onde a opcao e).
-  ajKickerAcento(TELA[secIni[secAtual]].titulo, x + 2.0f, y, 1);
+  // Kicker: a categoria e o bloco ("REPRODUCAO · IMAGEM E SOM", mockup v3).
+  { char k[200];
+    const char *bl = op >= 0 ? uxBloco(op) : naMais ? "Mais opções" : "";
+    if (bl[0]) snprintf(k, sizeof k, "%s · %s", i18n(TELA[secIni[secAtual]].titulo),
+                        i18n(op >= 0 && uxAvancada(op) ? "Mais opções" : bl));
+    else snprintf(k, sizeof k, "%s", i18n(TELA[secIni[secAtual]].titulo));
+    ajKickerAcento(k, x + 2.0f, y, 1); }
   y += 22.0f + 12.0f;
   // Cor de destaque: o titulo e o NOME da cor (a pendente, editando), como
   // no acentos-mockup.html; a opcao ja esta no rotulo da linha.
@@ -144,9 +160,9 @@ static void ajDesenharInspetor(void) {
     if (naMais) {
       char resumo[400];
       maisContar(secAtual, resumo, sizeof resumo);
-      y += ajBloco(TXT_V2_24, resumo, x, y, w, 32.0f, 0.68f, maxL);
+      y += ajBloco(TXT_V3_INSP, resumo, x, y, w, 37.0f, 0.70f, maxL);
     } else
-    y += ajBloco(TXT_V2_24, categoria ? SECAO_AJUDA[secAtual] : uxResumo(op), x, y, w, 32.0f, 0.68f, maxL);
+    y += ajBloco(TXT_V3_INSP, categoria ? SECAO_AJUDA[secAtual] : uxResumo(op), x, y, w, 37.0f, 0.70f, maxL);
     if (op == AJ_TEMA) {   // a cor PENDENTE, como a previa
       int salvo = valor[AJ_TEMA];
       if (ajEditandoLinha(AJ_TEMA)) valor[AJ_TEMA] = uxPendente;
@@ -156,14 +172,48 @@ static void ajDesenharInspetor(void) {
     }
   if (!categoria) {
     const char *ef = efeitoOpcao(op);
-    if (ef && ef[0] && y + 18.0f + txt_bloco(TXT_V2_26, i18n(ef), 0, 0, 0, x, -4000, w - 84, 34.8f, 0, 6) + 40 <= fim) {
-      y += 18.0f; y += aj2Ef("aj_info", i18n(ef), x, y, w, 1); }
+    // "O que muda:" em negrito, na mesma frase (mockup v3): o texto regular
+    // comeca depois do rotulo com espacos que nao quebram.
+    if (ef && ef[0]) {
+      const char *t = i18n(ef);
+      TxtLinha lp = ajTxt(TXT_V3_INSP_B, "O que muda:");
+      float hh = txt_bloco(TXT_V3_INSP, t, 0, 0, 0, x, -4000, w, 37.0f, 0, 4) + 37.0f;
+      if (y + 4.0f + hh <= fim) {
+        // A primeira linha continua depois do rotulo em negrito: as palavras
+        // que cabem nela; o resto quebra normalmente embaixo.
+        char l1[400];
+        size_t u = 0, ult = 0;
+        float livre = w - lp.w - 10.0f;
+        y += 4.0f;
+        txt_desenhar_alpha(lp, x, y + (37.0f - lp.h) * 0.5f, 0.95f);
+        while (t[u]) {
+          size_t v = u;
+          size_t tok;
+          while (t[v] == ' ') v++;
+          tok = txt_token_tam(t + v);
+          if (!tok) break;
+          v += tok;
+          if (v >= sizeof l1) break;
+          memcpy(l1, t, v); l1[v] = 0;
+          if ((float)txt_largura(TXT_V3_INSP, l1) > livre) break;
+          ult = v; u = v;
+          if (!t[u]) break;
+        }
+        memcpy(l1, t, ult); l1[ult] = 0;
+        if (ult) { TxtLinha r1 = ajTxt(TXT_V3_INSP, l1); txt_desenhar_alpha(r1, x + lp.w + 10.0f, y + (37.0f - r1.h) * 0.5f, 0.70f); }
+        y += 37.0f;
+        while (t[ult] == ' ') ult++;
+        if (t[ult]) y += ajBloco(TXT_V3_INSP, t + ult, x, y, w, 37.0f, 0.70f, 3);
+      }
+    }
     if (uxTemPadrao(op) && op != AJ_TEMA && y + 18.0f + 2 * 57.0f <= fim) {
       char padrao[160];
+      const char *tec = rotuloTecnico(op);
       uxValorTexto(op, uxValorPadrao(op), padrao, sizeof padrao);
-      y += 18.0f;
+      y += 26.0f;
       y += aj2Meta(i18n("Vale para"), i18n(uxEscopo(op)), x, y, w, 1);
-      y += aj2Meta(i18n("Padrão"), padrao, x, y, w, 1);
+      y += aj2MetaRecomendado(padrao, x, y, w, 1);
+      if (tec && y + 57.0f <= fim + 20.0f) y += aj2Meta(i18n("Nome técnico"), i18n(tec), x, y, w, 1);
     }
     // ENVIAR REGISTRO: o ultimo envio, o ultimo codigo e o destino.
     if (op == AJ_ENVIAR_LOG) {
@@ -314,7 +364,7 @@ static void ajDesenharFolha(void) {
         float lh = ajLinhaH(i), yy = y + AJ2_LN_GAP;
         // A superficie de foco nao some com o texto (editor por cima): o
         // alfa da mascara vai inteiro, o do texto em ajDesenharLinha.
-        ajDesenharLinha(i, yy, animItem[i], ajMascara(yy + (lh > 102 ? AJ2_LN_LINHA1 * 0.5f : lh * 0.5f), topo, base) * anim_suave(paginaA));
+        ajDesenharLinha(i, yy, animItem[i], ajMascara(yy + (lh > AJ2_LN_H + 0.5f ? AJ2_LN_LINHA1 * 0.5f : lh * 0.5f), topo, base) * anim_suave(paginaA));
       }
     }
     y += h;

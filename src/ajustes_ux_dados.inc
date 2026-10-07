@@ -329,6 +329,11 @@ int ajustes_buscar(const char *consulta, AjusteBuscaResultado *resultados, int c
     uxIndiceAcrescentar(indice, sizeof indice, titulo);
     uxIndiceAcrescentar(indice, sizeof indice, tituloPt);
     uxIndiceAcrescentar(indice, sizeof indice, aliases);
+    // 2.0.3: o nome de antes da linha (ROTULO NOVO), em portugues e traduzido.
+    if (rotuloTecnico(op)) {
+      uxIndiceAcrescentar(indice, sizeof indice, rotuloTecnico(op));
+      uxIndiceAcrescentar(indice, sizeof indice, i18n(rotuloTecnico(op)));
+    }
     uxIndiceAcrescentar(indice, sizeof indice, uxCaminhoAntigo(op));
     uxIndiceAcrescentar(indice, sizeof indice, i18n(uxCaminhoAntigo(op)));
     uxIndiceAcrescentar(indice, sizeof indice, secao);
