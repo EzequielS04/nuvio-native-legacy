@@ -838,7 +838,7 @@ int main(int argc, char **argv) {
   // tex_escala recebem dw/NV_TELA_W, que e o mesmo caminho pelo qual a previa
   // no Mac (retina) desenha em 2x. Se voltar 1920x1080, a resposta e a mesma da
   // C9 e nao ha o que fazer neste lado.
-  int pedeW, pedeH, pediu4k = 0;
+  int pedeW, pedeH, pediu4k = 0, autoPediu = 0, autoEst = 0;
 
   // OS DADOS ANTES DA JANELA, e so por causa desta escolha.
   //
@@ -900,6 +900,22 @@ int main(int argc, char **argv) {
       }
     }
     pediu4k = quer4k;
+    // AUTOMATIC (resolucao.h): ask for the 4K surface only on a 4K display, and
+    // only while the verdict for this TV + this app version is "probe" or "4K".
+    if (ajustes_res_auto() && !quer4k) {
+      char *mem = dados_ler(RES_ARQ_AUTO);
+      int est = res_auto_ler(mem, NV_VERSAO);
+      SDL_DisplayMode dm; int tela4k = SDL_GetDesktopDisplayMode(0, &dm) == 0 && dm.w >= 3840;
+      free(mem);
+      autoEst = est;
+      if (est != RES_AUTO_1080 && tela4k) {
+        quer4k = 1; autoPediu = 1;
+        printf("[4k] automatico: %s\n", est == RES_AUTO_4K ? "4K aprovado nesta TV, pedindo 3840x2160"
+                                                          : "tela 4K: sondando a GPU em 4K");
+      } else {
+        printf("[4k] automatico: 1080p (%s)\n", est == RES_AUTO_1080 ? "decidido antes nesta TV" : "tela nao e 4K");
+      }
+    }
 #ifdef NV_PEDIR_4K
     quer4k = 1;
     printf("[4k] build de medicao: pedindo 3840x2160\n");
@@ -1811,8 +1827,37 @@ int main(int argc, char **argv) {
       // GPU time of the window, by the GPU's own clock (gputempo.h). Only where
       // the extension exists; the line is what tells a 17 ms frame from a 30 ms
       // one when both show as "33" to the CPU.
-      { double gMed = 0, gPior, gUlt; int gN = gputempo_colher(&gMed, &gPior, &gUlt);
+      { double gMed = 0, gPior, gUlt, gP90 = gputempo_p90(); int gN = gputempo_colher(&gMed, &gPior, &gUlt);
         if (gN > 0) printf("[gpu-tempo] med=%.1fms pior=%.1fms ult=%.1fms n=%d\n", gMed, gPior, gUlt, gN);
+        // AUTOMATIC 4K (resolucao.h): probe, then watch. Same validity rule as below.
+        if (autoPediu) {
+          static ResAuto ra; static int iniciou, avisouSem;
+          if (!iniciou) { iniciou = 1; ra.estado = autoEst == RES_AUTO_4K ? RES_AUTO_4K : RES_AUTO_SONDAR; }
+          if (dw <= (int)NV_TELA_W) {
+            if (!avisouSem) {
+              avisouSem = 1;
+              printf("[4k] automatico: 1080p (a TV nao concedeu 4K)\n");
+              dados_gravar(RES_ARQ_AUTO, "1080 " NV_VERSAO "\n");
+            }
+          } else if (!gpun_alvo_1080_ativo() && ra.estado != RES_AUTO_1080) {
+            double fpsJan = quadros * 1000.0 / (double)(agora - ultRelato);
+            int valida = SDL_GetTicks() > 8000u && !abertura_ativa() &&
+                         !player_aberto() && !player_mini_ativo();
+            double p90 = gN > 0 ? gP90 : 0.0;
+            int r = res_auto_amostra(&ra, fpsJan, p90, valida);
+            if (r == RES_AUTO_APROVOU) {
+              printf("[4k] automatico: 4K (gpu p90=%.1f ms) fps=%.1f\n", ra.pior, fpsJan);
+              dados_gravar(RES_ARQ_AUTO, "4k " NV_VERSAO "\n");
+            } else if (r == RES_AUTO_REBAIXOU) {
+              printf("[4k] automatico: 1080p (gpu p90=%.1f ms) fps=%.1f\n", p90, fpsJan);
+              gpun_alvo_1080();
+              dados_gravar(RES_ARQ_AUTO, "1080 " NV_VERSAO "\n");
+              if (autoEst == RES_AUTO_4K)
+                ilha_avisar("res-4k-recuo", ILHA_INFO, NULL,
+                            i18n("Interface em 1080p: esta TV não aguenta 4K"), 8000u, 0);
+            }
+          }
+        }
         // 4K WATCH (resolucao.h): the person picked 4K and the TV granted it.
         // Only the interface counts: no player, no opening, 10 s of warm-up.
         if (pediu4k && dw > (int)NV_TELA_W && !gpun_alvo_1080_ativo()) {

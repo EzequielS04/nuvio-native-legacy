@@ -785,7 +785,7 @@
   T("AutoSync pelo áudio", "按音频 AutoSync"),
   T("AutoSync · Minucioso", "AutoSync · 精细"),
   T("Automática", "自动"),
-  T("Automática desenha em 1080p e, se a TV for fraca, tira efeitos em vez de baixar a resolução. 4K só nas TVs que permitem; se a TV não aguentar, o app volta para 1080p e avisa. Para tentar 4K de novo, escolha 4K outra vez. 720p desenha em 1280x720 e amplia: mais leve, com texto mais suave. Reinicie o app depois de mudar. O vídeo não muda.", "自动以 1080p 绘制；在性能较弱的电视上会关闭特效，而不是降低分辨率。4K 仅在允许的电视上可用；如果电视跟不上，应用会回到 1080p 并提示你。要再次尝试 4K，请重新选择 4K。720p 以 1280x720 绘制并放大：更轻量，文字更柔和。更改后请重启应用。视频不受影响。"),
+  T("Automática começa em 1080p e testa o 4K sozinha: só usa 4K se a tela for 4K e a TV aguentar com folga; se travar depois, volta para 1080p. Nunca baixa para 720p. Escolher 4K força 4K (se a TV não aguentar, o app volta para 1080p e avisa). 720p desenha em 1280x720 e amplia: mais leve, com texto mais suave. Reinicie o app depois de mudar. O vídeo não muda.", "“自动”从 1080p 开始，并自行测试 4K：只有屏幕是 4K 且电视性能有余量时才使用 4K，之后如果卡顿会退回 1080p。绝不会自行降到 720p。选择 4K 会强制使用 4K（电视跟不上时，应用会退回 1080p 并提示）。720p 以 1280x720 绘制后放大：更省资源，文字更柔和。更改后请重启应用。视频不受影响。"),
   T("Automático", "自动"),
   T("Automático mede a TV nos primeiros segundos e, se ela não der conta, tira os efeitos mais pesados. Completos mantém tudo; Leves tira desfoque e brilho para deixar a navegação mais lisa.", "自动会在最初几秒测量电视，若跟不上就关闭最耗资源的效果。完整保留全部效果；轻量关闭模糊和光晕，让浏览更流畅。"),
   T("Automático usa o formato que a conta Xtream declara e lembra o que tocou. HLS ou TS pede esse formato primeiro, mesmo quando a conta só declara o outro.", "自动会使用 Xtream 账号声明的格式，并记住能播放的格式。选 HLS 或 TS 时会先请求该格式，即使账号只声明了另一种。"),

@@ -26,6 +26,7 @@ void gputempo_quadro_fim(void);      // right before SDL_GL_SwapWindow
 // ms. Returns how many frames were measured (0 = unsupported / nothing yet)
 // and resets the window.
 int    gputempo_colher(double *med, double *pior, double *ult);
+double gputempo_p90(void);           // p90 of the current window, ms; call BEFORE gputempo_colher
 double gputempo_ultimo(void);        // last measured frame, ms (0 if none)
 
 #endif

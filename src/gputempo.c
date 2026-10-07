@@ -41,6 +41,8 @@ static int cab, cauda, nFila;   // FIFO: cauda = oldest in flight, cab = next fr
 static int ligado, aberto;
 static double soma, pior, ult;
 static int n;
+#define NAMOSTRAS 256
+static float amostras[NAMOSTRAS];   // frames of the current window, for the p90
 
 void gputempo_iniciar(void) {
   if (!SDL_GL_ExtensionSupported("GL_EXT_disjoint_timer_query")) {
@@ -72,7 +74,7 @@ static void colherProntas(void) {
     pGetUi64v(q[cauda], GL_QUERY_RESULT_EXT, &ns);
     cauda = (cauda + 1) % NQ; nFila--;
     { double ms = (double)ns / 1e6;
-      ult = ms; soma += ms; n++;
+      ult = ms; soma += ms; if (n < NAMOSTRAS) amostras[n] = (float)ms; n++;
       if (ms > pior) pior = ms; }
   }
 }
@@ -104,6 +106,16 @@ int gputempo_colher(double *med, double *piorOut, double *ultOut) {
   return r;
 }
 
+// 90th percentile of the window so far (call BEFORE gputempo_colher, which
+// resets it). 0 = no samples.
+double gputempo_p90(void) {
+  float a[NAMOSTRAS]; int m = n < NAMOSTRAS ? n : NAMOSTRAS, i, j;
+  if (m <= 0) return 0.0;
+  for (i = 0; i < m; i++) a[i] = amostras[i];
+  for (i = 1; i < m; i++) { float v = a[i]; for (j = i - 1; j >= 0 && a[j] > v; j--) a[j + 1] = a[j]; a[j + 1] = v; }
+  return (double)a[(m * 9) / 10 >= m ? m - 1 : (m * 9) / 10];
+}
+
 double gputempo_ultimo(void) { return ult; }
 
 #else
@@ -116,5 +128,6 @@ int gputempo_colher(double *med, double *pior, double *ult) {
   if (ult) *ult = 0.0;
   return 0;
 }
+double gputempo_p90(void) { return 0.0; }
 double gputempo_ultimo(void) { return 0.0; }
 #endif
