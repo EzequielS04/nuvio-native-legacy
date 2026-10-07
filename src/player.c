@@ -1252,7 +1252,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
     else miniGuia = 0;
     janAtiva = 0;
     avisarCascaAberto(aberto);
-    if (ci && ci->imdb[0] && !canalSessao) parental_pedir(ci->imdb);
+    if (ci && ci->imdb[0] && !canalSessao && ajustes_classif_player()) parental_pedir(ci->imdb);
     // A grade EPG comeca a baixar ja: o banner "agora/a seguir" do OSD e o
     // overlay do guia dependem dela. Idempotente.
     if (canalSessao) { guia_carregar(); epg_iniciar(); } }
@@ -4287,7 +4287,8 @@ void player_desenhar(Uint32 agora) {
   // tela): entra escalonada linha a linha, fica PG_SEG_VISIVEL e sai. Depois
   // disso nao volta nesta reproducao.
   {
-    int np = parental_n();
+    // Ajustes > Reproducao > Classificacao no player: desligada, nada da guia sobe.
+    int np = ajustes_classif_player() ? parental_n() : 0;
     // A JANELA COMECA QUANDO A RESPOSTA CHEGA, e nao no primeiro quadro.
     //
     // Era `tg < PG_SEG_TOTAL`, com tg contado do primeiro quadro: sete
