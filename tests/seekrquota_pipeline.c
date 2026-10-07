@@ -145,6 +145,12 @@ int main(void) {
   esperada = "third-key"; seekr_definir_chave(esperada); pedir(SEEKR_LIMITE_LOCAL);
   assert(spriteN == antes && usadas() == 50);
   assert(seekr_validar(esperada) == 1 && usadas() == 50);
+  // #312: chave pessoal nao paga nem sofre o teto local de 50 (o plano e do Seekr).
+  seekr_chave_propria(1); esperada = "own-key"; seekr_definir_chave(esperada);
+  seekr_tentar_novamente(); respostasHttp(200, 0); pedir(SEEKR_PRONTO);
+  assert(usadas() == 50 && spriteN > antes);
+  { SeekrUso p; seekr_uso(&p); assert(p.chavePropria); }
+  seekr_chave_propria(0);
   seekr_desligar();
   puts("seekrquota pipeline: PASS single-flight, durable-before-HTTP, cache, key/profile changes, retries, expiry, states and50limit");
   return 0;

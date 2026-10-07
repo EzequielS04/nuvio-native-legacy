@@ -60,6 +60,13 @@ static pthread_t fio;
 static int fioVivo, fioPronto;
 static SyncEstado estado = SYNC_PARADO;
 static char resumo[220] = "sem sincronizar";
+// Resumos com numero NAO guardam o texto pronto: o idioma pode mudar depois do
+// ciclo (Ajustes) e a linha ficava no idioma de quando sincronizou (#312, em
+// portugues com o app em ingles). Guardam os dados; sync_resumo() monta e
+// traduz a cada leitura. resumoTipo 0 = frase fixa em `resumo`.
+enum { RES_FIXO, RES_FORA_COPIA, RES_FORA_SEM, RES_CICLO };
+static int  resumoTipo, resumoHttp, resumoTrakt, resumoPend, resumoN[5];
+static char resumoData[32];
 static unsigned ultimoOk;
 static int sujoProgresso, sujoAjustes;
 // Capturado no fio principal: o worker nao le a lista enquanto ela muda.
@@ -1243,7 +1250,7 @@ static void *rodar(void *u) {
     printf("[sync] ciclo interrompido: %d perfis e nenhum escolhido nesta TV\n",
            perfis_n());
     fflush(stdout);
-    snprintf(resumo, sizeof resumo, "aguardando escolha de perfil");
+    { resumoTipo = RES_FIXO; snprintf(resumo, sizeof resumo, "aguardando escolha de perfil"); }
     cicloInterrompido = 1;
     estado = SYNC_PRONTO;
     fioPronto = 1;
@@ -1257,12 +1264,9 @@ static void *rodar(void *u) {
     if (temAddonsRem && !addonsPendentes()) addonsCedo = 1;
     soLeituraDaCopia(foraCiclo > 0 ? foraCiclo : 0);
     contacache_data(copiaQuandoCiclo, d, sizeof d);
-    if (copiaCiclo)
-      snprintf(resumo, sizeof resumo, i18n("servidor da conta fora do ar (HTTP %d) · usando a cópia de %s"),
-               foraCiclo > 0 ? foraCiclo : 0, d);
-    else
-      snprintf(resumo, sizeof resumo, i18n("servidor da conta fora do ar (HTTP %d) · sem cópia salva"),
-               foraCiclo > 0 ? foraCiclo : 0);
+    resumoHttp = foraCiclo > 0 ? foraCiclo : 0;
+    snprintf(resumoData, sizeof resumoData, "%s", d);
+    resumoTipo = copiaCiclo ? RES_FORA_COPIA : RES_FORA_SEM;
     estado = SYNC_PRONTO;
     fioPronto = 1;
     return NULL;
@@ -1305,7 +1309,7 @@ static void *rodar(void *u) {
     printf("[sync] perfil trocado no meio do ciclo (%d -> %d): nada sobe\n",
            perfilDoCiclo, perfis_ativo());
     fflush(stdout);
-    snprintf(resumo, sizeof resumo, "perfil trocado; sincronizando de novo");
+    { resumoTipo = RES_FIXO; snprintf(resumo, sizeof resumo, "perfil trocado; sincronizando de novo"); }
     estado = SYNC_PRONTO;
     fioPronto = 1;
     return NULL;
@@ -1326,14 +1330,12 @@ static void *rodar(void *u) {
   // novo o que ainda nao teve 2xx.
   contapend_enviar();
 
-  { int pend = contapend_pendentes();
-    char sufixo[48] = "";
-    if (pend > 0) snprintf(sufixo, sizeof sufixo, i18n(" · %d pendentes"), pend);
-  snprintf(resumo, sizeof resumo,
-           i18n("%d addons · %d progressos · %d vistos · %d na lista · %d coleções%s%s"),
-           nAddonsRem, syncprog_puxadas(), cVistos < 0 ? 0 : cVistos,
-           cBiblio < 0 ? 0 : cBiblio, cColecoes < 0 ? 0 : cColecoes,
-           temTraktRem ? " · Trakt" : "", sufixo); }
+  resumoPend = contapend_pendentes();
+  resumoN[0] = nAddonsRem; resumoN[1] = syncprog_puxadas();
+  resumoN[2] = cVistos < 0 ? 0 : cVistos; resumoN[3] = cBiblio < 0 ? 0 : cBiblio;
+  resumoN[4] = cColecoes < 0 ? 0 : cColecoes;
+  resumoTrakt = temTraktRem;
+  resumoTipo = RES_CICLO;
   estado = SYNC_PRONTO;
   fioPronto = 1;
   return NULL;
@@ -1404,7 +1406,7 @@ void sync_iniciar(void) {
   estado = SYNC_RODANDO;
   fioPronto = 0;
   if (pthread_create(&fio, NULL, rodar, NULL) == 0) { pthread_detach(fio); fioVivo = 1; }
-  else { estado = SYNC_FALHOU; snprintf(resumo, sizeof resumo, "sem fio para sincronizar"); }
+  else { estado = SYNC_FALHOU; { resumoTipo = RES_FIXO; snprintf(resumo, sizeof resumo, "sem fio para sincronizar"); } }
 }
 
 // Um ciclo automatico, se ja passou o intervalo. Devolve 1 quando disparou.
@@ -1716,7 +1718,27 @@ int  sync_addons_fora(void)   { return foraHttp ? addonsFora : 0; }
 SyncEstado  sync_estado(void)      { return estado; }
 // As frases fixas (resumo guarda o portugues) passam pela tabela aqui; as com
 // numero ja foram montadas com o formato traduzido.
-const char *sync_resumo(void)      { return i18n(resumo); }
+const char *sync_resumo(void) {
+  static char saida[260];
+  char sufixo[64] = "";
+  switch (resumoTipo) {
+    case RES_FORA_COPIA:
+      snprintf(saida, sizeof saida, i18n("servidor da conta fora do ar (HTTP %d) · usando a cópia de %s"),
+               resumoHttp, resumoData);
+      return saida;
+    case RES_FORA_SEM:
+      snprintf(saida, sizeof saida, i18n("servidor da conta fora do ar (HTTP %d) · sem cópia salva"), resumoHttp);
+      return saida;
+    case RES_CICLO:
+      if (resumoPend > 0) snprintf(sufixo, sizeof sufixo, i18n(" · %d pendentes"), resumoPend);
+      snprintf(saida, sizeof saida,
+               i18n("%d addons · %d progressos · %d vistos · %d na lista · %d coleções%s%s"),
+               resumoN[0], resumoN[1], resumoN[2], resumoN[3], resumoN[4],
+               resumoTrakt ? " · Trakt" : "", sufixo);
+      return saida;
+    default: return i18n(resumo);
+  }
+}
 unsigned    sync_ultimo_ok(void)   { return ultimoOk; }
 void        sync_sujar_progresso(void) { sujoProgresso = 1; }
 void        sync_sujar_addons(void) {
@@ -2043,7 +2065,7 @@ void sync_esquecer_usuario(void) {
   temAjustesBlob = 0;
   aplicarAjustes = 1;
   dados_apagar(SY_AJUSTES_LOCAIS);
-  snprintf(resumo, sizeof resumo, "sem conta");
+  { resumoTipo = RES_FIXO; snprintf(resumo, sizeof resumo, "sem conta"); }
   printf("[sync] dados do usuario apagados deste aparelho\n");
 }
 
