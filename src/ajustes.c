@@ -1759,6 +1759,7 @@ int ajustes_animacoes_reduzidas(void) { return valor[AJ_ANIM] == 1; }
 static int perfilSeguro;
 #define SEGURO perfilSeguro
 int ajustes_4k(void)                  { return valor[AJ_RESOLUCAO] == RES_4K && !SEGURO; }
+int ajustes_res_auto(void)            { return valor[AJ_RESOLUCAO] == RES_AUTO && !SEGURO; }
 int ajustes_720p(void)                { return valor[AJ_RESOLUCAO] == RES_720 && !SEGURO; }
 int ajustes_dolby_vision(void)        { return lig(AJ_DV); }
 int ajustes_dolby_atmos(void)         { return lig(AJ_ATMOS); }
@@ -2980,6 +2981,19 @@ void ajustes_dir(const char *dir) {
     printf("[ajustes] tema estilizado -> Da arte + Fundo Frost\n");
     gravar();
   }
+  // MIGRACAO UNICA (2.0.2, owner): everyone goes to Automatic once, 4K stored
+  // or not (resolucao.h: Automatic now probes 4K by itself). The flag is per
+  // TV (data folder); any change made AFTER it is respected.
+  { char *m = dados_ler(RES_ARQ_MIGRADA);
+    if (m) free(m);
+    else {
+      if (valor[AJ_RESOLUCAO] != RES_AUTO)
+        printf("[ajustes] resolucao da interface %d -> Automatica (migracao unica da 2.0.2)\n", valor[AJ_RESOLUCAO]);
+      valor[AJ_RESOLUCAO] = RES_AUTO;
+      dados_apagar(RES_ARQ_RECUO); dados_apagar(RES_ARQ_AUTO);
+      dados_gravar(RES_ARQ_MIGRADA, "1\n");
+      gravar();
+    } }
   // MIGRACAO UNICA (1.5.1, #149): religa o envio automatico. Ate a 1.5.0 a
   // abertura da tela de Ajustes desligava o envio e a gravacao seguinte
   // levava o "desligado" ao disco — quem o tem no arquivo, na maioria, nao
@@ -5083,7 +5097,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_TRAILER_ZOOM_TPK: return "Amplia a imagem do trailer e libera os modos de recorte e zoom da proporção no player; em algumas TVs Samsung pode deixar a tela preta ou mostrar a tela inicial da TV.";
     case AJ_CACHE_SEEK: return "Guarda no disco o trecho já baixado do vídeo, para voltar sem baixar de novo. Apagado ao fechar o player.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
-    case AJ_RESOLUCAO: return "Automática desenha em 1080p e, se a TV for fraca, tira efeitos em vez de baixar a resolução. 4K só nas TVs que permitem; se a TV não aguentar, o app volta para 1080p e avisa. Para tentar 4K de novo, escolha 4K outra vez. 720p desenha em 1280x720 e amplia: mais leve, com texto mais suave. Reinicie o app depois de mudar. O vídeo não muda.";
+    case AJ_RESOLUCAO: return "Automática começa em 1080p e testa o 4K sozinha: só usa 4K se a tela for 4K e a TV aguentar com folga; se travar depois, volta para 1080p. Nunca baixa para 720p. Escolher 4K força 4K (se a TV não aguentar, o app volta para 1080p e avisa). 720p desenha em 1280x720 e amplia: mais leve, com texto mais suave. Reinicie o app depois de mudar. O vídeo não muda.";
     case AJ_PERFIL_ATIVO: return "Perfil em uso nesta TV. Trocar de perfil é feito na tela de perfis, ao abrir o app.";
     case AJ_SYNC: return "Estado da última troca de dados com a sua conta: addons, progresso, coleções e preferências.";
     case AJ_ADDONS: return "Abre a lista de addons da sua conta, para ligar e desligar cada um nesta TV.";
@@ -5902,6 +5916,8 @@ static int definirValorDireto(int op, int novo) {
     char *m = dados_ler(RES_ARQ_RECUO);
     if (m) { free(m); dados_apagar(RES_ARQ_RECUO); printf("[4k] 4K escolhido de novo: tenta outra vez no proximo arranque\n"); }
   }
+  // Back to Automatic = measure again at the next launch.
+  if (op == AJ_RESOLUCAO && novo == RES_AUTO) dados_apagar(RES_ARQ_AUTO);
   if (op == AJ_ENQUETES) enquete_definir_optout(novo != 0);
   if (op == AJ_ADDONS_PRINCIPAL) sync_iniciar();
   if (op == AJ_SELOS_PACOTE) { selospacote_escolher(novo - 1); spEspelhar(); }
