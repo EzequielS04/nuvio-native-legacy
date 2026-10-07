@@ -153,7 +153,7 @@ static void rRepor(void) {   // a escolhida falha: o automatico tenta N outras
     float y = rYL(i) + 6, al = i <= n ? 1.0f : 0.28f;
     int falhou = i < s && s <= n + 1 && i <= n;
     rLinha(40, y, 500, 52, i == 2 ? "1080p" : "4K", NULL, i + 1, al);
-    if (falhou) { ajc_ret(40, y, 500, 52, 12, 0.85f, 0.25f, 0.22f, 0.4f); ajc_icone("aj_x", 566, y + 26, 20, 0.9f); }
+    if (falhou) { ajc_ret(40, y, 500, 52, 12, 0.03f, 0.03f, 0.04f, 0.6f); ajc_icone("aj_x", 566, y + 26, 20, 0.9f); }
     if (i == s && i <= n && s > 0) { ajc_foco(40, y, 500, 52, 12, 1); }
     if (i == 0 && s == 0) ajc_foco(40, y, 500, 52, 12, 1);
   }
@@ -501,7 +501,7 @@ static void rPacoteRem(void) {   // um pacote sai e os outros fecham o espaco
   rCartaoPacote(40, 80, 170, 140, 0, 1);
   rCartaoPacote(230, 80, 170, 140, 1, a1);
   rCartaoPacote(420 - 190 * e, 80, 170, 140, 2, 1);
-  ajc_ret(230, 80, 170, 140, 16, 0.85f, 0.25f, 0.22f, 0.25f * a1);
+  ajc_ret(230, 80, 170, 140, 16, 0.03f, 0.03f, 0.04f, 0.5f * a1);
   ajc_icone("aj_delete", 315, 150, 44, 0.9f * a1);
   ajc_ladrilho("aj_package", 320, 270, 44, 0, 0.7f);
 }
@@ -591,8 +591,10 @@ static void rSaida(void) {   // sair no meio: o video vai para a ilha da Home ou
     ajc_acento_ret(34, 232, 112, 34, 17, k);
     ajc_icone("aj_corner-up-left", 170, 250, 28, k);
   }
-  ajc_video(640 - (640 - (v ? 300 : 440)) * k, 360 - (360 - (v ? 60 : 250)) * k, 640 - (v ? 440 : 460) * k, 360 - (v ? 250 : 260) * k, 14 * k, 1 - (v ? 0.8f * k : 0));
-  ajc_foco(640 - (640 - (v ? 300 : 440)) * k, 360 - (360 - (v ? 60 : 250)) * k, 640 - (v ? 440 : 460) * k, 360 - (v ? 250 : 260) * k, 14, k * 0.8f);
+  // o video comeca na tela inteira (0,0) e encolhe ate o destino
+  { float vx = (v ? 300 : 440) * k, vy = (v ? 60 : 250) * k, vw = 640 - (v ? 340 : 460) * k, vh = 360 - (v ? 250 : 260) * k;
+    ajc_video(vx, vy, vw, vh, 14 * k, 1 - (v ? 0.8f * k : 0));
+    ajc_foco(vx, vy, vw, vh, 14, k * 0.8f); }
 }
 static void rManter(int op) {   // o video fica pronto na ilha por 2 minutos
   float k = ajcLig(op), f = ajc_fase(5.0f), cd = k > 0.5f ? 1 - f : 0;
@@ -736,6 +738,25 @@ static void rP2p(int op) {
   }
 }
 
+// Percentual assistido: a barra de tempo em close; passou da marca do valor,
+// o titulo conta como visto (o check acende).
+static void rPercentual(void) {
+  float pc = ajcValor(AJ_CW_CONCLUIDO), m = 40 + 560 * pc / 100.0f, cur = 0.55f + 0.43f * ajc_onda(4.0f);
+  float cx = 40 + 560 * cur, visto = cx >= m ? 1.0f : 0.0f;
+  char t[16];
+  ajc_video(0, 0, 640, 360, 0, 0.45f);
+  ajc_veu(0, 150, 640, 210, 0, 0.8f);
+  ajc_ret(40, 236, 560, 12, 6, 1, 1, 1, 0.12f);
+  ajc_ret(40, 236, cx - 40, 12, 6, 1, 1, 1, 0.75f);
+  ajc_acento_ret(m, 236, 600 - m, 12, 6, 0.45f);
+  ajc_ret(m - 1.5f, 214, 3, 56, 1.5f, 1, 1, 1, 0.9f);
+  snprintf(t, sizeof t, "%d%%", (int)(pc + 0.5f));
+  ajcSelo(t, m - ajcLargura(t, 16, 1) * 0.5f - 11, 176, 16, 1, 1);
+  ajc_bolinha(cx, 242, 22, 1, 1, 1, 1);
+  ajc_ladrilho("aj_check", 560, 80, 64, visto > 0.5f, 0.3f + 0.7f * visto);
+  ajc_cartaz(440, 48, 64, 64, 3, 0.9f);
+}
+
 static int ajcNovaReproducao(int sec, int op) {
   (void)sec;
   switch (op) {
@@ -770,6 +791,7 @@ static int ajcNovaReproducao(int sec, int op) {
     case AJ_PROPORCAO_PADRAO: rProporcao(op); return 1;
     case AJ_PLR_CLASSIF: rClassif(op); return 1;
     case AJ_SAIDA_PLAYER: rSaida(); return 1;
+    case AJ_CW_CONCLUIDO: rPercentual(); return 1;
     case AJ_MANTER_VIDEO: rManter(op); return 1;
     case AJ_SEEKR_LIGADO: case AJ_SEEKR_FITA: case AJ_SEEKR_CHAVE: case AJ_SEEKR_TESTAR: case AJ_SEEKR_AJUSTE:
       rSeekr(op); return 1;

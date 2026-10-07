@@ -535,7 +535,8 @@ static void ajcCenaPlayer(int op) {
       ajc_vidro(40, 80 - 20 * (1 - k), 300, 150, 18, k);
       ajc_ret(60, 100 - 20 * (1 - k), 160, 20, 6, 1, 1, 1, 0.9f * k);
       ajc_barras(60, 136 - 20 * (1 - k), 250, 4, k);
-      ajc_play(320, 150, 50, 1 - k * 0.4f);
+      if (ajcLig(op) < 0.5f) ajc_ladrilho("aj_pause", 320, 150, 60, 0, 0.9f);   // desligado: so o pause, sem painel
+      else ajc_play(320, 150, 50, 1 - k * 0.4f);
       ajcChaveCanto(ajcLig(op)); break; }
     case AJ_REACAO_CREDITOS: {   // nos creditos: a pergunta aparece
       float k = ajcLig(op) * ajc_onda(4.0f);
