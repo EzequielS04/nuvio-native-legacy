@@ -40,6 +40,12 @@ void ilha_avisar(const char *chave, int tipo, const char *icone,
 void ilha_retirar(const char *chave);
 // 1 enquanto o aviso desta chave esta na tela ou na fila.
 int  ilha_tem(const char *chave);
+// 1 quando um aviso com esta chave APARECEU na pilula (primeiro quadro na
+// tela, sem nada cobrindo) desde a ultima pergunta; a resposta e consumida.
+// E o "ja dito" de verdade: quem marca um evento como visto no disco
+// (avisodisp) pergunta aqui, e nao no instante em que mandou o aviso — um
+// aviso que a fila descartou, ou que venceu debaixo do painel, nao foi lido.
+int  ilha_mostrou(const char *chave);
 
 // --- PRIORIDADE, CONTADOR E A CENTRAL (mockup aprovado em 02/10) ------------------
 //

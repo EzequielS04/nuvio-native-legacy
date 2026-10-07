@@ -281,6 +281,42 @@ void ilha_retirar(const char *chave) {
   if (temCur && !strcmp(cur.chave, chave)) proximo();
 }
 
+// AS CHAVES QUE APARECERAM (ilha_mostrou). Um anel curto: quem pergunta o faz
+// a cada 2 s (ilhasinais.c), muito antes de 16 avisos passarem.
+#define MOSTRADOS 16
+static char mostrados[MOSTRADOS][sizeof(((Aviso *)0)->chave)];
+static int nMostrados;
+static void marcarMostrado(const char *chave) {
+  if (nMostrados == MOSTRADOS) {
+    memmove(mostrados[0], mostrados[1], sizeof mostrados[0] * (MOSTRADOS - 1));
+    nMostrados--;
+  }
+  snprintf(mostrados[nMostrados++], sizeof mostrados[0], "%s", chave);
+}
+int ilha_mostrou(const char *chave) {
+  int i, achou = 0;
+  if (!chave) return 0;
+  for (i = 0; i < nMostrados; ) {
+    if (!strcmp(mostrados[i], chave)) {
+      memmove(mostrados[i], mostrados[i + 1], sizeof mostrados[0] * (size_t)(nMostrados - i - 1));
+      nMostrados--; achou = 1;
+    } else i++;
+  }
+  return achou;
+}
+// O AVISO DA VEZ ENTRA NA TELA: o prazo comeca a contar e a chave vira "dita".
+// COBERTA (o painel de Salvos nascido da pilula, o cartao da atualizacao) o
+// prazo NAO comeca e, se ja corria, fica parado: antes ele vencia por baixo
+// do painel e o pedido de amizade sumia sem ninguem ter lido.
+static void vezNaTela(Uint32 agora, Uint32 antes) {
+  if (!temCur) return;
+  if (coberta) {
+    if (curAte && antes && agora > antes) curAte += agora - antes;
+    return;
+  }
+  if (!curAte) { curAte = agora + cur.ms; marcarMostrado(cur.chave); }
+}
+
 int ilha_tem(const char *chave) {
   int i;
   if (!chave) return 0;
@@ -1808,12 +1844,13 @@ static void ilha_desenharCorpo_(Uint32 agora) {
   float alvoW, alvoH, x, y;
   TxtLinha t1, t2;
   GfxRect vooPf;
+  Uint32 antes = ultQuadro;
   ultQuadro = agora;
   if (dt > 0.1f) dt = 0.1f;
 
   // Aviso vencido sai; o prazo so comeca a contar quando ele aparece.
-  if (temCur && curAte && (Sint32)(agora - curAte) >= 0) proximo();
-  if (temCur && !curAte) curAte = agora + cur.ms;
+  vezNaTela(agora, antes);
+  if (temCur && curAte && !coberta && (Sint32)(agora - curAte) >= 0) { proximo(); vezNaTela(agora, antes); }
   // Aviso que pediu `abrir`: a pilula cresce ate o modal no primeiro quadro.
   if (temCur && cur.abrir && curAte) { cur.abrir = 0; abrirDoAviso(); }
   atualizarHora();
