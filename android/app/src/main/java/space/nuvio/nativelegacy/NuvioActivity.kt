@@ -54,6 +54,14 @@ class NuvioActivity : SDLActivity() {
 
     private var camadaVideo: FrameLayout? = null
 
+    // Vigia do arranque (#266, ArranqueVigia.kt) e o que ele le do C (android.c).
+    private var vigia: ArranqueVigia? = null
+    external fun nativeEtapa(): String
+    external fun nativeQuadros(): Long
+    external fun nativeRecUrl(): String
+    fun estadoSdl() = "thread=${if (mSDLThread != null) "sim" else "nao"} foco=$mHasFocus " +
+        "retomada=$mIsResumedCalled superficie=${mSurface?.mIsSurfaceReady == true}"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // SEGUNDO onCreate NO MESMO PROCESSO = SEGUNDO main() DO C (o
         // SDLActivity.initialize() zera mSDLThread e o SDL sobe outro fio de
@@ -72,6 +80,9 @@ class NuvioActivity : SDLActivity() {
         jaCriada = true
         prepararAmbiente()
         super.onCreate(savedInstanceState)
+        // Antes de tudo que pode falhar daqui para baixo: o vigia so precisa
+        // do fio da interface livre.
+        if (!mBrokenLibraries) vigia = ArranqueVigia(this).also { it.iniciar() }
         observarRede()
 
         // SDLActivity.mLayout e um RelativeLayout com a SDLSurface dentro.
@@ -328,12 +339,19 @@ class NuvioActivity : SDLActivity() {
         super.onStop()
     }
 
+    override fun onResume() {
+        super.onResume()
+        vigia?.frente(true)
+    }
+
     override fun onPause() {
+        vigia?.frente(false)
         NvPlayer.pausarPeloSistema()
         super.onPause()
     }
 
     override fun onDestroy() {
+        vigia?.parar()
         fecharRede()
         NvPlayer.encerrar()
         val saindo = isFinishing
@@ -755,6 +773,10 @@ class NuvioActivity : SDLActivity() {
 
     // Controle remoto: troca a tecla ANTES do SDL, para cair no SDLK que o app espera.
     override fun dispatchKeyEvent(ev: KeyEvent): Boolean {
+        // Voltar com o C sem desenhar: o SDL entregaria a tecla a um main()
+        // preso e nada aconteceria. O vigia abre a tela com "Sair".
+        if (ev.keyCode == KeyEvent.KEYCODE_BACK && ev.action == KeyEvent.ACTION_DOWN &&
+            ev.repeatCount == 0 && vigia?.voltar() == true) return true
         val novo = when (ev.keyCode) {
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> KeyEvent.KEYCODE_ENTER
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY,

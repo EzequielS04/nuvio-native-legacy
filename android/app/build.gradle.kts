@@ -91,9 +91,14 @@ val copiaSdlJava = tasks.register<Copy>("copiaSdlJava") {
     // pilha padrao da JVM (~1 MB); o nucleo foi escrito para os 8 MB do fio
     // principal da LG e do .tpk (tpk.c), e o guia estourou a pilha com 900
     // canais numa copia local (SIGSEGV em guia.c, TCL, 30/09/2026).
+    // JOIN COM PRAZO (#266). O onDestroy do SDL espera o main() do C sem
+    // limite, no fio da interface; com o C preso o app nem saia ("so
+    // reiniciando a TV"). 3 s e depois segue: o NuvioActivity mata o processo
+    // ao sair.
     filter { linha: String ->
         linha.replace("new Thread(new SDLMain(), \"SDLThread\")",
                       "new Thread(null, new SDLMain(), \"SDLThread\", 16L * 1024 * 1024)")
+             .replace("SDLActivity.mSDLThread.join();", "SDLActivity.mSDLThread.join(3000);")
     }
 }
 tasks.named("preBuild") { dependsOn(copiaSdlJava) }

@@ -29,5 +29,10 @@ int  android_st_evento(char *dst, size_t n);
 char *android_listar_apps(void);
 int android_abrir_app(const char *pacote);
 int android_abrir_loja(const char *pacote, const char *nome);
+// Vigia do arranque (#266, ArranqueVigia.kt): a etapa do main() em que o fio do
+// SDL esta (texto estatico) e um contador de quadros apresentados. So o fio
+// do SDL chama.
+void android_etapa(const char *nome);
+void android_quadro(void);
 #endif
 #endif

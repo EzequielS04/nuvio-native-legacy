@@ -274,4 +274,38 @@ int __wrap_pthread_create(pthread_t *t, const pthread_attr_t *a, void *(*f)(void
   return r;
 }
 
+// VIGIA DO ARRANQUE (#266). TVs Android 11 (TCL 43P745, Shield, uma caixa)
+// ficam com a tela preta ao abrir, e sem login nao chega log nenhum ao D1. O
+// NuvioActivity (ArranqueVigia.kt) le daqui, do fio da interface, em que etapa
+// o main() esta e quantos quadros ja sairam: sem quadro em N s, ou com o laco
+// parado, ele mostra uma tela Android (dialogo) com a etapa, o fim do log, o
+// envio do registro sem conta e a saida. Escrito so pelo fio do SDL.
+static const char *volatile etapaAtual = "main";
+static volatile long long quadrosFeitos;
+
+void android_etapa(const char *nome) {
+  if (nome) __atomic_store_n(&etapaAtual, nome, __ATOMIC_RELEASE);
+}
+void android_quadro(void) { __atomic_add_fetch(&quadrosFeitos, 1, __ATOMIC_RELAXED); }
+
+JNIEXPORT jstring JNICALL
+Java_space_nuvio_nativelegacy_NuvioActivity_nativeEtapa(JNIEnv *env, jobject act) {
+  (void)act;
+  return (*env)->NewStringUTF(env, __atomic_load_n(&etapaAtual, __ATOMIC_ACQUIRE));
+}
+JNIEXPORT jlong JNICALL
+Java_space_nuvio_nativelegacy_NuvioActivity_nativeQuadros(JNIEnv *env, jobject act) {
+  (void)env; (void)act;
+  return (jlong)__atomic_load_n(&quadrosFeitos, __ATOMIC_RELAXED);
+}
+#ifndef NV_REC_URL
+#define NV_REC_URL ""
+#endif
+// Base do worker de registro (env.sh), para o envio do registro sem conta.
+JNIEXPORT jstring JNICALL
+Java_space_nuvio_nativelegacy_NuvioActivity_nativeRecUrl(JNIEnv *env, jobject act) {
+  (void)act;
+  return (*env)->NewStringUTF(env, NV_REC_URL);
+}
+
 #endif
