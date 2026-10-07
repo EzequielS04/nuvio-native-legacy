@@ -398,9 +398,9 @@ pronto:
 // A copia entregue a descoberta leva as fontes JUNTO: a pasta so aponta para o
 // bloco do conjunto, e o proximo sync o libera.
 typedef struct { ColFolder f; ColSource s[COL_SOURCE_MAX]; } ColCopia;
-#ifdef NV_TPK40
-// Tizen 4/5's manual ELF loader cannot initialize compiler TLS (tpk.sh rejects
-// PT_TLS). Same per-thread snapshot lifetime with a pthread key, as discord.c.
+// Per-thread snapshot on the heap (pthread key, freed on thread exit). A
+// `static __thread ColCopia` (~52 KB) inflated PT_TLS for every thread, and
+// Tizen 4/5's manual ELF loader cannot initialize compiler TLS at all (#317).
 static pthread_key_t colCopiaKey;
 static pthread_once_t colCopiaOnce = PTHREAD_ONCE_INIT;
 static int colCopiaKeyOk;
@@ -415,7 +415,6 @@ static ColCopia *colCopiaDoFio(void) {
   }
   return p;
 }
-#endif
 const ColFolder *col_por_catalogo(const char *base,const char *type,const char *id) {
   // Base vazia nao pergunta nada: sem esta guarda uma consulta sem URL casava
   // com QUALQUER fonte cuja base ainda estivesse vazia — um falso positivo que
@@ -424,13 +423,9 @@ const ColFolder *col_por_catalogo(const char *base,const char *type,const char *
   // Discovery runs concurrently with main-thread account sync. Never let it
   // observe the cleared/partially parsed builder or keep a pointer that sync
   // can replace after the lock is released.
-#ifdef NV_TPK40
   ColCopia *copiaP = colCopiaDoFio();
   if (!copiaP) return NULL;
 #define copia (*copiaP)
-#else
-  static __thread ColCopia copia;
-#endif
   const ColFolder *resultado = NULL;
   pthread_mutex_lock(&colTrava);
   for(int i=0;i<count;i++) {
@@ -448,9 +443,7 @@ const ColFolder *col_por_catalogo(const char *base,const char *type,const char *
 pronto:
   pthread_mutex_unlock(&colTrava);
   return resultado;
-#ifdef NV_TPK40
 #undef copia
-#endif
 }
 /* Arte editorial: JPEG primeiro, PNG depois.
  *
