@@ -15,6 +15,9 @@ static pthread_mutex_t trava = PTHREAD_MUTEX_INITIALIZER;
 static char padrao[FR_REGEX_MAX + 1];
 static char nomes[2][FR_NOMES_MAX][FR_NOME_MAX];
 static int nNomes[2];
+// A ORDEM (add-ons e plugins numa fila so, pelo nome de exibicao).
+static char ordem[FR_ORDEM_MAX][FR_NOME_MAX];
+static int nOrdem;
 static unsigned versao = 1;
 // A regex compilada do padrao em uso. `reEstado` e o de fonteregra_regex_estado.
 static regex_t re, reExcl;
@@ -215,8 +218,20 @@ static void poeSemTrava(int plugin, const char *nome) {
   snprintf(nomes[plugin][nNomes[plugin]++], FR_NOME_MAX, "%s", n);
 }
 
+static int achaOrdemSemTrava(const char *nome) {
+  int k;
+  for (k = 0; k < nOrdem; k++) if (!strcasecmp(ordem[k], nome)) return k;
+  return -1;
+}
+static void poeOrdemSemTrava(const char *nome) {
+  char n[FR_NOME_MAX];
+  limparNome(n, sizeof n, nome);
+  if (!n[0] || achaOrdemSemTrava(n) >= 0 || nOrdem >= FR_ORDEM_MAX) return;
+  snprintf(ordem[nOrdem++], FR_NOME_MAX, "%s", n);
+}
+
 static char *serializarSemTrava(void) {
-  size_t cap = 64 + strlen(padrao) + (size_t)(nNomes[0] + nNomes[1]) * (FR_NOME_MAX + 8), w = 0;
+  size_t cap = 64 + strlen(padrao) + (size_t)(nNomes[0] + nNomes[1] + nOrdem) * (FR_NOME_MAX + 8), w = 0;
   char *t = malloc(cap);
   int p, k;
   if (!t) return NULL;
@@ -224,12 +239,13 @@ static char *serializarSemTrava(void) {
   for (p = 0; p < 2; p++)
     for (k = 0; k < nNomes[p]; k++)
       w += (size_t)snprintf(t + w, cap - w, "%s %s\n", p ? "plugin" : "addon", nomes[p][k]);
+  for (k = 0; k < nOrdem; k++) w += (size_t)snprintf(t + w, cap - w, "ordem %s\n", ordem[k]);
   return t;
 }
 
 static void lerSemTrava(const char *t) {
   const char *l = t;
-  padrao[0] = 0; nNomes[0] = nNomes[1] = 0;
+  padrao[0] = 0; nNomes[0] = nNomes[1] = 0; nOrdem = 0;
   while (l && *l) {
     const char *f = strchr(l, '\n');
     size_t n = f ? (size_t)(f - l) : strlen(l);
@@ -240,6 +256,7 @@ static void lerSemTrava(const char *t) {
     if (!strncmp(linha, "regex ", 6)) snprintf(padrao, sizeof padrao, "%s", linha + 6);
     else if (!strncmp(linha, "addon ", 6)) poeSemTrava(0, linha + 6);
     else if (!strncmp(linha, "plugin ", 7)) poeSemTrava(1, linha + 7);
+    else if (!strncmp(linha, "ordem ", 6)) poeOrdemSemTrava(linha + 6);
     l = f ? f + 1 : NULL;
   }
   recompilarSemTrava();
@@ -355,6 +372,47 @@ int fonteregra_modelo_atual(void) {
   for (i = 1; i < fonteregra_modelos() && padrao[0]; i++) if (!strcmp(padrao, MODELOS[i])) { r = i; break; }
   pthread_mutex_unlock(&trava);
   return r;
+}
+
+// --- a ordem dos add-ons (so local, o oficial nao tem) ---------------------
+int fonteregra_ordem_n(void) {
+  int n;
+  pthread_mutex_lock(&trava); n = nOrdem; pthread_mutex_unlock(&trava);
+  return n;
+}
+int fonteregra_ordem_nome(int k, char *dst, size_t tam) {
+  int ok = 0;
+  if (!dst || !tam) return 0;
+  dst[0] = 0;
+  pthread_mutex_lock(&trava);
+  if (k >= 0 && k < nOrdem) { snprintf(dst, tam, "%s", ordem[k]); ok = 1; }
+  pthread_mutex_unlock(&trava);
+  return ok;
+}
+void fonteregra_ordem_definir(const char *const *nomesNovos, int n) {
+  int k;
+  pthread_mutex_lock(&trava);
+  nOrdem = 0;
+  for (k = 0; k < n && nomesNovos; k++) poeOrdemSemTrava(nomesNovos[k]);
+  versao++;
+  gravarSemTrava(ARQ);
+  pthread_mutex_unlock(&trava);
+}
+int fonteregra_ordem_rank(const char *nome) {
+  int k;
+  if (!nome || !nome[0]) return FR_ORDEM_SEM;
+  pthread_mutex_lock(&trava); k = achaOrdemSemTrava(nome); pthread_mutex_unlock(&trava);
+  return k < 0 ? FR_ORDEM_SEM : k;
+}
+void fonteregra_ordem_texto(char *dst, size_t tam) {
+  int k;
+  size_t w = 0;
+  if (!dst || !tam) return;
+  dst[0] = 0;
+  pthread_mutex_lock(&trava);
+  for (k = 0; k < nOrdem && w + 1 < tam; k++)
+    w += (size_t)snprintf(dst + w, tam - w, "%s%s", k ? " \xE2\x80\xBA " : "", ordem[k]);
+  pthread_mutex_unlock(&trava);
 }
 
 // --- a regra ----------------------------------------------------------------

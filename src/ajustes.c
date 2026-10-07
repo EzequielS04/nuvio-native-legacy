@@ -466,6 +466,11 @@ typedef enum {
   // tira tudo isso do app e para as chamadas de rede do social. No fim:
   // valor[]/CHAVE[] posicionais.
   AJ_HIST_CONTA, AJ_SOCIAL,
+  // 2.0.2: ORDEM DOS ADD-ONS no automatico (fonteregra.h): a folha para subir e
+  // descer add-ons e plugins, e "Usar a ordem" (Nao | Para desempatar | Ordem
+  // estrita). POR PERFIL, so desta TV (o oficial nao tem chave equivalente). A
+  // ordem mora em fonteregra.c; aqui so o modo. No fim: valor[]/CHAVE[] posicionais.
+  AJ_FONTE_ORDEM, AJ_FONTE_ORDEM_USO,
   AJ_N
 } OpcaoId;
 
@@ -523,6 +528,8 @@ static const char *V_FONTE_REGEX[] = { "Desligada", "Exigir", "Preferir" };
 // Modelos de regex (fonteregra_modelo). 0 = o padrao digitado.
 static const char *V_FONTE_MODELO[] = { "Personalizado", "Espanhol", "Português", "Inglês",
                                         "Multi-áudio (MULTI)", "Áudio duplo (DUAL)", "4K e Remux" };
+// "Usar a ordem" dos add-ons (fonteregra.h FR_ORDEM_*): o indice e o gravado.
+static const char *V_FONTE_ORDEM_USO[] = { "Não", "Para desempatar", "Ordem estrita" };
 // Indice gravado em tamanhoUiLocal; o fator sai de ajustes_tamanho_ui.
 static const char *V_TAMANHO_UI[] = { "100%", "120%", "130%", "150%" };
 static const char *V_TAMANHO_AJUSTES[] = { "80%", "90%", "100%" };
@@ -1272,6 +1279,8 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Dolby Vision em MKV (experimental)", V_LIGA, 2),          // local: dvMkvLocal
   ESC("Enviar histórico para a conta Nuvio", V_LIGA, 2),          // por perfil: histContaLocal
   ESC("Recursos sociais",                V_LIGA, 2),             // por perfil: socialLocal
+  ACAO("Ordem dos add-ons"),                                   // fonteregra.c (local)
+  ESC("Usar a ordem",                    V_FONTE_ORDEM_USO, 3), // por perfil: fonteOrdemUsoLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1486,6 +1495,7 @@ static const char *CHAVE[] = {
   "dvMkvLocal",
   "histContaLocal",
   "socialLocal",
+  "-fonteOrdem", "fonteOrdemUsoLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1800,6 +1810,7 @@ int ajustes_fonte_prazo_ms(void) {
 int ajustes_fonte_escopo(void)      { int v = valor[AJ_FONTE_ESCOPO]; return v < 0 || v > 2 ? 0 : v; }
 int ajustes_fonte_regex_modo(void)  { int v = valor[AJ_FONTE_REGEX]; return v < 0 || v > 2 ? 0 : v; }
 int ajustes_fonte_usar_outros(void) { return lig(AJ_FONTE_OUTROS); }
+int ajustes_fonte_ordem_uso(void)   { int v = valor[AJ_FONTE_ORDEM_USO]; return v < 0 || v > 2 || !fonteregra_ordem_n() ? 0 : v; }
 int ajustes_fonte_repor(void) {
   int v = valor[AJ_FONTE_REPOR];
   return v < 0 ? 0 : v > 3 ? 3 : v;     // arquivo editado a mao: dentro da tabela
@@ -4420,6 +4431,7 @@ static void pxAtivar(int op) {
 }
 
 static const char *frResumo(int plugin);
+static const char *frOrdemResumo(void);
 static const char *frRegexTexto(void);
 static const char *textoLeitura(int op) {
   static char buf[64];
@@ -4485,6 +4497,7 @@ static const char *textoLeitura(int op) {
     recomenda_perfil(&pf);
     return pf.apelido[0] ? pf.apelido : i18n("Não configurado");
   }
+  if (op == AJ_FONTE_ORDEM) return frOrdemResumo();
   if (op == AJ_FONTE_ADDONS_PERM) return frResumo(0);
   if (op == AJ_FONTE_PLUGINS_PERM) return frResumo(1);
   if (op == AJ_FONTE_REGEX_PADRAO) return frRegexTexto();
@@ -5097,6 +5110,8 @@ static const char *ajudaOpcao(int op) {
     case AJ_FONTE_OUTROS: return "Ligado: sem fonte nos permitidos dentro da espera, o automático usa os outros. Desligado: só os permitidos; sem fonte neles, a lista de fontes abre.";
     case AJ_FONTE_REGEX: return "Compara uma regex com o nome, a descrição e o add-on de cada fonte, sem diferenciar maiúsculas. Exigir: só toca o que casa. Preferir: o que casa vem primeiro.";
     case AJ_FONTE_REGEX_PADRAO: return "O padrão da regex, como no Nuvio oficial. Ex.: ESP|Latino|Castellano. Dá para digitar pelo celular. Um padrão inválido é ignorado.";
+    case AJ_FONTE_ORDEM: return "A ordem dos add-ons e plugins no automático: suba e desça cada um. Quem fica fora da ordem vem depois de todos. Só vale com a opção Usar a ordem ligada.";
+    case AJ_FONTE_ORDEM_USO: return "Não: a escolha de sempre. Para desempatar: na mesma faixa de qualidade e no mesmo grupo, vence o add-on mais cedo na ordem, sem fazer esperar. Ordem estrita: toma a melhor fonte válida do primeiro add-on da ordem que tiver uma, respeitando teto, tamanho e regex, mesmo que um add-on mais abaixo tenha qualidade maior; decide assim que ele responde. Fontes acima do teto ficam por último.";
     case AJ_FONTE_REGEX_MODELO: return "Padrões prontos: idiomas como os add-ons escrevem, áudio MULTI ou DUAL, 4K e Remux. Escolher um troca o padrão da regex.";
     case AJ_ESPACO_FILEIRAS: return "O espaço vertical entre uma fileira da Home e a seguinte. Com menos cabem mais fileiras na tela, com mais a Home fica mais arejada.";
     case AJ_ESPACO_TITULOS: return "O espaço horizontal entre os cartazes de uma fileira da Home.";
@@ -5809,8 +5824,9 @@ static void desenhaRiscoFolha(void);
 // marcados que ja nao estao instalados, para poder tira-los), com "Todos" no
 // topo. OK marca/desmarca e grava na hora (fonteregra.c); Voltar fecha.
 #define FR_FOLHA_MAX 128
-static int frAberta;            // 0 fechada; 1 add-ons; 2 plugins
+static int frAberta;            // 0 fechada; 1 add-ons; 2 plugins; 3 ordem dos add-ons
 static int frFoco;
+static int frCol;               // folha da ordem: 0 = subir, 1 = descer
 static int frN;
 static char frNome[FR_FOLHA_MAX][FR_NOME_MAX];
 static char frApoio[FR_FOLHA_MAX][64];
@@ -5823,9 +5839,45 @@ static void frPor(const char *nome, const char *apoio) {
   snprintf(frApoio[frN], sizeof frApoio[frN], "%s", apoio ? apoio : "");
   frN++;
 }
+static int frAchar(const char *nome) {
+  int k;
+  for (k = 0; k < frN; k++) if (!strcasecmp(frNome[k], nome)) return k;
+  return -1;
+}
+// A folha da ORDEM: primeiro os nomes da ordem, na ordem dela, depois os
+// instalados que ainda nao estao nela (add-ons, depois plugins).
+static void frMontarOrdem(void) {
+  int i, j, k;
+  char nm[FR_NOME_MAX];
+  frN = 0;
+  for (k = 0; k < fonteregra_ordem_n() && k < FR_ORDEM_MAX; k++)
+    if (fonteregra_ordem_nome(k, nm, sizeof nm)) frPor(nm, "Não instalado");
+  for (i = 0; i < addons_n(); i++)
+    if (!addons_sondado(i) || addons_fornece(i, ADD_STREAM)) {
+      const char *nome = addons_nome(i), *ap = addons_ativo(i) ? "" : "Desligado";
+      int at = frAchar(nome);
+      if (at >= 0) snprintf(frApoio[at], sizeof frApoio[at], "%s", ap);
+      else if (frN < FR_ORDEM_MAX) frPor(nome, ap[0] ? ap : "Fora da ordem");
+    }
+  for (i = 0; i < plugins_n_repos(); i++) {
+    int tot = plugins_repo_scrapers(i, NULL);
+    for (j = 0; j < tot; j++) {
+      PlugScraper sc;
+      if (plugins_scraper(i, j, &sc)) {
+        int at = frAchar(sc.nome);
+        const char *ap = sc.ativo ? "Plugin" : "Desligado";
+        if (at >= 0) snprintf(frApoio[at], sizeof frApoio[at], "%s", ap);
+        else if (frN < FR_ORDEM_MAX) frPor(sc.nome, ap);
+      }
+    }
+  }
+  if (frFoco > frN) frFoco = frN;
+  if (frFoco < 0) frFoco = 0;
+}
 static void frMontar(void) {
   int plugin = frAberta == 2, i, j, k;
   char nm[FR_NOME_MAX];
+  if (frAberta == 3) { frMontarOrdem(); return; }
   frN = 0;
   if (!plugin) {
     for (i = 0; i < addons_n(); i++)
@@ -5845,9 +5897,36 @@ static void frMontar(void) {
   if (frFoco > frN) frFoco = frN;
   if (frFoco < 0) frFoco = 0;
 }
-static void frAbrir(int plugin) { frAberta = plugin ? 2 : 1; frFoco = 0; frMontar(); }
+static void frAbrir(int qual) { frAberta = qual == 3 ? 3 : qual ? 2 : 1; frFoco = 0; frCol = 0; frMontar(); }
+// Sobe ou desce o item `k` (0..frN-1) da folha da ordem. A lista que a folha
+// mostra vira a ordem (quem estava fora entra), com a troca feita.
+static void frOrdemMover(int k, int dir) {
+  const char *ptr[FR_FOLHA_MAX];
+  char tmp[FR_NOME_MAX], ap[64];
+  int j = k + dir, i;
+  if (k < 0 || k >= frN || j < 0 || j >= frN) return;
+  snprintf(tmp, sizeof tmp, "%s", frNome[k]); snprintf(frNome[k], FR_NOME_MAX, "%s", frNome[j]); snprintf(frNome[j], FR_NOME_MAX, "%s", tmp);
+  snprintf(ap, sizeof ap, "%s", frApoio[k]); snprintf(frApoio[k], sizeof frApoio[k], "%s", frApoio[j]); snprintf(frApoio[j], sizeof frApoio[j], "%s", ap);
+  for (i = 0; i < frN; i++) ptr[i] = frNome[i];
+  fonteregra_ordem_definir(ptr, frN);
+  frFoco = j + 1;
+  sync_proteger_ajustes_locais();
+}
+static void frEventoOrdem(SDL_Keycode k) {
+  frMontar();
+  if (k == SDLK_ESCAPE || k == SDLK_AC_BACK || k == SDLK_BACKSPACE || k == SDLK_DELETE) { frAberta = 0; return; }
+  if (k == SDLK_UP && frFoco > 0) frFoco--;
+  if (k == SDLK_DOWN && frFoco < frN) frFoco++;
+  if (k == SDLK_LEFT) frCol = 0;
+  if (k == SDLK_RIGHT) frCol = 1;
+  if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
+    if (frFoco == 0) { fonteregra_ordem_definir(NULL, 0); sync_proteger_ajustes_locais(); uxNotificar("Ordem removida."); }
+    else frOrdemMover(frFoco - 1, frCol ? 1 : -1);
+  }
+}
 static void frEvento(SDL_Keycode k) {
   int plugin = frAberta == 2;
+  if (frAberta == 3) { frEventoOrdem(k); return; }
   frMontar();
   if (k == SDLK_ESCAPE || k == SDLK_AC_BACK || k == SDLK_BACKSPACE || k == SDLK_DELETE || k == SDLK_LEFT) {
     frAberta = 0; return;
@@ -5877,6 +5956,13 @@ static const char *frResumo(int plugin) {
   }
   if (n > 3) { char m[24]; snprintf(m, sizeof m, " +%d", n - 3); strncat(d, m, 160 - strlen(d) - 1); }
   return d;
+}
+// "A > B > C" na linha da ordem, ou "Nenhuma".
+static const char *frOrdemResumo(void) {
+  static char b[160];
+  if (!fonteregra_ordem_n()) return i18n("Nenhuma");
+  fonteregra_ordem_texto(b, sizeof b);
+  return b;
 }
 // O padrao na linha, ou o aviso de que esta vazio/invalido.
 static const char *frRegexTexto(void) {
@@ -6057,6 +6143,7 @@ static void eventoTela(const SDL_Event *e) {
     if (focoOp == AJ_APOIAR) { uxNotificar("Aponte a câmera do celular para um dos códigos."); return; }
     if (focoOp == AJ_ADDONS) { pediuAddons = 1; return; }
     if (focoOp == AJ_PLUGINS) { pediuPlugins = 1; return; }
+    if (focoOp == AJ_FONTE_ORDEM) { frAbrir(3); return; }
     if (focoOp == AJ_FONTE_ADDONS_PERM || focoOp == AJ_FONTE_PLUGINS_PERM) {
       frAbrir(focoOp == AJ_FONTE_PLUGINS_PERM); return;
     }
@@ -6794,6 +6881,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_FONTE_PRAZO: case AJ_TAM_MAX: case AJ_TAM_MIN: case AJ_PROPORCAO_PADRAO: case AJ_DTS_AC3:
     case AJ_FONTE_ESCOPO: case AJ_FONTE_ADDONS_PERM: case AJ_FONTE_PLUGINS_PERM: case AJ_FONTE_OUTROS:
     case AJ_FONTE_REGEX: case AJ_FONTE_REGEX_PADRAO: case AJ_FONTE_REGEX_MODELO:
+    case AJ_FONTE_ORDEM: case AJ_FONTE_ORDEM_USO:
       return AJPV_REPRO;
     case AJ_HOME_LAYOUT:
     case AJ_LANDSCAPE: case AJ_HERO_CHEIO: case AJ_HERO_FUNDO:
@@ -6912,7 +7000,8 @@ static void ajDesenharTudo(Uint32 agora) {
   // atropelam. Ela ja ocupa a tela toda em 100%.
   if (filAberta) { ESCALA_REAL_INI(); desenhaFileiras(); ESCALA_REAL_FIM(); }
   if (riscoFolha) desenhaRiscoFolha();
-  if (frAberta) desenhaFolhaPermitidos();
+  if (frAberta == 3) desenhaFolhaOrdem();
+  else if (frAberta) desenhaFolhaPermitidos();
 
   // Por cima de tudo: enquanto um vinculo esta em andamento, ele e a pergunta
   // da tela.

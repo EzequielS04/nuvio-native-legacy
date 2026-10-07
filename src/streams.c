@@ -859,6 +859,12 @@ int stream_regra_bloqueou(void) { return regraBloqueou; }
 static int pendenteGrupoCb(const char *nome, int plugin, void *u) {
   return fonteregra_grupo_pendente((const FonteRegraCfg *)u, nome, plugin);
 }
+// A posicao, na ordem dos add-ons, do melhor add-on que ainda nao respondeu
+// (FR_ORDEM_SEM = fora da ordem; quem nunca toca por regra nao conta).
+static int pendenteRankCb(const char *nome, int plugin, void *u) {
+  if (fonteregra_grupo_pendente((const FonteRegraCfg *)u, nome, plugin) < 0) return -1;
+  return fonteregra_ordem_rank(nome);
+}
 int  stream_cabe_no_teto(const Stream *s) { return s ? cabeNoTeto(s) : 1; }
 
 // Endereco de aviso e nao de conteudo. Estes dois foram MEDIDOS no aparelho:
@@ -1222,6 +1228,7 @@ int stream_primeira_boa(int tentativas) {
   long *pts;
   unsigned char *acima, *excl;
   signed char *grp;
+  int *rk, ordemUso = ajustes_fonte_ordem_uso();
   Conferencia c = { 0, 0 };
   Uint32 tVerif = 0;
   tentativas = fonteauto_tentativas(modo, tentativas);
@@ -1236,10 +1243,11 @@ int stream_primeira_boa(int tentativas) {
   acima = calloc((size_t)total, 1);
   excl = calloc((size_t)total, 1);
   grp = calloc((size_t)total, 1);
+  rk = calloc((size_t)total, sizeof *rk);
   regraBloqueou = 0;
-  if (!pts || !acima || !excl || !grp) {
+  if (!pts || !acima || !excl || !grp || !rk) {
     pthread_mutex_unlock(&verTrava);
-    free(pts); free(acima); free(excl); free(grp);
+    free(pts); free(acima); free(excl); free(grp); free(rk);
     return -1;
   }
   // A FILA E MONTADA NA ORDEM DE EXIBICAO (#221) e traduzida de volta para
@@ -1248,7 +1256,7 @@ int stream_primeira_boa(int tentativas) {
   { int *ordem = malloc(sizeof *ordem * (size_t)total), posPref = -1;
     if (!ordem) {
       pthread_mutex_unlock(&verTrava);
-      free(pts); free(acima); free(excl); free(grp);
+      free(pts); free(acima); free(excl); free(grp); free(rk);
       return -1;
     }
     for (q = 0; q < total; q++) {
@@ -1259,13 +1267,14 @@ int stream_primeira_boa(int tentativas) {
       acima[q] = (unsigned char)!cabeNoTeto(&lista[i]);
       excl[q] = (unsigned char)automaticaExcluida(i);
       grp[q] = (signed char)grupoDe(i);
+      rk[q] = fonteregra_ordem_rank(lista[i].provedor);
       if (!excl[q]) livres++;
     }
     pthread_mutex_unlock(&verTrava);
-    nf = fonteauto_fila_g(modo, total, posPref, pts, acima, excl, grp, tentativas, fila);
+    nf = fonteauto_fila_o(modo, total, posPref, pts, acima, excl, grp, rk, ordemUso, tentativas, fila);
     for (q = 0; q < nf; q++) fila[q] = ordem[fila[q]];
     free(ordem); }
-  free(pts); free(acima); free(excl); free(grp);
+  free(pts); free(acima); free(excl); free(grp); free(rk);
   if (nf < 1) {
     // Havia fonte, mas as regras de Ajustes nao deixam nenhuma (#202).
     if (livres > 0) {
@@ -1290,13 +1299,14 @@ int stream_primeira_boa(int tentativas) {
          tocadas, nf, c.abortou ? ", lista trocada no meio" : "");
   if (escolhida >= 0) { printf("[fonte] %d ok\n", escolhida); logarEscolha(escolhida, pref, modo == FONTEAUTO_PRIMEIRA); }
   { FonteRegraCfg c = regraCfg();
-    if (escolhida >= 0 && fonteregra_ativa(&c)) {
+    if (escolhida >= 0 && (fonteregra_ativa(&c) || ordemUso)) {
       static const char *const ESC_[3] = { "all", "addons-only", "plugins-only" };
       static const char *const RX[3] = { "off", "require", "prefer" };
       static const char *const GR[4] = { "allowed+match", "allowed", "other+match", "other" };
       int g = grupoDe(escolhida);
-      printf("[fonte] auto-play rules: scope=%s addons=%d plugins=%d regex=%s(%s) others=%s -> winner %s\n",
-             ESC_[c.escopo], fonteregra_n(0), fonteregra_n(1), RX[c.regexModo],
+      static const char *const OU[3] = { "off", "tie-break", "strict" };
+      printf("[fonte] auto-play rules: order=%s(%d) scope=%s addons=%d plugins=%d regex=%s(%s) others=%s -> winner %s\n",
+             OU[ordemUso], fonteregra_ordem_n(), ESC_[c.escopo], fonteregra_n(0), fonteregra_n(1), RX[c.regexModo],
              fonteregra_regex_estado() > 0 ? "ok" : fonteregra_regex_estado() < 0 ? "invalid, ignored" : "empty",
              c.usarOutros ? "on" : "off", g >= 0 && g < 4 ? GR[g] : "remembered");
     } }
@@ -1320,6 +1330,7 @@ int stream_auto_pode_decidir(int preferida, int prefPendente, int prazoPassou, i
   FonteautoParcial p;
   long *pts; unsigned char *acima, *excl, *boa; int *ad;
   signed char *grp;
+  int *rk;
   int q, total, r, posPref = -1;
   FonteRegraCfg rc = regraCfg();
   memset(&p, 0, sizeof p);
@@ -1330,9 +1341,10 @@ int stream_auto_pode_decidir(int preferida, int prefPendente, int prazoPassou, i
   acima = calloc((size_t)total, 1); excl = calloc((size_t)total, 1);
   boa = calloc((size_t)total, 1); ad = malloc(sizeof *ad * (size_t)total);
   grp = calloc((size_t)total, 1);
-  if (!pts || !acima || !excl || !boa || !ad || !grp) {
+  rk = calloc((size_t)total, sizeof *rk);
+  if (!pts || !acima || !excl || !boa || !ad || !grp || !rk) {
     pthread_mutex_unlock(&verTrava);
-    free(pts); free(acima); free(excl); free(boa); free(ad); free(grp);
+    free(pts); free(acima); free(excl); free(boa); free(ad); free(grp); free(rk);
     return 0;
   }
   for (q = 0; q < total; q++) {
@@ -1344,6 +1356,7 @@ int stream_auto_pode_decidir(int preferida, int prefPendente, int prazoPassou, i
     boa[q] = (unsigned char)boaParaJa(&lista[i]);
     ad[q] = chave ? (int)(chave[i] >> 16) : 0;
     grp[q] = (signed char)grupoDe(i);
+    rk[q] = fonteregra_ordem_rank(lista[i].provedor);
   }
   pthread_mutex_unlock(&verTrava);
   p.modo = ajustes_fonte_primeira() ? FONTEAUTO_PRIMEIRA : FONTEAUTO_MELHOR;
@@ -1353,8 +1366,10 @@ int stream_auto_pode_decidir(int preferida, int prefPendente, int prazoPassou, i
   p.addon = ad; p.pendenteAntes = pendenteAntesCb;
   p.grupo = grp; p.instantaneo = instantaneo;
   p.pendenteGrupoMin = addons_pendente_grupo_min(pendenteGrupoCb, &rc);
+  p.rank = rk; p.ordemUso = ajustes_fonte_ordem_uso();
+  p.pendenteRankMin = p.ordemUso == FR_ORDEM_ESTRITA ? addons_pendente_grupo_min(pendenteRankCb, &rc) : 99;
   r = fonteauto_pode_decidir(&p);
-  free(pts); free(acima); free(excl); free(boa); free(ad); free(grp);
+  free(pts); free(acima); free(excl); free(boa); free(ad); free(grp); free(rk);
   return r;
 }
 
@@ -2845,6 +2860,18 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
     // AINDA HA ADDON RESPONDENDO, com fonte ja na lista (#221): a lista vai
     // crescer, e quem escolhe agora escolhe entre o que chegou. Na linha do
     // contexto, no acento, para nao disputar com o titulo nem com a ajuda.
+    // A ORDEM DOS ADD-ONS no automatico (2.0.2): "Ordem: A › B › C", na mesma
+    // linha, antes do "Buscando" (que so entra se sobrar largura).
+    if (ajustes_fonte_ordem_uso() && rw-360-cw > 120) {
+      char lista[FR_ORDEM_MAX * 24], tOrdem[sizeof lista + 32];
+      TxtLinha lo;
+      fonteregra_ordem_texto(lista, sizeof lista);
+      snprintf(tOrdem, sizeof tOrdem, "%s: %s", i18n("Ordem"), lista);
+      lo = txt_linha_corta(TXT_HERO_META,tOrdem,160,160,158,255,rw-360-cw);
+      if (cw > 0) gfx_cor((GfxRect){tx+cw-13.5f,oy+74+ch*.5f-2.5f,5,5},.5f,.5f,.5f,.49f,anim);
+      txt_desenhar_alpha(lo,tx+cw,oy+72,anim);
+      cw += (float)lo.w + 22.0f; ch = 18.0f;
+    }
     if (n > 0 && addons_ocupado() && rw-360-cw > 80) {
       if (cw > 0) gfx_cor((GfxRect){tx+cw-13.5f,oy+74+ch*.5f-2.5f,5,5},.5f,.5f,.5f,.49f,anim);
       txt_desenhar_alpha(txt_linha_corta(TXT_HERO_META,"Buscando mais fontes…",ai,(int)(ag*255),(int)(ab*255),255,rw-360-cw),tx+cw,oy+72,anim);

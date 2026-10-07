@@ -165,6 +165,35 @@ static void perfilEConta(void) {
   assert(fonteregra_n(0) == 1 && fonteregra_contem(0, "Cuevana ES"));
 }
 
+// 2.0.2: ordem dos add-ons (fonteregra_ordem_*): definir, rank, texto, e o
+// arquivo do perfil leva a ordem junto.
+static void ordem(void) {
+  const char *nomes[4] = { "Torrentio", "Cuevana ES", "torrentio", "AIOStreams" };
+  char t[200], n[FR_NOME_MAX];
+  assert(fonteregra_ordem_n() == 0);
+  assert(fonteregra_ordem_rank("Torrentio") == FR_ORDEM_SEM);
+  fonteregra_ordem_definir(nomes, 4);                       // "torrentio" repete: sem caixa
+  assert(fonteregra_ordem_n() == 3);
+  assert(fonteregra_ordem_rank("torrentio") == 0 && fonteregra_ordem_rank("Cuevana ES") == 1);
+  assert(fonteregra_ordem_rank("AIOStreams") == 2 && fonteregra_ordem_rank("Outro") == FR_ORDEM_SEM);
+  fonteregra_ordem_texto(t, sizeof t);
+  assert(!strcmp(t, "Torrentio \xE2\x80\xBA Cuevana ES \xE2\x80\xBA AIOStreams"));
+  // Recarrega do disco e o perfil restaura a ordem.
+  fonteregra_carregar();
+  assert(fonteregra_ordem_n() == 3 && fonteregra_ordem_nome(1, n, sizeof n) && !strcmp(n, "Cuevana ES"));
+  fonteregra_perfil_guardar(7);
+  fonteregra_ordem_definir(NULL, 0);
+  assert(fonteregra_ordem_n() == 0);
+  assert(fonteregra_perfil_restaurar(7) && fonteregra_ordem_n() == 3);
+  // A ordem nao entra no blob da conta (o oficial nao tem chave dela).
+  { char *saida = NULL;
+    fonteregra_mesclar("{\"stream_auto_play_regex\":{\"type\":\"string\",\"value\":\"x\"}}", &saida);
+    assert(!saida || !strstr(saida, "Cuevana"));
+    free(saida); }
+  fonteregra_ordem_definir(NULL, 0);
+  fonteregra_perfil_esquecer();
+}
+
 int main(void) {
   const char *d = getenv("NUVIO_DADOS");
   assert(d && *d);
@@ -174,6 +203,7 @@ int main(void) {
   regex();
   grupos();
   perfilEConta();
+  ordem();
   puts("fonteregra: ok");
   return 0;
 }

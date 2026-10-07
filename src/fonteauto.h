@@ -47,6 +47,19 @@ int fonteauto_fila_g(int modo, int total, int preferida, const long *pontos,
                      const unsigned char *acimaTeto, const unsigned char *excluida,
                      const signed char *grupo, int max, int *fila);
 
+// A MESMA FILA COM A ORDEM DOS ADD-ONS (fonteregra.h). `rank` = posicao do
+// add-on de cada fonte na ordem (FR_ORDEM_SEM = fora dela); NULL = sem ordem.
+// ordemUso: FR_ORDEM_NAO = a fila de sempre; FR_ORDEM_DESEMPATE = na mesma
+// faixa de qualidade (pontos / FONTEAUTO_FAIXA) e no mesmo grupo vence o add-on
+// mais cedo na ordem; FR_ORDEM_ESTRITA = dentro do grupo, as fontes dentro do
+// teto do add-on mais cedo na ordem vem todas antes das do seguinte (e as
+// acima do teto depois de todas as de dentro).
+#define FONTEAUTO_FAIXA 10000
+int fonteauto_fila_o(int modo, int total, int preferida, const long *pontos,
+                     const unsigned char *acimaTeto, const unsigned char *excluida,
+                     const signed char *grupo, const int *rank, int ordemUso,
+                     int max, int *fila);
+
 // Quantas candidatas o modo pode conferir numa escolha. PRIMEIRA = 1 sempre:
 // a garantia do #130 e que so a fonte que vai tocar e tocada.
 int fonteauto_tentativas(int modo, int pedidas);
@@ -92,6 +105,9 @@ typedef struct {
   const signed char *grupo;               // NULL = sem regras (todas no grupo 0)
   int pendenteGrupoMin;                   // melhor grupo que um pendente pode trazer
   int instantaneo;
+  const int *rank;                        // NULL = sem ordem dos add-ons
+  int ordemUso;                           // FR_ORDEM_*
+  int pendenteRankMin;                    // menor posicao entre os add-ons pendentes (99 = nenhum)
 } FonteautoParcial;
 int fonteauto_pode_decidir(const FonteautoParcial *p);
 

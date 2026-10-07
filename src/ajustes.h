@@ -145,6 +145,8 @@ int ajustes_fonte_prazo_ms(void);
 // "Usar os outros se nao houver" (1 = ligado).
 int ajustes_fonte_escopo(void);
 int ajustes_fonte_regex_modo(void);
+// "Usar a ordem" dos add-ons (FR_ORDEM_*); 0 tambem quando nao ha ordem.
+int ajustes_fonte_ordem_uso(void);
 int ajustes_fonte_usar_outros(void);
 // R9b: 0 Equilibrio, 1 Qualidade maxima, 2 Começar rápido / 0 Preferir, 1 Indiferente, 2 Evitar HDR e DV.
 int ajustes_fonte_prioridade(void);

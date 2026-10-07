@@ -175,6 +175,8 @@ static const char *uxSinonimos(int op) {
     case AJ_ENQUETES: return "enquete enquetes votacao votar pesquisa opiniao notificacao notificacoes aviso convite ilha relogio poll";
     case AJ_LEG_LINGUA2: return "idioma legenda secundaria segunda dupla dual second subtitle subtitles";
     case AJ_TRAILER_ZOOM_TPK: return "trailer zoom barras pretas tarja ampliar recorte tela preta samsung experimental";
+    case AJ_FONTE_ORDEM: case AJ_FONTE_ORDEM_USO:
+      return "ordem ordenar subir descer prioridade add-on addon plugin primeiro desempate estrita auto-play autoplay automatico order priority tie strict";
     case AJ_FONTE_ESCOPO: case AJ_FONTE_ADDONS_PERM: case AJ_FONTE_PLUGINS_PERM: case AJ_FONTE_OUTROS:
       return "auto-play autoplay automatico fonte addon add-on plugin permitidos permitido escopo idioma espanhol spanish preferidos allowed addons plugins source scope";
     case AJ_FONTE_REGEX: case AJ_FONTE_REGEX_PADRAO: case AJ_FONTE_REGEX_MODELO:
@@ -233,6 +235,7 @@ static const char *uxCaminhoAntigo(int op) {
     case AJ_FONTE_HDR: case AJ_FONTE_PRAZO: case AJ_FONTE_TEXTO: case AJ_TAM_MAX: case AJ_TAM_MIN:
     case AJ_FONTE_ESCOPO: case AJ_FONTE_ADDONS_PERM: case AJ_FONTE_PLUGINS_PERM: case AJ_FONTE_OUTROS:
     case AJ_FONTE_REGEX: case AJ_FONTE_REGEX_PADRAO: case AJ_FONTE_REGEX_MODELO:
+    case AJ_FONTE_ORDEM: case AJ_FONTE_ORDEM_USO:
     case AJ_SELOS_CORES: case AJ_SELOS_PACOTE: case AJ_SELOS_PACOTE_ADD: case AJ_SELOS_PACOTE_REM:
       return "Reprodução";
     case AJ_BUSCA_CINEMETA: return "Busca";

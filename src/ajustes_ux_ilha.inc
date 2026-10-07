@@ -1059,6 +1059,69 @@ static void desenhaFolhaPermitidos(void) {
   }
 }
 
+// "Ordem dos add-ons" (2.0.2): a lista na ordem do automatico, com as setas de
+// subir e descer em cada linha (o arranjo da folha de editar abas do social).
+// "Sem ordem" no topo apaga a ordem.
+static void desenhaFolhaOrdem(void) {
+  int i, n;
+  GfxRect m = { 460, 90, 1000, 900 };
+  float topo, base, y, alvo;
+  char sub[200], k[160];
+  frMontar();
+  n = frN + 1;
+  ajVeuModal();
+  ajCentraModal(&m);
+  ajIlha(m, 36, 1, 1);
+  snprintf(sub, sizeof sub, "%s", i18n("Esquerda e direita escolhem subir ou descer; OK move. Quem está fora da ordem toca depois de todos."));
+  snprintf(k, sizeof k, "%s · %s", i18n("Fontes e addons"), i18n("Escolha da fonte"));
+  topo = ajCabecalhoFolha(m, k, "Ordem dos add-ons", sub, 0, 1);
+  base = m.y + m.h - 96.0f;
+  alvo = frFoco * 84.0f - (base - topo - 80.0f) * 0.5f;
+  if (alvo > n * 84.0f - (base - topo)) alvo = n * 84.0f - (base - topo);
+  if (alvo < 0) alvo = 0;
+  gfx_recorte(m.x, topo, m.w, base - topo);
+  y = topo - alvo;
+  for (i = 0; i < n; i++, y += 84) {
+    GfxRect r = { m.x + 18, y, m.w - 36, 80 };
+    int f = i == frFoco;
+    if (y + 80 < topo || y > base) continue;
+    if (f) ajFocoLinha(r, 22, 1, 1);
+    if (i == 0) {
+      TxtLinha t = ajTxtC(TXT_AJ_ROTULO, i18n("Sem ordem"), r.w - 120);
+      ajNeutro((GfxRect){ r.x + 22, y + 16, 48, 48 }, 14, 0.09f, 0.141f, 0.149f, 0.173f, 1);
+      ajIcone("aj_arrow-up-down", r.x + 22 + 14, y + 16 + 14, 20, 0.85f);
+      txt_desenhar_alpha(t, r.x + 22 + 48 + 16, y + 40 - t.h * 0.5f, f ? 1.0f : 0.86f);
+    } else {
+      const char *nome = frNome[i - 1], *apoio = frApoio[i - 1];
+      float bw = 56.0f, bx = r.x + r.w - 22 - bw * 2 - 8.0f, tw = bx - (r.x + 22 + 48 + 16) - 24;
+      int c;
+      char pos[16];
+      TxtLinha t = txt_linha_corta(TXT_AJ_ROTULO, nome, AJ_TX, tw);
+      TxtLinha cap = ajTxtC(TXT_ILHA_GENERO, apoio[0] ? i18n(apoio) : "", tw);
+      float ty = y + 40 - (t.h + (apoio[0] ? 4 + cap.h : 0)) * 0.5f;
+      snprintf(pos, sizeof pos, "%d", i);
+      ajRosto(nome, r.x + 22, y + 16, 48, 14, 0.09f, 0.85f, TXT_ILHA_INICIAL);
+      txt_desenhar_alpha(t, r.x + 22 + 48 + 16, ty, f ? 1.0f : 0.86f);
+      if (apoio[0]) txt_desenhar_alpha(cap, r.x + 22 + 48 + 16, ty + t.h + 4, 0.42f);
+      for (c = 0; c < 2; c++) {
+        GfxRect b = { bx + c * (bw + 8.0f), y + 12, bw, bw };
+        int bf = f && frCol == c, sem = (c == 0 && i == 1) || (c == 1 && i == frN);
+        if (bf) ajPilulaAcento(b, 28, 1);
+        else ajNeutro(b, 28, 0.08f, AJ_CHIP_SOL, 1);
+        if (bf) ajIconeT(c ? "aj_arrow-down" : "aj_arrow-up", b.x + 14, b.y + 14, 28, sem ? 0.3f : 1.0f);
+        else ajIcone(c ? "aj_arrow-down" : "aj_arrow-up", b.x + 14, b.y + 14, 28, sem ? 0.3f : 0.85f);
+      }
+    }
+  }
+  gfx_sem_recorte();
+  { AjDica d[2] = { { "OK", "Mover" }, { "Voltar", "Fechar" } };
+    ajDicas(d, 2, m.x + 44, m.y + m.h - 36, m.w - 88, 1); }
+  if (uxAviso[0]) {
+    TxtLinha t = ajTxtC(TXT_AJ_SUB, uxAviso, 1100);
+    txt_desenhar_alpha(t, (NV_VTELA_W - t.w) * 0.5f, NV_VTELA_H - 50, 0.8f);
+  }
+}
+
 // --- PLUGINS (pluginsui.c, F09) NO MESMO ARRANJO ----------------------------------
 // Indice com Contas aberta, a folha com o liga/desliga, "Adicionar" e os
 // repositorios (ou os scrapers de um), e o inspetor do item focado. Sem motor

@@ -559,13 +559,29 @@ int main(void) {
   { int vz = 0, k; for (k = 0; k < AJ_N_TELA; k++) if (TELA[k].tipo == IT_OPC && TELA[k].op == AJ_DV_MKV) vz++; assert(vz == 1); }
   // 2.0.2: "Enviar histórico para a conta Nuvio" and "Recursos sociais". Per PROFILE on this
   // TV (ajustes-p<N>.txt) but never in the account blob; default ON; last; once on screen.
-  assert(AJ_HIST_CONTA == AJ_FONTE_ESCOPO + 14 && AJ_SOCIAL == AJ_FONTE_ESCOPO + 15 && AJ_SOCIAL == AJ_N - 1);
+  assert(AJ_HIST_CONTA == AJ_FONTE_ESCOPO + 14 && AJ_SOCIAL == AJ_FONTE_ESCOPO + 15);
   assert(!strcmp(CHAVE[AJ_HIST_CONTA], "histContaLocal") && !strcmp(CHAVE[AJ_SOCIAL], "socialLocal"));
   assert(OPCOES[AJ_HIST_CONTA].n == 2 && OPCOES[AJ_SOCIAL].n == 2 && valorPadrao[AJ_HIST_CONTA] == 0 && valorPadrao[AJ_SOCIAL] == 0);
   assert(ajustes_hist_conta() && ajustes_social());
   assert(somenteDesteAparelho(AJ_HIST_CONTA) && dePerfil(AJ_HIST_CONTA) && somenteDesteAparelho(AJ_SOCIAL) && dePerfil(AJ_SOCIAL));
   assert(somenteDesteAparelho(AJ_CW_FONTE) && dePerfil(AJ_CW_FONTE) && somenteDesteAparelho(AJ_SALVOS_DEST) && dePerfil(AJ_SALVOS_DEST));
   { int a = 0, b = 0, k; for (k = 0; k < AJ_N_TELA; k++) if (TELA[k].tipo == IT_OPC) { a += TELA[k].op == AJ_HIST_CONTA; b += TELA[k].op == AJ_SOCIAL; } assert(a == 1 && b == 1); }
+  // 2.0.2: ordem dos add-ons no automatico: acao + "Usar a ordem" (Nao | Para desempatar | Ordem estrita).
+  // Por perfil, so desta TV, logo depois de AJ_SOCIAL, uma vez na tela, achavel.
+  assert(AJ_FONTE_ORDEM == AJ_FONTE_ESCOPO + 16 && AJ_FONTE_ORDEM_USO == AJ_FONTE_ESCOPO + 17 && AJ_FONTE_ORDEM == AJ_SOCIAL + 1);
+  assert(!strcmp(CHAVE[AJ_FONTE_ORDEM], "-fonteOrdem") && !strcmp(CHAVE[AJ_FONTE_ORDEM_USO], "fonteOrdemUsoLocal"));
+  assert(OPCOES[AJ_FONTE_ORDEM].tipo == OP_ACAO && OPCOES[AJ_FONTE_ORDEM_USO].n == 3 && valorPadrao[AJ_FONTE_ORDEM_USO] == 0);
+  assert(!strcmp(OPCOES[AJ_FONTE_ORDEM_USO].valores[2], "Ordem estrita"));
+  assert(dePerfil(AJ_FONTE_ORDEM_USO) && !dePerfil(AJ_FONTE_ORDEM) && ajustes_fonte_ordem_uso() == 0);
+  { int a = 0, b = 0, k; for (k = 0; k < AJ_N_TELA; k++) if (TELA[k].tipo == IT_OPC) { a += TELA[k].op == AJ_FONTE_ORDEM; b += TELA[k].op == AJ_FONTE_ORDEM_USO; } assert(a == 1 && b == 1); }
+  { const char *ordem[2] = { "A", "B" }; int antes = valor[AJ_FONTE_ORDEM_USO];
+    valor[AJ_FONTE_ORDEM_USO] = 2;
+    assert(ajustes_fonte_ordem_uso() == 0);       /* sem ordem definida, o modo nao age */
+    fonteregra_ordem_definir(ordem, 2);
+    assert(ajustes_fonte_ordem_uso() == 2);
+    fonteregra_ordem_definir(NULL, 0);
+    valor[AJ_FONTE_ORDEM_USO] = antes; }
+  assert(indiceResultado(AJ_FONTE_ORDEM, ajustes_buscar("ordem add-ons", resultados, AJ_N)) >= 0);
   // #303: "Continuar na escolha de perfil". Local, last, default ON (= today), once on screen, findable.
   assert(AJ_PS_CONTINUAR == AJ_CW_RETIDO_TAMBEM + 1 && AJ_PS_CONTINUAR == AJ_FONTE_ESCOPO + 11);
   assert(!strcmp(CHAVE[AJ_PS_CONTINUAR], "psContinuarLocal") && OPCOES[AJ_PS_CONTINUAR].n == 2 && valorPadrao[AJ_PS_CONTINUAR] == 0 && ajustes_ps_continuar());

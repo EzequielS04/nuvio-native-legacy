@@ -37,6 +37,10 @@ enum { FR_REGEX_DESLIGADA = 0, FR_REGEX_EXIGIR = 1, FR_REGEX_PREFERIR = 2 };
 #define FR_NOMES_MAX 48
 #define FR_NOME_MAX  96
 #define FR_REGEX_MAX 500          // o oficial (web) corta em 500
+#define FR_ORDEM_MAX 96           // nomes na ordem dos add-ons (add-ons e plugins juntos)
+#define FR_ORDEM_SEM 98           // posicao de quem nao esta na ordem: depois de todos
+// "Usar a ordem" (AJ_FONTE_ORDEM_USO): o indice e o gravado em ajustes.txt.
+enum { FR_ORDEM_NAO = 0, FR_ORDEM_DESEMPATE = 1, FR_ORDEM_ESTRITA = 2 };
 
 typedef struct { int escopo, regexModo, usarOutros; } FonteRegraCfg;
 
@@ -55,6 +59,17 @@ int  fonteregra_nome(int plugin, int k, char *dst, size_t tam);
 int  fonteregra_contem(int plugin, const char *nome);   // na lista (sem caixa)
 int  fonteregra_alternar(int plugin, const char *nome); // estado novo (1 = na lista)
 void fonteregra_limpar(int plugin);
+
+// --- a ordem dos add-ons ----------------------------------------------------
+// Uma fila de NOMES (add-ons e plugins juntos), so local por perfil: o oficial
+// nao tem chave equivalente (conferido nas chaves stream_auto_play_*).
+int  fonteregra_ordem_n(void);
+int  fonteregra_ordem_nome(int k, char *dst, size_t tam);
+void fonteregra_ordem_definir(const char *const *nomes, int n);
+// Posicao do nome na ordem (0 = primeiro); FR_ORDEM_SEM se nao esta nela.
+int  fonteregra_ordem_rank(const char *nome);
+// "A > B > C" ("" sem ordem), com o sinal de ">" tipografico.
+void fonteregra_ordem_texto(char *dst, size_t tam);
 
 // --- a regra ----------------------------------------------------------------
 // Grupo da fonte (ver o topo). `nome` = Stream.provedor; `texto` = o que a

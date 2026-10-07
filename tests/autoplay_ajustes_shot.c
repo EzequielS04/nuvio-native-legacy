@@ -113,6 +113,19 @@ int main(int argc, char **argv) {
   captura(nome, w);
   ajustes_teste_permitidos(0, 0);
 
+  // 3b) A folha da ordem dos add-ons (2.0.2): Torrentio primeiro, depois o
+  // Cuevana; os outros dois estao fora da ordem. Foco no Cuevana.
+  { const char *ordem[2] = { "Torrentio Latino", "Cuevana ES" };
+    fonteregra_ordem_definir(ordem, 2); }
+  ajustes_teste_permitidos(3, 2);
+  snprintf(nome, sizeof nome, "%s-5-ordem.png", saida);
+  captura(nome, w);
+  ajustes_teste_permitidos(0, 0);
+  assert(ajustes_teste_focar_opcao(ajustes_teste_op_por_chave("-fonteOrdem")));
+  snprintf(nome, sizeof nome, "%s-6-ordem-linha.png", saida);
+  captura(nome, w);
+  fonteregra_ordem_definir(NULL, 0);
+
   // 4) Regex invalida: a linha avisa e o automatico a ignora.
   fonteregra_definir_regex("(ESP|Latino");
   assert(ajustes_teste_focar_opcao(opPadrao));
