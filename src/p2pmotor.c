@@ -91,10 +91,21 @@ static P2pmSondaFn sondaFn = sondaReal;
 // Percorre `p` sem seguir links. apagar=1 remove tudo (inclusive `p`);
 // apagar=0 so soma os blocos REAIS (o arquivo do torrent e esparso: o
 // tamanho mente).
+// #202: no ARM de 32 bits sem _FILE_OFFSET_BITS=64 o lstat de um arquivo
+// acima de 2 GB falha (EOVERFLOW): o video do torrent nao era contado nem
+// apagado, e o disco da TV enchia sessao apos sessao. O tpk.sh compila este
+// arquivo com 64 bits; se o lstat falhar mesmo assim, apagar tenta o unlink.
+#if defined(NV_TPK) && defined(__arm__)
+_Static_assert(sizeof(off_t) == 8, "p2pmotor.c precisa de -D_FILE_OFFSET_BITS=64 (#202)");
+#endif
 static uint64_t percorrer(const char *p, int apagar, int fundo) {
   struct stat st;
   uint64_t soma = 0;
-  if (fundo > 16 || lstat(p, &st) != 0) return 0;
+  if (fundo > 16) return 0;
+  if (lstat(p, &st) != 0) {
+    if (apagar && fundo > 0) unlink(p);
+    return 0;
+  }
   if (S_ISDIR(st.st_mode)) {
     DIR *d = opendir(p);
     struct dirent *e;
