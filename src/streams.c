@@ -717,7 +717,12 @@ static int nivelHdr(const Stream *s) {
   if (s->dolbyVision) {
     int toca = ajustes_dolby_vision() && telaDv != 0;
 #ifndef NV_ANDROID
+#ifdef NV_TPK
     toca = toca && (s->mp4 || strstr(s->url, ".mp4"));
+#else
+    // LG: DV em MKV so com o ajuste "Dolby Vision em MKV" ligado.
+    toca = toca && (s->mp4 || strstr(s->url, ".mp4") || ajustes_dv_mkv());
+#endif
 #endif
     if (perfil5(s)) { if (nivel < 1) nivel = 1; }
     else if (toca) nivel = 4;
@@ -1966,7 +1971,8 @@ static int grupoRes(const Stream *s) {
 static void rotuloQualidade(const Stream *s, char *res, size_t nr, char *faixa, size_t nf, int *hdr) {
   static const char *const RES[FOLHA_RES] = { "4K", "1080p", "720p", "SD" };
   uint64_t b = s->badges;
-  snprintf(res, nr, "%s", RES[grupoRes(s) / 2]);
+  if (s->altura <= 0 && !(b & (badges_bit("r-4k") | badges_bit("r-1080") | badges_bit("r-720")))) snprintf(res, nr, "?");
+  else snprintf(res, nr, "%s", RES[grupoRes(s) / 2]);
   *hdr = ehHdr(s);
   if (s->dolbyVision || (b & (badges_bit("v-dv") | badges_bit("a-atmos-dv") | badges_bit("a-truehd-dv") | badges_bit("a-dd-dv")))) snprintf(faixa, nf, "DV");
   else if (b & badges_bit("v-hdr10plus")) snprintf(faixa, nf, "HDR10+");
@@ -3203,6 +3209,14 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
         // real choice but stops calling it the best for this TV.
         mx+=16+caixaAlta(fitPesada(i) ? "Escolha automática" : "Melhor para esta TV",
                          ai,(int)(ag*255),(int)(ab*255),mx+16,cy,anim)+18;
+        // #284: no modo "do addon" a fileira de selos nao existe e a linha
+        // nao dizia a resolucao; ela vai junto da marca ("4K · HDR10").
+        if(ajustes_fonte_texto_addon()){
+          char rs[16], fx[16], rq[40]; int hd;
+          rotuloQualidade(s,rs,sizeof rs,fx,sizeof fx,&hd);
+          snprintf(rq,sizeof rq,"%s · %s",rs,fx);
+          mx+=caixaAlta(rq,ai,(int)(ag*255),(int)(ab*255),mx,cy,anim)+18;
+        }
       }
       // StreamFit (F03): "above the connection" is a condition of this source on
       // this network, not a defect: champagne-grey like the HDR label, after any
