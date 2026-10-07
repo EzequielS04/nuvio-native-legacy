@@ -65,6 +65,17 @@ typedef struct {
 } CtxExtra;
 void ctx_abrir_social(const CatItem *titulo, const CtxExtra *extras, int n);
 int  ctx_pediu_extra(void);
+// A LINHA EXPANDIDA DO PAINEL DE SALVOS (dono, 06/10): o menu da lista de Salvos
+// nao flutua — a linha em foco se abre DENTRO do painel (acordeao). ctx_inline_t
+// e a mola 0..1 (0 = nao e o modo inline); ctx_inline_altura a altura da linha
+// aberta (largura w); ctx_inline_desenhar desenha, dentro da linha em (x, y), o
+// logo sobre a faixa de arte (de altura faixaH, que e de quem chama) e embaixo
+// a meta, notas, sinopse e as pilulas de acao, tudo com o alfa `a`.
+// ctx_inline_pedir(1) ANTES de ctx_abrir_salvo liga o modo (so a lista em linhas).
+void  ctx_inline_pedir(int on);
+float ctx_inline_t(void);
+float ctx_inline_altura(float w, float faixaH);
+void  ctx_inline_desenhar(float x, float y, float w, float faixaH, float a);
 // 1 enquanto o menu aberto e o do painel: app.c o desenha POR CIMA do painel e
 // entrega a ele as teclas que chegariam ao painel.
 int  ctx_do_painel(void);

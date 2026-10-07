@@ -78,4 +78,8 @@ float ctxinfo_desenhar(const CatItem *ci, const CtxInfoEstado *st,
 // "friends: ...", "schedule: ...", "badges: saved watched"). Para os testes;
 // os rotulos sao em ingles para nao parecerem texto de tela.
 void ctxinfo_texto(const CatItem *ci, const CtxInfoEstado *st, char *dst, size_t cap);
+// Versao compacta (linha expandida do painel de Salvos): meta, notas e sinopse
+// em duas linhas, em (x, y) com largura w. Devolve a altura; `desenhar` 0 so mede.
+float ctxinfo_compacto(const CatItem *ci, const CtxInfoEstado *st, float x, float y,
+                       float w, float ca, int desenhar);
 #endif
