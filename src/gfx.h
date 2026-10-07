@@ -406,7 +406,8 @@ GLuint gfx_desfocado(GLuint src, const char *chave);
 int gfx_desfocado_px(GLuint tex, float u, float v, unsigned char rgb[3]);
 int  gfx_snap_ok(void);        // 1 quando o FBO do snapshot existe
 void gfx_snap_comecar(void);   // redireciona o desenho para o snapshot
-void gfx_snap_terminar(void);  // volta para a tela
+void gfx_snap_terminar(void);   // volta para a tela
+int  gfx_snap_vazio(int *maxCanal);   // 1 = o snapshot (alvo ligado) saiu preto
 void gfx_snap_desenhar(void);  // pinta o snapshot ocupando a tela toda
 void gfx_snap_encerrar(void);
 int  gfx_snap_ativo(void);     // 1 enquanto o desenho vai para o snapshot

@@ -3099,6 +3099,28 @@ void gfx_snap_comecar(void) {
   GFX_OUTRO_FIM();
 }
 
+// 1 se o snapshot (ainda ligado como alvo) saiu PRETO nas faixas de baixo da
+// metade esquerda — onde ha home por baixo do painel. Tres linhas de 1100 px
+// lidas do FBO: uns 13 KB, so quando a copia e (re)pintada. Existe porque a
+// copia parada do painel de Salvos saiu preta na TCL (Android) sem erro de GL:
+// o sintoma do dono e a home sumida atras do Social.
+int gfx_snap_vazio(int *maxCanal) {
+  static unsigned char lin[1100 * 4];
+  int k, i, mx = 0;
+  if (!snapFbo || !snapAtivo) return 0;
+  for (k = 0; k < 3; k++) {
+    int y = snapH * (k == 0 ? 3 : k == 1 ? 5 : 7) / 10;
+    glReadPixels(0, y, 1100 < snapW ? 1100 : snapW, 1, GL_RGBA, GL_UNSIGNED_BYTE, lin);
+    for (i = 0; i < 1100 * 4; i += 4) {
+      if (lin[i] > mx) mx = lin[i];
+      if (lin[i + 1] > mx) mx = lin[i + 1];
+      if (lin[i + 2] > mx) mx = lin[i + 2];
+    }
+  }
+  if (maxCanal) *maxCanal = mx;
+  return mx <= 3;
+}
+
 void gfx_snap_terminar(void) {
   if (!snapFbo || !snapAtivo) return;
   GFX_OUTRO_INI();

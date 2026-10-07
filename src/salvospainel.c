@@ -399,15 +399,20 @@ static int temPedidoPerfil;
 // AS DUAS PORTAS PARA GENTE NOVA (dono, 06/10: "vamos melhorar esses 2
 // botoes"): cartoes com icone num disco, nome e o que cada uma faz — eram
 // chips de 56 iguais no fim da lista. Abrem a aba logo abaixo dos pedidos.
-#define SPS_H_PORTA    104.0f
+#define SPS_H_PORTA     88.0f
 // "COMO VOCE APARECE" e "QUEM VE O QUE VOCE ASSISTE" (dono, 06/10: "precisa
 // de destaque"): a previa do cartao que os outros veem e o controle de tres
 // segmentos, cada um com a frase do que ele faz.
-#define SPS_H_PREVIA   156.0f
-#define SPS_H_ALCANCE  176.0f
+#define SPS_H_PREVIA   128.0f
+#define SPS_H_ALCANCE  156.0f
 // CONTAS LIGADAS (Trakt, Simkl, Letterboxd): cada servico um cartao com a
 // marca, a cor dele quando ligado e a animacao de ligar (identAnim*).
 #define SPS_H_CONTA    112.0f
+// CONTAS LIGADAS EM UMA FILEIRA (06/10, "tudo mais junto"): tres ladrilhos
+// lado a lado e, embaixo, a frase do ladrilho em foco. A altura e da FILEIRA
+// e fica na primeira linha do grupo; as outras duas valem 0 (socialAlt).
+#define SPS_H_CONTAS   150.0f
+#define SPS_CONTA_H     96.0f
 // Alturas dos dois blocos de texto que NAO sao linha e por isso nao recebem
 // foco: o enunciado da pergunta e a explicacao do estado vazio. Sao constantes
 // e nao medidas porque a rolagem precisa delas ANTES do desenho — e as duas
@@ -963,6 +968,7 @@ static int perguntandoAlcance(void) {
   return aba == SP_ABA_SOCIAL && nSocial > 0 && social[0].tipo == SPS_ALC_0;
 }
 
+static int spsConta(int t) { return t == SPS_IDENT || t == SPS_SIMKL || t == SPS_LETTERBOXD; }
 static float socialAlt(int i) {
   if (i < 0 || i >= nSocial) return 0.0f;
   switch (social[i].tipo) {
@@ -977,9 +983,10 @@ static float socialAlt(int i) {
     case SPS_APARECER:  return SPS_H_APARECER;
     case SPS_ALCANCE:   return SPS_H_ALCANCE;
     case SPS_NOME:      return SPS_H_PREVIA;
-    case SPS_IDENT:     return SPS_H_CONTA;
-    case SPS_SIMKL:     return SPS_H_CONTA;
-    case SPS_LETTERBOXD: return SPS_H_CONTA;
+    case SPS_IDENT:
+    case SPS_SIMKL:
+    case SPS_LETTERBOXD:
+      return (i > 0 && spsConta(social[i - 1].tipo)) ? 0.0f : SPS_H_CONTAS;
     default:            return SPS_H_CONSENT;
   }
 }
@@ -993,7 +1000,6 @@ static float socialAlt(int i) {
 // Quem desenha tem de olhar o tipo para saber se escreve o rotulo — um vao
 // mudo com o cabecalho das sugestoes por cima seria pior que vao nenhum.
 static float socialTopo(void);
-static int spsConta(int t) { return t == SPS_IDENT || t == SPS_SIMKL || t == SPS_LETTERBOXD; }
 static float socialAntes(int i) {
   // A PRIMEIRA SECAO DA LISTA tem 6 px de ar, e nao 22 (ver SP_SECAO_AR1).
   float sh = (i == 0 && socialTopo() <= 0.0f) ? SP_SECAO_H1 : SP_SECAO_H;
@@ -1011,7 +1017,7 @@ static float socialAntes(int i) {
   if (social[i].tipo == SPS_APARECER) return SPS_SEP_APARECER;
   // As secoes de ajuste ganham rotulo: "Voce para os outros" antes da previa
   // e "Contas ligadas" antes do primeiro servico.
-  if (social[i].tipo == SPS_NOME) return sh;
+  if (social[i].tipo == SPS_NOME) return 0.0f;   // o cartao abre a aba, sem rotulo
   if (spsConta(social[i].tipo)) return (i == 0 || !spsConta(social[i - 1].tipo)) ? sh : 0.0f;
   // As portas abrem a aba quando nao ha pedido; depois dos pedidos, um vao.
   if (social[i].tipo == SPS_ENCONTRAR) return i == 0 ? 0.0f : SPS_SEP_APARECER * 1.6f;
@@ -1026,7 +1032,7 @@ static float socialTopo(void) {
   if (perguntandoAlcance()) return SPS_ALC_TOPO;
   // Com pedido esperando, o texto de "nenhuma recomendacao" sai: os pedidos
   // sao a primeira coisa da aba, e o codigo continua em "Adicionar um amigo".
-  return nRecs == 0 && nPeds == 0 ? SPS_VAZIO_TOPO : 0.0f;
+  return 0.0f;   // a aba vazia nao tem texto proprio: o cartao e o botao dizem o que fazer
 }
 
 // Copia a lista de recomendacoes para dentro do painel. COPIA, e nao ponteiro:
@@ -1124,6 +1130,14 @@ static void reconstruirSocial(void) {
     if (recomenda_sugestao(i, &sugs[nSugs])) nSugs++;
     else break;
 
+#if SP_V2
+  // VOCE PARA OS OUTROS: a previa de como os amigos te veem e o nivel de
+  // quem ve o que voce assiste, num cartao so, ANTES dos pedidos.
+  if (nSocial + 1 < SP_SOCIAL_MAX) {
+    social[nSocial].tipo = SPS_NOME; social[nSocial].idx = 0; nSocial++;
+    social[nSocial].tipo = SPS_ALCANCE; social[nSocial].idx = 0; nSocial++;
+  }
+#endif
   // OS PEDIDOS ABREM A LISTA: sao a unica coisa da aba que espera uma
   // resposta de quem esta olhando.
   { int np = recomenda_n_pedidos();
@@ -1132,22 +1146,10 @@ static void reconstruirSocial(void) {
     for (i = 0; i < nPeds && nSocial < SP_SOCIAL_MAX; i++) {
       social[nSocial].tipo = SPS_PEDIDO; social[nSocial].idx = (short)i; nSocial++;
     } }
-  // AS DUAS PORTAS LOGO DEPOIS DOS PEDIDOS (dono, 06/10): eram dois chips no
-  // fim da lista, abaixo de todos os amigos. Achar gente nova e a acao da
-  // aba; quem tem o codigo na mao nao precisa rolar ate o fim.
-  if (nSocial + 1 < SP_SOCIAL_MAX) {
+  // UM BOTAO SO para gente nova: busca por nome/@apelido e codigo de amigo.
+  if (nSocial < SP_SOCIAL_MAX) {
     social[nSocial].tipo = SPS_ENCONTRAR; social[nSocial].idx = 0; nSocial++;
-    social[nSocial].tipo = SPS_ADICIONAR; social[nSocial].idx = 0; nSocial++;
   }
-#if SP_V2
-  // VOCE PARA OS OUTROS, em destaque (dono, 06/10): a previa de como os
-  // amigos te veem e o nivel de quem ve o que voce assiste, antes do
-  // conteudo — eram duas linhas de texto cinza no fim da aba.
-  if (nSocial + 1 < SP_SOCIAL_MAX) {
-    social[nSocial].tipo = SPS_NOME; social[nSocial].idx = 0; nSocial++;
-    social[nSocial].tipo = SPS_ALCANCE; social[nSocial].idx = 0; nSocial++;
-  }
-#endif
   for (i = 0; i < nRecs && nSocial < SP_SOCIAL_MAX; i++) {
     social[nSocial].tipo = SPS_REC; social[nSocial].idx = (short)i; nSocial++;
   }
@@ -1170,6 +1172,10 @@ static void reconstruirSocial(void) {
   // que so faz sentido olhando para esta lista ("quem me ve?"), e quem quiser
   // mudar de ideia vai procura-lo onde a pergunta foi feita. A alternativa em
   // Ajustes esta descrita no relatorio; as duas podem coexistir.
+  // O interruptor fica ANTES das contas: "Contas ligadas" fecha a aba.
+  if (nSocial < SP_SOCIAL_MAX) {
+    social[nSocial].tipo = SPS_APARECER; social[nSocial].idx = 0; nSocial++;
+  }
 #if SP_V2
   // O TRAKT NESTE PERFIL (F08). Sem servidor novo, ou sem as duas contas no
   // aparelho e nada ligado, a linha nao existe: nao ha o que oferecer.
@@ -1187,9 +1193,6 @@ static void reconstruirSocial(void) {
     social[nSocial].tipo = SPS_LETTERBOXD; social[nSocial].idx = 0; nSocial++;
   }
 #endif
-  if (nSocial < SP_SOCIAL_MAX) {
-    social[nSocial].tipo = SPS_APARECER; social[nSocial].idx = 0; nSocial++;
-  }
 }
 
 static void reconstruirAtividade(void) {
@@ -1603,6 +1606,7 @@ static float topoDe(int i) {
   // erraria a partir dali e a rolagem pararia o foco meio fora da janela.
   if (aba == SP_ABA_SOCIAL) {
     int k;
+    while (i > 0 && i < nSocial && spsConta(social[i].tipo) && spsConta(social[i - 1].tipo)) i--;
     y = socialTopo();
     for (k = 0; k < i && k < nSocial; k++)
       y += socialAntes(k) + socialAlt(k) + SPS_GAP;
@@ -2068,6 +2072,13 @@ void spainel_evento(const SDL_Event *e) {
     if (alcCol > 0) { alcCol--; return; }
   }
 #endif
+  // As contas ligadas sao uma fileira: ← → andam entre os ladrilhos.
+  if ((k == SDLK_LEFT || k == SDLK_RIGHT) && aba == SP_ABA_SOCIAL && foco >= 0 && foco < nSocial &&
+      spsConta(social[foco].tipo)) {
+    int d = k == SDLK_RIGHT ? 1 : -1;
+    if (foco + d >= 0 && foco + d < nSocial && spsConta(social[foco + d].tipo)) { foco += d; return; }
+    if (k == SDLK_RIGHT) return;
+  }
   if (k == SDLK_LEFT) {
     if (temAbas() && foco == SP_FOCO_ABAS && aba != SP_ABA_SALVOS) {
       trocarAba(proximaAba(aba, -1)); return;
@@ -2089,6 +2100,13 @@ void spainel_evento(const SDL_Event *e) {
     return;
   }
   if (k == SDLK_DOWN || k == SDLK_UP) { pedCol = 0; alcCol = -1; }
+  // Dentro da fileira de contas, cima e baixo SAEM dela (a ordem do D-pad e a
+  // do desenho: os tres ladrilhos sao uma linha).
+  if ((k == SDLK_DOWN || k == SDLK_UP) && aba == SP_ABA_SOCIAL && foco > 0 && foco < nSocial &&
+      spsConta(social[foco].tipo)) {
+    if (k == SDLK_UP) { while (foco > 0 && spsConta(social[foco - 1].tipo)) foco--; }
+    else { while (foco + 1 < nSocial && spsConta(social[foco + 1].tipo)) foco++; }
+  }
   if (k == SDLK_DOWN) {
     if (foco == SP_FOCO_ABAS) {
       if (temBarra()) { foco = SP_FOCO_BARRA; if (barraFoco >= nChips()) barraFoco = 0; }
@@ -2294,7 +2312,7 @@ void spainel_atualizar(float dt, Uint32 agora) {
     // A ALTURA DA LINHA FOCADA, e nao SP_POSTER_H sempre: na aba Social a linha
     // pode ter 84, 112 ou 138px, e usar a maior empurraria a rolagem 54px alem
     // do necessario num interruptor de 104.
-    base = topo + (aba == SP_ABA_SOCIAL ? socialAlt(foco)
+    base = topo + (aba == SP_ABA_SOCIAL ? (spsConta(social[foco].tipo) ? SPS_H_CONTAS : socialAlt(foco))
                  : aba == SP_ABA_ATIVIDADE ? SPA_H
                  : aba == SP_ABA_AVISOS ? avisos_lista_altura_linha(foco, foco)
                  : linhas[foco].lh);
@@ -3165,7 +3183,7 @@ static void desenhaAlcancePergunta(float dx, float y0, float a) {
             243, 242, 239, x, y, SP_INTERNO, 27.0f, a * 0.42f, 2);
 }
 
-static void desenhaSocialVazio(float dx, float y0, float a) {
+__attribute__((unused)) static void desenhaSocialVazio(float dx, float y0, float a) {
   float x = SP_X + dx + SP_PAD;
   float y = y0 + 8.0f;
   const char *cod = recomenda_meu_codigo();
@@ -3445,22 +3463,16 @@ static void desenhaSecaoAcento(float x, float y, const char *rotulo, float a, in
 static void desenhaPorta(int i, float dx, float y, float alt, float a) {
   float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f, v = focoVisual(f);
   float ar, ag, ab, tinta = ajustes_acento_tinta(NULL, NULL, NULL);
-  int enc = social[i].tipo == SPS_ENCONTRAR, np = recomenda_n_pedidos();
+  int np = recomenda_n_pedidos();
   GfxRect r = { SP_X + dx + SP_LINHA_X, y + 6.0f, SP_LINHA_W, alt - 12.0f };
-  GfxRect d = { r.x + SP_LINHA_PADX, r.y + (r.h - 60.0f) * 0.5f, 60.0f, 60.0f };
-  float tx = d.x + d.w + 20.0f, fim = r.x + r.w - SP_LINHA_PADX - 28.0f;
-  const char *cod = recomenda_meu_codigo();
-  char dica[200];
+  GfxRect d = { r.x + SP_LINHA_PADX, r.y + (r.h - 52.0f) * 0.5f, 52.0f, 52.0f };
+  float tx = d.x + d.w + 18.0f, fim = r.x + r.w - SP_LINHA_PADX - 28.0f;
   ajustes_acento(&ar, &ag, &ab);
   superficieCaixa(r, SP_LINHA_RAIO / r.h, f, a);
   gfx_cor(d, 0.5f, ar, ag, ab, (0.28f + 0.72f * v) * a);
   { float ic = anim_mistura(1.0f, tinta, v);
-    gfx_icone((GfxRect){ d.x + 16.0f, d.y + 16.0f, 28.0f, 28.0f }, enc ? "aj_search" : "aj_user-plus",
-              ic, ic, ic, a); }
-  if (enc) snprintf(dica, sizeof dica, "%s", i18n("Busque por nome ou @apelido"));
-  else if (cod[0]) snprintf(dica, sizeof dica, i18n("Digite o código de um amigo · o seu é %s"), cod);
-  else snprintf(dica, sizeof dica, "%s", i18n("Digite o código de um amigo"));
-  if (enc && np > 0) {
+    gfx_icone((GfxRect){ d.x + 12.0f, d.y + 12.0f, 28.0f, 28.0f }, "aj_user-plus", ic, ic, ic, a); }
+  if (np > 0) {
     char b[16];
     TxtLinha n;
     GfxRect p;
@@ -3472,8 +3484,8 @@ static void desenhaPorta(int i, float dx, float y, float alt, float a) {
     fim = p.x - 12.0f;
   }
   { float lw = fim - tx;
-    TxtLinha t = txtIlha(TXT_ILHA_NOME, enc ? "Encontrar pessoas" : "Adicionar por código", lw);
-    TxtLinha sb = txtIlha(TXT_ILHA_SUB, dica, lw);
+    TxtLinha t = txtIlha(TXT_ILHA_NOME, "Adicionar pessoas", lw);
+    TxtLinha sb = txtIlha(TXT_ILHA_SUB, "Busque por nome ou @apelido, ou use o código", lw);
     float ty = r.y + (r.h - 56.0f) * 0.5f;
     txt_desenhar_alpha(t, tx, ty, a * (0.9f + 0.1f * v));
     txt_desenhar_alpha(sb, tx, ty + 33.0f, a * 0.62f); }
@@ -3494,39 +3506,35 @@ static const char *ALC_FRASE[3] = {
 static void desenhaPrevia(int i, float dx, float y, float alt, float a, Uint32 agora) {
   float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f, v = focoVisual(f);
   float ar, ag, ab;
-  GfxRect r = { SP_X + dx + SP_LINHA_X, y + 6.0f, SP_LINHA_W, alt - 12.0f };
+  // UM CARTAO SO com o controle de nivel logo abaixo (a linha seguinte, que nao
+  // desenha caixa propria): o fundo e pintado aqui, com a altura das duas.
+  GfxRect r = { SP_X + dx + SP_LINHA_X, y + 6.0f, SP_LINHA_W, alt + SPS_H_ALCANCE - 12.0f };
   const ContaPerfil *pf = perfis_item_ativo();
   RecPerfil eu;
   char nome[96], l2[160];
-  int n = recomenda_alcance();
   ajustes_acento(&ar, &ag, &ab);
-  superficieCaixa(r, SP_LINHA_RAIO / r.h, f, a);
+  superficieCaixa(r, SP_LINHA_RAIO / r.h, 0.0f, a);
   caixaAltaIlha("Como você aparece", (int)(ar * 255), (int)(ag * 255), (int)(ab * 255),
                 r.x + SP_LINHA_PADX, r.y + 18.0f, a);
-  { TxtLinha h = txtIlha(TXT_ILHA_HORA, v > 0.5f ? "OK para mudar o nome" : "É assim que seus amigos te veem", 300.0f);
-    txt_desenhar_alpha(h, r.x + r.w - SP_LINHA_PADX - (float)h.w, r.y + 16.0f, a * 0.5f); }
+  if (v > 0.5f) {
+    TxtLinha h = txtIlha(TXT_ILHA_HORA, "OK para mudar o nome", 300.0f);
+    txt_desenhar_alpha(h, r.x + r.w - SP_LINHA_PADX - (float)h.w, r.y + 16.0f, a * 0.5f);
+  }
   snprintf(nome, sizeof nome, "%s", recomenda_meu_nome()[0] ? recomenda_meu_nome()
                                    : (pf && pf->nome[0] ? pf->nome : i18n("Nome do perfil")));
   memset(&eu, 0, sizeof eu);
   recomenda_perfil(&eu);
   if (eu.apelido[0]) snprintf(l2, sizeof l2, "@%s", eu.apelido);
   else snprintf(l2, sizeof l2, "%s", i18n("Ainda sem @apelido"));
-  { GfxRect m = { r.x + SP_LINHA_PADX, r.y + 50.0f, r.w - 2.0f * SP_LINHA_PADX, 84.0f };
-    GfxRect av = { m.x + 14.0f, m.y + 12.0f, 60.0f, 60.0f };
+  { GfxRect m = { r.x + 8.0f, r.y + 46.0f, r.w - 16.0f, 64.0f };
+    GfxRect av = { m.x + 14.0f, m.y + 4.0f, 56.0f, 56.0f };
     float tx = av.x + av.w + 18.0f;
-    TxtLinha selo;
-    GfxRect sp;
-    if (ajustes_vidro()) gfx_cor(m, 18.0f / m.h, 1, 1, 1, 0.07f * a);
-    else gfx_cor(m, 18.0f / m.h, .135f, .142f, .165f, a);
+    // So o foco desenha caixa: em repouso a linha e texto sobre o cartao.
+    if (f > 0.01f) superficieItem(m, 18.0f / m.h, f, a);
     rostoIlha(av, pf ? pf->avatarUrl : "", nome, "eu", 0, a, agora);
-    selo = txtIlha(TXT_ILHA_HORA, (n >= 0 && n <= 2) ? ALC_SEG[n] : "Ninguém", 220.0f);
-    sp = (GfxRect){ m.x + m.w - 16.0f - (float)selo.w - 46.0f, m.y + (m.h - 34.0f) * 0.5f, (float)selo.w + 46.0f, 34.0f };
-    gfx_cor(sp, 0.5f, 1, 1, 1, 0.10f * a);
-    gfx_icone((GfxRect){ sp.x + 12.0f, sp.y + 8.0f, 18.0f, 18.0f }, n > 0 ? "aj_eye" : "aj_eye-off", 1, 1, 1, 0.8f * a);
-    txt_desenhar_alpha(selo, sp.x + 36.0f, sp.y + (sp.h - selo.h) * 0.5f, a * 0.85f);
-    { float lw = sp.x - 14.0f - tx;
-      txt_desenhar_alpha(txtIlha(TXT_ILHA_NOME, nome, lw), tx, m.y + 14.0f, a);
-      txt_desenhar_alpha(txtIlha(TXT_ILHA_SUB, l2, lw), tx, m.y + 47.0f, a * 0.62f); } }
+    { float lw = m.x + m.w - 14.0f - tx;
+      txt_desenhar_alpha(txtIlha(TXT_ILHA_NOME, nome, lw), tx, m.y + 2.0f, a);
+      txt_desenhar_alpha(txtIlha(TXT_ILHA_SUB, l2, lw), tx, m.y + 33.0f, a * 0.62f); } }
 }
 
 // QUEM VE O QUE VOCE ASSISTE: tres segmentos. ← → andam, OK escolhe. O
@@ -3536,18 +3544,23 @@ static void desenhaAlcanceSeg(int i, float dx, float y, float alt, float a) {
   float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f, v = focoVisual(f);
   float ar, ag, ab;
   int tf = ajustes_tinta_foco(), cur = recomenda_alcance(), sel, k;
+  // Sem caixa propria: o cartao de cima (desenhaPrevia) ja cobre esta linha.
+  // So se a linha de cima saiu da janela, o fundo e pintado aqui.
   GfxRect r = { SP_X + dx + SP_LINHA_X, y + 6.0f, SP_LINHA_W, alt - 12.0f };
-  GfxRect t = { r.x + SP_LINHA_PADX, r.y + 62.0f, r.w - 2.0f * SP_LINHA_PADX, 58.0f };
+  GfxRect t = { r.x + SP_LINHA_PADX, y + 40.0f, r.w - 2.0f * SP_LINHA_PADX, 54.0f };
   float sw = (t.w - 8.0f) / 3.0f;
   if (cur < 0 || cur > 2) cur = 0;
   sel = (v > 0.5f && alcCol >= 0 && alcCol <= 2) ? alcCol : cur;
   ajustes_acento(&ar, &ag, &ab);
-  superficieCaixa(r, SP_LINHA_RAIO / r.h, f, a);
+  if (y < listaTopo()) {
+    GfxRect c = { r.x, y - SPS_H_PREVIA + 6.0f, r.w, SPS_H_PREVIA + alt - 12.0f };
+    superficieCaixa(c, SP_LINHA_RAIO / c.h, 0.0f, a);
+  }
   txt_desenhar_alpha(txtIlha(TXT_ILHA_NOME, "Quem vê o que você assiste?", r.w * 0.62f),
-                     r.x + SP_LINHA_PADX, r.y + 16.0f, a);
+                     r.x + SP_LINHA_PADX, y - 2.0f, a);
   if (v > 0.5f) {
     TxtLinha h = txtIlha(TXT_ILHA_HORA, "← → escolhe · OK confirma", 260.0f);
-    txt_desenhar_alpha(h, r.x + r.w - SP_LINHA_PADX - (float)h.w, r.y + 22.0f, a * 0.5f);
+    txt_desenhar_alpha(h, r.x + r.w - SP_LINHA_PADX - (float)h.w, y + 4.0f, a * 0.5f);
   }
   if (ajustes_vidro()) gfx_cor(t, 0.5f, 1, 1, 1, 0.06f * a);
   else gfx_cor(t, 0.5f, .135f, .142f, .165f, a);
@@ -3568,7 +3581,7 @@ static void desenhaAlcanceSeg(int i, float dx, float y, float alt, float a) {
       gfx_cor((GfxRect){ s.x + (s.w - 6.0f) * 0.5f, s.y + s.h - 9.0f, 6.0f, 6.0f }, 0.5f, ar, ag, ab, a);
   }
   txt_desenhar_alpha(txtIlha(TXT_ILHA_SUB, ALC_FRASE[sel], r.w - 2.0f * SP_LINHA_PADX),
-                     r.x + SP_LINHA_PADX, t.y + t.h + 12.0f, a * 0.62f);
+                     r.x + SP_LINHA_PADX, t.y + t.h + 10.0f, a * 0.62f);
 }
 
 // --- CONTAS LIGADAS ----------------------------------------------------------
@@ -3603,8 +3616,9 @@ static void contaMarca(int sv, GfxRect d, float a) {
   // O letreiro do Simkl e branco sobre preto: o ladrilho escuro separa a
   // marca do cartao, que fica na cor do servico quando ligado.
   gfx_cor(d, 0.28f, .043f, .051f, .063f, a);
-  { float w = caixaAltaIlha("simkl", 255, 255, 255, -1.0f, 0.0f, 1.0f);
-    caixaAltaIlha("simkl", 255, 255, 255, d.x + (d.w - w) * 0.5f, d.y + d.h * 0.5f - 9.0f, a); }
+  { TxtLinha l = txt_linha(TXT_ILHA_HORA, "SIMKL", 255, 255, 255, 255);
+    if ((float)l.w > d.w - 6.0f) l = txt_linha(TXT_ILHA_NOME, "S", 255, 255, 255, 255);   // ladrilho pequeno: so a inicial
+    txt_desenhar_alpha(l, d.x + (d.w - (float)l.w) * 0.5f, d.y + (d.h - (float)l.h) * 0.5f, a); }
 }
 
 // Um cartao por servico. Estados: para ligar (superficie neutra, "Ligar"),
@@ -3624,10 +3638,20 @@ static void desenhaConta(int i, float dx, float y, float alt, float a, Uint32 ag
   char buf[160];
   float ar, ag, ab, cr = SERVICO[sv].r, cg = SERVICO[sv].g, cb = SERVICO[sv].b;
   float encher = 0.0f, t = 1.0f;
-  GfxRect r = { SP_X + dx + SP_LINHA_X, y + 6.0f, SP_LINHA_W, alt - 12.0f };
-  GfxRect d = { r.x + SP_LINHA_PADX, r.y + (r.h - 64.0f) * 0.5f, 64.0f, 64.0f };
+  // UM LADRILHO de uma fileira de ate tres (06/10): col/n dizem onde ele cai.
+  int col = 0, n = 1, j;
+  GfxRect fila, r, d;
   GfxRect p;
   TxtLinha pr, pf;
+  (void)alt;
+  for (j = i; j > 0 && spsConta(social[j - 1].tipo); j--) col++;
+  for (j = i - col; j < nSocial && spsConta(social[j].tipo); j++) n = j - (i - col) + 1;
+  // As linhas 2 e 3 do grupo chegam com o y da fileira JA somado a altura dela.
+  if (col > 0) y -= SPS_H_CONTAS;
+  fila = (GfxRect){ SP_X + dx + SP_LINHA_X, y + 6.0f, SP_LINHA_W, SPS_CONTA_H };
+  { float gap = 12.0f, tw = (fila.w - gap * (float)(n - 1)) / (float)n;
+    r = (GfxRect){ fila.x + (tw + gap) * (float)col, fila.y, tw, fila.h }; }
+  d = (GfxRect){ r.x + 16.0f, r.y + (r.h - 48.0f) * 0.5f, 48.0f, 48.0f };
   int reduz = ajustes_animacoes_reduzidas() || anim_politica_reduzida || gfx_efeitos_minimos();
 #if SP_V2
   int op;
@@ -3685,57 +3709,57 @@ static void desenhaConta(int i, float dx, float y, float alt, float a, Uint32 ag
   // O CARTAO NA COR DO SERVICO, crescendo do meio enquanto anima.
   if (encher > 0.0f) {
     float cx = r.x + r.w * 0.5f, cy = r.y + r.h * 0.5f;
-    float w = reduz ? r.w : 56.0f + (r.w - 56.0f) * encher, h = reduz ? r.h : 56.0f + (r.h - 56.0f) * encher;
+    float w = reduz ? r.w : 40.0f + (r.w - 40.0f) * encher, h = reduz ? r.h : 40.0f + (r.h - 40.0f) * encher;
     GfxRect c = { cx - w * 0.5f, cy - h * 0.5f, w, h };
     float raio = (SP_LINHA_RAIO + (28.0f - SP_LINHA_RAIO) * (1.0f - encher)) / h;
-    gfx_cor(c, raio > 0.5f ? 0.5f : raio, cr, cg, cb, (reduz ? encher : 1.0f) * 0.86f * a);
+    gfx_cor(c, raio > 0.5f ? 0.5f : raio, cr, cg, cb, (reduz ? encher : 1.0f) * 0.62f * a);
     // O foco sobre a cor: um fio claro por dentro da borda.
     if (v > 0.01f && encher >= 1.0f) gfx_anel_fora(r, SP_LINHA_RAIO / r.h, 0.0f, 3.0f, 1, 1, 1, 0.9f * v * a);
   }
   contaMarca(sv, d, a);
-  // A PILULA A DIREITA: o que o OK faz (ou o estado, quando ligado).
+  // O ESTADO NO LADRILHO: uma linha sob o nome ("Ligar", "Unida"...). A frase
+  // longa (erro, "OK de novo para separar") vai na legenda sob a fileira,
+  // para o ladrilho em foco.
   { char rotP[64];
     snprintf(rotP, sizeof rotP, "%s", i18n(pilula));
-    pr = txt_linha(TXT_ILHA_SEG, rotP, SPI_FG_R, SPI_FG_G, SPI_FG_B, 255);
-    pf = txt_linha(TXT_ILHA_SEG, rotP, tf, tf, tf, 255); }
-  { float extra = (ligado && !indo && !strcmp(pilula, "Unida")) ? 28.0f : indo ? 34.0f : 0.0f;
-    float pw = (float)pr.w + 40.0f + extra;
-    p = (GfxRect){ r.x + r.w - SP_LINHA_PADX - pw, r.y + (r.h - 46.0f) * 0.5f, pw, 46.0f }; }
-  if (ligado && !indo) {
-    gfx_cor(p, 0.5f, 1, 1, 1, (0.20f + 0.10f * v) * a);
-    if (!strcmp(pilula, "Unida")) gfx_icone((GfxRect){ p.x + 16.0f, p.y + 12.0f, 22.0f, 22.0f }, "aj_check", 1, 1, 1, a);
-    txt_desenhar_alpha(pr, p.x + p.w - 20.0f - (float)pr.w, p.y + (p.h - pr.h) * 0.5f, a);
-  } else {
-    botaoSup(p, 0.5f, f, a);
+    pr = txt_linha(TXT_ILHA_SUB, rotP, SPI_FG_R, SPI_FG_G, SPI_FG_B, 255);
+    pf = txt_linha(TXT_ILHA_SUB, rotP, 255, 255, 255, 255); }
+  { float tx = d.x + d.w + 12.0f, lw = r.x + r.w - 12.0f - tx, ty = r.y + (r.h - 56.0f) * 0.5f, ix = tx;
+    int unida = ligado && !indo && !strcmp(pilula, "Unida");
+    txt_desenhar_alpha(txtIlha(TXT_ILHA_NOME, SERVICO[sv].nome, lw), tx, ty, a);
+    if (unida) { gfx_icone((GfxRect){ tx, ty + 36.0f, 20.0f, 20.0f }, "aj_check", 1, 1, 1, a); ix = tx + 26.0f; }
     if (indo) {
       // LIGANDO: o ponto do Nuvio e o do servico girando um em volta do outro.
-      float ang = (float)(agora % 900u) / 900.0f * 6.2832f, ox = p.x + 24.0f, oy = p.y + p.h * 0.5f;
+      float ang = (float)(agora % 900u) / 900.0f * 6.2832f, ox = tx + 10.0f, oy = ty + 46.0f;
       if (reduz) ang = 0.0f;
-      gfx_cor((GfxRect){ ox + cosf(ang) * 7.0f - 5.0f, oy + sinf(ang) * 7.0f - 5.0f, 10, 10 }, 0.5f, ar, ag, ab, a);
-      gfx_cor((GfxRect){ ox - cosf(ang) * 7.0f - 5.0f, oy - sinf(ang) * 7.0f - 5.0f, 10, 10 }, 0.5f, cr, cg, cb, a);
+      gfx_cor((GfxRect){ ox + cosf(ang) * 6.0f - 4.0f, oy + sinf(ang) * 6.0f - 4.0f, 8, 8 }, 0.5f, ar, ag, ab, a);
+      gfx_cor((GfxRect){ ox - cosf(ang) * 6.0f - 4.0f, oy - sinf(ang) * 6.0f - 4.0f, 8, 8 }, 0.5f, cr, cg, cb, a);
+      ix = tx + 28.0f;
     }
-    txt_desenhar_alpha(pr, p.x + p.w - 20.0f - (float)pr.w, p.y + (p.h - pr.h) * 0.5f, a * 0.85f * (1.0f - v));
-    txt_desenhar_alpha(pf, p.x + p.w - 20.0f - (float)pf.w, p.y + (p.h - pf.h) * 0.5f, a * v);
+    txt_desenhar_alpha(pr, ix, ty + 36.0f, a * (ligado ? 0.9f : 0.6f) * (1.0f - v));
+    txt_desenhar_alpha(pf, ix, ty + 36.0f, a * v); }
+  p = (GfxRect){ r.x + r.w * 0.5f - 20.0f, r.y + r.h * 0.5f - 20.0f, 40.0f, 40.0f };   // para a animacao
+  // A LEGENDA da fileira: a frase do ladrilho em foco, uma vez por fileira.
+  if (v > 0.5f) {
+    TxtLinha lg = txtIlha(TXT_ILHA_SUB, sub, fila.w - 8.0f);
+    txt_desenhar_alpha(lg, fila.x + 4.0f, fila.y + fila.h + 12.0f, a * 0.7f);
   }
-  { float tx = d.x + d.w + 20.0f, lw = p.x - 16.0f - tx, ty = r.y + (r.h - 56.0f) * 0.5f;
-    txt_desenhar_alpha(txtIlha(TXT_ILHA_NOME, SERVICO[sv].nome, lw), tx, ty, a);
-    txt_desenhar_alpha(txtIlha(TXT_ILHA_SUB, sub, lw), tx, ty + 33.0f, a * (encher > 0.5f ? 0.85f : 0.62f)); }
   // OS DOIS DISCOS SE JUNTANDO, por cima de tudo (dura menos de meio segundo).
   if (ligado && !reduz && t < 0.62f) {
     float mx = r.x + r.w * 0.5f, my = r.y + r.h * 0.5f;
-    float sa = d.x + d.w * 0.5f, sb = p.x + p.w * 0.5f;
+    float sa = d.x + d.w * 0.5f, sb = r.x + r.w - 26.0f;
     float e = 1.0f - powf(1.0f - (t / 0.45f > 1.0f ? 1.0f : t / 0.45f), 3.0f);
     float junta = suave((t - 0.40f) / 0.20f);
     float some = 1.0f - suave((t - 0.50f) / 0.12f);
     if (junta < 1.0f) {
-      float rad = 16.0f + 6.0f * e, xa = sa + (mx - sa) * e, xb = sb + (mx - sb) * e;
+      float rad = 10.0f + 4.0f * e, xa = sa + (mx - sa) * e, xb = sb + (mx - sb) * e;
       gfx_cor((GfxRect){ xa - rad * 2, my - rad * 2, rad * 4, rad * 4 }, 0.5f, ar, ag, ab, 0.22f * (1 - junta) * a);
       gfx_cor((GfxRect){ xb - rad * 2, my - rad * 2, rad * 4, rad * 4 }, 0.5f, cr, cg, cb, 0.22f * (1 - junta) * a);
       gfx_cor((GfxRect){ xa - rad, my - rad, rad * 2, rad * 2 }, 0.5f, ar, ag, ab, (1 - junta) * a);
       gfx_cor((GfxRect){ xb - rad, my - rad, rad * 2, rad * 2 }, 0.5f, cr, cg, cb, (1 - junta) * a);
     }
     if (junta > 0.0f) {
-      float rad = 22.0f + 18.0f * junta;
+      float rad = 14.0f + 12.0f * junta;
       float mr = ar + (cr - ar) * junta, mg = ag + (cg - ag) * junta, mb = ab + (cb - ab) * junta;
       gfx_cor((GfxRect){ mx - rad * 1.8f, my - rad * 1.8f, rad * 3.6f, rad * 3.6f }, 0.5f, mr, mg, mb, 0.25f * some * a);
       gfx_cor((GfxRect){ mx - rad, my - rad, rad * 2, rad * 2 }, 0.5f, mr, mg, mb, some * a);
@@ -4000,12 +4024,16 @@ static const Uint32 SP_FUNDO_REFAZ_MS[] = { 400, 1500, 4000 };
 #define SP_FUNDO_FALTA_MS   150
 #define SP_FUNDO_FALTA_MAX  80     /* ~12 s de tentativas por invalidacao */
 void spainel_fundo(int podeParar, unsigned rev, void (*fundo)(void *), void *ctx) {
-  static int pronto, refeitas, faltou, tentativas;
+  static int pronto, refeitas, faltou, tentativas, copiaPreta;
   static unsigned revPronto;
   static Uint32 desde, pintadoEm;
   int parado = podeParar && aberto && entrada >= 0.999f && gfx_snap_ok();
   const char *motivo = "";
   if (!parado) { pronto = 0; refeitas = 0; faltou = 0; tentativas = 0; }
+  // A copia saiu preta (ver gfx_snap_vazio): enquanto o painel estiver aberto
+  // a home e desenhada direto, como antes do fundo parado.
+  if (!aberto) copiaPreta = 0;
+  if (copiaPreta) parado = 0;
   else if (rev != revPronto && pronto) {
     // OS TEMPOS DE REPINTURA RECOMECAM A CADA REPUBLICACAO (relato do dono,
     // 05/10, na TCL: a home continuou sumindo com o painel aberto). A home
@@ -4057,9 +4085,16 @@ void spainel_fundo(int podeParar, unsigned rev, void (*fundo)(void *), void *ctx
     fflush(stdout);
   }
   if (parado) {
+    int mx = 0;
     veuInteiro();
     gfx_sem_recorte();
+    if (gfx_snap_vazio(&mx)) {
+      copiaPreta = 1;
+      printf("[spainel] copia parada saiu PRETA (max=%d): desenhando a home direto\n", mx);
+      fflush(stdout);
+    }
     gfx_snap_terminar();
+    if (copiaPreta) { veuNoFundo = 0; pronto = 0; if (fundo) fundo(ctx); return; }
     gfx_snap_desenhar();
     if (!refeitas) desde = SDL_GetTicks();
     pintadoEm = SDL_GetTicks();
@@ -4251,7 +4286,6 @@ static void desenharPainel(Uint32 agora) {
     // baixo dele leria como duas telas empilhadas.
     if (consentindo())    desenhaConsentimento(x, y, a);
     else if (perguntandoAlcance()) desenhaAlcancePergunta(x, y, a);
-    else if (nRecs == 0 && nPeds == 0) desenhaSocialVazio(x, y, a);
     y += socialTopo();
     for (i = 0; i < nSocial; i++) {
       float alt = socialAlt(i);
@@ -4280,7 +4314,9 @@ static void desenharPainel(Uint32 agora) {
       }
       // Fora da janela nao custa texto nem textura — mesma razao da lista de
       // Salvos logo abaixo.
-      if (y + alt >= listaTopo() && y <= SP_LISTA_BASE) {
+      { float yv = y, av = alt;
+        if (spsConta(social[i].tipo)) { av = SPS_H_CONTAS; if (i > 0 && spsConta(social[i - 1].tipo)) yv -= SPS_H_CONTAS; }
+      if (yv + av >= listaTopo() && yv <= SP_LISTA_BASE) {
         switch (social[i].tipo) {
           case SPS_REC: desenhaRecLinha(i, social[i].idx, x, y, a, agora); break;
           case SPS_SUG: desenhaSugLinha(i, social[i].idx, x, y, a, agora); break;
@@ -4320,6 +4356,7 @@ static void desenharPainel(Uint32 agora) {
             desenhaBotaoLinha(i, x, y, alt, a, "Não, não quero aparecer", NULL, NULL, 0);
             break;
         }
+      }
       }
       y += alt + SPS_GAP;
     }
