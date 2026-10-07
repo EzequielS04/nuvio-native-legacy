@@ -1399,7 +1399,12 @@ static int lerCabecalho(Fio *f) {
     tam = lerTam(p + o + ui, n - o - ui, &ut);
     if (tam < 0) break;
     o += ui + ut;
-    if (o + tam > n) break;        // elemento passa da janela: o SeekHead resolve
+    if (o + tam > n) {             // elemento passa da janela: o SeekHead resolve
+      // Sem SeekHead que diga onde esta o Tracks, o proprio inicio dele serve
+      // (#308: Tracks de 96 KB num remux sem SeekHead para ele).
+      if (id == ID_TRACKS && f->posTracks < 0) f->posTracks = f->segIni + (o - ui - ut - f->segIni);
+      break;
+    }
     if (id == ID_SEEKHEAD) { f->seekHeadVisto = 1; lerSeekHead(f, p + o, tam); }
     else if (id == ID_INFO) { lerInfo(f, p + o, tam); achouInfo = 1; }
     else if (id == ID_TRACKS) {
@@ -1454,6 +1459,19 @@ static int lerCabecalho(Fio *f) {
     ui = 0;
     if (lerId(p, n, &ui) != ID_TRACKS) { free(p); return MKVASS_NOGO_SEM_RANGE; }
     tam = lerTam(p + ui, n - ui, &ut);
+    // #308: o CodecPrivate de um fansub (estilos e typesetting) leva o Tracks a
+    // 96 KB; com os 64 KB fixos acima o elemento vinha cortado e a faixa ASS
+    // virava "nao e ASS", indo para a TV como texto simples. Agora pede o
+    // elemento inteiro (teto de MKVASS_CORPO_MAX, o mesmo do corpo ASS).
+    if (tam > 0 && tam <= MKVASS_CORPO_MAX && ui + ut + tam > n) {
+      long total = ui + ut + tam;
+      free(p);
+      p = rangeInsistir(f, f->posTracks, total, &n);
+      if (!p) return MKVASS_NOGO_REDE;
+      ui = 0;
+      if (lerId(p, n, &ui) != ID_TRACKS) { free(p); return MKVASS_NOGO_SEM_RANGE; }
+      tam = lerTam(p + ui, n - ui, &ut);
+    }
     if (tam <= 0 || ui + ut + tam > n) { free(p); return MKVASS_NOGO_FAIXA; }
     achouTracks = lerTracks(f, p + ui + ut, tam);
     free(p);
