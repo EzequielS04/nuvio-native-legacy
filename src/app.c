@@ -2112,6 +2112,13 @@ void app_evento(const SDL_Event *e) {
   // de dois toques deliberados. Vale para os dois sentidos (abrir e fechar),
   // porque o defeito nao distingue: o segundo evento e que sobra.
   //
+  // CH+ NA LG (dono, 07/10: "junta o CH+ e o AZUL"): nas outras plataformas o
+  // CH+ chega aqui como AZUL/"s" (main.c, remapCanal) e o toque curto sempre
+  // abriu este painel; segurado abre a central. Na LG o CH+ curto so valia com
+  // um cartao na ilha — e a AZUL era a unica porta. Agora o CH+ curto e o
+  // mesmo toque, e segurado segue para a central (central.h). Com canal na
+  // tela (zap, PiP) ele nao chega aqui: azulPodeAbrirSalvos recusa.
+  //
   // COM O RELOGIO NA TELA a mesma tecla passa pela ilha (ilha.h, pedido do
   // dono de 01/10): com um cartao na pilula (atividade ao vivo, estreia) ela
   // abre o MODAL — e ai o CH+ tambem, como no toast da central —; sem cartao
@@ -2119,8 +2126,7 @@ void app_evento(const SDL_Event *e) {
   // Relogio desligado: o de sempre.
   if(e->type==SDL_KEYDOWN && !e->key.repeat &&
      (e->key.keysym.sym==SDLK_s || e->key.keysym.scancode==NV_SCANCODE_BLUE ||
-      ((ilha_cartao_na_tela() || ilha_atividade_expansivel()) && !spainel_aberto() &&
-       (e->key.keysym.scancode==NV_SCANCODE_CH_UP || e->key.keysym.sym==SDLK_PAGEUP))) &&
+      e->key.keysym.scancode==NV_SCANCODE_CH_UP || e->key.keysym.sym==SDLK_PAGEUP) &&
      azulPodeAbrirSalvos(e)) {
     alternarSalvos(1);
     return;
