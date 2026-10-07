@@ -294,6 +294,11 @@ int main(void) {
   assert(e[0].temporada == 1 && e[0].episodio == 1 && !strcmp(e[0].vid, "a:1"));
   assert(e[1].temporada == 1 && e[1].episodio == 2);
   assert(e[2].temporada == 2 && e[2].episodio == 1);
+  // Sem "episode" (todos 0): nao sao repeticoes, nenhum some.
+  n = parsearEpisodios("{\"videos\":[{\"id\":\"x\",\"season\":1,\"name\":\"X\"},"
+                       "{\"id\":\"y\",\"season\":1,\"name\":\"Y\"},"
+                       "{\"id\":\"z\",\"season\":1,\"name\":\"Z\"}]}", e, 16);
+  assert(n == 3);
   puts("episodiosdup: ok");
   return 0;
 }

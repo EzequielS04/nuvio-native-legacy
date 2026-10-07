@@ -5805,7 +5805,10 @@ static int parsearEpisodios(const char *corpo, CatEp *eps, int max) {
   if (n > 1) {
     int w = 1;
     for (int i = 1; i < n; i++) {
-      if (eps[i].temporada == eps[w - 1].temporada &&
+      // Sem numero de episodio (0) nao e repeticao: todos os videos sem
+      // "episode" cairiam num cartao so.
+      if (eps[i].episodio > 0 &&
+          eps[i].temporada == eps[w - 1].temporada &&
           eps[i].episodio == eps[w - 1].episodio) continue;
       if (w != i) eps[w] = eps[i];
       w++;
