@@ -7301,6 +7301,26 @@ int ajustes_teste_focar_opcao(int op) {
   return 0;
 }
 
+// Inventario das previas: a i-esima opcao visivel da TELA (op, categoria,
+// chave do disco e rotulo) e a cena dela desenhada sozinha num instante fixo.
+int ajustes_teste_cena_item(int i, int *op, int *sec, const char **chave, const char **rot) {
+  int k, n = 0;
+  montarTela();
+  for (k = 0; k < AJ_N_TELA; k++) {
+    if (TELA[k].tipo != IT_OPC || TELA[k].op < 0 || TELA[k].op >= AJ_N) continue;
+    if (n++ != i) continue;
+    *op = TELA[k].op; *sec = secDoItem[k];
+    *chave = CHAVE[*op] ? (CHAVE[*op][0] == '-' ? CHAVE[*op] + 1 : CHAVE[*op]) : "";
+    *rot = rotuloOpcao(*op);
+    return 1;
+  }
+  return 0;
+}
+void ajustes_teste_cena_desenhar(int op, float t, float x, float y, float w) {
+  ajcTesteT = t;
+  ajCenaGerada(uxSecaoDe(op), op, x, y, w);
+  ajcTesteT = -1.0f;
+}
 void ajustes_teste_tema(int tema, int vidro);
 void ajustes_teste_ux_captura(int cenario) {
   memcpy(valor, valorPadrao, sizeof valor);

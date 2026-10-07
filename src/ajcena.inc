@@ -40,6 +40,9 @@ static const float MATIZ[AJC_NMATIZ][3] = {
   { 0.34f, 0.38f, 0.46f },   // ardosia
 };
 
+#ifdef AJUSTES_TESTE
+static float ajcTesteT = -1.0f;
+#endif
 static GfxRect ajc_r(float x, float y, float w, float h) {
   return (GfxRect){ C.x + x * C.s, C.y + y * C.s, w * C.s, h * C.s };
 }
@@ -77,6 +80,9 @@ static float ajc_comecar(float x, float y, float w, float a) {
   C.x = x; C.y = y; C.w = w; C.s = w / AJC_W; C.h = w * AJC_H / AJC_W; C.a = a;
   C.red = ajustes_animacoes_reduzidas();
   C.t = C.red ? 0.0f : (float)(SDL_GetTicks() % 3600000u) / 1000.0f;
+#ifdef AJUSTES_TESTE
+  if (ajcTesteT >= 0.0f) { C.red = 0; C.t = ajcTesteT; }   // captura: a cena num instante fixo
+#endif
   ajustes_acento(&C.ar, &C.ag, &C.ab);
   C.tinta = (float)ajustes_tinta_foco() / 255.0f;
   q = (GfxRect){ x, y, w, C.h };

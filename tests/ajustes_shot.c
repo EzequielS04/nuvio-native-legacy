@@ -65,6 +65,8 @@ static const char *const AJ_IDS[] = {
 };
 
 extern int ajustes_teste_focar_opcao(int op);
+extern int ajustes_teste_cena_item(int i, int *op, int *sec, const char **chave, const char **rot);
+extern void ajustes_teste_cena_desenhar(int op, float t, float x, float y, float w);
 extern void ajustes_teste_ux_captura(int cenario);
 extern void atualizacao_teste_estado(int busca, const char *tag);
 extern int ajustes_teste_op_atualizar(void);
@@ -229,6 +231,45 @@ int main(int argc, char **argv) {
   if (getenv("NUVIO_SHOT_TEMA") || getenv("NUVIO_SHOT_VIDRO"))
     ajustes_teste_tema(getenv("NUVIO_SHOT_TEMA") ? atoi(getenv("NUVIO_SHOT_TEMA")) : -1,
                        getenv("NUVIO_SHOT_VIDRO") && atoi(getenv("NUVIO_SHOT_VIDRO")));
+
+  // NUVIO_SHOT_CENAS=<pasta>: the generated preview of EVERY visible option,
+  // drawn alone at a fixed instant (960x540 PNG each) plus indice.tsv, to find
+  // options that share the same scene.
+  if (getenv("NUVIO_SHOT_CENAS")) {
+    const char *dir = getenv("NUVIO_SHOT_CENAS");
+    float t = getenv("NUVIO_SHOT_CENAS_T") ? (float)atof(getenv("NUVIO_SHOT_CENAS_T")) : 1.7f;
+    int op, sec, n;
+    const char *chave, *rot;
+    FILE *ix;
+    snprintf(nome, sizeof nome, "%s/indice.tsv", dir);
+    ix = fopen(nome, "w");
+    assert(ix);
+    for (n = 0; ajustes_teste_cena_item(n, &op, &sec, &chave, &rot); n++) {
+      unsigned char *pix = malloc(960 * 540 * 4);
+      SDL_Surface *s;
+      int q, y;
+      assert(pix);
+      for (q = 0; q < 8; q++) {   // text lines rasterize over a few frames
+        SDL_PumpEvents();
+        txt_novo_quadro(); tex_novo_quadro(); tex_bombear(6);
+        glClearColor(0, 0, 0, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        ajustes_teste_cena_desenhar(op, t, 0, 0, 960);
+        if (q == 7) glReadPixels(0, 1080 - 540, 960, 540, GL_RGBA, GL_UNSIGNED_BYTE, pix);
+        SDL_GL_SwapWindow(w);
+      }
+      s = SDL_CreateRGBSurfaceWithFormat(0, 960, 540, 32, SDL_PIXELFORMAT_RGBA32);
+      assert(s);
+      for (y = 0; y < 540; y++) memcpy((char *)s->pixels + y * s->pitch, pix + (539 - y) * 960 * 4, 960 * 4);
+      snprintf(nome, sizeof nome, "%s/%03d-%s.png", dir, n, chave && chave[0] ? chave : "sem");
+      assert(IMG_SavePNG(s, nome) == 0);
+      fprintf(ix, "%d\t%d\t%d\t%s\t%s\n", n, sec, op, chave ? chave : "", rot ? rot : "");
+      SDL_FreeSurface(s); free(pix);
+    }
+    fclose(ix);
+    printf("cenas: %d em %s\n", n, dir);
+    return 0;
+  }
 
   // Reuse the compiled harness to compare Settings at 80% and 90%.
   // NUVIO_AJUSTES_ESCALA_COMPARAR=1 /tmp/nuvio-ajustes-shot /tmp/settings

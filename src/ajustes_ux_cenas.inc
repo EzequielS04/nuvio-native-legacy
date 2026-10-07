@@ -804,8 +804,17 @@ static void ajcCenaIcone(int op, int sec) {
   ajc_barra(260, 256, 120, 0.3f);
 }
 
+// --- cenas proprias por opcao (2.0.3), uma pasta por grupo de categorias ---------------
+#include "ajustes_ux_cenas_reproducao.inc"
+#include "ajustes_ux_cenas_cartazes.inc"
+#include "ajustes_ux_cenas_servicos.inc"
+#include "ajustes_ux_cenas_home.inc"
+#include "ajustes_ux_cenas_titulo.inc"
+
 // --- despacho ------------------------------------------------------------------------
 static void ajcCenaOpcao(int sec, int op) {
+  if (ajcNovaReproducao(sec, op) || ajcNovaCartazes(sec, op) || ajcNovaServicos(sec, op) ||
+      ajcNovaHome(sec, op) || ajcNovaTitulo(sec, op)) return;
   switch (op) {
     case AJ_HOME_LAYOUT: ajcCenaLayouts(); return;
     case AJ_PS_FUNDO: case AJ_PS_CONTINUAR: ajcCenaPerfis(op); return;
