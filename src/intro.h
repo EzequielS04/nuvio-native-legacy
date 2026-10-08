@@ -54,6 +54,10 @@ int  intro_extrair_aniskip(const char *json,double dur,IntroTrecho *out,int max)
 void intro_montar_url_aniskip(char *url,size_t n,long mal,int ep,double dur);
 // O id do MyAnimeList na resposta de kitsu.io/api/edge/anime/<id>/mappings; 0 = nao ha.
 long intro_kitsu_mal(const char *json);
+// Trechos declarados pelo PROPRIO arquivo (capitulos do MKV): substituem, por
+// tipo, o que o TheIntroDB/AniSkip trouxe, tenha chegado antes ou depois. n=0
+// limpa. Zerados por intro_desligar.
+void intro_definir_capitulos(const IntroTrecho *v,int n);
 void intro_desligar(void);
 int  intro_ativo(double posSeg,double *fim,int *tipo);
 // Segundo em que os creditos comecam, ou 0 quando nao ha marcador. Serve ao

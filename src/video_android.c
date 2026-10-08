@@ -29,6 +29,7 @@
 #include "marco.h"
 #include "streams.h"
 #include "video.h"
+#include "capmkv.h"
 #include "audioinfo.h"
 #include "video_reconexao.h"
 #include "idioma.h"
@@ -562,6 +563,7 @@ int video_tocar_posicao(const char *u, double segundos) {
   int inicioMs = isfinite(segundos) && segundos > 0.0 && segundos <= INT_MAX / 1000.0
     ? (int)(segundos * 1000.0) : 0;
   snprintf(urlAtual, sizeof urlAtual, "%s", u ? u : "");
+  capmkv_iniciar(urlAtual);
   nv_recon_zerar(&recon);
   reconPermitida = reconProxima; reconProxima = 0;
   reconIniciou = 0; reconErroPend = 0;
@@ -634,6 +636,7 @@ void video_bombear(void) {
 }
 void video_parar(void) {
   novaRetomada(-1);
+  capmkv_zerar();   // fio de capitulos em voo nao alimenta o proximo titulo
   nv_recon_zerar(&recon);
   reconErroPend = 0; reconFaixasPend = 0; reconBuscarMs = -1;
   if (ativo) kSemArg(mParar);
@@ -704,7 +707,8 @@ void video_escala_definir(int sw, int sh) { (void)sw; (void)sh; }
 const char *video_url_atual(void) { return urlAtual; }
 double video_pos(void) { return prontoLoad ? posMs / 1000.0 : 0; }
 double video_duracao(void) { return durMs / 1000.0; }
-double video_creditos(void) { return 0.0; }   // TODO: capitulos do MKV
+// Capitulos do MKV lidos por um fio lateral (capmkv.c, 203-capitulos).
+double video_creditos(void) { return capmkv_creditos(video_duracao()); }
 double video_buffer_fim(void) { return 0; }
 unsigned video_bufferando_ms(void) {
   // Esperando para reconectar: o watchdog (app.c) nao troca de fonte.

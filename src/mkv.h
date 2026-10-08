@@ -76,6 +76,22 @@ double mkv_creditos_nomeados(const MkvCap *caps, int n);
 // de dois capitulos. 2.0.3: em anime o ultimo capitulo e a previa, nao o ED.
 double mkv_creditos_ultimo(const MkvCap *caps, int n);
 
+// Capitulos que o trecho do cabecalho NAO trouxe (203-capitulos): se `cab`
+// (o inicio do arquivo, ja baixado) traz Chapters inteiro, devolve; senao segue
+// o SeekHead com UM Range e le o elemento inteiro. Devolve quantos capitulos;
+// `status` (opcional) recebe -1 quando nao houve pedido extra (resultado
+// definitivo) ou o HTTP do pedido extra (0 = sem resposta).
+// BLOQUEIA: chamar de fio proprio.
+int mkv_capitulos_alem(const char *url, const unsigned char *cab, long cabN,
+                       MkvCap *caps, int maxCaps, int *status);
+
+// Capitulo de ABERTURA pelo nome ("Opening", "OP", "Intro", "Abertura"): [ini,
+// fim) vai ate o inicio do capitulo seguinte. 0 = nao ha.
+int mkv_intro_nomeada(const MkvCap *caps, int n, double *ini, double *fim);
+// Inicio do ULTIMO capitulo quando ele e previa do proximo episodio ("Preview",
+// "Next Episode"); 0 caso contrario. Nao e credito: marca ate onde os creditos vao.
+double mkv_previa_nomeada(const MkvCap *caps, int n);
+
 // CASA as legendas que a TV lista com as TrackEntry de legenda do arquivo (#92).
 //
 // O `trackNum` do subtitleTrackInfo da LG NAO e o TrackNumber do Matroska. E o

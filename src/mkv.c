@@ -223,8 +223,10 @@ static int lerCapitulos(const unsigned char *p, long n, MkvCap *saida, int max) 
     o += ui + ut;
     if (o + tam > n) break;
     if (id == ID_EDITION) {
-      // Uma edicao contem os atomos; descer sem pular.
-      achou += lerCapitulos(p + o, tam, saida + achou, max - achou);
+      // Uma edicao contem os atomos; descer sem pular. So a PRIMEIRA edicao
+      // vale: varias edicoes concatenadas bagunçariam a ordem ("ultimo
+      // capitulo") e repetiriam nomes.
+      if (!achou) achou += lerCapitulos(p + o, tam, saida + achou, max - achou);
     } else if (id == ID_CHAPATOM) {
       MkvCap c;
       long q = 0;
@@ -275,6 +277,48 @@ static int lerCapitulos(const unsigned char *p, long n, MkvCap *saida, int max) 
 // incompleta). So mkv_faixas_do_trecho olha: ali o trecho e o da pre-busca, e
 // lista incompleta manda a sonda para a rede como antes.
 static int tracksCortado;
+// Onde o Chapters mora, pelo SeekHead (203-capitulos): posicao ABSOLUTA no
+// arquivo (-1 = o SeekHead nao disse). 64 bits: Chapters no fim de um remux de
+// mais de 2 GB nao cabe num long de 32 bits.
+static long long segIni, posChapters;
+#define ID_SEEKHEAD 0x114D9B74UL
+#define ID_SEEK     0x4DBBUL
+#define ID_SEEKID   0x53ABUL
+#define ID_SEEKPOS  0x53ACUL
+
+static void lerSeekHead(const unsigned char *p, long n) {
+  long o = 0;
+  while (o < n) {
+    int ui = 0, ut = 0;
+    unsigned long id = lerId(p + o, n - o, &ui);
+    long tam;
+    if (!id) return;
+    tam = lerTam(p + o + ui, n - o - ui, &ut);
+    if (tam < 0) return;
+    o += ui + ut;
+    if (o + tam > n) return;
+    if (id == ID_SEEK) {
+      unsigned long alvo = 0;
+      long long pos = -1;
+      long q = 0;
+      while (q < tam) {
+        int vi = 0, vt = 0;
+        unsigned long fid = lerId(p + o + q, tam - q, &vi);
+        long ftam;
+        if (!fid) break;
+        ftam = lerTam(p + o + q + vi, tam - q - vi, &vt);
+        if (ftam < 0) break;
+        q += vi + vt;
+        if (q + ftam > tam) break;
+        if (fid == ID_SEEKID) alvo = (unsigned long)lerUint(p + o + q, ftam);
+        else if (fid == ID_SEEKPOS) pos = (long long)lerUint(p + o + q, ftam);
+        q += ftam;
+      }
+      if (alvo == ID_CHAPTERS && pos >= 0) posChapters = segIni + pos;
+    }
+    o += tam;
+  }
+}
 
 static int acharTracks(const unsigned char *p, long n, MkvFaixa *saida, int max,
                        MkvCap *caps, int maxCaps, int *nCaps) {
@@ -282,6 +326,7 @@ static int acharTracks(const unsigned char *p, long n, MkvFaixa *saida, int max,
   int nFaixas = 0;
   if (nCaps) *nCaps = 0;
   tracksCortado = 0;
+  segIni = 0; posChapters = -1;
   while (o < n) {
     int ui = 0, ut = 0;
     unsigned long id = lerId(p + o, n - o, &ui);
@@ -293,9 +338,10 @@ static int acharTracks(const unsigned char *p, long n, MkvFaixa *saida, int max,
     if (id == ID_SEGMENT || tam == -2) {
       // Segment: descer para dentro. Tamanho desconhecido idem — nao ha por
       // onde pular.
-      if (id == ID_SEGMENT) continue;
+      if (id == ID_SEGMENT) { segIni = o; continue; }
       return 0;
     }
+    if (id == ID_SEEKHEAD && o + tam <= n) lerSeekHead(p + o, tam);
     if (id == ID_TRACKS) {
       long disp = n - o;
       long t = tam > disp ? disp : tam;   // cabecalho maior que o trecho baixado
@@ -317,8 +363,11 @@ static int acharTracks(const unsigned char *p, long n, MkvFaixa *saida, int max,
     }
     if (id == ID_CHAPTERS && caps && maxCaps > 0) {
       long disp = n - o;
-      long t = tam > disp ? disp : tam;
-      if (nCaps) *nCaps = lerCapitulos(p + o, t, caps, maxCaps);
+      // Chapters CORTADO pelo trecho: lista pela metade erra o "ultimo
+      // capitulo". Fica para a leitura por SeekHead (mkv_capitulos_alem).
+      if (tam > disp) { posChapters = o - ui - ut; return nFaixas; }
+      if (nCaps) *nCaps = lerCapitulos(p + o, tam, caps, maxCaps);
+      posChapters = -1;
       return nFaixas;
     }
     if (o + tam > n) return nFaixas;  // elemento passa do que baixamos
@@ -400,6 +449,76 @@ double mkv_creditos_ultimo(const MkvCap *caps, int n) {
 }
 
 
+// --- capitulos fora da janela (203-capitulos) ----------------------------------
+//
+// O SeekHead diz onde o Chapters mora; quando ele nao esta na janela do
+// cabecalho (remux com capa/fontes antes, ou Chapters no fim do arquivo), UM
+// Range busca o elemento INTEIRO — o mesmo que o 203-308 fez com o Tracks de
+// 96 KB. Pequeno primeiro (64 KB cobre quase todo Chapters); se o elemento
+// declara mais, um segundo pedido com o tamanho exato, limitado a 2 MB.
+#define MKV_CAP_PRIMEIRO (64L * 1024)
+#define MKV_CAP_TETO     (2L * 1024 * 1024)
+
+static int capsPorPosicao(const char *url, long long pos, MkvCap *caps, int max, int *status) {
+  long n = 0, need;
+  int ui = 0, ut = 0, achou = 0, st = 0;
+  unsigned long id;
+  long tam;
+  char *b = rede_baixar_trecho_st(url, 15, pos, pos + MKV_CAP_PRIMEIRO - 1, &n, &st, NULL, NULL, 0);
+  if (status) *status = st;
+  if (!b) return 0;
+  id = lerId((const unsigned char *)b, n, &ui);
+  tam = id == ID_CHAPTERS ? lerTam((const unsigned char *)b + ui, n - ui, &ut) : -1;
+  if (tam < 0 || tam > MKV_CAP_TETO) { free(b); return 0; }
+  need = ui + ut + tam;
+  if (need > n) {
+    free(b);
+    b = rede_baixar_trecho_st(url, 15, pos, pos + need - 1, &n, &st, NULL, NULL, 0);
+    if (status) *status = st;
+    if (!b || n < need) { free(b); return 0; }
+  }
+  achou = lerCapitulos((const unsigned char *)b + ui + ut, tam, caps, max);
+  free(b);
+  return achou;
+}
+
+int mkv_capitulos_alem(const char *url, const unsigned char *cab, long cabN,
+                       MkvCap *caps, int maxCaps, int *status) {
+  MkvFaixa fx[MKV_MAX_FAIXAS];
+  int n = 0;
+  if (status) *status = -1;
+  if (!url || !url[0] || !caps || maxCaps < 1 || !cab || cabN < 64 || cab[0] != 0x1A ||
+      cab[1] != 0x45 || cab[2] != 0xDF || cab[3] != 0xA3) return 0;
+  acharTracks(cab, cabN, fx, MKV_MAX_FAIXAS, caps, maxCaps, &n);
+  if (n > 0) return n;                   // ja estava na janela
+  if (posChapters < 0) return 0;         // SeekHead nao diz: nao chuta
+  n = capsPorPosicao(url, posChapters, caps, maxCaps, status);
+  printf("[mkv] capitulos pelo SeekHead (pos %lld): %d\n", posChapters, n);
+  fflush(stdout);
+  return n;
+}
+
+int mkv_intro_nomeada(const MkvCap *caps, int n, double *ini, double *fim) {
+  int i;
+  for (i = 0; caps && i < n - 1; i++) {
+    char m[64];
+    nomeMinusculo(caps[i].nome, m, sizeof m);
+    if (nomeAbertura(m) && caps[i + 1].inicio > caps[i].inicio) {
+      if (ini) *ini = caps[i].inicio;
+      if (fim) *fim = caps[i + 1].inicio;
+      return 1;
+    }
+  }
+  return 0;
+}
+
+double mkv_previa_nomeada(const MkvCap *caps, int n) {
+  char m[64];
+  if (!caps || n < 2) return 0.0;
+  nomeMinusculo(caps[n - 1].nome, m, sizeof m);
+  return nomePrevia(m) ? caps[n - 1].inicio : 0.0;
+}
+
 int mkv_faixas_e_caps(const char *url, MkvFaixa *saida, int max,
                       MkvCap *caps, int maxCaps, int *nCaps) {
   char *buf;
@@ -417,6 +536,8 @@ int mkv_faixas_e_caps(const char *url, MkvFaixa *saida, int max,
   }
   achou = acharTracks((const unsigned char *)buf, n, saida, max,
                       caps, maxCaps, nCaps);
+  if (caps && nCaps && !*nCaps && posChapters >= 0)
+    *nCaps = capsPorPosicao(url, posChapters, caps, maxCaps, NULL);
   free(buf);
   printf("[mkv] %d faixas e %d capitulos lidos do cabecalho (%ld bytes)\n",
          achou, (nCaps && caps) ? *nCaps : 0, n);

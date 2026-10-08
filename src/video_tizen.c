@@ -86,6 +86,7 @@
 #include "idioma.h"
 #include "marco.h"
 #include "mkv.h"
+#include "capmkv.h"
 #include <SDL2/SDL.h>
 #include <emscripten.h>
 #include <emscripten/threading.h>
@@ -1152,6 +1153,7 @@ static void *lerMkv(void *arg) {
     printf("[mkv] %d capitulos; creditos nomeados em %.0fs, ultimo em %.0fs\n",
            nCaps, creditosNomeado, creditosUltimo);
     fflush(stdout);
+    capmkv_aplicar(caps, nCaps);   // abertura/creditos/previa do arquivo -> modulo de intro
   }
   if (n < 1) marco("mkv: nenhuma faixa lida (nao e MKV, ou Range falhou)");
   else aplicarIdiomasDoMkv(fx, n);
