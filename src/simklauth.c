@@ -293,7 +293,11 @@ static void *fioPoll(void *u) {
         printf("[simkl] poll sem resposta util (HTTP %d, %d seguidas); sigo esperando\n",
                st, falhasSeguidas + 1);
         fflush(stdout);
-        if (++falhasSeguidas >= SMK_FALHAS_MAX) {
+        // Rede morta, timeout, 5xx e corpo cortado (Wi-Fi lento da Shield) so
+        // acabam pelo prazo do codigo. Desistir antes so cabe a um 4xx que se
+        // repete (chave recusada), nao a falha de transporte.
+        falhasSeguidas++;
+        if (st >= 400 && st < 500 && st != 408 && falhasSeguidas >= SMK_FALHAS_MAX) {
           snprintf(erro, sizeof erro, i18n("falha ao consultar o Simkl (HTTP %d)"), st);
           estado = SMK_ERRO;
         }
