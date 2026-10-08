@@ -72,6 +72,7 @@ int assrender_ler_pasta_fontes(const char *dir,
 #include <SDL2/SDL.h>
 #include <ass/ass.h>
 #include "gfx.h"
+#include "bidi.h"
 
 #define ASS_TEX_INICIAL 64
 
@@ -449,17 +450,9 @@ static int ass_frame_copiar(ASS_Image *im, AssCpuFrame *out) {
  * texto arabe fica em peso Regular. Detecta por bytes UTF-8: U+0600-06FF
  * (D8-DB), U+0740-07BF (DD), U+FB50-FDFF e U+FE70-FEFF (EF AD-B7 / B9-BB). */
 static int assArabe;
-static int ass_texto_tem_arabe(const char *t) {
-  const unsigned char *p = (const unsigned char *)t;
-  for (; p && *p; p++) {
-    if ((*p >= 0xD8 && *p <= 0xDB) || *p == 0xDD) return 1;
-    if (*p == 0xEF && ((p[1] >= 0xAD && p[1] <= 0xB7) || (p[1] >= 0xB9 && p[1] <= 0xBB))) return 1;
-  }
-  return 0;
-}
 static void ass_trilha_arabe_sem_negrito(ASS_Track *t) {
   int i, arabe = 0;
-  for (i = 0; i < t->n_events && !arabe; i++) arabe = ass_texto_tem_arabe(t->events[i].Text);
+  for (i = 0; i < t->n_events && !arabe; i++) arabe = bidi_tem_arabe(t->events[i].Text);
   assArabe = arabe && !assNaskhBold;   /* com a face Bold real, Bold=1 e \b1 a usam */
   if (!arabe || assNaskhBold) return;
   for (i = 0; i < t->n_styles; i++) t->styles[i].Bold = 0;
@@ -964,7 +957,6 @@ int assrender_adicionar_fonte(const char *nome, const void *dados, size_t tamanh
  * alvo (k = pixels por unidade, 1 ou 2) e o quadro volta a ser desenhado 1:1.
  * Quem desenha informa (player.c); sem informar, k = 1. */
 static int layPxUnid = 1;
-static int ass_pixels_por_unidade(void) { return layPxUnid; }
 void assrender_pixels_por_unidade(float f) { layPxUnid = f >= 1.5f ? 2 : 1; }
 
 void assrender_definir_layout(float x, float y, float w, float h,
@@ -973,7 +965,7 @@ void assrender_definir_layout(float x, float y, float w, float h,
   if (lw < 16 || lh < 16) return;
   if (videoW < 2 || videoH < 2) { videoW = lw; videoH = lh; }
   if (!(escalaFonte > 0.1 && escalaFonte < 4.0)) escalaFonte = 1.0;
-  k = ass_pixels_por_unidade();
+  k = layPxUnid;
   pthread_mutex_lock(&assFilaTrava);
   if (lw != layPedW || lh != layPedH || videoW != layPedVW || videoH != layPedVH ||
       k != layPedK || escalaFonte != layPedEscala || fabsf(x - layPedX) > 0.5f || fabsf(y - layPedY) > 0.5f) {

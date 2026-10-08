@@ -1388,14 +1388,6 @@ static int corridasDe(TTF_Font *f, TTF_Font *a, TTF_Font *b, const char *s,
 // so tem a face Regular, e o SDL_ttf engorda o bitmap ja rasterizado: as letras
 // ligadas (formas de apresentacao de bidi.c) se fundem e os pontos viram borrao.
 // Texto arabe fica no peso Regular; so o latim da mesma linha recebe o negrito.
-static int txtTemArabe(const char *s) {
-  const unsigned char *p = (const unsigned char *)s;
-  for (; p && *p; p++) {
-    if ((*p >= 0xD8 && *p <= 0xDB) || *p == 0xDD) return 1;               // U+0600-06FF, U+0740-07BF
-    if (*p == 0xEF && ((p[1] >= 0xAD && p[1] <= 0xB7) || (p[1] >= 0xB9 && p[1] <= 0xBB))) return 1; // FB50-FDFF, FE70-FEFF
-  }
-  return 0;
-}
 static int txtTemLatim(const char *s) {
   for (; s && *s; s++) if ((*s >= 'A' && *s <= 'Z') || (*s >= 'a' && *s <= 'z')) return 1;
   return 0;
@@ -1452,7 +1444,7 @@ static int medirCorridas(TTF_Font *f, TTF_Font *a, TTF_Font *b, const char *s,
     if (len <= 0 || len >= (int)sizeof pedaco) continue;
     memcpy(pedaco, s + c[i].ini, (size_t)len); pedaco[len] = 0;
     { TTF_Font *g = c[i].f; int ex = extra;
-      if (txtTemArabe(pedaco) && (extra & TTF_STYLE_BOLD)) {
+      if (bidi_tem_arabe(pedaco) && (extra & TTF_STYLE_BOLD)) {
         TTF_Font *bf = arabeBoldFace();
         if (bf) g = bf;
         ex = extra & ~TTF_STYLE_BOLD;
@@ -1479,7 +1471,7 @@ static SDL_Surface *renderCorridas(TTF_Font *f, TTF_Font *a, TTF_Font *b,
     sf[i] = NULL; gf[i] = g;
     if (len <= 0 || len >= (int)sizeof pedaco) continue;
     memcpy(pedaco, s + c[i].ini, (size_t)len); pedaco[len] = 0;
-    if (txtTemArabe(pedaco) && (extra & TTF_STYLE_BOLD)) {
+    if (bidi_tem_arabe(pedaco) && (extra & TTF_STYLE_BOLD)) {
       TTF_Font *bf = arabeBoldFace();
       if (bf) g = bf;
       ex = extra & ~TTF_STYLE_BOLD;
@@ -1659,7 +1651,7 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
   // tiraria delas o peso que o app inteiro conta com.
   int estiloAnt, novo = 0;
   arabeCorpo = (int)(ESTILOS[estilo].corpo * ESC_T + 0.5f);
-  if (enfase && txtTemArabe(v) && !txtTemLatim(v) && (enfase & TXT_ENF_NEGRITO)) {   // #335
+  if (enfase && bidi_tem_arabe(v) && !txtTemLatim(v) && (enfase & TXT_ENF_NEGRITO)) {   // #335
     TTF_Font *bf = arabeBoldFace();
     if (bf) fonte = bf;               // a face Bold de verdade
     enfase &= ~TXT_ENF_NEGRITO;       // nunca o sintetico sobre arabe
@@ -1774,7 +1766,7 @@ static int larguraLinhaMedir(TxtEstilo estilo, const char *s, TxtFamilia familia
   const char *v = visualDe(fonte, s, vis, sizeof vis);
   int estiloAnt, novo = 0;
   arabeCorpo = (int)(ESTILOS[estilo].corpo * ESC_T + 0.5f);
-  if (enfase && txtTemArabe(v) && !txtTemLatim(v) && (enfase & TXT_ENF_NEGRITO)) {   // #335
+  if (enfase && bidi_tem_arabe(v) && !txtTemLatim(v) && (enfase & TXT_ENF_NEGRITO)) {   // #335
     TTF_Font *bf = arabeBoldFace();
     if (bf) fonte = bf;               // a face Bold de verdade
     enfase &= ~TXT_ENF_NEGRITO;       // nunca o sintetico sobre arabe
