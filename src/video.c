@@ -16,6 +16,7 @@
 #include "velocidade.h"
 #include "cacheboost.h"
 #include "dts/dts_playback.h"
+#include "dts_tv.h"
 #include "dts/dts_engine.h"
 #include "ajustes.h"
 #include "dts/dts_overlay.h"
@@ -2039,11 +2040,20 @@ void video_bombear(void) {
     // nela. `touch /tmp/nuvio-dts-forcar` converte toda faixa DTS escolhida.
     forcar = knownDts && access("/tmp/nuvio-dts-forcar", F_OK) == 0;
 #endif
-    if ((audioNaoSup && knownDts) || forcar) {
+    // webOS 26 nao tem DTS e toca a faixa MUDA sem errorCode 200 (#285): nelas
+    // converte antes do erro, que nunca vem.
+    if ((audioNaoSup && knownDts) || forcar ||
+        nv_dts_converter_ja(webosMaior(), knownDts, 1, dtsTentou)) {
       dtsEstado = VIDEO_DTS_PREPARANDO;
       iniciarDts(-1);
     }
   }
+  // Sem conversao nesta TV (adapter ausente, app morreu com ela aberta, webOS
+  // 3/4): se a TV nao tem DTS, o silencio e certo — avisa na ilha em vez de
+  // deixar parecer que toca.
+  else if (!dtsHabilitado && pronto && (!dtsEstado || dtsEstado == VIDEO_DTS_SEM_SOM))
+    dtsEstado = nv_dts_sem_som(webosMaior(), video_faixa_dts(video_audio(audioAtual)) > 0, 0)
+                ? VIDEO_DTS_SEM_SOM : 0;
   // O ACB demora cerca de 1,5 s para ligar uma sessao. Se o usuario sair e
   // reabrir nesse intervalo, o loadCompleted novo encontra bindVivo=1. Antes
   // ele simplesmente desistia para sempre; agora o pedido fica pendente.
