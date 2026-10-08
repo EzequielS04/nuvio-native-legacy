@@ -5615,16 +5615,22 @@ static int localizarTexto(const char *tipo, const char *id, char *tit, size_t nt
 // A arte so troca a do proprio item: logo e fundo vao para `logo`/`backdrop`
 // (o card deitado e o destaque leem dali); o fundo do addon tambem fica como
 // backdropCatalogo, que e a "arte do catalogo" para a fonte escolhida.
-static int aplicarLocItem(CatItem *c) {
-  char id[24], tit[160], sin[900], logo[512], fundo[512];
+// O que o cache sabe do item (sem rede); 0 = nada.
+static int locValoresDoItem(const CatItem *c, char *tit, size_t nt, char *sin, size_t ns,
+                            char *logo, size_t nl, char *fundo, size_t nf) {
+  char id[24], chave[64];
   const char *tipo;
   int ok = 0;
   if (!locChaveDoItem(c, id, sizeof id, &tipo)) return 0;
   locLerDisco();
-  { char chave[64];
-    locChave(chave, sizeof chave, tipo, id);
-    if (!locLerEx(chave, tit, sizeof tit, sin, sizeof sin, logo, sizeof logo,
-                  fundo, sizeof fundo, &ok, 1) || !ok) return 0; }
+  locChave(chave, sizeof chave, tipo, id);
+  return locLerEx(chave, tit, nt, sin, ns, logo, nl, fundo, nf, &ok, 1) && ok;
+}
+static int aplicarLocItem(CatItem *c) {
+  char tit[160], sin[900], logo[512], fundo[512];
+  int ok = 0;
+  if (!locValoresDoItem(c, tit, sizeof tit, sin, sizeof sin, logo, sizeof logo,
+                        fundo, sizeof fundo)) return 0;
   if (tit[0] && strcmp(tit, c->titulo)) { snprintf(c->titulo, sizeof c->titulo, "%s", tit); ok = 2; }
   if (sin[0] && strcmp(sin, c->sinopse)) { snprintf(c->sinopse, sizeof c->sinopse, "%s", sin); ok = 2; }
   if (logo[0] && strcmp(logo, c->logo)) { snprintf(c->logo, sizeof c->logo, "%s", logo); ok = 2; }
@@ -5684,25 +5690,26 @@ static void *fioLocalizar(void *u) {
     locDeNovo = 0;
     pthread_mutex_unlock(&locFilaTrava);
     for (k = 0; k < n; k++) {
-      const CatItem *o = lista[k] < cat_n() ? cat_item(lista[k]) : NULL;
+      // Copia sob a trava do catalogo: este fio nao vira quadro, entao um
+      // ponteiro de cat_item() aqui pode apontar para bloco ja liberado
+      // (revisao 2.0.3, como fioSinopseHero; tests/localizar_corrida.sh).
+      CatItem *e = malloc(sizeof *e);
       char id[24], imdb[64], tit[160], sin[900], logo[512], fundo[512];
       const char *tipo;
-      if (!o || !locChaveDoItem(o, id, sizeof id, &tipo)) continue;
-      snprintf(imdb, sizeof imdb, "%s", o->imdb);
+      if (!e) continue;
+      if (!cat_copiar_item(lista[k], e) || !locChaveDoItem(e, id, sizeof id, &tipo)) {
+        free(e); continue; }
+      snprintf(imdb, sizeof imdb, "%s", e->imdb);
       if (!localizarTexto(tipo, id, tit, sizeof tit, sin, sizeof sin,
-                          logo, sizeof logo, fundo, sizeof fundo)) continue;
+                          logo, sizeof logo, fundo, sizeof fundo)) { free(e); continue; }
       novos++;
-      // Reler: o item pode ter mudado de lugar ou de texto enquanto a rede
-      // respondia. So o titulo e a sinopse sao tocados.
-      o = lista[k] < cat_n() ? cat_item(lista[k]) : NULL;
-      if (o && !strcmp(o->imdb, imdb)) {
-        CatItem *e = malloc(sizeof *e);
-        if (e) {
-          *e = *o;
-          if (aplicarLocItem(e)) cat_atualizar_item(lista[k], e);
-          free(e);
-        }
-      }
+      // O item pode ter mudado de lugar ou de texto enquanto a rede respondia:
+      // so titulo, sinopse, logo e fundo entram, e so se o indice ainda e este
+      // titulo. Nada mais do item e reescrito.
+      if (locValoresDoItem(e, tit, sizeof tit, sin, sizeof sin, logo, sizeof logo,
+                           fundo, sizeof fundo))
+        cat_aplicar_localizado(lista[k], imdb, tit, sin, logo, fundo);
+      free(e);
     }
     pthread_mutex_lock(&locFilaTrava);
     if (locDeNovo) { pthread_mutex_unlock(&locFilaTrava); continue; }
