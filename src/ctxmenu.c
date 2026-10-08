@@ -736,9 +736,17 @@ static void espelharAssistido(int atual, const CatItem *ci, int intencao) {
     // As mesmas tres fontes de "Tirar de Continuar assistindo": quem
     // marcou como visto tambem nao quer o card de retomada de volta
     // no proximo ciclo.
-    trakt_playback_remover(ci->imdb);
+    // Em fio (fioTirarRemoto): o DELETE do Trakt e uma chamada de rede por
+    // pausa (ate 20 s cada) e o syncprog e RPC; nenhum pode parar o desenho.
+    { TirarRemoto *tr = (TirarRemoto *)malloc(sizeof *tr);
+      if (tr) {
+        pthread_t t;
+        snprintf(tr->imdb, sizeof tr->imdb, "%s", ci->imdb);
+        snprintf(tr->chave, sizeof tr->chave, "%s", chave);
+        if (pthread_create(&t, NULL, fioTirarRemoto, tr) == 0) pthread_detach(t);
+        else fioTirarRemoto(tr);
+      } }
     simkl_playback_remover(ci->imdb);
-    syncprog_remover(chave);
     // O CARIMBO DE "TIRAR DE CONTINUAR" (#244). Sem ele a proxima passada
     // readmitia o item pelo /sync/playback que o servidor ainda devolvia (ou
     // por uma pausa que o DELETE nao alcancou), so sem a barra.

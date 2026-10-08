@@ -77,6 +77,7 @@
 #include <string.h>
 #include <strings.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <time.h>
 
 #define G_MAX_CANAL  900
@@ -230,7 +231,9 @@ static char   sCats[G_MAX_CAT][64];  static int sNCats;
 
 enum { G_PARADO, G_BAIXANDO, G_PRONTO, G_FALHOU };
 static int estado = G_PARADO;
-static int fioVivo, pendPronto;
+static int fioVivo;
+static int sOk;                 // staging: a carga achou canal (antes de pendPronto)
+static atomic_int pendPronto;   // release no fio de carga, acquire no desenho
 // Foco pedido com a lista ainda baixando; publicar() aplica ao chegar.
 static char focoPend[80];
 
@@ -883,8 +886,8 @@ static void *fioGuia(void *u) {
   // "nao existe": e o caso do catalogo de canais que estoura o prazo com o
   // manifesto tendo vindo 200.
   if (sNFontes > 0 && !ok) sFalhas++;
-  pendPronto = 1;
-  if (!ok) estado = G_FALHOU;
+  sOk = ok;
+  atomic_store_explicit(&pendPronto, 1, memory_order_release);
   return NULL;
 }
 
@@ -2250,9 +2253,15 @@ int guia_atualizando_lista(void) {
 
 void guia_atualizar(float dt, Uint32 agora) {
   entrada = anim_mola(entrada, guia_visivel() ? 1.0f : 0.0f, dt, NV_MOLA_TELA);
-  if (recargaDoPainel && !fioVivo && !recarregarPend && !pendPronto) recargaDoPainel = 0;
-  if (pendPronto) {
-    publicar(); estado = G_PRONTO; pendPronto = 0; fioVivo = 0; focoValido();
+  int prontoPend = atomic_load_explicit(&pendPronto, memory_order_acquire);
+  if (recargaDoPainel && !fioVivo && !recarregarPend && !prontoPend) recargaDoPainel = 0;
+  if (prontoPend) {
+    publicar();
+    // Quem decide e o desenho: falha da carga continua G_FALHOU, e e ela que
+    // faz guia_carregar tentar de novo.
+    estado = sOk ? G_PRONTO : G_FALHOU;
+    atomic_store_explicit(&pendPronto, 0, memory_order_relaxed);
+    fioVivo = 0; focoValido();
     if (painel) painelMontar();   // sabe[] mudou: quem nao fornece canal sai
   }
   // O painel de addons pediu recarga com o fio ainda vivo: agora que ele
