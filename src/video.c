@@ -61,6 +61,13 @@ static int dvSegurar;
 // acontecer (VIDEO_DV_NAO_*), a fonte nova, o demux ja abriu o arquivo, a faixa
 // da TV que foi trocada, e o mudo do player da TV enquanto a tela cobre.
 static int dvNao, dvSessaoN, dvFonteAberta, dvSilencio, dvSilenciado;
+// O PONTO DE PARTIDA: onde a pessoa apertou Play (0, ou a retomada pedida com a
+// tela do DV de pe). A tela so silencia o HDR10 da TV, que segue andando por
+// baixo dela durante as novas tentativas da sonda (3/8/20 s): esse trecho
+// ninguem viu. O caminho do DV parte daqui, e o HDR10 que fica volta para ca.
+static double dvEntradaSeg;
+// Menos que isto andado nao paga o seek (e o re-buffer) de volta.
+#define DV_ENTRADA_FOLGA_S 2.0
 static char dvAudioDe[16];
 // The audio track a Dolby Vision session of this URL last played (file
 // ordinal + language). Leaving the film and resuming the same source reopens
@@ -1208,9 +1215,10 @@ static int eventoPayload(const char *p, unsigned minhaSessao) {
       video_escolher_legenda(l2);
     }
     if (posAoCarregar > 1.0) {
-      double alvo = posAoCarregar;
+      double alvo = posAoCarregar, entrada = dvEntradaSeg;
       posAoCarregar = 0.0;
       video_buscar(alvo);
+      dvEntradaSeg = entrada;   // recarga interna: o ponto de partida nao muda
       marco("retomado apos queda do pipeline");
     }
     // O pipeline e novo: o estilo da legenda nao sobrevive ao load anterior.
@@ -2111,7 +2119,7 @@ int video_tocar(const char *url) {
   printf("[dts] fallback %s\n", dtsHabilitado ? "available" : "unavailable");
   dvSondado = dvMkvPerfil = dvAudios = 0; dtsModoDv = 0; dvAudioMkvOrd = -1; dvSegurar = 0;
   dvNao = 0; dvSessaoN++; dvFonteAberta = 0; dvAudioDe[0] = 0;
-  nv_dvsonda_zerar(&mkvRetry); mkvRetryEm = 0;
+  nv_dvsonda_zerar(&mkvRetry); mkvRetryEm = 0; dvEntradaSeg = 0.0;
   dvHabilitado = dvLiberadoNestaTv();
   fflush(stdout);
   // O modo vale para esta fonte e para os recarregar dela (tocarInterno).
@@ -2655,6 +2663,18 @@ static int dvLiberadoNestaTv(void) {
   }
   return 1;
 }
+// O HDR10 fica (recusa com a tela de pe): volta ao ponto de partida antes de a
+// tela sair. Sem a tela a pessoa viu o HDR10 andar, e ele segue de onde esta.
+static void dvVoltarEntrada(void) {
+  char m[80];
+  if (!dvSilencio || dtsSessao || !ligado || !midia[0] || posSeg - dvEntradaSeg <= DV_ENTRADA_FOLGA_S) return;
+  printf("[dv] HDR10 andou %.1f s coberto pela tela: volta ao ponto de partida %.1fs\n",
+         posSeg - dvEntradaSeg, dvEntradaSeg);
+  fflush(stdout);
+  snprintf(m, sizeof m, "dv: HDR10 volta ao ponto de partida %ds", (int)dvEntradaSeg);
+  marco(m);
+  video_buscar(dvEntradaSeg);
+}
 // The file decides: single-layer profile 5 or 8 (base layer + RPU, no
 // enhancement layer) and a selected audio track the path can feed (E-AC-3 and
 // AC-3 pass through, DTS is converted). Anything else stays with the TV player.
@@ -2672,7 +2692,7 @@ static int dvPronto(void) {
     // Sem perfil: o arquivo nao tem dvcC, ou a sonda desistiu de ler o
     // cabecalho (tres falhas) — sao notas diferentes para a pessoa.
     dvNao = dvMkvPerfil ? VIDEO_DV_NAO_PERFIL : mkvRetry.desistiu ? VIDEO_DV_NAO_SONDA : VIDEO_DV_NAO_SEM_DV;
-    dvHabilitado = 0; return 0;
+    dvHabilitado = 0; dvVoltarEntrada(); return 0;
   }
   if (dvMemOrd >= 0 && dvMemOrd < nAudio && dvMemOrd != audioAtual && !strcmp(urlAtual, dvMemUrl) &&
       (!dvMemIdioma[0] || !faixaAudio[dvMemOrd].idioma[0] || ling_casa(faixaAudio[dvMemOrd].idioma, dvMemIdioma))) {
@@ -2703,7 +2723,7 @@ static int dvPronto(void) {
       }
       printf("[dv] audio %s cannot be fed: stays on the TV player\n", c); fflush(stdout);
       dvNao = VIDEO_DV_NAO_AUDIO;
-      dvHabilitado = 0; return 0;
+      dvHabilitado = 0; dvVoltarEntrada(); return 0;
     }
   }
   return 1;
@@ -2738,7 +2758,10 @@ static int iniciarDts(int stream) {
   // seekDone) e a posicao certa; posSeg nao, porque o currentTime da TV volta a
   // escreve-lo com a posicao antiga ate o seek acontecer. O pararSessao abaixo
   // zera o seekEm, e o caminho nascia no inicio do arquivo em vez do ponto salvo.
-  double alvo = (seekEm || seekEnvEm || seekRetryEm) ? seekAlvo : posSeg;
+  // Com a tela do DV de pe, o HDR10 andou sem ninguem ver (novas tentativas da
+  // sonda): o caminho parte do ponto de partida, nao de onde a TV chegou.
+  double alvo = dtsModoDv && dvSilencio ? dvEntradaSeg
+              : (seekEm || seekEnvEm || seekRetryEm) ? seekAlvo : posSeg;
   int paused = pausaPedida, ordinal = audioAtual, count = nAudio, trocada = 0;
   memset(&selected, 0, sizeof selected);
   if (a) {
@@ -2987,11 +3010,15 @@ void video_volume(int pct) {
 void video_buscar(double segundos) {
   if (dtsSessao) {
     if (segundos < 0) segundos = 0;
+    if (dvSilencio) dvEntradaSeg = segundos;
     posSeg = segundos; seekAlvo = segundos;
     seekEm = SDL_GetTicks() + SEEK_REPOUSO_MS; return;
   }
   if (!ligado || !midia[0]) return;
   if (segundos < 0) segundos = 0;
+  // Com a tela do DV de pe ninguem busca com o controle (ela come as teclas):
+  // o seek e a retomada, o ponto onde o filme deve comecar.
+  if (dvSilencio) dvEntradaSeg = segundos;
   posSeg = segundos;
   seekAlvo = segundos;
   seekEm = SDL_GetTicks() + SEEK_REPOUSO_MS;
@@ -3283,7 +3310,7 @@ void video_dv_recusar(void) {
     printf("[dv] a pessoa escolheu HDR10: volta ao player da TV em %.1fs\n", alvo); fflush(stdout);
     snprintf(lu, sizeof lu, "%s", legUrlAtual);
     if (!recarregarMesmaFonte(alvo, -1, -1, lu)) falhou = 1;
-  } else { printf("[dv] a pessoa escolheu HDR10\n"); fflush(stdout); }
+  } else { printf("[dv] a pessoa escolheu HDR10\n"); fflush(stdout); dvVoltarEntrada(); }
 }
 // Ha midia carregada. O furo na superficie usa ISTO e nao o loadCompleted:
 // abrir o buraco cedo nao custa nada (atras dele so existe o plano de video) e
