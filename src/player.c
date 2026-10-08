@@ -2081,7 +2081,7 @@ int player_regra_proximo(double posSeg, double durSeg, double cred) {
     return posSeg >= cred;   // marcador aceito: ele manda, e so ele
   // SEM MARCADOR: TEMPO FIXO antes do fim, nunca porcentagem (2.0.3, dono).
   // Era "os 2 min finais"; agora sao os creditos tipicos (intro_fim_estimado:
-  // 40 s, 15 s em episodio < 10 min). Log da TCL na 2.0.0: "2 min finais: pos
+  // 50 s, 15 s em episodio < 10 min). Log da TCL na 2.0.0: "2 min finais: pos
   // 0s de 30s" — abaixo de 2 min de duracao nao ha "fim" para estimar.
   { double fimEst = intro_fim_estimado(durSeg);
     if (fimEst <= 0.0) return 0;
@@ -3112,10 +3112,14 @@ void player_atualizar(float dt, Uint32 agora) {
   // episodio de todos os titulos, e com a marca so por IMDb a lista que o
   // player ja tinha pedido nao voltava mais: folha de episodios vazia e sem
   // A seguir ate sair do player.
+  // E por GERACAO DAS FAIXAS (cat_geracao_episodios): a volta do vetor comum de
+  // episodios apaga a lista sem subir a revisao, e a marca por IMDb impedia o
+  // novo pedido — "[posplay] sem lista" e nenhum cartao A seguir (2.0.3).
   { static char epsPedidoDe[64];
-    static unsigned epsPedidoRev;
+    static unsigned epsPedidoRev, epsPedidoGer;
     const CatItem *ci = item();
-    if (epsPedidoRev != cat_revisao()) { epsPedidoRev = cat_revisao(); epsPedidoDe[0] = 0; }
+    if (epsPedidoRev != cat_revisao() || epsPedidoGer != cat_geracao_episodios()) {
+      epsPedidoRev = cat_revisao(); epsPedidoGer = cat_geracao_episodios(); epsPedidoDe[0] = 0; }
     if (!ehCanal() && epT > 0 && ci && ci->imdb[0] && strcmp(epsPedidoDe, ci->imdb)) {
       int ix = idxAtual();
       if (cat_n_episodios(ix) > 0) {

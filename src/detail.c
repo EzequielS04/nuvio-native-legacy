@@ -176,6 +176,9 @@ static CatItem idxCopia;
 static int  idxTemCopia;
 // Ultima revisao do catalogo que esta pagina ja tratou. Ver detail_atualizar.
 static unsigned revistaVista;
+// cat_geracao_episodios() da ultima vez que se conferiu a lista. Zerada na
+// abertura (abrirInterno) para o primeiro quadro conferir sempre.
+static unsigned epGerVista; static int epGerConferido;
 // O tipo (serie ou nao) com que os extras foram pedidos nesta abertura. Item
 // de tipo incerto ("anime" de catalogo do AIOMetadata) abre como filme e o
 // /meta o resolve como serie depois (descoberta.c, buscarEps): ai os extras
@@ -1340,6 +1343,11 @@ static void abrirInterno(const HomeItem *it) {
 #endif
     if (!adotou) trailer_fechar(); }
   revistaVista = cat_revisao();
+  // A PAGINA PEDE A PROPRIA LISTA. Quem pedia era so app.c, e so quando o alvo
+  // de fontes MUDA: reabrir a serie que esta tocando (pela ilha, pelo mini
+  // player) tem o mesmo alvo, e a pagina abria com a faixa vazia e sem pedido
+  // nenhum — sem os cartoes de episodio (TCL do dono, 2.0.3).
+  epGerConferido = 0;
   // Guarda identidade e copia ANTES de qualquer republicacao. Ver revalidarIdx.
   arteFixa[0] = logoFixo[0] = logoCatalogoFixo[0] = 0;
   arteFixaPoster = 0;   // arte nova por abertura
@@ -3141,10 +3149,13 @@ void detail_atualizar(float dt, Uint32 agora) {
       extrasSerie = ehSerie();
       extras_pedir(ci->imdb, extrasSerie, ci->tmdb);
     } }
-  { unsigned rev = cat_revisao();
-    if (rev != revistaVista) {
-      revistaVista = rev;
-      if (ehSerie() && cat_n_episodios(idx) < 1) {
+  // TAMBEM QUANDO SO A GERACAO DAS FAIXAS ANDOU (cat_geracao_episodios): a
+  // volta do vetor de episodios apaga a lista sem subir a revisao. E na
+  // abertura (epGerConferido = 0), sem esperar alguem republicar.
+  { unsigned rev = cat_revisao(), eg = cat_geracao_episodios();
+    if (rev != revistaVista || eg != epGerVista || !epGerConferido) {
+      revistaVista = rev; epGerVista = eg; epGerConferido = 1;
+      if (ehSerie() && cat_n_episodios(idx) < 1 && !desc_episodios_carregando(idx)) {
         const CatItem *ci = cat_item(idx);
         desc_episodios(idx, ci ? ci->temporada : 0);
       }

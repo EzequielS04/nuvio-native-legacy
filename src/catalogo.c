@@ -237,6 +237,18 @@ static unsigned catRevisao;
 // nao-atomico de dois fios ainda podia perder uma subida — e uma subida
 // perdida e a home que nao se reconstroi.
 static void revisaoSobe(void) { __atomic_add_fetch(&catRevisao, 1u, __ATOMIC_RELEASE); }
+// GERACAO DAS FAIXAS DE EPISODIO (2.0.3): sobe TODA vez que uma faixa e
+// apagada — troca de bloco (zerarFaixas) e, principalmente, a VOLTA do vetor
+// comum em cat_definir_episodios, que zera as faixas de TODOS os titulos sem
+// mexer em catRevisao. Quem mostra episodios (detalhe, player) so repedia
+// quando a revisao andava: a volta apagava a lista da serie aberta e ninguem
+// a pedia de novo (TCL do dono, 08/10: pagina da serie aberta pela ilha sem
+// os cartoes de episodio, e "[posplay] sem lista de episodios" no player).
+// Desde 1a5d1670 a troca de catalogo nao zera mais nEps, entao a volta deixou
+// de ser rara: acontece a cada CAT_EP_MAX episodios publicados na sessao.
+static unsigned epGeracao;
+static void epGeracaoSobe(void) { __atomic_add_fetch(&epGeracao, 1u, __ATOMIC_RELEASE); }
+unsigned cat_geracao_episodios(void) { return __atomic_load_n(&epGeracao, __ATOMIC_ACQUIRE); }
 // SOBE A CADA MUDANCA EM ITEM, e nao so na troca do bloco: marca de lista
 // (naLista), progresso, item acrescentado ou substituido. Existe para quem
 // mostra uma LISTA DERIVADA do catalogo (o painel de Salvos) poder perguntar
@@ -482,6 +494,7 @@ static void garantirFaixas(int quantos) {
 // Troca de catalogo: os indices mudaram e nenhuma faixa antiga vale.
 static void zerarFaixas(int quantos) {
   nFaixas = 0;
+  epGeracaoSobe();
   garantirFaixas(quantos);
 }
 
@@ -2250,6 +2263,7 @@ void cat_definir_episodios(int indiceItem, const CatEp *lista, int qtd) {
     // serie passa a exibir os episodios da obra que acabou de ser carregada.
     memset(epQtd,0,(size_t)nFaixas*sizeof *epQtd);
     memset(epIni,0,(size_t)nFaixas*sizeof *epIni);
+    epGeracaoSobe();   // as outras series perderam a lista: quem mostra repede
   }
   memcpy(&eps[nEps], lista, sizeof(CatEp) * (size_t)qtd);
   epIni[indiceItem] = nEps;
