@@ -1,4 +1,7 @@
 #include "rede.h"
+#ifdef NV_ANDROID
+#include "android.h"
+#endif
 #include "negcache.h"
 #include "negcache.inc"
 #include <pthread.h>
@@ -751,6 +754,10 @@ static _Thread_local int redeParcialOk;
 #define INFO_RESPONSE_CODE   2097154
 // CURLINFO_TOTAL_TIME = CURLINFO_DOUBLE (0x300000) + 3: segundos do pedido.
 #define INFO_TEMPO_TOTAL     3145731
+// CURLINFO_NAMELOOKUP/CONNECT/APPCONNECT_TIME = CURLINFO_DOUBLE + 4/5/33.
+#define INFO_TEMPO_DNS       3145732
+#define INFO_TEMPO_TCP       3145733
+#define INFO_TEMPO_TLS       3145761
 // Cabecalhos de RESPOSTA. So rede_baixar_etag os pede; ver a nota la.
 #define OPT_HEADERFUNCTION  20079
 #define OPT_HEADERDATA      10029
@@ -1021,6 +1028,25 @@ static void soltarHandleR(void *c, int r, const char *url) {
     if (curl_getinfo) { curl_getinfo(c, INFO_RESPONSE_CODE, &http); curl_getinfo(c, INFO_TEMPO_TOTAL, &seg); }
     avisoHost(url, r, (int)http, seg > 0 ? (unsigned)(seg * 1000.0 + 0.5) : 0u);
   }
+#ifdef NV_ANDROID
+  // #266/#332: tempos dos primeiros pedidos e de toda falha — DNS, TCP e TLS
+  // separados (CURLINFO_*_TIME, acumulados desde o inicio). So o host vai ao log.
+  { static int vistos;
+    int n = __atomic_add_fetch(&vistos, 1, __ATOMIC_RELAXED);
+    if ((n <= 6 || r != 0) && curl_getinfo) {
+      double dns = 0, tcp = 0, tls = 0, tot = 0;
+      long http = 0, novas = -1;
+      char h[96];
+      curl_getinfo(c, INFO_TEMPO_DNS, &dns); curl_getinfo(c, INFO_TEMPO_TCP, &tcp);
+      curl_getinfo(c, INFO_TEMPO_TLS, &tls); curl_getinfo(c, INFO_TEMPO_TOTAL, &tot);
+      curl_getinfo(c, INFO_RESPONSE_CODE, &http); curl_getinfo(c, INFO_NUM_CONNECTS, &novas);
+      hostDaUrl(url, h, sizeof h);
+      printf("[rede] tempo #%d %s curl=%d http=%ld dns=%.0f tcp=%.0f tls=%.0f total=%.0f ms conexoes_novas=%ld\n",
+             n, h[0] ? h : "?", r, http, dns * 1000, tcp * 1000, tls * 1000, tot * 1000, novas);
+      fflush(stdout);
+    }
+  }
+#endif
   if (!curl_reset) { curl_cleanup(c); return; }
   if (r != 0) {
     curl_cleanup(c);
@@ -1310,7 +1336,39 @@ static void prepararOpenSSL(void) {
   fflush(stdout);
 }
 
-static int abrir(void) {
+#ifdef NV_ANDROID
+#include <fcntl.h>
+#include <poll.h>
+#include <unistd.h>
+#include <sys/utsname.h>
+// #266/#332: o curl_global_init da libcurl do APK semeia o PSA e o CTR-DRBG do
+// mbedTLS. Ate a 266.1 a semente vinha de /dev/random (o mbedTLS so usa
+// getrandom com glibc), que BLOQUEIA em kernel < 5.6 com pouca entropia
+// estimada. A deps.sh agora aponta para /dev/urandom; esta linha diz, no log, o
+// kernel e se /dev/random estava travado naquela hora — prova ou derruba a tese.
+static void entropiaLog(void) {
+  struct utsname u;
+  char ea[32] = "?";
+  const char *rnd = "?";
+  FILE *f = fopen("/proc/sys/kernel/random/entropy_avail", "r");
+  int fd;
+  if (f) { if (!fgets(ea, sizeof ea, f)) snprintf(ea, sizeof ea, "?"); fclose(f); }
+  ea[strcspn(ea, "\r\n")] = 0;
+  fd = open("/dev/random", O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+  if (fd >= 0) {
+    struct pollfd p = { fd, POLLIN, 0 };
+    int r = poll(&p, 1, 0);
+    rnd = r > 0 && (p.revents & POLLIN) ? "legivel" : r == 0 ? "BLOQUEARIA" : "erro";
+    close(fd);
+  } else rnd = "sem-acesso";
+  if (uname(&u) != 0) snprintf(u.release, sizeof u.release, "?");
+  printf("[rede] kernel=%s entropy_avail=%s /dev/random=%s\n",
+         u.release, ea, rnd);
+  fflush(stdout);
+}
+#endif
+
+static int abrirReal(void) {
   void *h;
   int r = __atomic_load_n(&pronto, __ATOMIC_ACQUIRE);
   // Acquire publica tambem os ponteiros dlsym e o global_init para os outros
@@ -1339,7 +1397,14 @@ static int abrir(void) {
 #ifdef NV_ANDROID
   // Android: o sistema nao oferece libcurl a apps; ela vai no APK (jniLibs) com
   // o nome "libcurl.so", e o dlopen por nome acha na pasta nativa do app.
-  h = dlopen("libcurl.so", RTLD_NOW);
+  printf("[rede] dlopen libcurl.so\n"); fflush(stdout);
+  { unsigned long t0 = redeAgoraMs();
+    const char *e;
+    h = dlopen("libcurl.so", RTLD_NOW);
+    e = h ? "" : dlerror();
+    printf("[rede] dlopen libcurl.so %s em %lu ms%s%s\n", h ? "ok" : "FALHOU", redeAgoraMs() - t0,
+           h ? "" : ": ", e ? e : "?");
+    fflush(stdout); }
   if (!h)
 #endif
   h = dlopen("libcurl.so.5", RTLD_NOW);
@@ -1380,7 +1445,18 @@ static int abrir(void) {
     pthread_mutex_unlock(&abrirTrava);
     return 0;
   }
+#ifdef NV_ANDROID
+  // #266: a Shield (Tegra) para em "rede_preparar" sem imprimir mais nada; a
+  // libcurl 8 + mbedTLS 3.6 inicia o PSA/entropia aqui dentro. Marca cada lado.
+  entropiaLog();
+  printf("[rede] curl_global_init\n"); fflush(stdout);
+  { unsigned long t0 = redeAgoraMs();
+    int gi = curl_global ? curl_global(3 /* CURL_GLOBAL_DEFAULT */) : -1;
+    printf("[rede] curl_global_init ok (r=%d) em %lu ms\n", gi, redeAgoraMs() - t0);
+    fflush(stdout); }
+#else
   if (curl_global) curl_global(3 /* CURL_GLOBAL_DEFAULT */);
+#endif
   // DEPOIS do global_init e ANTES de soltar a trava: a partir daqui qualquer fio
   // pode entrar em curl_easy_perform, e e la que o OpenSSL comeca a ser usado.
 #ifndef NV_ANDROID   // libcurl do APK nao usa libcrypto 1.0 (e dlopen de libcrypto.so seria do sistema)
@@ -1391,7 +1467,126 @@ static int abrir(void) {
   return 1;
 }
 
+#ifdef NV_ANDROID
+// #266: na Shield (Tegra, Android 11) o app nunca terminava de abrir, parado em
+// rede_preparar. Suspeita nao provada: dlopen da libcurl / curl_global_init
+// (mbedTLS 3.6 PSA/entropia) bloqueando. No Android isso roda num fio proprio;
+// a interface segue abrindo e quem precisa de rede espera pela bandeira, com
+// limite. Se a init nunca voltar, o log diz.
+static int fioIniciado;
+static void *fioCurl(void *a) {
+  struct timespec t0, t1;
+  (void)a;
+  clock_gettime(CLOCK_MONOTONIC, &t0);
+  abrirReal();
+  clock_gettime(CLOCK_MONOTONIC, &t1);
+  printf("[rede] libcurl pronta em %ld ms (pronto=%d)\n",
+         (long)((t1.tv_sec - t0.tv_sec) * 1000 + (t1.tv_nsec - t0.tv_nsec) / 1000000),
+         __atomic_load_n(&pronto, __ATOMIC_ACQUIRE));
+  fflush(stdout);
+  return NULL;
+}
+static void iniciarFioCurl(void) {
+  pthread_t t;
+  if (__atomic_exchange_n(&fioIniciado, 1, __ATOMIC_ACQ_REL)) return;
+  if (pthread_create(&t, NULL, fioCurl, NULL) != 0) { fioCurl(NULL); return; }
+  pthread_detach(t);
+}
+// Espera a libcurl ate `ms`. Depois que UMA espera estourou, ninguem mais
+// espera: sem isso cada imagem e cada chamada pagaria os 20 s de novo enquanto
+// a init segue presa (a 266.1 fazia isso, e a tela de login ficava parada).
+static int esgotou;
+static int abrirAte(unsigned long ms) {
+  int r = __atomic_load_n(&pronto, __ATOMIC_ACQUIRE);
+  unsigned long t0;
+  if (r == 1 || r == -1) return r > 0;
+  iniciarFioCurl();
+  if (__atomic_load_n(&esgotou, __ATOMIC_ACQUIRE)) ms = 0;
+  t0 = redeAgoraMs();
+  for (;;) {
+    struct timespec d = { 0, 10 * 1000 * 1000 };
+    r = __atomic_load_n(&pronto, __ATOMIC_ACQUIRE);
+    if (r == 1 || r == -1) return r > 0;
+    if (redeAgoraMs() - t0 >= ms) {
+      if (ms && !__atomic_exchange_n(&esgotou, 1, __ATOMIC_ACQ_REL)) {
+        printf("[rede] libcurl nao ficou pronta em %lu ms (pronto=%d); pedidos simples vao pelo Android\n", ms, r);
+        fflush(stdout);
+      }
+      return 0;
+    }
+    nanosleep(&d, NULL);
+  }
+}
+static int abrir(void) { return abrirAte(20000); }
+
+// RESERVA PELO ANDROID (#266/#332). Pedido simples (GET/POST de texto, com
+// cabecalhos) que a libcurl nao pode atender — nao ficou pronta, ou caiu no
+// transporte — vai por NuvioActivity.httpPedir (HttpURLConnection). A conta, o
+// login e o Supabase passam por aqui (nuvem.c: rede_*_st), e assim o login
+// nunca depende so da nossa libcurl. `curlRuim` gruda na sessao: se a libcurl
+// falhou onde o Android respondeu, os proximos pedidos simples vao direto.
+static int curlRuim;
+static char *viaAndroid(const char *verbo, const char *url, int segundos,
+                        const char *const *cab, const char *corpo, int *status,
+                        long *tam, const char *porque) {
+  char *cabs, *r, erro[200], h[96];
+  size_t n = 1;
+  int k, st = 0, temCt = 0;
+  long bytes = 0;
+  unsigned long t0 = redeAgoraMs();
+  static int logados;
+  if (status) *status = 0;
+  for (k = 0; cab && cab[k]; k++) {
+    n += strlen(cab[k]) + 1;
+    if (!strncasecmp(cab[k], "Content-Type:", 13)) temCt = 1;
+  }
+  if (corpo && !temCt) n += 32;
+  cabs = (char *)malloc(n);
+  if (!cabs) return NULL;
+  cabs[0] = 0;
+  for (k = 0; cab && cab[k]; k++) { strcat(cabs, cab[k]); strcat(cabs, "\n"); }
+  // Mesmo padrao do postarNativo: JSON, salvo quem mandou o proprio.
+  if (corpo && !temCt) strcat(cabs, "Content-Type: application/json\n");
+  r = android_http(verbo, url, cabs, corpo, (segundos > 0 ? segundos : 20) * 1000,
+                   &st, &bytes, erro, sizeof erro);
+  free(cabs);
+  hostDaUrl(url, h, sizeof h);
+  if (__atomic_add_fetch(&logados, 1, __ATOMIC_RELAXED) <= 12 || !r) {
+    printf("[rede] via Android (%s) %s %s: http=%d em %lu ms%s%s\n", porque, verbo,
+           h[0] ? h : "?", st, redeAgoraMs() - t0, r ? "" : " FALHOU: ", r ? "" : erro);
+    fflush(stdout);
+  }
+  if (!r) { snprintf(redeErroTxt, sizeof redeErroTxt, "android: %.180s", erro); return NULL; }
+  redeErroTxt[0] = 0;
+  if (st == 401 && aviso401) aviso401(url);
+  if (status) *status = st;
+  else if (st < 200 || st > 299) { free(r); return NULL; }  // como rede_baixar sem status
+  if (tam) *tam = bytes;
+  return r;
+}
+// 1 = este pedido simples vai direto pelo Android (sem tocar na libcurl).
+static int androidPrimeiro(void) {
+  if (__atomic_load_n(&curlRuim, __ATOMIC_ACQUIRE)) return 1;
+  // 8 s, e nao 20: a tela de login nao fica parada esperando a libcurl.
+  return !abrirAte(8000);
+}
+// Falha de TRANSPORTE da libcurl num pedido simples: tenta o Android uma vez.
+static char *androidDepois(const char *verbo, const char *url, int segundos,
+                           const char *const *cab, const char *corpo, int *status) {
+  char *r;
+  if (redeCancelouLocal || (redeCancelLocal && *redeCancelLocal)) return NULL;
+  r = viaAndroid(verbo, url, segundos, cab, corpo, status, NULL, "curl falhou");
+  if (r && !__atomic_exchange_n(&curlRuim, 1, __ATOMIC_ACQ_REL)) {
+    printf("[rede] libcurl falhou onde o Android respondeu: pedidos simples ficam pelo Android nesta sessao\n");
+    fflush(stdout);
+  }
+  return r;
+}
+void rede_preparar(void) { iniciarFioCurl(); }
+#else
+static int abrir(void) { return abrirReal(); }
 void rede_preparar(void) { abrir(); }
+#endif
 
 /* Request novo isolado do handle/controles por fio dos wrappers. */
 // Trusted Mozilla bundle configured once at startup. Android's libcurl has
@@ -1457,7 +1652,25 @@ char *rede_baixar_com(const char *url, int segundos, const char *const *cab) {
 
 char *rede_baixar_st(const char *url, int segundos, const char *const *cab,
                      int *status) {
+#ifdef NV_ANDROID
+  char *r;
+  int st = 0;
+  if (!url || !*url) { if (status) *status = 0; return NULL; }
+  if (androidPrimeiro()) {   // st local: com status NULL o 4xx tambem volta com corpo, como no curl
+    r = viaAndroid("GET", url, segundos, cab, NULL, &st, NULL, "libcurl fora");
+    if (status) *status = st;
+    return r;
+  }
+  r = rede_baixar_interno2(url, segundos, NULL, cab, &st, NULL, 0);
+  if (status) *status = st;
+  if (!r && st == 0) {
+    r = androidDepois("GET", url, segundos, cab, NULL, &st);
+    if (status) *status = st;
+  }
+  return r;
+#else
   return rede_baixar_interno2(url, segundos, NULL, cab, status, NULL, 0);
+#endif
 }
 char *rede_baixar_st_retry(const char *url, int segundos, const char *const *cab,
                            int *status, int *retryAfter) {
@@ -1512,7 +1725,12 @@ static char *rede_baixar_interno3(const char *url, int segundos, long *tam,
   // Endereco de API de metadados que ja respondeu "nao existe" (ou host em
   // recuo por timeout): nao pede de novo — ver negcache.h.
   if (!status && negcache_barra(url, (long)time(NULL))) return NULL;
+#ifdef NV_ANDROID
+  // libcurl nunca ficou pronta: GET simples (catalogo, imagem) pelo Android.
+  if (!abrir()) return viaAndroid("GET", url, segundos, cab, NULL, status, tam, "libcurl fora");
+#else
   if (!abrir()) return NULL;
+#endif
   inicio = redeAgoraMs();
   prazoMs = (unsigned long)(segundos > 0 ? segundos : 30) * 1000UL;
   for (tentativa = 0; ; tentativa++) {
@@ -1894,7 +2112,25 @@ static char *postarNativo(const char *url, int segundos, const char *const *cab,
 
 char *rede_postar_st(const char *url, int segundos, const char *const *cab,
                      const char *corpo, int *status) {
+#ifdef NV_ANDROID
+  char *r;
+  int st = 0;
+  if (!url || !*url) { if (status) *status = 0; return NULL; }
+  if (androidPrimeiro()) {   // st local: com status NULL o 4xx tambem volta com corpo, como no curl
+    r = viaAndroid("POST", url, segundos, cab, corpo ? corpo : "", &st, NULL, "libcurl fora");
+    if (status) *status = st;
+    return r;
+  }
+  r = postarNativo(url, segundos, cab, corpo, &st, 0);
+  if (status) *status = st;
+  if (!r && st == 0) {
+    r = androidDepois("POST", url, segundos, cab, corpo ? corpo : "", &st);
+    if (status) *status = st;
+  }
+  return r;
+#else
   return postarNativo(url, segundos, cab, corpo, status, 0);
+#endif
 }
 
 char *rede_postar_seguro_st(const char *url, int segundos, const char *const *cab,

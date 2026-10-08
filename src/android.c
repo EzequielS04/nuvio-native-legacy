@@ -255,6 +255,68 @@ int android_abrir_loja(const char *pacote, const char *nome) {
   return chamarBool("abrirLoja", "(Ljava/lang/String;Ljava/lang/String;)Z", pacote, nome ? nome : "");
 }
 
+// Ver android.h. A resposta vem como byte[]: 4 bytes de status (big-endian) e
+// o corpo; status 0 = falha de transporte, e o corpo e o motivo.
+char *android_http(const char *verbo, const char *url, const char *cabs,
+                   const char *corpo, int prazoMs, int *status, long *n,
+                   char *erro, size_t nErro) {
+  JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
+  jobject act = env ? (jobject)SDL_AndroidGetActivity() : NULL;
+  jclass cls = NULL;
+  jmethodID m;
+  jstring jm = NULL, ju = NULL, jc = NULL;
+  jbyteArray jcorpo = NULL, jr = NULL;
+  char *r = NULL;
+  if (status) *status = 0;
+  if (n) *n = 0;
+  if (erro && nErro) snprintf(erro, nErro, "jni indisponivel");
+  if (!env || !act) return NULL;
+  m = metodo(env, act, &cls, "httpPedir", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[BI)[B");
+  if (m && !(*env)->ExceptionCheck(env)) {
+    jm = (*env)->NewStringUTF(env, verbo ? verbo : "GET");
+    ju = (*env)->NewStringUTF(env, url ? url : "");
+    jc = (*env)->NewStringUTF(env, cabs ? cabs : "");
+    if (corpo) {
+      jsize k = (jsize)strlen(corpo);
+      jcorpo = (*env)->NewByteArray(env, k);
+      if (jcorpo) (*env)->SetByteArrayRegion(env, jcorpo, 0, k, (const jbyte *)corpo);
+    }
+    if (jm && ju && jc && (!corpo || jcorpo) && !(*env)->ExceptionCheck(env))
+      jr = (jbyteArray)(*env)->CallObjectMethod(env, act, m, jm, ju, jc, jcorpo, (jint)prazoMs);
+  }
+  if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); jr = NULL; }
+  if (jr) {
+    jsize k = (*env)->GetArrayLength(env, jr);
+    if (k >= 4) {
+      unsigned char s4[4];
+      int st;
+      (*env)->GetByteArrayRegion(env, jr, 0, 4, (jbyte *)s4);
+      st = (s4[0] << 24) | (s4[1] << 16) | (s4[2] << 8) | s4[3];
+      r = (char *)malloc((size_t)(k - 4) + 1);
+      if (r) {
+        (*env)->GetByteArrayRegion(env, jr, 4, k - 4, (jbyte *)r);
+        r[k - 4] = 0;
+        if (st <= 0) {   // falha: o corpo e o motivo
+          if (erro && nErro) snprintf(erro, nErro, "%s", r);
+          free(r); r = NULL;
+        } else {
+          if (status) *status = st;
+          if (n) *n = (long)(k - 4);
+        }
+      }
+    }
+    (*env)->DeleteLocalRef(env, jr);
+  }
+  if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+  if (jm) (*env)->DeleteLocalRef(env, jm);
+  if (ju) (*env)->DeleteLocalRef(env, ju);
+  if (jc) (*env)->DeleteLocalRef(env, jc);
+  if (jcorpo) (*env)->DeleteLocalRef(env, jcorpo);
+  if (cls) (*env)->DeleteLocalRef(env, cls);
+  (*env)->DeleteLocalRef(env, act);
+  return r;
+}
+
 // PILHA DOS FIOS. O bionic da ~1 MB a um pthread criado sem atributo; o glibc
 // da LG e do Tizen da 8 MB, e o nucleo foi escrito contando com isso (vetores
 // de CatItem, DiagAddon, VazCand... na pilha dos fios de descoberta e

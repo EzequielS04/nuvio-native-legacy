@@ -260,6 +260,49 @@ class NuvioActivity : SDLActivity() {
         }
     }
 
+    // HTTP PELA PILHA DO ANDROID (#266/#332, src/android.c android_http).
+    // Reserva da libcurl do APK para pedidos simples (conta, login, Supabase):
+    // em Shield/BRAVIA a init da libcurl nao voltava e o login esperava 20 s
+    // para falhar. Chamado de fios de rede do C (nunca do fio de UI). Volta
+    // [status 4 bytes big-endian][corpo]; status 0 = falha, corpo = motivo.
+    fun httpPedir(metodo: String, url: String, cabs: String, corpo: ByteArray?, prazoMs: Int): ByteArray {
+        var con: java.net.HttpURLConnection? = null
+        return try {
+            con = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            val prazo = if (prazoMs > 0) prazoMs else 20000
+            con.connectTimeout = minOf(prazo, 10000)
+            con.readTimeout = prazo
+            con.instanceFollowRedirects = true
+            con.useCaches = false
+            con.requestMethod = metodo
+            con.setRequestProperty("User-Agent", "Nuvio/1.0 (webOS)")
+            for (l in cabs.split('\n')) {
+                val i = l.indexOf(':')
+                if (i > 0) con.setRequestProperty(l.substring(0, i).trim(), l.substring(i + 1).trim())
+            }
+            if (corpo != null) {
+                con.doOutput = true
+                con.setFixedLengthStreamingMode(corpo.size)
+                con.outputStream.use { it.write(corpo) }
+            }
+            val st = con.responseCode
+            val ent = if (st >= 400) con.errorStream else con.inputStream
+            val dados = ent?.use { it.readBytes() } ?: ByteArray(0)
+            val r = ByteArray(4 + dados.size)
+            r[0] = (st ushr 24).toByte(); r[1] = (st ushr 16).toByte()
+            r[2] = (st ushr 8).toByte(); r[3] = st.toByte()
+            System.arraycopy(dados, 0, r, 4, dados.size)
+            r
+        } catch (e: Throwable) {
+            val m = (e.javaClass.simpleName + ": " + (e.message ?: "")).take(180).toByteArray()
+            val r = ByteArray(4 + m.size)
+            System.arraycopy(m, 0, r, 4, m.size)
+            r
+        } finally {
+            try { con?.disconnect() } catch (_: Throwable) {}
+        }
+    }
+
     // ONDE ASSISTIR (src/ondever.c), chamados pelo C do fio do SDL.
     //
     // Apps que aparecem no inicio da TV, "pacote\tnome" por linha. Leanback

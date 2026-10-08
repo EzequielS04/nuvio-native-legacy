@@ -33,6 +33,13 @@ int android_abrir_loja(const char *pacote, const char *nome);
 // SDL esta (texto estatico) e um contador de quadros apresentados. So o fio
 // do SDL chama.
 void android_etapa(const char *nome);
+// HTTP PELA PILHA DO ANDROID (#266/#332, NuvioActivity.httpPedir). Reserva da
+// libcurl para pedidos simples: GET/POST com cabecalhos "Nome: valor" separados
+// por '\n'. Devolve o corpo (malloc, com 0 no fim; *n = bytes) e *status = HTTP;
+// NULL = falha de transporte, com o motivo em `erro`. Qualquer fio.
+char *android_http(const char *verbo, const char *url, const char *cabs,
+                   const char *corpo, int prazoMs, int *status, long *n,
+                   char *erro, size_t nErro);
 void android_quadro(void);
 #endif
 #endif

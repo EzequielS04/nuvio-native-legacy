@@ -1267,6 +1267,12 @@ int main(int argc, char **argv) {
   arranque_enviar();   // #317: se a sessao anterior morreu no arranque, conta isso ao servidor (1x)
   // NIVEL DE GPU (gpunivel.h): le GL_*, marca a GPU fraca no perfil e decide
   // o nivel de partida ANTES de tex_iniciar, que tira o perfil do aparelho.
+#ifdef NV_ANDROID
+  // #266: garante o contexto GL corrente neste fio antes das consultas (o
+  // primeiro SwapWindow ja saiu acima).
+  NV_ETAPA("GL MakeCurrent");
+  if (SDL_GL_GetCurrentContext() != ctx) SDL_GL_MakeCurrent(win, ctx);
+#endif
   gpun_iniciar(dw, dh);
   gputempo_iniciar();   // GPU clock per frame (Android, where the extension exists)
   int gpuPref = ajustes_gpu_efeitos();
