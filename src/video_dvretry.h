@@ -35,4 +35,14 @@ static inline int nv_dvsonda_pronta(int prazoVencido, int bufferando) {
 
 static inline void nv_dvsonda_zerar(NvDvSonda *s) { s->falhas = 0; s->desistiu = 0; }
 
+// URL de arquivo .mp4 (o caminho, sem query nem fragmento): MP4 nao tem Tracks de
+// Matroska. Cobre o trailer do IMDb, tocado sem que video_definir_mp4 seja
+// chamado (C9: a sonda e o retry disparavam nele em segundo plano).
+static inline int nv_url_e_mp4(const char *u) {
+  size_t n = 0;
+  if (!u) return 0;
+  while (u[n] && u[n] != '?' && u[n] != '#') n++;
+  return n >= 4 && (u[n-4] == '.') && (u[n-3] | 32) == 'm' && (u[n-2] | 32) == 'p' && u[n-1] == '4';
+}
+
 #endif

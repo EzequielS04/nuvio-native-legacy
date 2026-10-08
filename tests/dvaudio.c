@@ -30,6 +30,11 @@ int main(void) {
   { char c[2][16] = {"A_TRUEHD", "A_TRUEHD"}; char i[2][8] = {"en", "en"}; char r[2][48] = {"a", "b"};
     assert(nv_dvaudio_escolher(2, 0, c, i, r, casa) == -1); }
   assert(nv_dvaudio_tem_atmos("DD+ ATMOS") && nv_dvaudio_tem_atmos("x joc") && !nv_dvaudio_tem_atmos("DD+ 7.1"));
+  // C9 (log real): o pipeline da TV lista UMA faixa de audio, o MKV tem duas.
+  // A escolha vem so do MKV; a lista da TV nao pode limitar.
+  { char c[2][16] = {"A_TRUEHD", "A_EAC3"}; char i[2][8] = {"eng", "eng"};
+    char r[2][48] = {"Dolby TrueHD Atmos 7.1", "Dolby Digital Plus 7.1"};
+    assert(nv_dvaudio_decidir(1, 2, 0, c, i, r, casa) == 1); }
   puts("dvaudio ok");
   return 0;
 }

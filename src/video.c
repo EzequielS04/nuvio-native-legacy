@@ -47,7 +47,12 @@ static char dtsSaida[64];
 // plain ints, the same tolerance faixaLeg already has.
 static volatile int dvSondado, dvMkvPerfil, dvMkvEl, dvMkvBl, dvMkvRpu;
 static char dvAudioCodec[16][16];   // Matroska CodecID of each audio track, file order
+static char dvAudioIdioma[16][8];   // idioma/nome de cada faixa DO MKV (a lista da TV pode trazer so uma)
+static char dvAudioNome[16][48];
 static volatile int dvAudios;
+// Faixa do MKV (ordinal entre as de audio) escolhida pelo dvPronto no lugar de uma
+// que o caminho nao alimenta; -1 = nenhuma. O iniciarDts a entrega ao motor.
+static int dvAudioMkvOrd = -1;
 static int dvHabilitado, dtsModoDv, dvRecuoAviso;
 // The audio track a Dolby Vision session of this URL last played (file
 // ordinal + language). Leaving the film and resuming the same source reopens
@@ -1107,7 +1112,7 @@ static int eventoPayload(const char *p, unsigned minhaSessao) {
       // regra dos 2 min finais e sobe antes dos creditos — o #34, de volta como
       // #73. O Tizen sempre sondou todo MKV (video_tizen.c: mkvPendente =
       // !fonteMp4), e e por isso que la o cartao acerta.
-      if (!fonteMp4) mkvPendente = 1;
+      if (!fonteMp4 && !nv_url_e_mp4(urlAtual)) mkvPendente = 1;
       else if (faltando) marco("mkv: fonte e MP4, sonda dispensada"); }
   }
 
@@ -1867,7 +1872,7 @@ static void *lerMkv(void *arg) {
     // Falha de sonda nao e "nao e MKV" (C9: a rede da TV ficou ~10 s fora logo
     // apos o disparo). Se o DV ainda pode valer para ESTA fonte, agenda nova
     // tentativa em vez de dar dvSondado=1 e perder o DV pelo resto da sessao.
-    if (dvHabilitado && !fonteMp4 && !dtsSessao && !dtsTentou && !dvSondado &&
+    if (dvHabilitado && !fonteMp4 && !nv_url_e_mp4(url) && !dtsSessao && !dtsTentou && !dvSondado &&
         mkvFioSessao == __atomic_load_n(&sessao, __ATOMIC_ACQUIRE) && !strcmp(url, urlAtual)) {
       int tent = 0;
       unsigned espera = nv_dvsonda_falhou(&mkvRetry, &tent);
@@ -1900,7 +1905,11 @@ static void *lerMkv(void *arg) {
         if (fx[j].dvPerfil)
           printf("[dv] file: profile=%d level=%d rpu=%d el=%d bl=%d compat=%d\n", fx[j].dvPerfil,
                  fx[j].dvNivel, fx[j].dvRpu, fx[j].dvEl, fx[j].dvBl, fx[j].dvCompat);
-      } else if (fx[j].tipo == 2 && na < 16) snprintf(dvAudioCodec[na++], sizeof dvAudioCodec[0], "%s", fx[j].codec);
+      } else if (fx[j].tipo == 2 && na < 16) {
+        snprintf(dvAudioIdioma[na], sizeof dvAudioIdioma[0], "%s", fx[j].idioma);
+        snprintf(dvAudioNome[na], sizeof dvAudioNome[0], "%s", fx[j].nome);
+        snprintf(dvAudioCodec[na++], sizeof dvAudioCodec[0], "%s", fx[j].codec);
+      }
     }
     dvAudios = na; dvSondado = 1; }
 
@@ -2051,7 +2060,7 @@ int video_tocar(const char *url) {
   dtsTentou = 0; dtsRevisao = 0; dtsSaida[0] = 0; dtsNativePending = 0; dtsEstado = 0;
   dtsHabilitado = dts_playback_enabled() && dtsLiberadoNestaTv();
   printf("[dts] fallback %s\n", dtsHabilitado ? "available" : "unavailable");
-  dvSondado = dvMkvPerfil = dvAudios = 0; dtsModoDv = 0;
+  dvSondado = dvMkvPerfil = dvAudios = 0; dtsModoDv = 0; dvAudioMkvOrd = -1;
   nv_dvsonda_zerar(&mkvRetry); mkvRetryEm = 0;
   dvHabilitado = dvLiberadoNestaTv();
   fflush(stdout);
@@ -2081,7 +2090,7 @@ static void velBombear(void);
 static void mkvRetryBombear(void) {
   if (!mkvRetryEm) return;
   if (mkvRetrySessao != __atomic_load_n(&sessao, __ATOMIC_ACQUIRE) || strcmp(mkvRetryUrl, urlAtual) ||
-      dtsSessao || fonteMp4 || !dvHabilitado || dtsTentou) {
+      dtsSessao || fonteMp4 || nv_url_e_mp4(urlAtual) || !dvHabilitado || dtsTentou) {
     mkvRetryEm = 0; return;
   }
   if (fioMkvVivo || !nv_dvsonda_pronta((int)(SDL_GetTicks() - mkvRetryEm) >= 0, bufferandoDesde != 0)) return;
@@ -2615,27 +2624,25 @@ static int dvPronto(void) {
     printf("[dv] audio track %d restored for this source\n", dvMemOrd + 1); fflush(stdout);
     video_escolher_audio(dvMemOrd);
   }
+  if (dvAudioMkvOrd >= 0) return 1;   // ja decidido; iniciarDts pode ter adiado (bind ativo)
   if (audioAtual >= 0 && audioAtual < dvAudios) {
     const char *c = dvAudioCodec[audioAtual];
     if (!nv_dvaudio_alimentavel(c)) {
       // TrueHD (e afins) nao entra no caminho, mas o remux costuma trazer um
-      // E-AC-3 do mesmo idioma: troca para ele e mantem o DV. A escolha da
-      // pessoa DEPOIS disto vale (video_escolher_audio entrega ao player da TV)
-      // e o dvMem acima ja foi aplicado, entao nao e sobrescrito.
-      int n = nAudio < dvAudios ? nAudio : dvAudios, k, i;
-      char cod[16][16], idi[16][8], rot[16][48];
-      if (n > 16) n = 16;
-      for (i = 0; i < n; i++) {
-        snprintf(cod[i], sizeof cod[i], "%s", dvAudioCodec[i]);
-        snprintf(idi[i], sizeof idi[i], "%s", faixaAudio[i].idioma);
-        snprintf(rot[i], sizeof rot[i], "%s", faixaAudio[i].rotulo);
-      }
-      k = nv_dvaudio_escolher(n, audioAtual, (const char (*)[16])cod, (const char (*)[8])idi,
-                              (const char (*)[48])rot, ling_casa);
+      // E-AC-3 do mesmo idioma. A escolha sai da lista do PROPRIO MKV (a da TV
+      // tem uma faixa so) e vai direto ao motor: iniciarDts a passa como ordinal
+      // do arquivo. NAO ha selectTrack no player da TV, que nem conhece a faixa.
+      // O dvMem acima ja foi aplicado, entao uma escolha lembrada nao e
+      // sobrescrita; a escolha da pessoa DEPOIS (video_escolher_audio com a
+      // sessao DV ativa) continua entregando o resto ao player da TV.
+      int k = nv_dvaudio_decidir(nAudio, dvAudios, audioAtual, (const char (*)[16])dvAudioCodec,
+                                 (const char (*)[8])dvAudioIdioma, (const char (*)[48])dvAudioNome,
+                                 ling_casa);
       if (k >= 0) {
-        printf("[dv] audio %s -> faixa %d (%s %s) para manter Dolby Vision\n", c, k + 1, cod[k], rot[k]);
+        printf("[dv] audio %s -> faixa %d (%s %s) para manter Dolby Vision\n", c, k + 1,
+               dvAudioCodec[k], dvAudioNome[k]);
         fflush(stdout);
-        video_escolher_audio(k);
+        dvAudioMkvOrd = k;
         return 1;
       }
       printf("[dv] audio %s cannot be fed: stays on the TV player\n", c); fflush(stdout);
@@ -2663,12 +2670,22 @@ static int iniciarDts(int stream) {
   DtsTrack selected;
   const VideoFaixa *a = video_audio(audioAtual);
   double alvo = posSeg;
-  int paused = pausaPedida, ordinal = audioAtual, count = nAudio;
+  int paused = pausaPedida, ordinal = audioAtual, count = nAudio, trocada = 0;
   memset(&selected, 0, sizeof selected);
   if (a) {
     snprintf(selected.language, sizeof selected.language, "%s", a->idioma);
     snprintf(selected.codec, sizeof selected.codec, "%s", a->codec);
     selected.channels = a->canais;
+  }
+  // DV com a faixa trocada pelo dvPronto: ordinal, contagem e idioma sao os do
+  // MKV (dts_playback.c prepare(): o k-esimo audio do arquivo, conferido por
+  // idioma e por codec que o caminho alimenta). Canais ficam 0 = nao conferir.
+  if (dtsModoDv && dvAudioMkvOrd >= 0 && dvAudioMkvOrd < dvAudios) {
+    memset(&selected, 0, sizeof selected);
+    snprintf(selected.language, sizeof selected.language, "%s", dvAudioIdioma[dvAudioMkvOrd]);
+    snprintf(selected.codec, sizeof selected.codec, "%s",
+             !strcmp(dvAudioCodec[dvAudioMkvOrd], "A_EAC3") ? "eac3" : "ac3");
+    ordinal = dvAudioMkvOrd; count = dvAudios; trocada = 1;
   }
   dtsLegAntes = legAtual; dtsLegCount = nLeg;
   memset(&dtsLegFaixa, 0, sizeof dtsLegFaixa);
@@ -2687,7 +2704,7 @@ static int iniciarDts(int stream) {
   dts_engine_set_ac3(ajustes_dts_ac3());
   dts_playback_next_dv(dtsModoDv);
   dtsSessao = dts_playback_start(urlAtual, cabsHttp, stream, alvo,
-                               paused, expWin, 0, a ? &selected : NULL, ordinal, count);
+                               paused, expWin, 0, (a || trocada) ? &selected : NULL, ordinal, count);
   if (!dtsSessao) {
     dtsMarcarAbertas(0);
     marco("DTS startup failed: software playback unavailable");
@@ -3168,6 +3185,7 @@ int video_mkv_sondado(void) {
 void video_sondar_mkv_agora(void) {
   if (dtsSessao || !mkvPendente || fioMkvVivo || !urlAtual[0]) return;
   mkvPendente = 0;
+  if (nv_url_e_mp4(urlAtual)) return;   // .mp4 nunca tem Tracks de Matroska
   fioMkvVivo = 1;
   printf("[mkv] sonda do cabecalho disparada (buffer %.0f s a frente)\n", bufferSeg - posSeg);
   fflush(stdout);

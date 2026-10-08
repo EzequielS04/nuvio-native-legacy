@@ -54,4 +54,16 @@ static inline int nv_dvaudio_escolher(int n, int atual, const char (*codec)[16],
   return melhor;
 }
 
+// Decisao como o dvPronto a usa. A escolha vem SO da lista do MKV (nMkv faixas):
+// o player da TV costuma listar UMA faixa de audio num remux com TrueHD+E-AC-3
+// (C9: "faixas: audio=1"), entao a lista dele nao pode limitar os candidatos.
+// nTv fica na assinatura so para o teste deixar essa regra explicita.
+// Devolve o indice da faixa NO MKV (ordinal entre as faixas de audio), ou -1.
+static inline int nv_dvaudio_decidir(int nTv, int nMkv, int atual, const char (*codec)[16],
+                                     const char (*idioma)[8], const char (*rotulo)[48],
+                                     int (*casa)(const char *, const char *)) {
+  (void)nTv;
+  return nv_dvaudio_escolher(nMkv, atual, codec, idioma, rotulo, casa);
+}
+
 #endif
