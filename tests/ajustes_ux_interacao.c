@@ -270,6 +270,14 @@ int main(void) {
   for (i=0;i<AJ_N_TELA;i++) if (TELA[i].tipo == IT_OPC)
     assert(strcmp(ajVisualIcone(TELA[i].op), "aj_settings-2"));
 
+  // Apoiar o projeto: OK abre o painel dos QRs, o foco fica na linha, Voltar e OK fecham.
+  assert(apoio_n() > 0);
+  focarOpcao(AJ_APOIAR); assert(!apoioAberto);
+  key(SDLK_RETURN); assert(apoioAberto && !uxEditor);
+  key(SDLK_DOWN); assert(apoioAberto && focoOp == AJ_APOIAR);   // setas nao andam por tras
+  key(SDLK_ESCAPE); assert(!apoioAberto && focoOp == AJ_APOIAR);
+  key(SDLK_RETURN); assert(apoioAberto); key(SDLK_RETURN); assert(!apoioAberto && focoOp == AJ_APOIAR);
+
   // Reabrir a tela preserva valores confirmados e não confirma rascunhos.
   int confirmado = valor[AJ_RELOGIO]; ajustes_encerrar(); ajustes_iniciar();
   assert(valor[AJ_RELOGIO] == confirmado);

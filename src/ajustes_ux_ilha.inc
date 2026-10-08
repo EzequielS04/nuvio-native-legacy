@@ -933,7 +933,7 @@ static void aj2InspetorDiferencas(void) {
 // --- A TELA ---------------------------------------------------------------------
 static int ajModalAberto(void) {
   return (uxEditor && (uxRestaurar || uxAvisoRisco || uxEditor == 2)) || riscoFolha || frAberta || ajVinculoAtivo() ||
-         teclado_aberto() || registro_envio_aberto();
+         teclado_aberto() || registro_envio_aberto() || apoioAberto;
 }
 static void ajDesenharTela(void) {
   int modal = ajModalAberto();

@@ -1695,6 +1695,10 @@ static void guiaEvento(const SDL_Event *e);
 static void guiaDesenhar(void);
 static void guiaAtualizar(float dt);
 static int guiaAberto;
+static int apoioAberto;   // painel com os QRs de "Apoiar o projeto" (ajustes_ux_apoio.inc)
+static void apoioAbrir(void);
+static void apoioEvento(const SDL_Event *e);
+static void apoioDesenhar(void);
 int  ajustes_opcao_em_foco(void) { return focoOp; }
 // Categoria mostrada na lista. Com o foco no indice ela e a categoria em foco
 // la; com o foco na lista, a do item.
@@ -6300,6 +6304,7 @@ static void eventoTela(const SDL_Event *e);
 void ajustes_evento(const SDL_Event *e) {
   AJ_ESCALA_INI();
   if (guiaAberto) { guiaEvento(e); AJ_ESCALA_FIM(); return; }
+  if (apoioAberto) { apoioEvento(e); AJ_ESCALA_FIM(); return; }
   eventoTela(e);
   // FIM DA EDICAO DO LIMITE (issue #197): qualquer tecla que solte a linha
   // (OK, Voltar, cima/baixo, sair da tela) confirma a rajada. Sem rajada em
@@ -6384,7 +6389,7 @@ static void eventoTela(const SDL_Event *e) {
     if (focoOp == AJ_VER_REGISTRO) { registro_abrir(); return; }
     if (focoOp == AJ_GUIA) { guiaAbrir(0); return; }
     if (focoOp == AJ_NOVIDADES20) { pediuNovidades20 = 1; return; }
-    if (focoOp == AJ_APOIAR) { uxNotificar("Aponte a câmera do celular para um dos códigos."); return; }
+    if (focoOp == AJ_APOIAR) { apoioAbrir(); return; }
     if (focoOp == AJ_ADDONS) { pediuAddons = 1; return; }
     if (focoOp == AJ_PLUGINS) { pediuPlugins = 1; return; }
     if (focoOp == AJ_FONTE_ORDEM) { frAbrir(3); return; }
@@ -7275,6 +7280,7 @@ static void ajDesenharTudo(Uint32 agora) {
 
   // A modal de digitacao e a ultima: ela e sempre a pergunta mais recente da
   // tela, e tem de ficar por cima ate do cartao de vinculo.
+  if (apoioAberto) apoioDesenhar();
   if (teclado_aberto()) teclado_desenhar(agora);
 }
 
@@ -7416,7 +7422,7 @@ int ajustes_teste_quadro(const char *id) {
   uxCancelar(); uxAviso[0] = 0; uxRetornarOp = -1;
   memset(maisAberto, 0, sizeof maisAberto);
   scrollY = velY = 0; paginaA = 1;
-  filAberta = 0; riscoFolha = 0;
+  filAberta = 0; riscoFolha = 0; apoioAberto = 0;
   focarSecao(0); focoIndice = 1;
   ajArteFundoN = 12; ajMemFixa = 0; ajQuadroAddons = 0; ajQuadroPlugins = 0; ajVinculoTeste = 0;
   if (teclado_aberto()) { SDL_Event e = { 0 }; e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_ESCAPE; teclado_evento(&e); }
@@ -7487,6 +7493,7 @@ int ajustes_teste_quadro(const char *id) {
     if (primeira < 0) return 0;
     focarOpcao(primeira);
   }
+  else if (!strcmp(id, "apoio-painel")) { ajArteFundoN = 12; focarOpcao(AJ_APOIAR); apoioAbrir(); }
   else if (!strncmp(id, "guia", 4)) { if (!ajustesTesteGuia(id)) return 0; }
   else if (!strcmp(id, "principal")) { focarOpcao(AJ_HOME_LAYOUT); }
   // 2.0 N1: logo e abertura. NUVIO_N1_LOGO / NUVIO_N1_ABERT escolhem o valor salvo.
