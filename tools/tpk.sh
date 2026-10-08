@@ -85,7 +85,7 @@ if [ ! -f "$CACHE/prefix/lib/libSDL2.a" ] || [ ! -f "$CACHE/prefix/lib/libSDL2_t
            https://github.com/harfbuzz/harfbuzz/releases/download/10.4.0/harfbuzz-10.4.0.tar.xz \
            https://github.com/libass/libass/releases/download/0.17.5/libass-0.17.5.tar.xz; do
     d="$CACHE/src/$(basename "$u" .tar.xz)"
-    [ -d "$d" ] || curl -fsSL "$u" | tar x -C "$CACHE/src"
+    [ -d "$d" ] || curl -fsSL "$u" | tar xJ -C "$CACHE/src"
   done
   cp tools/tpk/deps.sh "$CACHE/deps.sh"
   docker run --rm --platform linux/arm/v5 -v "$CACHE:/w" nuvio-tpk-sdk sh /w/deps.sh
