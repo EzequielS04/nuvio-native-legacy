@@ -153,6 +153,8 @@ static void *range_worker(void *opaque) {
       pthread_mutex_unlock(&e->range_lock);
       job->data=rede_baixar_trecho64_final(target,direct&&cross?"":e->headers,job->start,job->end,
         &job->count,&job->total,&job->status,&job->cancel,fin,&cross);
+      uint64_t first=clock_ns(CLOCK_MONOTONIC);
+      int first_status=job->status, first_ok=job->data!=NULL;
       if(direct && !job->data && !__atomic_load_n(&job->cancel,__ATOMIC_RELAXED)) {
         pthread_mutex_lock(&e->range_lock);
         if(!strcmp(e->final_url,target)) e->final_url[0]=0;
@@ -160,6 +162,19 @@ static void *range_worker(void *opaque) {
         job->data=rede_baixar_trecho64_final(e->url,e->headers,job->start,job->end,
           &job->count,&job->total,&job->status,&job->cancel,fin,&cross);
         direct=0;
+        /* #203 DV startup took ~19.5 s twice (LG C9): one stalled request
+         * hitting the 15 s curl deadline plus a ~4.5 s add-on re-resolve is
+         * the suspicion. Name it in the log: no URL, only timings/status. */
+        uint64_t done=clock_ns(CLOCK_MONOTONIC);
+        printf("[dts-range] direto falhou: at=%lldMiB ms=%llu http=%d; pelo addon: ms=%llu http=%d bytes=%ld\n",
+               (long long)(job->start>>20),(unsigned long long)((first-begun)/1000000),first_status,
+               (unsigned long long)((done-first)/1000000),job->status,job->count);
+        fflush(stdout);
+      } else if(!__atomic_load_n(&job->cancel,__ATOMIC_RELAXED) &&
+                (!first_ok || first-begun>=UINT64_C(3000000000))) {
+        printf("[dts-range] %s: at=%lldMiB ms=%llu http=%d bytes=%ld direto=%d\n",first_ok?"lento":"falhou",
+               (long long)(job->start>>20),(unsigned long long)((first-begun)/1000000),first_status,job->count,direct);
+        fflush(stdout);
       }
       if(!direct && job->data && fin[0]) {
         pthread_mutex_lock(&e->range_lock);

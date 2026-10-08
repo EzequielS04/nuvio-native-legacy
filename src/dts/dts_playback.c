@@ -162,6 +162,7 @@ static int trackMatches(DtsPlayback *p, const DtsTrack *t) {
       (!p->selected.language[0] || ling_casa(t->language, p->selected.language)) &&
       (!p->selected.channels || t->channels == p->selected.channels);
 }
+static double clockSeconds(clockid_t clock);
 static int prepare(DtsPlayback *p, int stream, int core, double target) {
   const DtsMediaInfo *info;
   /* A native Load is single-use. Retire its callbacks before reconfiguration. */
@@ -178,6 +179,7 @@ static int prepare(DtsPlayback *p, int stream, int core, double target) {
   p->suppress_events = 0;
   pthread_mutex_unlock(&p->lock);
   /* Reloading selects the exact same source stream and resets encoder delay. */
+  double began = clockSeconds(CLOCK_MONOTONIC), opened;
   nativeEvent(p,"{\"dtsStage\":{\"name\":\"source-open-requested\"}}");
   if (dts_engine_open(p->engine, p->url, p->headers, stream, core, target) < 0) {
     fail(p, dts_engine_error(p->engine)); return 0;
@@ -218,12 +220,26 @@ static int prepare(DtsPlayback *p, int stream, int core, double target) {
       info = dts_engine_info(p->engine);
     }
   }
-  nativeEvent(p,"{\"dtsStage\":{\"name\":\"source-opened\"}}");
+  /* #203: stage lines print only after prepare, so they carry no time of
+   * their own. Say how long the source open and the native Load took. */
+  opened = clockSeconds(CLOCK_MONOTONIC);
+  {
+    char event[128];
+    snprintf(event, sizeof event, "{\"dtsStage\":{\"name\":\"source-opened\",\"detail\":\"ms=%.0f\"}}",
+             (opened - began) * 1000);
+    nativeEvent(p, event);
+  }
   p->pipeline = dts_pipeline_create(NV_APP_ID, p->window,
                                     p->major, nativeEvent, p);
   if (!p->pipeline) { fail(p, "DTS native pipeline unavailable"); return 0; }
   if (!info || !dts_pipeline_load(p->pipeline, info, target)) {
     fail(p, dts_pipeline_error(p->pipeline)); return 0;
+  }
+  {
+    char event[128];
+    snprintf(event, sizeof event, "{\"dtsStage\":{\"name\":\"native-load-returned\",\"detail\":\"ms=%.0f\"}}",
+             (clockSeconds(CLOCK_MONOTONIC) - opened) * 1000);
+    nativeEvent(p, event);
   }
   pthread_mutex_lock(&p->lock);
   p->status.info = *info;
