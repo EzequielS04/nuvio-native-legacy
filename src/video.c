@@ -2179,8 +2179,10 @@ void video_bombear(void) {
     // nela. `touch /tmp/nuvio-dts-forcar` converte toda faixa DTS escolhida.
     forcar = knownDts && access("/tmp/nuvio-dts-forcar", F_OK) == 0;
 #endif
-    // webOS 26 nao tem DTS e toca a faixa MUDA sem errorCode 200 (#285): nelas
-    // converte antes do erro, que nunca vem.
+    // Toda LG de 2020 em diante (release >= 5, dts_tv.h) converte o DTS antes
+    // de tocar, inclusive os modelos 2023/24 que tem DTS: nao da para detectar
+    // o suporte com seguranca (o webOS 26 toca MUDO sem errorCode 200, #285).
+    // So a C9 e anteriores (webOS < 5) usam o caminho nativo + errorCode 200.
     if ((audioNaoSup && knownDts) || forcar ||
         nv_dts_converter_ja(webosMaior(), knownDts, 1, dtsTentou)) {
       dtsEstado = VIDEO_DTS_PREPARANDO;
