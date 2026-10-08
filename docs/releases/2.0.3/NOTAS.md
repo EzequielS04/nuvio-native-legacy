@@ -14,7 +14,7 @@ New Settings, a new episode menu, the Magic Remote pointer on almost every scree
 - **Episode ratings** show the Trakt or TMDB logo next to the score. The episode synopsis is smaller.
 - **TV guide:** choose which channel add-ons show up, per profile (#283). When a provider has more channels than fit, the guide says "Showing N of M channels" instead of dropping categories.
 - **P2P space limit** in the P2P settings (#334). Leftovers from a session that crashed are deleted at start.
-- **LG: Dolby Vision in MKV** shows a screen while it opens, with each step and a "Watch now in HDR10" button. If the audio is TrueHD, it switches to E-AC-3 or AC-3 in the same language so Dolby Vision stays on. A failed header read is retried instead of falling back to HDR10. The option is still off by default.
+- **LG: Dolby Vision in MKV** shows a screen while it opens, with each step and a "Watch now in HDR10" button. If the audio is TrueHD, it switches to E-AC-3 or AC-3 in the language you were listening to, so Dolby Vision stays on; if it can't match the track safely, it doesn't switch. A failed header read is retried instead of falling back to HDR10, and the film still starts where you pressed Play. If it falls back to HDR10, it continues from that point. The option is still off by default.
 - **LG Magic Remote pointer** on almost every screen: Library, Settings, Explore, View all, Search, Profile, Saved, Agenda, TV guide, Add-ons, the player sheets, the post-play screen and the Dolby Vision screen (#99).
 - **Thai** is drawn with a bundled Noto Sans Thai font, in the interface and in subtitles (#369).
 - **Hide unreleased** now also applies to Home rows and to collection and View all grids (#369).
@@ -39,13 +39,13 @@ New Settings, a new episode menu, the Magic Remote pointer on almost every scree
 
 - **Live TV:** the reconnect watcher took the provider's end of stream for a manual pause and never reopened the channel. Manual pause is now tracked on its own (#302, #350).
 - **Samsung .tpk with Mali-400 (Utgard):** poster mipmaps are built on the CPU and the hero image is decoded at 960 px, so Home stutters less (#286).
-- **Search** waits 300 ms after the last key before asking the add-ons, and keeps the previous rows until the first reply (#368).
-- **Add-on sync** merges your TV edits with the account instead of replacing it: an add-on installed on the phone stays, one removed on the phone does not come back. After 3 refusals (4xx) the TV edit is dropped and the account list is applied (#360).
+- **Search** waits 300 ms after the last key before asking the add-ons, and keeps the previous rows until the first reply (#368). A search with no results clears the previous ones.
+- **Add-on sync** merges your TV edits with the account instead of replacing it: an add-on installed on the phone stays, one removed on the phone does not come back. The merged list is never cut. After 3 refusals (4xx) the TV edit is dropped and the account list is applied (#360).
 - **Fixed sidebar:** the row editor (Reorder and enable rows) and the View all and collection grids start after it instead of under it (#359).
 - **Up next** no longer disappears when the Nuvio catalog does not list the episode; Cinemeta is checked first (#356).
 - **Recommending a series** from a Continue Watching card works again (#363).
 - **Samsung .wgt:** Arabic subtitles use Noto Naskh (#370). Holding OK in the subtitle sheet makes one choice instead of reloading on every repeat (#370).
-- **Profile page:** Left at the edge opens the sidebar without closing the page (#371).
+- **Profile page:** Left at the edge opens the sidebar without closing the page, also on a new profile or one with only friends (#371).
 - **Continue Watching:** with Episode thumbnail on, the card shows the episode still; a watched movie says Play. With the Nuvio account as source, up next is filled even when Trakt or Simkl is linked, without episodes already watched elsewhere.
 - **Watched:** "up to here" and "season" only send episodes that change, so Trakt gets no duplicate plays. The main button, next episode and "% watched" follow the change right away.
 - **Episode list** missing on a title page, or no Up next card in the player, after browsing many titles.
@@ -71,6 +71,7 @@ New Settings, a new episode menu, the Magic Remote pointer on almost every scree
 - **Trakt/Simkl sign-in** no longer freezes the screen while sending credentials.
 - Saved: section label follows the open card. Glass outline follows the poster radius. Back from the add-on and plugin lists returns to the row you came from.
 - **Sync** summary is translated on the spot, and the Continue Watching source "Both" is now "All sources" (#312).
+- A username and password inside an add-on URL no longer show up in the log.
 - The log is sent once per session, at most 64 KB, and records the settings you change.
 
 ## Notes
