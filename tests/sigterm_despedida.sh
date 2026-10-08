@@ -27,7 +27,7 @@ sessao() { # numero do log; mata com SIGTERM depois de a abertura terminar
   local log="$W/log$1.txt" i
   NUVIO_DADOS="$DADOS" "$BIN" "$PWD/deploy/app/art" >"$log" 2>&1 &
   PID=$!
-  for i in $(seq 1 120); do grep -q "abertura\] fim" "$log" && break; sleep 0.25; done
+  for i in $(seq 1 120); do grep -q "abertura\] fim" "$log" 2>/dev/null && break; sleep 0.25; done
   sleep 1
   [ "$1" = 1 ] && { kill -TERM "$PID"; for i in $(seq 1 40); do kill -0 "$PID" 2>/dev/null || break; sleep 0.25; done; }
   [ "$1" = 2 ] && { kill -TERM "$PID"; wait "$PID" 2>/dev/null; }
