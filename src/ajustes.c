@@ -475,6 +475,10 @@ typedef enum {
   AJ_FONTE_AQUECER,
   AJ_FONTE_CONFERIR_VARIAS,
   AJ_FONTE_PREPARAR,
+  // 2.0.2 (#203): "Proximo episodio no Continuar". Ligado (padrao) = os 'a seguir' das
+  // series entram na fileira; Desligado = so o que esta em andamento. Por perfil, local
+  // (como AJ_CW_FONTE). No fim: valor[]/CHAVE[] posicionais.
+  AJ_CW_PROXIMO,
   AJ_N
 } OpcaoId;
 
@@ -1289,6 +1293,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Aquecer conexões ao abrir o título", V_LIGA, 2),   // local: fonteAquecerLocal
   ESC("Conferir várias fontes ao mesmo tempo", V_LIGA, 2),   // local: fonteConferirVariasLocal
   ESC("Preparar a fonte ao abrir o título", V_LIGA, 2),   // local: fontePrepararLocal
+  ESC("Próximo episódio no Continuar",   V_LIGA, 2),   // por perfil: cwProximoLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1508,6 +1513,7 @@ static const char *CHAVE[] = {
   "fonteAquecerLocal",
   "fonteConferirVariasLocal",
   "fontePrepararLocal",
+  "cwProximoLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1823,6 +1829,7 @@ int ajustes_fonte_tocar_conferindo(void) { return lig(AJ_FONTE_TOCAR_CONFERINDO)
 int ajustes_fonte_aquecer(void) { return lig(AJ_FONTE_AQUECER); }
 int ajustes_fonte_conferir_varias(void) { return lig(AJ_FONTE_CONFERIR_VARIAS); }
 int ajustes_fonte_preparar(void) { return lig(AJ_FONTE_PREPARAR); }
+int ajustes_cw_proximo(void) { return lig(AJ_CW_PROXIMO); }
 int ajustes_fonte_escopo(void)      { int v = valor[AJ_FONTE_ESCOPO]; return v < 0 || v > 2 ? 0 : v; }
 int ajustes_fonte_regex_modo(void)  { int v = valor[AJ_FONTE_REGEX]; return v < 0 || v > 2 ? 0 : v; }
 int ajustes_fonte_usar_outros(void) { return lig(AJ_FONTE_OUTROS); }
@@ -3795,6 +3802,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_FIL_LIMITE:     /* fileiras da home: por aparelho (fileirasui-p<N>.txt) */
     case AJ_FIL_ORDEM:
     case AJ_CW_FONTE:
+    case AJ_CW_PROXIMO:
     case AJ_BORDA_FOCO:
     case AJ_FONTE_UI:
     case AJ_FONTE_MANUAL:
@@ -3896,7 +3904,7 @@ static int somenteDesteAparelho(int op) {
 // onde o historico vai e se o social existe. Entram na copia por perfil
 // (ajustes-p<N>.txt) e continuam FORA do blob (somenteDesteAparelho).
 static int perfilLocal(int i) {
-  return i == AJ_CW_FONTE || i == AJ_SALVOS_DEST || i == AJ_HIST_CONTA || i == AJ_SOCIAL;
+  return i == AJ_CW_FONTE || i == AJ_CW_PROXIMO || i == AJ_SALVOS_DEST || i == AJ_HIST_CONTA || i == AJ_SOCIAL;
 }
 
 static int dePerfil(int i) {
@@ -4710,7 +4718,7 @@ static int inativa(int op) {
     // ser a vitrine.
     case AJ_DESCANSO_ESTILO: return valor[AJ_ESMAECER] == 0;
     case AJ_DESCANSO_FONTE:  return valor[AJ_ESMAECER] == 0 || ajustes_descanso_estilo() != 0;
-    case AJ_CW_OK: case AJ_CW_FONTE:
+    case AJ_CW_OK: case AJ_CW_FONTE: case AJ_CW_PROXIMO:
     case AJ_CW_ESTILO: case AJ_CW_THUMB: case AJ_CW_FURTHEST:
     case AJ_CW_NAO_EXIBIDOS: case AJ_CW_ORDEM: case AJ_CW_CONCLUIDO: case AJ_CW_RETIDO_TAMBEM:
       return !ajustes_cw_ligado();
@@ -4871,7 +4879,7 @@ static const char *ajudaOpcao(int op) {
     if (op == AJ_DTS_AC3) return "Não disponível nesta TV. Só a LG converte o DTS dentro do app.";
     if (op == AJ_CACHE_SEEK) return "Não disponível nesta TV. O player da LG e da Samsung não deixa o app guardar o vídeo em disco.";
     if (op == AJ_DESCOBRIR) return "A tela Descobrir do app web ainda não existe nesta TV. A escolha fica guardada na conta.";
-    if ((op >= AJ_CW_OK && op <= AJ_CW_ORDEM) || op == AJ_CW_CONCLUIDO || op == AJ_CW_RETIDO_TAMBEM)
+    if ((op >= AJ_CW_OK && op <= AJ_CW_ORDEM) || op == AJ_CW_PROXIMO || op == AJ_CW_CONCLUIDO || op == AJ_CW_RETIDO_TAMBEM)
       return op == AJ_CW_BLUR_PROX && ajustes_cw_ligado()
         ? "Ative Miniatura do episódio para desfocar a imagem do próximo episódio."
         : "Ative Continuar assistindo para ajustar os cards de retomada.";
@@ -5013,6 +5021,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_CW_THUMB: return "Usa a imagem do próprio episódio no card, em vez da arte da série.";
     case AJ_CW_BLUR_PROX: case AJ_DET_BLUR_NAO_VISTOS: return "Oculta detalhes da miniatura para evitar spoilers de episódios ainda não assistidos.";
     case AJ_CW_FURTHEST: return "Escolhe o próximo episódio a partir do mais avançado marcado como assistido.";
+    case AJ_CW_PROXIMO: return "Ligado, a fileira mostra também o próximo episódio das séries que você acompanha. Desligado, mostra só o que você deixou pela metade.";
     case AJ_CW_NAO_EXIBIDOS: return "A retomada mostra o próximo episódio antes de ir ao ar.";
     case AJ_CW_ORDEM: return "Como a retomada se ordena: pelo mais recente, no estilo dos streamings, ou com os episódios futuros num bloco separado.";
     case AJ_CW_CONCLUIDO: return "A partir de quanto do episódio ele conta como assistido e a retomada passa ao próximo.";
@@ -5259,6 +5268,8 @@ static const char *efeitoOpcao(int op) {
       return "Vale só nesta TV: não altera a Home dos seus outros aparelhos.";
     case AJ_CW_OK:
       return "Vale só nesta TV: não altera a Home dos seus outros aparelhos.";
+    case AJ_CW_PROXIMO:
+      return "Vale para este perfil. Ao mudar, a fileira é remontada na hora.";
     case AJ_CW_FONTE:
       // SEM VINCULO, "Simkl" e uma fileira vazia. Dizer isso aqui, na linha
       // onde a escolha e feita, e o que impede a Home de so perder a fileira
@@ -6048,7 +6059,7 @@ static int definirValorDireto(int op, int novo) {
   if (op == AJ_ICONE_APP) iconeapp_aplicar_plataforma();
   if (op == AJ_CW_FONTE || op == AJ_SALVOS_DEST || op == AJ_SOCIAL) desc_repetir();
   // A fonte decide so esta fileira: refaz-la, alem do ciclo completo (#244).
-  if (op == AJ_CW_FONTE) desc_refazer_continuar();
+  if (op == AJ_CW_FONTE || op == AJ_CW_PROXIMO) desc_refazer_continuar();
   if (op == AJ_CW_ORDEM || op == AJ_CW_NAO_EXIBIDOS || op == AJ_CW_CONCLUIDO || op == AJ_CW_RETIDO_TAMBEM)
     desc_refazer_continuar();
   if (op == AJ_TEX_MB) tex_definir_orcamento_mb(ajustes_tex_mb());

@@ -270,6 +270,7 @@ int   ajustes_cw_ordem(void)               { return 0; }   // Padrao (issue #127
 int   ajustes_cw_concluido(void)           { return 90; }  // Percentual assistido de fabrica
 int   ajustes_itens_fileira(void)          { return 12; }   // padrao (#163)
 int   ajustes_cw_mostrar_nao_exibidos(void) { return 1; }
+int   ajustes_cw_proximo(void) { return 1; }
 int   ajustes_cw_ligado(void)              { return 1; }
 int   ajustes_cw_estilo(void)              { return 0; }
 int   ajustes_posteres_deitados(void)      { return 0; }
@@ -315,6 +316,7 @@ int trakt_continuar(CatItem *s, int m) {
   return 1;
 }
 int   trakt_e_a_seguir(const char *id)     { (void)id; return 0; }
+int   trakt_progresso_ocultar(const char *i, int o) { (void)i; (void)o; return 0; }
 int   trakt_continuar_falhou(void)         { return 0; }
 const char *nuvem_trakt_cliente(void)      { return ""; }
 int   arte_reserva_registrar(const char *url, const char *imdb, int poster) {

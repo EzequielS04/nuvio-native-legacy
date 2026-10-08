@@ -108,6 +108,17 @@ void prog_marcar_removido(const char *imdb);
 // a remocao. 0 quando nunca foi removido.
 int  prog_removido_vence(const char *imdb, long long instanteMs);
 
+// "OCULTO DE CONTINUAR ASSISTINDO", em disco (#203): vale para o item "A seguir",
+// que nao tem ponto de retomada para apagar. Mesma regra de instante de
+// prog_removido_vence, mas SOBREVIVE ao reinicio. Volta quando ha episodio NOVO.
+void prog_ocultar_continuar(const char *imdb);
+// 1 quando `imdb` (obra, perfil ativo) continua oculto para um item de instante
+// `instanteMs`. Nao altera nada.
+int  prog_oculto_vence(const char *imdb, long long instanteMs);
+// Se a obra estava oculta e `instanteMs` a desfaz (episodio novo), apaga o
+// registro e devolve 1: quem chama desfaz tambem o oculto do Trakt.
+int  prog_oculto_soltar(const char *imdb, long long instanteMs);
+
 // Apaga o arquivo inteiro, todos os perfis. Chamar no logout, junto de
 // sync_esquecer_usuario.
 void prog_esquecer_tudo(void);

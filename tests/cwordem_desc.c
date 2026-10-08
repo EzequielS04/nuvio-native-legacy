@@ -122,6 +122,7 @@ int ajustes_cw_ordem(void)                { return modoTeste; }
 static int concluidoTeste = 90;         // Percentual assistido; 90 de fabrica
 int   ajustes_cw_concluido(void)           { return concluidoTeste; }
 int ajustes_cw_mostrar_nao_exibidos(void) { return naoExibidosTeste; }
+int   ajustes_cw_proximo(void) { return 1; }
 
 // --- O "TRAKT" FALSO ---------------------------------------------------------
 // Por instante (o mais recente primeiro depois da ordenacao da montagem):
@@ -160,6 +161,7 @@ static const Falso BROTHERS[] = {
 static const Falso *tabela = FALSO;
 static int semDataPrimeiro;   // 1 = o primeiro da tabela vem sem `released`
 static int nTabela = (int)(sizeof FALSO / sizeof *FALSO);
+int   trakt_progresso_ocultar(const char *i, int o) { (void)i; (void)o; return 0; }
 #define NFALSO nTabela
 int trakt_e_a_seguir(const char *id) {
   int i;

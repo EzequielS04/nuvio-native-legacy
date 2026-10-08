@@ -25,6 +25,8 @@
 // exercita a remocao, e o catalogo aqui e falso.
 void prog_remover(const char *chave) { (void)chave; }
 void prog_marcar_removido(const char *imdb) { (void)imdb; }
+int prog_oculto_vence(const char *imdb, long long ms) { (void)imdb; (void)ms; return 0; }
+int prog_oculto_soltar(const char *imdb, long long ms) { (void)imdb; (void)ms; return 0; }
 int  prog_removido_vence(const char *imdb, long long instanteMs) { (void)imdb; (void)instanteMs; return 0; }
 int  cat_tirar_continuar(const char *imdb) { (void)imdb; return 0; }
 int arte_reserva_episodios(const char *imdb, const char *corpo) { (void)imdb; (void)corpo; return 0; }
@@ -246,6 +248,7 @@ int   ajustes_itens_fileira(void)          { return 12; }   // padrao (#163)
 int   ajustes_cw_ordem(void)               { return 0; }   // Padrao (issue #127)
 int   ajustes_cw_concluido(void)           { return 90; }  // Percentual assistido de fabrica
 int   ajustes_cw_mostrar_nao_exibidos(void) { return 1; }
+int   ajustes_cw_proximo(void) { return 1; }
 int   ajustes_idioma_ingles(void)          { return 0; }
 int ajustes_idioma(void) { return 0; }
 int   ajustes_tmdb_ligado(void)            { return 0; }
@@ -256,6 +259,7 @@ int   ajustes_fundo_addon(void)            { return 0; }
 int   ajustes_logo_addon(void)             { return 0; }
 int   addons_aceita_id(int i, const char *t, const char *id) { (void)i; (void)t; (void)id; return -1; }
 int   trakt_e_a_seguir(const char *id)     { (void)id; return 0; }
+int   trakt_progresso_ocultar(const char *i, int o) { (void)i; (void)o; return 0; }
 const char *ajustes_tmdb_idioma(void)      { return "pt-BR"; }
 int   cat_acrescentar(const CatItem *i)    { (void)i; return -1; }
 void  cat_atualizar_item(int i, const CatItem *n) { (void)i; (void)n; }

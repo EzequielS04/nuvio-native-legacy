@@ -220,7 +220,7 @@ static int ajCenaSecao(int op) {
       return AJC_CON_PERFIS;
     case AJ_ADDONS: case AJ_PLUGINS: case AJ_ADDONS_PRINCIPAL: return AJC_FON_ADDONS;
     case AJ_ENQUETES: return AJC_CON_AVISOS;
-    case AJ_DISCORD: case AJ_SALVOS_DEST: case AJ_CW_FONTE: case AJ_HIST_CONTA: case AJ_SOCIAL: return AJC_CON_SOCIAL;
+    case AJ_DISCORD: case AJ_SALVOS_DEST: case AJ_CW_FONTE: case AJ_CW_PROXIMO: case AJ_HIST_CONTA: case AJ_SOCIAL: return AJC_CON_SOCIAL;
     case AJ_DEBRID_RD: case AJ_DEBRID_TB: case AJ_DEBRID_PM: case AJ_DEBRID_AD: case AJ_DEBRID_AD_TESTAR:
       return AJC_CON_CHAVES;
     case AJ_P2P_LIGADO: case AJ_P2P_URL: case AJ_P2P_TESTAR: return AJC_CON_P2P;

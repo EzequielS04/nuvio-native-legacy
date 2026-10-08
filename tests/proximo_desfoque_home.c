@@ -50,6 +50,7 @@ const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nom
 static Uint32 relogio = 1000;
 static void quadro(void) { relogio += 16; home_atualizar(0.016f, relogio); }
 int trakt_e_a_seguir(const char *i) { (void)i; return 0; }
+int   trakt_progresso_ocultar(const char *i, int o) { (void)i; (void)o; return 0; }
 int simkl_e_a_seguir(const char *i) { (void)i; return 0; }
 int main(void) {
   static CatItem a, b;
