@@ -151,6 +151,11 @@ static int progressoPronto, proximoT, proximoE;
 // "aired" do Trakt ja desconta episodio que ainda nao foi ao ar, que e
 // justamente o denominador certo para uma porcentagem.
 static int epsExibidos, epsVistos;
+// QUANTOS VISTOS O MAPA (vistoep) TINHA quando epsVistos foi lido do Trakt. O
+// hero mostra epsVistos + (mapa agora - epsBase): marcar/desmarcar pelo menu,
+// player ou Agenda mexe no mapa na hora, e sem isto a linha "% assistido"
+// ficava congelada ate reabrir a pagina.
+static int epsBase;
 static int  nRel;
 static struct { int numero; int nEps; struct { int ep, nota; } eps[EX_EP_MAX]; }
             temps[EX_TEMP_MAX];
@@ -569,6 +574,7 @@ static void *buscar(void *arg) {
         memcpy(vistos, novo, sizeof vistos);
         proximoT = pt; proximoE = pe; progressoPronto = 1;
         epsExibidos = exib; epsVistos = vist;
+        epsBase = vistoep_contar(id);
       }
       pthread_mutex_unlock(&trava);
     }
@@ -1372,7 +1378,7 @@ static void zerarPublicado(void) {
   agTemp = agEp = 0;
   memset(vistos, 0, sizeof vistos);
   progressoPronto = proximoT = proximoE = 0;
-  epsExibidos = epsVistos = 0;
+  epsExibidos = epsVistos = epsBase = 0;
   memset(notas, 0, sizeof notas);
 }
 
@@ -1912,11 +1918,15 @@ int extras_progresso_pronto(void) {
 // exibidos nao e "0% assistido": e serie que ainda nao estreou, e 0% ali seria
 // uma afirmacao sobre nada.
 int extras_progresso_serie(int *vistosEp, int *exibidos) {
-  int pronto, v, e;
+  int pronto, v, e, base;
+  char idAtual[sizeof idPedido];
   pthread_mutex_lock(&trava);
   pronto = progressoPronto; v = epsVistos; e = epsExibidos;
+  base = epsBase; snprintf(idAtual, sizeof idAtual, "%s", idPedido);
   pthread_mutex_unlock(&trava);
   if (!pronto || e <= 0) return 0;
+  if (idAtual[0] && vistoep_conhecido(idAtual))
+    v = vistoep_ajustar_vistos(v, base, vistoep_contar(idAtual), e);
   if (v > e) v = e;      // o Trakt conta reprise; a porcentagem nao passa de 100
   if (vistosEp) *vistosEp = v;
   if (exibidos) *exibidos = e;

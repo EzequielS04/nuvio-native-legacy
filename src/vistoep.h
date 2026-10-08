@@ -64,6 +64,9 @@ int  vistoep_marcar_lote(const char *imdb, const VistoPar *pares, int n, int vis
 // Episodio de estado DESCONHECIDO (-1) conta como mudou, para o mapa vazio
 // continuar reparando o remoto. `*ja` = quantos ja estavam assim. Devolve
 // quantos entraram em `envio` (cabe `n`).
+// Vistos da serie = o que o Trakt disse (baseTrakt) mais o que o mapa mudou
+// desde entao (contarAgora - contarBase), preso a [0, exibidos].
+int  vistoep_ajustar_vistos(int baseTrakt, int contarBase, int contarAgora, int exibidos);
 int  vistoep_aplicar(const char *imdb, const VistoPar *lote, int n, int visto,
                      VistoPar *envio, int *ja);
 
