@@ -328,6 +328,26 @@ int main(void) {
     CONFERE(!recomenda_enviar(&ci, "trakt:gustavo", 99, ""), "modelo 99 recusado");
     CONFERE(!recomenda_enviar(&ci, "", 0, ""), "sem destinatario, recusado"); }
 
+  // --- 9b. card de Continuar assistindo de SERIE (issue #363) --------------
+  // O CatItem do card carrega "tt123:S:E" em `imdb`. O servidor so aceita
+  // /^tt\d+$/ (HTTP 400): o que viaja tem de ser o id da serie.
+  { CatItem ci;
+    memset(&ci, 0, sizeof ci);
+    snprintf(ci.imdb, sizeof ci.imdb, "%s", "tt17887410:2:5");
+    snprintf(ci.tipo, sizeof ci.tipo, "%s", "series");
+    snprintf(ci.titulo, sizeof ci.titulo, "%s", "Dark Matter");
+    respStatus = 200;
+    respCorpo = "{\"ok\":1,\"id\":10}";
+    envioEstado = REC_ENVIO_NADA;
+    fila.cheia = 0;
+    CONFERE(recomenda_enviar(&ci, "trakt:gustavo", 4, ""), "serie: o envio entra na fila");
+    nPost = 0;
+    enviarFila(cab);
+    CONFERE(strstr(ultimoCorpoPost, "\"imdb\":\"tt17887410\"") != NULL,
+            "serie: imdb sem temporada/episodio: [%s]", ultimoCorpoPost);
+    CONFERE(strstr(ultimoCorpoPost, "tt17887410:") == NULL,
+            "serie: sem sufixo :S:E no corpo: [%s]", ultimoCorpoPost); }
+
   // --- 10. o JSON do envio escapa aspas ------------------------------------
   { char esc[80];
     jsonEsc(esc, sizeof esc, "as\"pas\\e barra");
