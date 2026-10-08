@@ -252,7 +252,7 @@ int  video_registro_negado(void) { return 0; }
 int video_luna(const char *uri, const char *carga, void (*cb)(const char *, void *), void *ctx) {
   (void)uri; (void)carga; (void)cb; (void)ctx; return 0;
 }
-int  video_tocar(const char *u) { snprintf(urlAtual, sizeof urlAtual, "%s", u ? u : ""); return 0; }
+int  video_tocar(const char *u) { snprintf(urlAtual, sizeof urlAtual, "%s", u ? u : ""); return SIM.aceita; }
 void video_bombear(void) {}
 void video_parar(void) {}
 void video_pausar(int p) { (void)p; }
@@ -279,9 +279,20 @@ double video_duracao(void) { return SIM.duracao; }
 double video_creditos(void) { return 0.0; }
 double video_buffer_fim(void) { return SIM.bufferFim; }
 void video_definir_dv(int dv) { (void)dv; }
-int  video_tocando(void) { return 0; }
+int  video_tocando(void) { return SIM.tocando; }
+int  video_iniciando(void) { return SIM.iniciando; }
 int  video_pronto(void) { return SIM.pronto; }
-int  video_ativo(void) { return 0; }
+// A tela do DV no Mac: o que a simulacao disser, e o registro das chamadas para
+// os testes provarem o mudo (dv_tela) e a escolha do HDR10 (recusar).
+static int simDvTela = -1, simDvRecusas;
+void video_dv_fase(VideoDvFase *f) { if (f) *f = SIM.dvFase; }
+int  video_dv_candidato(const char *url) { (void)url; return SIM.dvCandidato; }
+void video_dv_tela(int cobrindo) { simDvTela = cobrindo ? 1 : 0; }
+void video_dv_recusar(void) { simDvRecusas++; SIM.dvFase.recusa = VIDEO_DV_NAO_PESSOA; }
+void video_dv_segurar(int segurar) { (void)segurar; }
+int  video_simulado_dv_tela(void) { return simDvTela; }
+int  video_simulado_dv_recusas(void) { return simDvRecusas; }
+int  video_ativo(void) { return SIM.aceita; }
 int  video_falhou(void) { return 0; }
 const char *video_erro_texto(void) { return ""; }
 int  video_decoder_anunciou(void) { return 1; }

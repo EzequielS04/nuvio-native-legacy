@@ -176,6 +176,56 @@ int video_dts_legenda_desenhar(double seconds, int delay_ms, float x, float y, f
 // it handed playback back to the TV player (1 slow source, 2 did not start).
 int video_dv_ativo(void);
 int video_dv_recuo_consumir(void);
+
+// --- A TELA DO DOLBY VISION EM MKV (dvtela.h) --------------------------------
+// O que o caminho do DV esta fazendo AGORA, para a tela que cobre a troca do
+// player da TV (HDR10) pelo nosso demux. Tudo e estado real do backend; nada
+// aqui e relogio. Fora da webOS (e no Mac sem simulacao) volta zerado.
+enum {
+  VIDEO_DV_NAO_NADA = 0,
+  VIDEO_DV_NAO_SEM_DV,    // o cabecalho do arquivo nao tem Dolby Vision
+  VIDEO_DV_NAO_PERFIL,    // perfil 7 com camada de realce (ou outro que nao 5/8)
+  VIDEO_DV_NAO_AUDIO,     // nenhuma faixa de audio que o caminho alimenta
+  VIDEO_DV_NAO_SONDA,     // o cabecalho nao veio (a sonda desistiu)
+  VIDEO_DV_NAO_LENTO,     // o caminho abriu e a fonte nao acompanhou
+  VIDEO_DV_NAO_FALHOU,    // o caminho nao abriu
+  VIDEO_DV_NAO_PESSOA     // a pessoa escolheu HDR10
+};
+typedef struct {
+  int sessao;          // muda a cada video_tocar (fonte nova)
+  int sondado;         // o cabecalho do MKV ja foi lido
+  int perfil, el;      // do dvcC do arquivo (0 = sem Dolby Vision)
+  int audioTrocado;    // a faixa da TV nao passa no caminho e outra entrou
+  char audioDe[16], audioPara[16];   // CodecID do Matroska ("A_TRUEHD", "A_EAC3")
+  int caminho;         // nosso demux foi pedido (iniciarDts em modo DV)
+  int fonteAberta;     // o demux abriu o arquivo (stage source-opened)
+  int carregado;       // a TV aceitou o fluxo (loadCompleted no caminho)
+  int dvConfirmado;    // o pipeline disse hdrType DolbyVision
+  int tocando;         // `playing` no caminho
+  int recusa;          // VIDEO_DV_NAO_*: o DV desta fonte nao vai acontecer
+  int falhou;          // a fonte falhou de vez (video_falhou)
+} VideoDvFase;
+void video_dv_fase(VideoDvFase *f);
+// 1 quando a PROXIMA abertura de `url` vai tentar Dolby Vision em MKV: a fonte
+// afirmou DV (video_definir_dv), nao e MP4 (video_definir_mp4 e a extensao) e
+// a opcao esta ligada e liberada nesta TV. Chamar DEPOIS de video_definir_dv e
+// video_definir_mp4, como video_tocar.
+int  video_dv_candidato(const char *url);
+// A tela esta cobrindo a abertura: o player da TV que toca o HDR10 enquanto o
+// cabecalho e lido fica MUDO (uMS setVolume 0). 0 devolve o volume se a fonte
+// ficar no player da TV.
+void video_dv_tela(int cobrindo);
+// A pessoa preferiu HDR10 agora: esta fonte nao tenta mais Dolby Vision. Se o
+// caminho ja abriu, volta ao player da TV na mesma posicao.
+void video_dv_recusar(void);
+// O PLAYER AINDA NAO TERMINOU DE RETOMAR: segura a troca para o caminho do DV
+// ate o seek do ponto salvo ter sido pedido ao player da TV (o caminho nasce na
+// posicao dele). Chamado por quadro pelo player.
+void video_dv_segurar(int segurar);
+// O caminho proprio (DV/DTS) carregou e ainda nao tocou o primeiro quadro, sem
+// pausa nossa: e o preroll do nosso demux, NAO uma pausa. O painel de pausa e a
+// retomada "de quem abre pausado" perguntam isto.
+int  video_iniciando(void);
 // 1 once the current source has played on webOS (kept across reloads of it).
 int video_fonte_tocou(void);
 const char *video_dts_saida(void);  // actual local conversion output, empty for native playback
@@ -388,7 +438,15 @@ typedef struct {
   unsigned bufferandoMs;
   double pos, duracao, bufferFim;
   int dts;           // VIDEO_DTS_* que video_dts_estado devolve
+  int aceita;               // video_tocar devolve isto (1 = o player tem video)
+  int tocando, iniciando;   // video_tocando / video_iniciando
+  int dvCandidato;          // video_dv_candidato
+  VideoDvFase dvFase;       // video_dv_fase
 } VideoSimulacao;
+// Capturas/testes: o que video_dv_tela e video_dv_recusar receberam (contagem
+// de chamadas e ultimo valor), para provar o mudo e a escolha do HDR10.
+int video_simulado_dv_tela(void);
+int video_simulado_dv_recusas(void);
 void video_simular(const VideoSimulacao *s);
 #endif
 

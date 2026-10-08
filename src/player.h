@@ -279,6 +279,7 @@ void player_shot_estado(Uint32 agora, float pos, float dur, int tocando, int bot
 void player_shot_foco(int botao, int barra);
 void player_shot_toast(Uint32 agora, const char *texto, const char *icone, int ambar, int modo);
 void player_shot_esconder(void);
+const char *player_shot_toast_texto(Uint32 agora);
 void player_shot_carregando(int sim);
 void player_shot_buscando(int sim);
 void player_shot_video(int sim);

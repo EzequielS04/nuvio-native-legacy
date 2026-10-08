@@ -4933,6 +4933,8 @@ void player_shot_toast(Uint32 agora, const char *texto, const char *icone, int a
   visivel = 0; anim = 0.0f; ultimoInput = agora;
 }
 void player_shot_esconder(void) { visivel = 0; anim = 0.0f; }
+// O aviso da ilha que esta no ar ("" sem aviso): a nota do HDR10 (dvtela.h).
+const char *player_shot_toast_texto(Uint32 agora) { (void)agora; return toastAte > SDL_GetTicks() ? toastTexto : ""; }
 void player_shot_carregando(int sim) { esperandoFonte = sim; erroFonte = 0; }
 void player_shot_buscando(int sim) { shotBusca = sim; scrubbing = sim; posVisSolto = sim; }
 #endif
