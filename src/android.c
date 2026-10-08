@@ -1,6 +1,7 @@
 // Ponte do nucleo com o Android. Ver android.h.
 #ifdef NV_ANDROID
 #include "android.h"
+#include "queda.h"
 #include <SDL2/SDL.h>
 #include <android/log.h>
 #include <jni.h>
@@ -9,6 +10,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <poll.h>
+#include <android/api-level.h>
 
 #define AND_TAG "nuvio"
 
@@ -84,6 +87,44 @@ static void espelharNoLogcat(void) {
   setvbuf(stdout, NULL, _IOLBF, 0);
 }
 
+// RELATOR DE QUEDA NATIVA para Android < 12 (#318, queda.h). Changhong AI
+// PONT (Android 11, MStar): "crash-nativo status=11" ao tocar, e o log acaba
+// sem dizer onde; o tombstone do ApplicationExitInfo (Tombstone.kt) so existe
+// do 12 em diante. No 12+ fica desligado: o tombstone ja diz, e melhor.
+// No tratador, depois do relato: o que ainda esta no pipe do espelho vai para
+// o arquivo de log (as ultimas linhas antes da queda se perdiam ali) e uma
+// linha marca o momento. So poll/read/write.
+static void drenarNaQueda(void) {
+  static char b[4096];
+  static const char marca[] = "[queda] sinal fatal: relato gravado, sai no log da proxima abertura\n";
+  int k;
+  if (fdLeitura < 0 || fdArquivo < 0) return;
+  for (k = 0; k < 64; k++) {
+    struct pollfd p;
+    ssize_t n, off = 0;
+    p.fd = fdLeitura; p.events = POLLIN; p.revents = 0;
+    if (poll(&p, 1, 0) <= 0 || !(p.revents & POLLIN)) break;
+    n = read(fdLeitura, b, sizeof b);
+    if (n <= 0) break;
+    while (off < n) { ssize_t w = write(fdArquivo, b + off, (size_t)(n - off)); if (w <= 0) break; off += w; }
+  }
+  if (write(fdArquivo, marca, sizeof marca - 1) < 0) { /* sem rastro e so isso */ }
+}
+
+static void armarRelatorDeQueda(void) {
+  const char *d = getenv("NUVIO_DADOS");
+  char arq[600];
+  int api = android_get_device_api_level();
+  if (!d || !d[0]) return;
+  snprintf(arq, sizeof arq, "%s/queda-nativa.txt", d);
+  queda_relatar(arq);   // da sessao anterior, se ela caiu com o relator armado
+  if (api > 0 && api < 31) {
+    queda_armar_encadeado(arq, drenarNaQueda);
+    printf("[queda] relator nativo armado (Android api %d, encadeado a ART/debuggerd)\n", api);
+  }
+  fflush(stdout);
+}
+
 void android_iniciar(void) {
   // Mesma pilha para os fios criados pelo SDL (SDL_CreateThread).
   SDL_SetHint(SDL_HINT_THREAD_STACK_SIZE, "8388608");
@@ -92,6 +133,7 @@ void android_iniciar(void) {
   SDL_SetHint("SDL_ANDROID_TRAP_BACK_BUTTON", "1");
   espelharNoLogcat();
   logaTv();
+  armarRelatorDeQueda();
 }
 
 // SUPERFICIE 4K. A TCL Smart TV Pro (Android 14) tem painel 3840x2160 mas poe
