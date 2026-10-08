@@ -674,6 +674,7 @@ static int esperaAddonsDaConta(void) {
 #define NV_ARRANQUE_REDE 0
 #endif
 #if NV_ARRANQUE_REDE
+#include <dlfcn.h>   // nv_log_egl; no .tpk (NV_SEM_WEBOS) o include de cima nao vale
 // Configs EGL cada vez mais simples: sem profundidade/stencil/MSAA, depois RGB565.
 static void nv_attrs_simples(int nivel) {
   SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
