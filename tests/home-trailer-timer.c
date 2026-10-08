@@ -18,6 +18,7 @@ static int fixturePrintf(const char *format, ...);
 
 #define static
 #include "../src/home.c"
+void desc_sinopse_hero(const int *idx, int n) { (void)idx; (void)n; }
 #undef static
 #undef printf
 static int fixturePrintf(const char *format, ...) {

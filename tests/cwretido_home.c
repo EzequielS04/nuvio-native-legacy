@@ -16,6 +16,7 @@ void cachearte_estatisticas_pedir(void) {}
 void tex_cache_marcar_larg(int grupo, const char *url, float larg, int essencial, int emUso) {
   (void)grupo; (void)url; (void)larg; (void)essencial; (void)emUso; }
 #include "../src/home.c"
+void desc_sinopse_hero(const int *idx, int n) { (void)idx; (void)n; }
 #include "cwfrente.h"
 
 char *dados_ler(const char *nome) { (void)nome; return NULL; }

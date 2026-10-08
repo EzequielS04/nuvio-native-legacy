@@ -5701,6 +5701,148 @@ static void localizarContinuarPublicado(void) {
   desc_localizar_indices(idx, n);
 }
 
+// SINOPSE DOS CANDIDATOS DO DESTAQUE (08/10, LG C9 2.0.3). Com "hero *" o
+// destaque sorteia ate 10 titulos de TODO o catalogo, e uns 28% dele sao itens
+// RASOS (lista do Trakt: so nome e a arte sintetica do metahub, ver
+// completarRaso). Eles entravam no destaque sem sinopse, porque o /meta so era
+// pedido ao ABRIR o detalhe. Aqui o texto vem do MESMO /meta do detalhe
+// (metaprov_meta: catalogo do Nuvio, Cinemeta so como reserva), em fio proprio,
+// UM pedido por vez e com pausa entre eles — nunca uma rajada de 10.
+//
+// So a sinopse (e o nome, se o item veio sem) e escrita: a arte do item nao
+// muda, senao o fundo do destaque trocaria debaixo de quem esta olhando.
+// O resultado vai para o CATALOGO (cat_atualizar_item), entao o detalhe, que
+// le o mesmo item, reaproveita sem pedir de novo. Titulo que nao conseguiu
+// sinopse (rede, ficha sem descricao) NAO sai do destaque: aparece sem ela, e
+// a falha vai para o log, com o id, para nao ser silencio.
+#define HSIN_LOTE 10
+#define HSIN_PAUSA_MS 150
+#define HSIN_NEG_N 32
+#define HSIN_NEG_S 600
+static int hsIdx[HSIN_LOTE], hsNIdx;
+static volatile int hsVivo, hsDeNovo;
+static pthread_mutex_t hsTrava = PTHREAD_MUTEX_INITIALIZER;
+// Falhas recentes: o conjunto do destaque e refeito a cada mudanca do catalogo,
+// e sem esta memoria um titulo sem descricao viraria um pedido por refeita.
+static struct { char imdb[24]; long ate; } hsNeg[HSIN_NEG_N];
+
+static int hsNegativo(const char *imdb) {
+  int i, r = 0;
+  pthread_mutex_lock(&hsTrava);
+  for (i = 0; i < HSIN_NEG_N; i++)
+    if (hsNeg[i].imdb[0] && !strcmp(hsNeg[i].imdb, imdb) && hsNeg[i].ate > (long)time(NULL)) { r = 1; break; }
+  pthread_mutex_unlock(&hsTrava);
+  return r;
+}
+static void hsNegGuardar(const char *imdb) {
+  static int prox;
+  int i, vaga = -1;
+  pthread_mutex_lock(&hsTrava);
+  for (i = 0; i < HSIN_NEG_N; i++) if (!strcmp(hsNeg[i].imdb, imdb)) { vaga = i; break; }
+  if (vaga < 0) { vaga = prox; prox = (prox + 1) % HSIN_NEG_N; }
+  snprintf(hsNeg[vaga].imdb, sizeof hsNeg[vaga].imdb, "%s", imdb);
+  hsNeg[vaga].ate = (long)time(NULL) + HSIN_NEG_S;
+  pthread_mutex_unlock(&hsTrava);
+}
+
+// Preenche a sinopse de UM item raso. -1 = nada a fazer (ja tem sinopse, canal,
+// id que nao e do IMDb); 1 = preencheu; 0 = tentou e nao veio texto.
+// `get` e o provedor de rede (NULL = o de sempre); o teste passa o dele.
+int desc_sinopse_completar_item(CatItem *c, MetaprovGet get, void *ctx) {
+  char id[24], tit[160], sin[900];
+  const char *tipo;
+  char *corpo;
+  int prov = -1;
+  if (!c || c->sinopse[0] || !locChaveDoItem(c, id, sizeof id, &tipo)) return -1;
+  corpo = get ? metaprov_meta_com(tipo, id, 10, get, ctx, &prov)
+              : metaprov_meta(tipo, id, 10, &prov);
+  tit[0] = sin[0] = 0;
+  if (!corpo || !metaTextos(corpo, tit, sizeof tit, sin, sizeof sin) || !sin[0]) {
+    const char *porque = corpo ? "a ficha nao tem descricao" : "sem resposta da rede";
+    free(corpo);
+    printf("[hero] sinopse NAO preenchida %s (%s)\n", id, porque);
+    fflush(stdout);
+    return 0;
+  }
+  free(corpo);
+  snprintf(c->sinopse, sizeof c->sinopse, "%s", sin);
+  if (!c->titulo[0] && tit[0]) snprintf(c->titulo, sizeof c->titulo, "%s", tit);
+  printf("[hero] sinopse preenchida %s (%d caracteres, %s)\n", id, (int)strlen(sin),
+         prov == METAPROV_CINEMETA ? "Cinemeta" : "catalogo do Nuvio");
+  fflush(stdout);
+  return 1;
+}
+
+static void *fioSinopseHero(void *u) {
+  (void)u;
+  for (;;) {
+    int lista[HSIN_LOTE], n, k;
+    pthread_mutex_lock(&hsTrava);
+    n = hsNIdx;
+    memcpy(lista, hsIdx, sizeof(int) * (size_t)n);
+    hsDeNovo = 0;
+    pthread_mutex_unlock(&hsTrava);
+    for (k = 0; k < n; k++) {
+      const CatItem *o = lista[k] < cat_n() ? cat_item(lista[k]) : NULL;
+      char imdb[64];
+      CatItem *e;
+      int r;
+      if (!o || o->sinopse[0]) continue;
+      snprintf(imdb, sizeof imdb, "%s", o->imdb);
+      if (hsNegativo(imdb)) continue;
+      e = malloc(sizeof *e);
+      if (!e) continue;
+      *e = *o;
+      r = desc_sinopse_completar_item(e, NULL, NULL);
+      if (r == 0) hsNegGuardar(imdb);
+      if (r == 1) {
+        // Reler: o catalogo pode ter sido refeito enquanto a rede respondia.
+        // So a sinopse (e o nome, se faltava) entram no item que esta la agora.
+        const CatItem *a = lista[k] < cat_n() ? cat_item(lista[k]) : NULL;
+        if (a && !strcmp(a->imdb, imdb) && !a->sinopse[0]) {
+          CatItem *f = malloc(sizeof *f);
+          if (f) {
+            *f = *a;
+            snprintf(f->sinopse, sizeof f->sinopse, "%s", e->sinopse);
+            if (!f->titulo[0]) snprintf(f->titulo, sizeof f->titulo, "%s", e->titulo);
+            cat_atualizar_item(lista[k], f);
+            free(f);
+          }
+        }
+      }
+      free(e);
+      SDL_Delay(HSIN_PAUSA_MS);   // um pedido por vez, com folga entre eles
+    }
+    pthread_mutex_lock(&hsTrava);
+    if (hsDeNovo) { pthread_mutex_unlock(&hsTrava); continue; }
+    hsVivo = 0;
+    pthread_mutex_unlock(&hsTrava);
+    return NULL;
+  }
+}
+
+// Pede a sinopse dos indices `idx` (o conjunto do destaque). Barata e
+// repetivel: quem ja tem sinopse, ou falhou ha pouco, e pulado no fio.
+void desc_sinopse_hero(const int *idx, int n) {
+  pthread_t t;
+  int i, falta = 0;
+  if (!idx || n < 1) return;
+  if (n > HSIN_LOTE) n = HSIN_LOTE;
+  for (i = 0; i < n; i++) {
+    const CatItem *o = idx[i] >= 0 && idx[i] < cat_n() ? cat_item(idx[i]) : NULL;
+    if (o && !o->sinopse[0]) { falta = 1; break; }
+  }
+  if (!falta) return;
+  pthread_mutex_lock(&hsTrava);
+  memcpy(hsIdx, idx, sizeof(int) * (size_t)n);
+  hsNIdx = n;
+  if (hsVivo) { hsDeNovo = 1; pthread_mutex_unlock(&hsTrava); return; }
+  hsVivo = 1;
+  pthread_mutex_unlock(&hsTrava);
+  if (pthread_create(&t, NULL, fioSinopseHero, NULL) != 0) hsVivo = 0;
+  else pthread_detach(t);
+}
+
 // Publica a parte critica antes de qualquer enriquecimento opcional. Assim a
 // fileira de episodios aparece depois da primeira resposta, sem esperar pelas
 // duas viagens ao TMDB usadas para foto e personagem do elenco.

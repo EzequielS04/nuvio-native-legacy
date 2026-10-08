@@ -363,6 +363,9 @@ static unsigned heroTardeEm;
 static int heroPreItem = -1;
 // O item cuja pre-busca ja foi anunciada no log (uma linha por item).
 static int heroPreLogado = -1;
+// Diagnostico de `pre-busca nao saiu`: o ciclo (heroTrocaEm) e o instante da
+// ultima linha, para sair uma por ciclo e nao mais que uma a cada 5 s.
+static Uint32 heroPreDiagCiclo, heroPreDiagEm;
 
 // --- EXPANSAO DO CARTAZ FOCADO EM REPOUSO ------------------------------------
 //
@@ -485,6 +488,7 @@ static void heroTrailerMarcarTocou(const char *imdb) {
 static int heroAutoDesligado;
 static char   heroTrailerYoutubeId[16];
 static int heroTrailerSegurando(Uint32 agora);
+static int heroTrailerTocando(void);
 // A espera e ajuste; a janela da Apple (NV_TRAILER_HERO_JANELA_MS) conta a
 // partir dela, senao uma espera longa venceria a janela antes de abrir.
 static Uint32 heroTrailerEspera(void) { return ajustes_trailer_hero_espera_ms(); }
@@ -750,6 +754,9 @@ static void heroSetGarantir(void) {
     return;
   heroSetFilRev = fr; heroSetCat = cn; heroSetNFil = nf; heroSetRev = 1;
   heroMontarSet();
+  // Os candidatos ja sao conhecidos: completa em segundo plano a sinopse dos
+  // que vieram rasos (lista do Trakt), antes de o carrossel chegar a eles.
+  desc_sinopse_hero(heroSet, heroSetN);
 }
 
 // Quantos titulos o destaque oferece.
@@ -2809,18 +2816,40 @@ void home_atualizar(float dt, Uint32 agora) {
       heroTrocaEm = agora + NV_HERO_INTERVALO_MS;
     }
     // PRE-BUSCA (ver heroPreItem): as MESMAS condicoes da troca automatica
-    // acima, so que NV_HERO_PRE_MS antes. Com trailer segurando, nada: o
-    // trailer pode durar minutos e a arte ficaria ocupando memoria parada.
+    // acima, so que NV_HERO_PRE_MS antes — com UMA diferenca, de proposito: o
+    // trailer SENDO PROCURADO ou preparado nao impede a pre-busca. Medido na C9
+    // (08/10, 2.0.3): nenhuma linha `pre-busca` em duas sessoes, porque cada
+    // titulo do carrossel tem a busca do trailer (`[trailer] apple ...`,
+    // `[trailer] imdb ...`) e heroTrailerSegurando segura o carrossel durante
+    // ela; quando a busca termina, heroTrocaEm ja venceu e a troca sai no
+    // mesmo quadro, sem a janela de 3 s. Esse tempo de busca e curto e limitado
+    // (heroTrailerMaxEspera), entao pre-buscar nele custa uma arte a mais por
+    // poucos segundos. Com o trailer TOCANDO nada: ele pode durar minutos e a
+    // arte ficaria ocupando memoria parada.
     heroPreItem = -1;
-    if (alvo < 0 && heroDesejado < 0 && !heroAutoDesligado &&
-        agora + NV_HERO_PRE_MS >= heroTrocaEm &&
-        (!focoHero || agora + NV_HERO_PRE_MS - heroUltTecla >= HOME_HERO_OCIO_MS) &&
-        !heroTrailerSegurando(agora)) {
-      int total = heroNLista();
-      int pos = heroPosDe(heroAtual);
-      int proximo = total > 0 ? heroIdxEm(((pos < 0 ? 0 : pos) + 1) % total) : 0;
-      if (proximo < 0) proximo = 0;
-      if (proximo != heroAtual) heroPreItem = proximo;
+    { const int janela = agora + NV_HERO_PRE_MS >= heroTrocaEm;
+      const int seg = heroTrailerSegurando(agora);
+      const int tocando = heroTrailerTocando();
+      if (alvo < 0 && heroDesejado < 0 && !heroAutoDesligado && janela &&
+          (!focoHero || agora + NV_HERO_PRE_MS - heroUltTecla >= HOME_HERO_OCIO_MS) &&
+          (!seg || !tocando)) {
+        int total = heroNLista();
+        int pos = heroPosDe(heroAtual);
+        int proximo = total > 0 ? heroIdxEm(((pos < 0 ? 0 : pos) + 1) % total) : 0;
+        if (proximo < 0) proximo = 0;
+        if (proximo != heroAtual) heroPreItem = proximo;
+      }
+      // DIAGNOSTICO, uma linha por ciclo do carrossel e no maximo uma a cada
+      // 5 s: a janela abriu e a pre-busca nao saiu — diz quem a impediu.
+      if (janela && heroPreItem < 0 && heroPreDiagCiclo != heroTrocaEm &&
+          agora - heroPreDiagEm >= 5000) {
+        heroPreDiagCiclo = heroTrocaEm; heroPreDiagEm = agora;
+        printf("[hero] pre-busca nao saiu: alvo=%d desejado=%d autoDesligado=%d "
+               "segurando=%d tocando=%d focoHero=%d ocio=%d lista=%d\n",
+               alvo, heroDesejado, heroAutoDesligado, seg, tocando, focoHero,
+               (int)(agora - heroUltTecla), heroNLista());
+        fflush(stdout);
+      }
     }
   }
   }
@@ -4287,6 +4316,16 @@ static const char *heroTrailerYoutube(const char *imdb) {
 // nunca segura quando a preferencia foi desligada. `home_atualizar` chama esta
 // funcao antes de home_trailer_passo, entao o prazo tambem e o que libera a
 // rotacao no quadro em que o trailer falhou.
+// O trailer do destaque esta no ar, tocando? (Diferente de segurando, que
+// tambem vale durante a busca e o preparo.)
+static int heroTrailerTocando(void) {
+  const CatItem *ci;
+  if (!ajustes_trailer_hero() || heroTrailerItem != heroAtual) return 0;
+  ci = cat_item_exato(heroAtual);
+  if (!ci || strcmp(heroTrailerImdb, ci->imdb) != 0) return 0;
+  return trailer_aberto() && trailer_tocando();
+}
+
 static int heroTrailerSegurando(Uint32 agora) {
   const CatItem *ci;
   if (!ajustes_trailer_hero() || heroTrailerItem != heroAtual) return 0;
