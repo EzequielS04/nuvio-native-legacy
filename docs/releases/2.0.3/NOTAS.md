@@ -64,7 +64,7 @@ New Settings, a new episode menu, the Magic Remote pointer on almost every scree
 - **Embedded subtitles:** large MKV track headers, gentler reads, no stale downloads (#308, #330); more add-on subtitles (#268); Arabic subtitles with real bold and sharp ASS in 4K (#335).
 - **Duplicate episodes** in the episode list (#328).
 - **LG:** resume no longer drops the source on a failed seek (#246); DTS on webOS 26 (#285).
-- **Samsung:** Pause and subtitle list errors (#269); aspect/zoom button on Tizen 4/5; Arabic subtitles when an older install left old fonts.
+- **Samsung:** Pause and subtitle list errors (#269); aspect/zoom button on Tizen 4/5; Arabic subtitles when an older install left old fonts. When the TV hides an audio track it can't play (DTS, TrueHD), the other tracks keep the names from the file instead of a generic one.
 - **Player:** UP at the top of the controls hides them (#305); the Seekr time and preview follow the hold.
 - **Live TV:** a channel queued while zapping keeps its add-on (#283).
 - **Trakt:** the watchlist is read page by page.
