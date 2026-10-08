@@ -915,10 +915,18 @@ static void hostDaUrl(const char *u, char *h, size_t n) {
   h[0] = 0;
   if (!p || n == 0) return;
   p += 3;
-  k = (size_t)(p - u) + strcspn(p, "/?#");
-  if (k >= n) k = n - 1;
-  memcpy(h, u, k);
-  h[k] = 0;
+  // Userinfo (`usuario:senha@`) NUNCA vai para o log nem para a chave de host:
+  // addons IPTV carregam credencial ali. Guarda esquema + host(+porta).
+  { const char *fim = p + strcspn(p, "/?#"), *q, *at = NULL;
+    size_t e = (size_t)(p - u);
+    for (q = p; q < fim; q++) if (*q == '@') at = q;
+    if (at) p = at + 1;
+    k = (size_t)(fim - p);
+    if (e + k >= n) { if (e >= n) e = n - 1; k = n - 1 - e; }
+    memcpy(h, u, e);
+    memcpy(h + e, p, k);
+    h[e + k] = 0;
+  }
 }
 static void hostsEsquecer(void) { memset(usoHost, 0, sizeof usoHost); }
 static void hostUsado(const char *url, unsigned long agora) {
