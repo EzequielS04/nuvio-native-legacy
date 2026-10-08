@@ -3369,11 +3369,12 @@ void app_atualizar(float dt, Uint32 agora) {
   // A lista de addons foi aberta DE Ajustes, entao o Back dela volta para
   // Ajustes. Cair na home aqui faria a pessoa refazer o caminho inteiro so
   // para ligar dois addons seguidos.
-  if (tela == TELA_ADDONS && addonsui_quer_sair() && saiuPorEsquerda &&
-      sidebar_permitida()) {
+  // 2.0.3: Voltar ou Esquerda devolvem a categoria Fontes e addons com o foco
+  // na linha "Addons" (antes a Esquerda abria a barra lateral e o Voltar caia
+  // no indice dos Ajustes).
+  if (tela == TELA_ADDONS && addonsui_quer_sair()) {
     saiuPorEsquerda = 0;
-    menu_abrir();
-  } else if (tela == TELA_ADDONS && addonsui_quer_sair()) {
+    ajustes_voltar_de_lista(0);
     trocarTela(TELA_AJUSTES); menu_definir_destino(MENU_AJUSTES);
   }
   if (tela == TELA_AJUSTES) {
@@ -3409,6 +3410,8 @@ void app_atualizar(float dt, Uint32 agora) {
   }
   // Plugins (F09): o mesmo caminho da lista de addons (abre de Ajustes, volta a ela).
   if (tela == TELA_PLUGINS && pluginsui_quer_sair()) {
+    saiuPorEsquerda = 0;
+    ajustes_voltar_de_lista(1);
     trocarTela(TELA_AJUSTES); menu_definir_destino(MENU_AJUSTES);
   }
   if (tela == TELA_AJUSTES && ajustes_pediu_plugins()) {

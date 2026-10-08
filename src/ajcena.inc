@@ -40,6 +40,9 @@ static const float MATIZ[AJC_NMATIZ][3] = {
   { 0.34f, 0.38f, 0.46f },   // ardosia
 };
 
+#ifdef AJUSTES_TESTE
+static float ajcTesteT = -1.0f;
+#endif
 static GfxRect ajc_r(float x, float y, float w, float h) {
   return (GfxRect){ C.x + x * C.s, C.y + y * C.s, w * C.s, h * C.s };
 }
@@ -77,6 +80,9 @@ static float ajc_comecar(float x, float y, float w, float a) {
   C.x = x; C.y = y; C.w = w; C.s = w / AJC_W; C.h = w * AJC_H / AJC_W; C.a = a;
   C.red = ajustes_animacoes_reduzidas();
   C.t = C.red ? 0.0f : (float)(SDL_GetTicks() % 3600000u) / 1000.0f;
+#ifdef AJUSTES_TESTE
+  if (ajcTesteT >= 0.0f) { C.red = 0; C.t = ajcTesteT; }   // captura: a cena num instante fixo
+#endif
   ajustes_acento(&C.ar, &C.ag, &C.ab);
   C.tinta = (float)ajustes_tinta_foco() / 255.0f;
   q = (GfxRect){ x, y, w, C.h };
@@ -184,11 +190,17 @@ static void ajc_ladrilho(const char *nome, float cx, float cy, float d, int acen
   if (acento) ajc_icone_tinta(nome, cx, cy, d * 0.5f, a);
   else ajc_icone(nome, cx, cy, d * 0.5f, a);
 }
+// 2.0.3: a mesma PILULA COM ESTADO das linhas (nunca a bolinha sozinha):
+// ligada, clara e cheia com ponto escuro e o "texto" escuro; desligada, so o
+// contorno, ponto vazado e o "texto" cinza.
 static void ajc_chave(float x, float y, float liga, float a) {
   float k = liga < 0 ? 0 : liga > 1 ? 1 : liga;
-  ajc_ret(x, y, 40, 22, 11, 0.30f, 0.31f, 0.35f, a);
-  ajc_ret(x, y, 40, 22, 11, C.ar, C.ag, C.ab, k * a);
-  ajc_ret(x + 3 + 18 * k, y + 3, 16, 16, 8, 1, 1, 1, (0.7f + 0.3f * k) * a);
+  ajc_ret(x - 6, y, 52, 22, 11, 0.55f, 0.56f, 0.60f, (1 - k) * a);
+  ajc_ret(x - 5, y + 1, 50, 20, 10, 0.10f, 0.105f, 0.12f, (1 - k) * a);
+  ajc_ret(x - 6, y, 52, 22, 11, 0.953f, 0.949f, 0.937f, k * a);
+  ajc_ret(x + 1, y + 7, 8, 8, 4, 0.75f * (1 - k) + 0.09f * k, 0.75f * (1 - k) + 0.09f * k, 0.78f * (1 - k) + 0.10f * k, a);
+  ajc_ret(x + 3, y + 9, 4, 4, 2, 0.10f, 0.105f, 0.12f, (1 - k) * a);
+  ajc_ret(x + 14, y + 9, 24, 4, 2, 0.75f * (1 - k) + 0.09f * k, 0.75f * (1 - k) + 0.09f * k, 0.78f * (1 - k) + 0.10f * k, a);
 }
 static void ajc_bolinha(float cx, float cy, float d, float r, float g, float b, float a) {
   ajc_ret(cx - d * 0.5f, cy - d * 0.5f, d, d, d * 0.5f, r, g, b, a);

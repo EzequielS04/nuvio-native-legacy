@@ -712,7 +712,7 @@ static void montarAjustes(const char *consultaLocal) {
 static void montarGuia(const char *q) {
   int res[16], n, i;
   if (!q || !q[0]) {
-    cabecalho(i18n("Novo na 1.8.0"));
+    cabecalho(i18n("Novo na 2.0"));
     for (i = 0, n = 0; i < 200 && n < 5; i++) {
       Linha *l;
       if (!ajustes_guia_titulo(i)[0]) break;

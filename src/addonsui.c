@@ -67,7 +67,9 @@ void addonsui_evento(const SDL_Event *e) {
         sync_sujar_addons();
       }
       break;
-    case SDLK_AC_BACK: case SDLK_LEFT: sair = 1; break;
+    // Voltar (qualquer tecla de voltar) e Esquerda: de volta a linha "Addons"
+    // em Ajustes › Fontes e addons (app.c chama ajustes_voltar_de_lista).
+    case SDLK_AC_BACK: case SDLK_ESCAPE: case SDLK_BACKSPACE: case SDLK_LEFT: sair = 1; break;
     default: break;
   }
 }

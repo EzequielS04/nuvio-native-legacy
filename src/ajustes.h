@@ -291,6 +291,9 @@ void  ajustes_desenhar_addons(int foco);
 // (liga/desliga, adicionar, repositorios); 1 = scrapers do repositorio `repo`.
 typedef struct { int nivel, foco, repo, armado; const char *aviso; } AjPluginsVista;
 void  ajustes_desenhar_plugins(const AjPluginsVista *v);
+// 2.0.3: a lista de addons (0) ou de plugins (1) fechou: Ajustes reabre na
+// categoria dela, com o foco na linha que a abriu.
+void  ajustes_voltar_de_lista(int plugins);
 // KIT DAS ILHAS (Glass UI) para as telas que saem de Ajustes: diagnostico,
 // teste de velocidade e diagnostico da Live TV. Mesmo material e mesmas pecas
 // da tela de Ajustes (ajustes_ux_ilha.inc).

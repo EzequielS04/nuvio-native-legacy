@@ -263,8 +263,12 @@ static const char *ajVisualIcone(int op) {
 // anterior tinha Cartazes/Trailers/Titulo/Reproducao/Idiomas/Aparencia
 // trocados, e Reproducao mostrava os chips de idioma.
 #include "perfis.h"
-enum { AJS_HOME = 0, AJS_TITULO, AJS_CARTAZES, AJS_TRAILERS, AJS_APARENCIA, AJS_REPRODUCAO,
-       AJS_FONTES, AJS_IDIOMAS, AJS_TVAOVIVO, AJS_CONTAS, AJS_DESEMPENHO, AJS_SOBRE, AJS_N };
+// 2.0.3: a ordem da tarefa (Assistir, Telas, Conta e sistema). AJS_TRAILERS nao
+// e mais categoria (Cartazes e trailers e uma so): fica depois de AJS_N como a
+// CENA das opcoes de trailer dentro de Cartazes e trailers.
+enum { AJS_REPRODUCAO = 0, AJS_IDIOMAS, AJS_FONTES, AJS_TVAOVIVO,
+       AJS_HOME, AJS_APARENCIA, AJS_TITULO, AJS_CARTAZES,
+       AJS_CONTAS, AJS_DESEMPENHO, AJS_SOBRE, AJS_N, AJS_TRAILERS = AJS_N };
 static float ajPreviaHome(float x, float y, float w);
 static float ajPreviaHomeArte(float x, float y, float w, int arte);
 static const char *ajTituloN(int n);
@@ -278,23 +282,25 @@ static TxtEstilo ajEstiloPxS(float px, int forte) { return ajEstiloPx(px < 6.0f 
 // o primeiro bloco (entrar na categoria nao troca a imagem). Nenhum indice se
 // repete: sao 36 das 40 amostras de deploy/app/art (sobram 28, 29, 34 e 36).
 // -1 = a categoria nao tem esse bloco.
-#define AJ_ARTE_BLOCOS 6
-static const signed char AJ_ARTE_SEC[AJS_N][AJ_ARTE_BLOCOS] = {
-  { 12,  0, 20,  1, 31, -1 },   // Tela inicial: Estilo, Fileiras, Continuar, Barra lateral, Escolha de perfil
-  {  3,  4, 17, -1, -1, -1 },   // Pagina do titulo: O que aparece, Notas, Dados do titulo
-  { 13, 35, 27, -1, -1, -1 },   // Cartazes e arte: Cartaz em foco, Forma, De onde vem a arte
-  { 15, 16, -1, -1, -1, -1 },   // Trailers: Onde toca, Som e imagem
-  {  9, 39, 38,  6, 11, -1 },   // Aparencia: Cores e vidro, Logo e abertura, Texto e tamanho, Movimento e relogio, Tela de descanso
-  { 18, 22, 32, -1, -1, -1 },   // Reproducao: Imagem e som, Durante e depois, Seekr
-  {  5,  7, 37, 19, 10, -1 },   // Fontes e addons: Addons, Escolha da fonte, Debrid, P2P, Servidores
-  { 21, 24, -1, -1, -1, -1 },   // Idiomas e legendas: Idiomas, Segunda legenda
-  {  2, 14, -1, -1, -1, -1 },   // TV ao vivo: Provedor, Se o canal nao abre
-  { 23, 33,  8, -1, -1, -1 },   // Conta e perfis: Perfil, Trakt e Simkl, Notificacoes
-  { 26, -1, -1, -1, -1, -1 },   // Desempenho desta TV
-  { 30, 25, -1, -1, -1, -1 },   // Sobre e ajuda: (guia e) App, Registro
+#define AJ_ARTE_BLOCOS 9
+// Os blocos de "Mais opcoes" (depois do MAIS() da categoria) repetem a arte do
+// bloco basico de mesmo nome: e a mesma parte do app, so que tecnica.
+static const signed char AJ_ARTE_SEC[AJS_N + 1][AJ_ARTE_BLOCOS] = {
+  { 18,  7, 22, 32,  7, 18, 19, -1, -1 },   // Reproducao: Imagem e som, Escolha da fonte, Durante e depois, Miniatura; Mais: fonte, som e video, P2P
+  { 21, 24, 21, -1, -1, -1, -1, -1, -1 },   // Idiomas e legendas: Idiomas, Segunda legenda; Mais: idiomas
+  {  5, 37, 10, -1, -1, -1, -1, -1, -1 },   // Fontes e addons: Addons, Debrid, Servidores
+  {  2, 14, 14, -1, -1, -1, -1, -1, -1 },   // TV ao vivo: Provedor, Se o canal nao abre; Mais
+  { 12,  0, 20,  1, 31, 12,  0, 20,  1 },   // Tela inicial: Estilo, Fileiras, Continuar, Barra lateral, Escolha de perfil; Mais
+  {  9, 39, 38,  6, 11,  9, -1, -1, -1 },   // Aparencia: Cores e vidro, Logo e abertura, Texto e tamanho, Movimento e relogio, Tela de descanso; Mais
+  {  3,  4, 17,  4, 17, -1, -1, -1, -1 },   // Pagina do titulo: O que aparece, Notas, Dados do titulo; Mais: notas, dados
+  { 13, 35, 27, 15, 16, 13, 35, 27, 15 },   // Cartazes e trailers: Cartaz em foco, Forma, Arte, Trailers, Som e imagem; Mais
+  { 23, 33,  8, -1, -1, -1, -1, -1, -1 },   // Conta e servicos: Perfil, Trakt e Simkl, Notificacoes
+  { 26, -1, -1, -1, -1, -1, -1, -1, -1 },   // Esta TV (Mais: Memoria)
+  { 30, 25, -1, -1, -1, -1, -1, -1, -1 },   // Sobre e ajuda: (guia e) App, Registro
+  { 15, 16, -1, -1, -1, -1, -1, -1, -1 },   // (cena) Trailers: Onde toca, Som e imagem
 };
 static int ajCenaArteN(int sec) {
-  return sec >= 0 && sec < AJS_N ? AJ_ARTE_SEC[sec][0] : 12;
+  return sec >= 0 && sec <= AJS_N ? AJ_ARTE_SEC[sec][0] : 12;
 }
 // A arte do submenu (bloco) da opcao. As opcoes antes do primeiro bloco e as
 // do primeiro bloco ficam com a imagem da categoria.

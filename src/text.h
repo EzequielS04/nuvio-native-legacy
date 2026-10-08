@@ -164,6 +164,23 @@ typedef enum {
   // negrito das frases dos capitulos (24/600, par do TXT_V2_24).
   TXT_W20_HERO, TXT_W20_24B,
   TXT_DESC_HORA,   // relogio da tela de descanso (230, Montserrat ExtraLight; so digitos e ':')
+  // AJUSTES 2.0.3 (mockup v3, aprovado em 07/10): os corpos do mockup a 1920 com
+  // os Ajustes no padrao de 80% (corpo = px do mockup / 0,8). No FIM do enum.
+  TXT_V3_NOME,     // nome do cartao de categoria (33 / 700 no mockup)
+  TXT_V3_VALOR,    // valor do cartao (26 / 400)
+  TXT_V3_CHIP,     // pilulas do alto (23 / 600)
+  TXT_V3_CHIP_R,   // a parte de estado da pilula (23 / 400)
+  TXT_V3_DESC,     // titulo do cartao de descoberta (29 / 700)
+  TXT_V3_SUB,      // frase do cartao de descoberta, grupo do indice (23 / 400)
+  TXT_V3_LN,       // rotulo da linha (26 / 500)
+  TXT_V3_LN_B,     // rotulo da linha em foco (26 / 700)
+  TXT_V3_GRP,      // cabecalho de bloco da lista (26 / 700)
+  TXT_V3_VAL,      // valor da linha (26 / 400)
+  TXT_V3_BEN,      // frase de beneficio da linha em foco (20 / 400)
+  TXT_V3_PILL,     // "Ligado"/"Desligado" escritos (21 / 600)
+  TXT_V3_SELO,     // ESTA TV, ESTE PERFIL, AVANCADO, SO LG (14 / 700, caixa alta)
+  TXT_V3_INSP,     // texto do inspetor (22 / 400)
+  TXT_V3_INSP_B,   // "O que muda:" (22 / 700)
   TXT_NFONTES
 } TxtEstilo;
 

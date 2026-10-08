@@ -1570,7 +1570,9 @@ typedef char conferi_uma_chave_por_opcao[
 //   OPC  uma opcao do enum.
 // Toda opcao do enum aparece aqui UMA vez: conferirTela() grita no log no
 // arranque e tests/ajustes_secoes.sh falha na suite.
-typedef enum { IT_SEC, IT_GRP, IT_ROT, IT_OPC } ItemTipo;
+// IT_MAIS (2.0.3): a linha "Mais opcoes · N" no fim da categoria. Tudo o que
+// vem depois dela, na mesma categoria, e avancado (uxAvancada).
+typedef enum { IT_SEC, IT_GRP, IT_ROT, IT_OPC, IT_MAIS } ItemTipo;
 typedef struct {
   ItemTipo    tipo;
   int         op;               // IT_OPC
@@ -1583,6 +1585,7 @@ typedef struct {
 // Rotulo com a nota a direita no lugar da contagem ("para quem faz o app").
 #define ROTS(t, s)    { IT_ROT, -1, t, s, NULL }
 #define OPC(o)        { IT_OPC, o, NULL, NULL, NULL }
+#define MAIS()        { IT_MAIS, -1, "Mais opções", NULL, "aj_sliders-horizontal" }
 
 #include "ajustes_ux_tela.inc"
 
@@ -1599,17 +1602,25 @@ static int telaMontada;
 // para resolver. Dura a sessao do app, para voltar a uma categoria e achar o
 // bloco onde estava.
 static int grupoAberto[AJ_MAX_SECOES];
+// "Mais opcoes" aberto em cada categoria (OK na linha IT_MAIS, ou um atalho que
+// leva a uma avancada). Dura a sessao; nao vai para o disco.
+static int maisAberto[AJ_MAX_SECOES];
+static int maisItem[AJ_MAX_SECOES];   // indice em TELA do IT_MAIS da categoria (-1 = nao tem)
 
 static void montarTela(void) {
-  int i, s = -1, g = -1;
+  int i, s = -1, g = -1, depois = 0;
   if (telaMontada) return;
+  memset(uxAvancadaTab, 0, sizeof uxAvancadaTab);
+  for (i = 0; i < AJ_MAX_SECOES; i++) maisItem[i] = -1;
   for (i = 0; i < AJ_N_TELA; i++) {
     const Item *it = &TELA[i];
     if (it->tipo == IT_SEC) {
       if (s + 1 < AJ_MAX_SECOES) secIni[++s] = i;
-      g = -1;
+      g = -1; depois = 0;
     } else if (it->tipo == IT_GRP) g = i;
     else if (it->tipo == IT_ROT) g = -1;   // rotulo fecha o grupo anterior
+    else if (it->tipo == IT_MAIS) { depois = 1; if (s >= 0) maisItem[s] = i; }
+    else if (it->tipo == IT_OPC && depois && it->op >= 0 && it->op < AJ_N) uxAvancadaTab[it->op] = 1;
     secDoItem[i] = s < 0 ? 0 : s;
     grupoDoItem[i] = it->tipo == IT_OPC ? g : -1;
   }
@@ -1698,6 +1709,10 @@ static void guiaEvento(const SDL_Event *e);
 static void guiaDesenhar(void);
 static void guiaAtualizar(float dt);
 static int guiaAberto;
+static int apoioAberto;   // painel com os QRs de "Apoiar o projeto" (ajustes_ux_apoio.inc)
+static void apoioAbrir(void);
+static void apoioEvento(const SDL_Event *e);
+static void apoioDesenhar(void);
 int  ajustes_opcao_em_foco(void) { return focoOp; }
 // Categoria mostrada na lista. Com o foco no indice ela e a categoria em foco
 // la; com o foco na lista, a do item.
@@ -1753,12 +1768,20 @@ static int sair = 0;
 
 // Rascunho e navegação separados dos valores persistentes.
 static int uxIndice = 2;
-static int uxChipAv;   // foco no chip "Avancadas" do alto do indice (liga/desliga global)
+static int uxChipAv;   // (menu antigo) foco no chip "Avancadas"; a grade da 2.0.3 usa uxTopo
+// 2.0.3: o alvo em foco no ALTO da grade (AJ2_T_*: Buscar, Avancadas, Perfil,
+// O que o Nuvio faz?, Resolver um problema), -1 = uma categoria (uxIndice).
+static int uxTopo = -1;
+static int guiaDoIndice;   // o guia foi aberto por um cartao da grade: Voltar volta para ele
 // A fileira de cada pilula do alto (0 Buscar, 1 Diferentes, 2 Avancadas): quem
 // mede e o desenho (aj2ChipsMedir, pelo texto traduzido); a navegacao so le.
 static int uxChipLinha[3];
 static int uxUltimoItem[AJ_MAX_SECOES];
 static int uxAbrirOp = -1, uxPediuBusca, uxVeioBusca, uxRetornarOp = -1;
+// 2.0.3: ao voltar das listas de addons/plugins, Ajustes reabre na categoria
+// de onde elas sairam, com o foco na linha (e nao no indice).
+static int uxVoltarOp = -1;
+void ajustes_voltar_de_lista(int plugins) { uxVoltarOp = plugins ? AJ_PLUGINS : AJ_ADDONS; }
 static int uxDifs[AJ_N], uxNDifs, uxDifFoco;
 static int uxEditor, uxOp, uxPendente, uxOriginal, uxRodape;
 static int uxRestaurar, uxConfirmar, uxAvisoRisco;
@@ -3098,6 +3121,20 @@ void ajustes_dir(const char *dir) {
       gravar();
     } }
 #endif
+  // MIGRACAO UNICA (2.0.3, dono): o tamanho dos Ajustes volta ao padrao de 80%
+  // para quem ainda esta no padrao antigo (90%, ate e87ecb3c). O arquivo grava
+  // o indice, entao 90% guardado e quase sempre o padrao que ninguem escolheu.
+  // Quem tem 100% escolheu, e quem trocar depois desta marca, fica.
+  { char *m = dados_ler("ajustesescala-203.txt");
+    if (m) free(m);
+    else {
+      if (valor[AJ_TAMANHO_AJUSTES] == 1) {
+        valor[AJ_TAMANHO_AJUSTES] = 0;
+        printf("[ajustes] tamanho dos ajustes 90%% -> 80%% (migracao unica da 2.0.3)\n");
+      }
+      dados_gravar("ajustesescala-203.txt", "1\n");
+      gravar();
+    } }
   // MIGRACAO UNICA (2.0): o fundo da escolha de perfil volta a Filmes (0, a
   // parede de cartazes de cada perfil, PS_FUNDO_FILMES em psestilos.h) para
   // todo mundo, uma vez. O dono decidiu: quem tinha Listras ou Arte do perfil
@@ -4180,6 +4217,10 @@ static void focarOpcao(int op);
 // trailer" 86, P2P no .wgt 6), escondendo o aviso que importa.
 static int foraDestaPlataforma(int op) {
   if (op == AJ_RELOGIO_POS) return 1;   // saiu da tela em 7d69643a: a ilha e sempre no canto direito
+  // 2.0.3: o Descobrir do web nao existe na TV; "Avancadas" e a pilula do alto
+  // do indice; os oito AJ_MDB_* seguem as "Notas no titulo" (notaLigarPar).
+  if (op == AJ_DESCOBRIR || op == AJ_AVANCADAS) return 1;
+  if (op >= AJ_MDB_TRAKT && op <= AJ_MDB_MAL) return 1;
 #ifndef NV_TPK
   if (op == AJ_TRAILER_ZOOM_TPK) return 1;
 #endif
@@ -4276,6 +4317,7 @@ int ajustes_iniciar(void) {
   if (secAtual < 0 || secAtual >= nSecoes) secAtual = 0;
   focoIndice = 1; uxChipAv = 0;
   focarSecao(secAtual);
+  uxTopo = -1;
   // "Experimentar a cor viva" (cartao de novidades): abre em Aparencia com o
   // foco JA na linha da cor, e nao no indice — quem apertou o botao quer
   // trocar a cor, nao achar onde ela mora.
@@ -4294,6 +4336,7 @@ int ajustes_iniciar(void) {
   guiaFechar();
   if (abrirNoGuia) { abrirNoGuia = 0; focarOpcao(AJ_GUIA); guiaAbrir(guiaDaNovidades); guiaDaNovidades = 0; }
   if (uxAbrirOp >= 0) { int op = uxAbrirOp; uxAbrirOp = -1; focarOpcao(op); }
+  if (uxVoltarOp >= 0) { int op = uxVoltarOp; uxVoltarOp = -1; focarOpcao(op); }
   uxCancelar(); uxAviso[0] = 0; uxRetornarOp = -1;
   filAberta = 0; filFoco = 0; filCampo = 0; filPegou = 0; filTopo = 0;
   emEdicao = 0;
@@ -4313,9 +4356,59 @@ int ajustes_quer_sair(void) { return sair; }
 // O ROTULO DA LINHA. Quase todos sao fixos (OPCOES[]); AJ_ATUALIZAR muda com
 // o que se sabe: com versao nova e "Atualizar o aplicativo" (abre o cartao),
 // sem ela e "Procurar atualização" (consulta agora).
+// 2.0.3 (M2, estudo ajustes-ux): ROTULO EM LINGUAGEM COMUM. Onde o nome da
+// linha era jargao ou marca ("Coincidencia por regex", "Background do hero"), a
+// linha passa a dizer o que faz. O nome antigo continua em OPCOES[] e aparece
+// no inspetor como "Nome tecnico", entra no indice da busca e nas trilhas do
+// guia; nada no disco ou na conta depende do rotulo.
+static const char *rotuloNovo(int op) {
+  switch (op) {
+    case AJ_FONTE_HDR: return "Dolby Vision e HDR";
+    case AJ_ATMOS: return "Preferir som Dolby Atmos";
+    case AJ_FONTE_MANUAL: return "Escolher a fonte você mesmo";
+    case AJ_FONTE_PRIORIDADE: return "O que o Nuvio prioriza";
+    case AJ_FONTE_PRAZO: return "Quanto espera pelos add-ons";
+    case AJ_TAM_MAX: return "Tamanho máximo do arquivo";
+    case AJ_TAM_MIN: return "Tamanho mínimo do arquivo";
+    case AJ_PLR_CLASSIF: return "Classificação indicativa no player";
+    case AJ_SAIDA_PLAYER: return "Ao sair no meio do filme";
+    case AJ_FONTE_REGEX: return "Filtrar fontes pelo nome (regex)";
+    case AJ_FONTE_REGEX_PADRAO: return "Padrão do filtro";
+    case AJ_FONTE_REGEX_MODELO: return "Modelo pronto do filtro";
+    case AJ_DTS_AC3: return "Converter DTS para a TV ouvir";
+    case AJ_CACHE_SEEK: return "Guardar o trecho baixado no disco";
+    case AJ_LEG_FORCADA: return "Só os letreiros quando o áudio já é no seu idioma";
+    case AJ_TMDB_IDIOMA: return "Idioma dos dados do título";
+    case AJ_HERO_FUNDO: return "Imagem de fundo do destaque";
+    case AJ_GRAD_CLASSICO: return "Realce antigo no cartaz em foco";
+    case AJ_LARGURA_DP: return "Largura do cartaz";
+    case AJ_RAIO_DP: return "Cantos do cartaz";
+    case AJ_TMDB_LIGADO: return "Dados do TMDB";
+    case AJ_MDB_LIGADO: return "Notas do MDBList";
+    case AJ_STALKER_PORTAL: return "Portal com MAC (Stalker)";
+    case AJ_LIVETV_PROXY: return "Repassar o canal pelo app (proxy)";
+    case AJ_LIVETV_MODO: return "Modo do player dos canais";
+    case AJ_ESPACO: return "Imagens guardadas na memória";
+    case AJ_NOTAS_HOME: return "Nota do IMDb nos cartazes";
+    case AJ_SUFIXO_TIPO: return "Filme ou série no nome da fileira";
+    case AJ_NOME_ADDON: return "Nome do addon na fileira";
+    default: return NULL;
+  }
+}
 static const char *rotuloOpcao(int op) {
   if (op == AJ_ATUALIZAR && !atualizacao_nova()[0]) return "Procurar atualização";
+  if (rotuloNovo(op)) return rotuloNovo(op);
   return OPCOES[op].rotulo;
+}
+// O nome de antes (OPCOES[]), so quando a linha ganhou um rotulo novo.
+static const char *rotuloTecnico(int op) {
+  return op >= 0 && op < AJ_N && rotuloNovo(op) ? OPCOES[op].rotulo : NULL;
+}
+// A trilha do guia ainda diz o nome antigo de algumas linhas: troca pelo novo.
+static const char *rotuloAtualDoAntigo(const char *s) {
+  int k;
+  for (k = 0; k < AJ_N; k++) if (rotuloNovo(k) && !strcmp(OPCOES[k].rotulo, s)) return rotuloNovo(k);
+  return s;
 }
 
 // SERVIDORES PESSOAIS (jellyfin.h). Texto das linhas: so dado de exibicao
@@ -4781,7 +4874,9 @@ static int inativa(int op) {
     case AJ_TMDB_REDES: case AJ_TMDB_EPS: case AJ_TMDB_TRAILERS:
     case AJ_TMDB_MAIS: case AJ_TMDB_COL: case AJ_TMDB_CW:
       return !ajustes_tmdb_ligado();
-    case AJ_MDB_CHAVE:
+    // A chave e so leitura (vem da conta): nunca apagada; o MDBList desligado
+    // esta em Mais opcoes e as notas o religam (notaLigarPar).
+    case AJ_MDB_CHAVE: return 0;
     case AJ_MDB_TRAKT: case AJ_MDB_IMDB: case AJ_MDB_TMDB:
     case AJ_MDB_LETTER: case AJ_MDB_TOMATES: case AJ_MDB_AUDIENCIA:
     case AJ_MDB_META: case AJ_MDB_MAL:
@@ -4792,7 +4887,7 @@ static int inativa(int op) {
     case AJ_NT_TOMATES: case AJ_NT_AUDIENCIA: case AJ_NT_META:
     case AJ_NT_METAUSER: case AJ_NT_TMDB: case AJ_NT_LETTER: case AJ_NT_MAL:
     case AJ_NT_EBERT: case AJ_NT_SCORE:
-      return !ajustes_mdblist_ligado() || !extras_mdblist_tem_chave();
+      return !extras_mdblist_tem_chave();
     // Cada campo so vale para o provedor dele; o teste, para qualquer um ligado.
     case AJ_POSTER_INST: case AJ_POSTER_TOKEN: case AJ_POSTER_EXTRA:
       return valor[AJ_POSTER_PROV] != PP_SPATIAL;
@@ -4814,6 +4909,29 @@ static int soLeitura(int op) { return OPCOES[op].tipo == OP_LEITURA; }
 static int mutavel(int op)   { return OPCOES[op].tipo != OP_LEITURA &&
                                       OPCOES[op].tipo != OP_ACAO && !inativa(op); }
 
+// "MAIS OPCOES" DA CATEGORIA (2.0.3): quantas avancadas ela tem neste build e,
+// se `resumo`, os primeiros rotulos ("DTS, Dolby Vision em MKV, ..."), ja
+// traduzidos, para a linha fechada dizer o que ha dentro.
+static int maisContar(int sec, char *resumo, size_t n) {
+  int i, k = 0;
+  size_t u = 0;
+  if (resumo && n) resumo[0] = 0;
+  if (sec < 0 || sec >= nSecoes || maisItem[sec] < 0) return 0;
+  for (i = maisItem[sec] + 1; i < secFim(sec); i++) {
+    int op = TELA[i].op;
+    if (TELA[i].tipo != IT_OPC) continue;
+    if ((op == AJ_PERFIL_PESQ || op == AJ_PERFIL_EDITAR) && !recomenda_ativo()) continue;
+    if (op == AJ_ICONE_APP && !apoiador_ativo()) continue;
+    if (resumo && u + 4 < n && k < 6) {
+      const char *r = i18n(rotuloOpcao(op));
+      u += (size_t)snprintf(resumo + u, n - u, "%s%s", k ? ", " : "", r);
+      if (u >= n) u = n - 1;
+    }
+    k++;
+  }
+  return k;
+}
+
 // --- NAVEGACAO SOBRE TELA[] ---------------------------------------------------
 // Item desenhado agora? Opcao de grupo fechado nao e — nem desenhada, nem
 // alcancada pelo cima/baixo.
@@ -4831,19 +4949,21 @@ static int visivel(int i) {
     int op = TELA[i].op;
     if ((op == AJ_PERFIL_PESQ || op == AJ_PERFIL_EDITAR) && !recomenda_ativo()) return 0;
     if (op == AJ_BUSCA_CINEMETA && valor[op] == 0 && !cinemetaInstalado()) return 0;
-    if (uxAvancada(op) && !lig(AJ_AVANCADAS)) return 0;
+    if (uxAvancada(op) && !lig(AJ_AVANCADAS) && !maisAberto[secDoItem[i]]) return 0;
   }
+  // A linha "Mais opcoes" some com a pilula Avancadas ligada (ja esta tudo a vista).
+  if (TELA[i].tipo == IT_MAIS) return !lig(AJ_AVANCADAS) && maisContar(secDoItem[i], NULL, 0) > 0;
   return 1;
 }
 static int focavel(int i) {
-  return (TELA[i].tipo == IT_GRP || TELA[i].tipo == IT_OPC) && visivel(i);
+  return (TELA[i].tipo == IT_GRP || TELA[i].tipo == IT_OPC || TELA[i].tipo == IT_MAIS) && visivel(i);
 }
 static void focar(int i) {
   if (i < 0 || i >= AJ_N_TELA) return;
   focoItem = i;
   focoOp = TELA[i].tipo == IT_OPC ? TELA[i].op : -1;
   secAtual = secDoItem[i];
-  uxIndice = secAtual + 2; uxChipAv = 0;
+  uxIndice = secAtual + 2; uxChipAv = 0; uxTopo = -1;
   uxUltimoItem[secAtual] = i;
   emEdicao = 0;
   sairArmado = 0;
@@ -4870,9 +4990,9 @@ static void focarOpcao(int op) {
   int i;
   for (i = 0; i < AJ_N_TELA; i++) {
     if (TELA[i].tipo != IT_OPC || TELA[i].op != op) continue;
-    // Busca/atalho para uma avancada: liga o interruptor global (so na memoria;
-    // grava junto com o proximo ajuste salvo) em vez de esconder o destino.
-    if (uxAvancada(op) && !lig(AJ_AVANCADAS)) valor[AJ_AVANCADAS] = 0;
+    // Busca/atalho para uma avancada: abre o "Mais opcoes" da categoria dela
+    // (so nesta sessao) em vez de esconder o destino.
+    if (uxAvancada(op) && !lig(AJ_AVANCADAS)) maisAberto[secDoItem[i]] = 1;
     focar(i);
     focoIndice = 0;
     return;
@@ -5327,8 +5447,84 @@ static const char *efeitoOpcao(int op) {
         : "OK abre o vínculo, com QR e código. As setas laterais não fazem nada nesta linha.";
     case AJ_ADDONS: case AJ_DISCORD: case AJ_PLUGINS:
       return "OK abre. As setas laterais não fazem nada nesta linha.";
+    // 2.0.3 (M2): o "O que muda" das linhas do mockup v3 e das que dependem
+    // de outra (a pessoa liga e nao ve nada: #232, #177, #229).
+    case AJ_QUALIDADE:
+      return "A escolha automática fica com fontes até esta resolução. Automática não põe limite.";
+    case AJ_LEG_FORCADA:
+      return "Ao abrir um vídeo com áudio no seu idioma, a legenda forçada é escolhida; sem ela, nenhuma.";
+    case AJ_FONTE_REGEX:
+      return "Preferir sobe para o topo as fontes que casam com o padrão; Exigir esconde as outras.";
+    case AJ_FONTE_MANUAL:
+      return "Ligado, a lista de fontes abre a cada play. Desligado, o Nuvio escolhe sozinho com as regras logo abaixo.";
+    case AJ_CW_THUMB:
+      return "Desfocar o próximo episódio só funciona com esta opção ligada.";
+    case AJ_NT_TOMATES: case AJ_NT_AUDIENCIA: case AJ_NT_META: case AJ_NT_METAUSER:
+    case AJ_NT_TMDB: case AJ_NT_LETTER: case AJ_NT_MAL: case AJ_NT_EBERT: case AJ_NT_SCORE:
+      return "Esta nota vem do MDBList: ligar aqui liga também a consulta ao MDBList.";
+    case AJ_HERO_TRAILER:
+      return "O som do trailer no destaque é uma opção à parte, em Som e imagem.";
     default: return NULL;
   }
+}
+
+// A FRASE DE BENEFICIO (2.0.3, M2): uma linha sob o rotulo da linha em foco,
+// "o que isto faz por voce" (mockup v3, tela 02). Onde a primeira frase da
+// ajuda ja diz isso, ela e usada (ja traduzida); onde a ajuda abre listando
+// valores ("Equilibrio: ...") ou e longa demais, a frase e propria.
+static const char *beneficioProprio(int op) {
+  switch (op) {
+    case AJ_QUALIDADE: return "O teto de resolução das fontes que o Nuvio escolhe.";
+    case AJ_FONTE_HDR: return "Se fontes com HDR ou Dolby Vision passam na frente das outras.";
+    case AJ_DV: return "Deixa tocar fontes em Dolby Vision quando a TV aceita.";
+    case AJ_ATMOS: return "Fontes com som Dolby Atmos passam na frente.";
+    case AJ_FONTE_PRIORIDADE: return "O critério da escolha automática: equilíbrio, qualidade ou começar rápido.";
+    case AJ_FONTE_PRAZO: return "Quanto tempo o Nuvio espera os add-ons antes de escolher.";
+    case AJ_PLR_CLASSIF: return "No começo do filme, a ilha mostra a classificação e os avisos.";
+    case AJ_SAIDA_PLAYER: return "O filme pode ficar na ilha do relógio para você voltar depois.";
+    case AJ_LEG_FORCADA: return "Placas e falas em outra língua aparecem; o resto, não.";
+    case AJ_BUSCA_CINEMETA: return "A busca também consulta o Cinemeta se o catálogo do Nuvio falhar.";
+    case AJ_HOME_LAYOUT: return "Como a Home se organiza: Moderna, Padrão ou Dinâmica.";
+    case AJ_HERO_FUNDO: return "De onde vem a arte grande do destaque e da página do título.";
+    case AJ_HERO_ARTE_DIF: return "O destaque pode usar outra arte que não a do cartaz.";
+    case AJ_HERO_TRAILER: return "Com o foco parado no destaque, o trailer toca no lugar da arte.";
+    case AJ_FOCO_TRAILER: return "Com o foco parado num cartaz, o trailer toca no destaque.";
+    case AJ_RESOLUCAO: return "Automática começa em 1080p e só usa 4K se a TV aguentar.";
+    case AJ_PERFIL_PESQ: return "Deixa amigos acharem você pela busca.";
+    case AJ_HIST_CONTA: return "O que você assiste neste perfil vai para a conta Nuvio.";
+    case AJ_SOCIAL: return "Amigos, a atividade deles e recomendações.";
+    case AJ_LIVETV_DIAG: return "Testa a rede, a conta e vários canais de uma vez.";
+    case AJ_LIVETV_RES: return "Qual versão do canal entra primeiro: FHD, HD ou SD.";
+    case AJ_XTREAM_CONTA: return "Se a assinatura está ativa, quando vence e quantas telas usa.";
+    case AJ_PERFIL_EDITAR: return "Apelido, bio e o que os amigos veem no seu perfil.";
+    case AJ_SELO_VISTO: return "Um check no cartaz do que você já assistiu.";
+    case AJ_CW_ORDEM: return "Em que ordem a retomada mostra os títulos.";
+    case AJ_FONTE_REGEX: return "Sobe ou exige fontes cujo nome casa com um padrão.";
+    case AJ_DTS_AC3: return "Para TVs que não tocam DTS: o som é convertido na hora.";
+    case AJ_CACHE_SEEK: return "Guarda o que já baixou para voltar no filme sem esperar.";
+    default: return NULL;
+  }
+}
+// A primeira frase de `s` (ja traduzida): ate ". ", "! ", "? " ou "。".
+static const char *primeiraFrase(const char *s, char *b, size_t n) {
+  size_t i, fim = 0;
+  if (!s) { b[0] = 0; return b; }
+  for (i = 0; s[i] && i + 1 < n; i++) {
+    unsigned char c = (unsigned char)s[i];
+    if ((c == '.' || c == '!' || c == '?') && (s[i + 1] == ' ' || !s[i + 1])) { fim = i + 1; break; }
+    if (c == 0xE3 && (unsigned char)s[i + 1] == 0x80 && (unsigned char)s[i + 2] == 0x82) { fim = i + 3; break; }
+  }
+  if (!fim) fim = i;
+  if (fim >= n) fim = n - 1;
+  memcpy(b, s, fim); b[fim] = 0;
+  return b;
+}
+static const char *ajudaOpcao(int op);
+static const char *uxBeneficio(int op) {
+  static char b[400];
+  const char *p = beneficioProprio(op);
+  if (p) return i18n(p);
+  return primeiraFrase(i18n(ajudaOpcao(op)), b, sizeof b);
 }
 
 
@@ -5355,7 +5551,7 @@ static float yDoItem(int item) {
   for (i = secIni[s]; i < item && i < secFim(s); i++) y += alturaItem(i);
   return y;
 }
-static float alturaFoco(int i) { return TELA[i].tipo == IT_GRP ? AJ_GRUPO_H : ajLinhaH(i); }
+static float alturaFoco(int i) { return TELA[i].tipo == IT_GRP ? AJ_GRUPO_H : TELA[i].tipo == IT_MAIS ? alturaItem(i) : ajLinhaH(i); }
 
 // Tecla dentro da folha de fileiras.
 //
@@ -6060,6 +6256,27 @@ static const char *FR_ALFA_REGEX =
 // de efeitos colaterais para manter iguais.
 // Uma escolha final: persiste uma vez antes dos efeitos externos. Navegar no
 // seletor nunca passa por aqui, inclusive para idiomas e limite de fileiras.
+// NOTAS NO TITULO (decisao do dono, 07/10): os oito "qual nota o MDBList baixa"
+// (AJ_MDB_*) sairam da tela. Ligar uma nota liga o par dela na conta e, se a
+// nota vem do MDBList, o MDBList tambem — senao a linha ligada nao mostraria
+// nada. Desligar nao mexe no par (outro aparelho pode usar).
+static void notaLigarPar(int op) {
+  int par = -1, mdb = 1;
+  switch (op) {
+    case AJ_NT_IMDB: par = AJ_MDB_IMDB; mdb = 0; break;
+    case AJ_NT_TRAKT: par = AJ_MDB_TRAKT; mdb = 0; break;
+    case AJ_NT_TMDB: par = AJ_MDB_TMDB; break;
+    case AJ_NT_TOMATES: par = AJ_MDB_TOMATES; break;
+    case AJ_NT_AUDIENCIA: par = AJ_MDB_AUDIENCIA; break;
+    case AJ_NT_META: case AJ_NT_METAUSER: par = AJ_MDB_META; break;
+    case AJ_NT_LETTER: par = AJ_MDB_LETTER; break;
+    case AJ_NT_MAL: par = AJ_MDB_MAL; break;
+    case AJ_NT_EBERT: case AJ_NT_SCORE: break;
+    default: return;
+  }
+  if (par >= 0) valor[par] = 0;      // 0 = Ligado
+  if (mdb) valor[AJ_MDB_LIGADO] = 0;
+}
 static int definirValorDireto(int op, int novo) {
   int antes;
   if (op < 0 || op >= AJ_N ||
@@ -6072,6 +6289,7 @@ static int definirValorDireto(int op, int novo) {
   antes = valor[op];
   if (novo == antes) return 1;
   valor[op] = novo;
+  if (novo == 0) notaLigarPar(op);
   if (!gravar()) { valor[op] = antes; return 0; }
   if (op == AJ_FIL_LIMITE) {
     fil_ajustar_limite(novo);
@@ -6136,6 +6354,7 @@ static void eventoTela(const SDL_Event *e);
 void ajustes_evento(const SDL_Event *e) {
   AJ_ESCALA_INI();
   if (guiaAberto) { guiaEvento(e); AJ_ESCALA_FIM(); return; }
+  if (apoioAberto) { apoioEvento(e); AJ_ESCALA_FIM(); return; }
   eventoTela(e);
   // FIM DA EDICAO DO LIMITE (issue #197): qualquer tecla que solte a linha
   // (OK, Voltar, cima/baixo, sair da tela) confirma a rajada. Sem rajada em
@@ -6187,7 +6406,13 @@ static void eventoTela(const SDL_Event *e) {
   if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
     // OK NUM GRUPO abre ou fecha (sanfona: abrir um fecha o outro). O foco
     // fica no cabecalho; baixo entra nas opcoes.
-    if (focoOp < 0) { if (TELA[focoItem].tipo == IT_GRP) abrirGrupo(focoItem); return; }
+    if (focoOp < 0) {
+      if (TELA[focoItem].tipo == IT_GRP) abrirGrupo(focoItem);
+      // "Mais opcoes": abre (ou fecha) no lugar; o foco fica na linha e o
+      // Baixo entra nas avancadas.
+      if (TELA[focoItem].tipo == IT_MAIS) maisAberto[secAtual] = !maisAberto[secAtual];
+      return;
+    }
     if (OPCOES[focoOp].tipo != OP_ACAO) { uxAbrirEditor(focoOp); return; }
     // O contexto da modal de digitacao, se esta acao abrir uma: "Secao · Bloco".
     { char kc[200]; const char *b = uxBloco(focoOp);
@@ -6214,7 +6439,7 @@ static void eventoTela(const SDL_Event *e) {
     if (focoOp == AJ_VER_REGISTRO) { registro_abrir(); return; }
     if (focoOp == AJ_GUIA) { guiaAbrir(0); return; }
     if (focoOp == AJ_NOVIDADES20) { pediuNovidades20 = 1; return; }
-    if (focoOp == AJ_APOIAR) { uxNotificar("Aponte a câmera do celular para um dos códigos."); return; }
+    if (focoOp == AJ_APOIAR) { apoioAbrir(); return; }
     if (focoOp == AJ_ADDONS) { pediuAddons = 1; return; }
     if (focoOp == AJ_PLUGINS) { pediuPlugins = 1; return; }
     if (focoOp == AJ_FONTE_ORDEM) { frAbrir(3); return; }
@@ -6447,6 +6672,12 @@ void ajustes_atualizar(float dt, Uint32 agora) {
   // UM GRUPO ABERTO QUER SER VISTO INTEIRO, ou quanto couber: com o foco no
   // cabecalho, a rolagem estica a base ate a ultima opcao dele. Sem isto o OK
   // abria o grupo abaixo da borda e parecia nao ter feito nada.
+  // "Mais opcoes" aberto: o mesmo, ate o fim da categoria (o que coube).
+  if (TELA[focoItem].tipo == IT_MAIS && maisAberto[secAtual]) {
+    float fim = yDoItem(secFim(secAtual) - 1) + alturaItem(secFim(secAtual) - 1);
+    if (fim - topo > AJ_BASE - AJ_TOPO) fim = topo + (AJ_BASE - AJ_TOPO);
+    if (fim > base) base = fim;
+  }
   if (TELA[focoItem].tipo == IT_GRP && grupoAberto[secAtual] == focoItem) {
     int i = focoItem + 1;
     while (i < secFim(secAtual) && grupoDoItem[i] == focoItem) i++;
@@ -7048,6 +7279,7 @@ static AjPreview familiaPreviaOpcao(int op) {
 void teclado_teste_texto(const char *t);
 void teclado_teste_foco(int f, int c);
 static int ajQuadroAddons;   // captura: a tela de addons no lugar de Ajustes
+static int ajQuadroPlugins;  // captura: a de plugins (foco + 1)
 #endif
 static void ajDesenharTudo(Uint32 agora);
 // Own Settings scale: the virtual canvas and the active drawing factor agree.
@@ -7061,6 +7293,7 @@ static void ajDesenharTudo(Uint32 agora) {
   // as tres ilhas por cima. Ver ajustes_ux_desenho.inc.
 #ifdef AJUSTES_TESTE
   if (ajQuadroAddons) { ajustes_desenhar_addons(ajQuadroAddons - 1); return; }
+  if (ajQuadroPlugins) { AjPluginsVista v = { 0, ajQuadroPlugins - 1, 0, 0, "" }; ajustes_desenhar_plugins(&v); return; }
 #endif
   montarTela();
   if (guiaAberto) { guiaDesenhar(); return; }
@@ -7097,6 +7330,7 @@ static void ajDesenharTudo(Uint32 agora) {
 
   // A modal de digitacao e a ultima: ela e sempre a pergunta mais recente da
   // tela, e tem de ficar por cima ate do cartao de vinculo.
+  if (apoioAberto) apoioDesenhar();
   if (teclado_aberto()) teclado_desenhar(agora);
 }
 
@@ -7123,6 +7357,26 @@ int ajustes_teste_focar_opcao(int op) {
   return 0;
 }
 
+// Inventario das previas: a i-esima opcao visivel da TELA (op, categoria,
+// chave do disco e rotulo) e a cena dela desenhada sozinha num instante fixo.
+int ajustes_teste_cena_item(int i, int *op, int *sec, const char **chave, const char **rot) {
+  int k, n = 0;
+  montarTela();
+  for (k = 0; k < AJ_N_TELA; k++) {
+    if (TELA[k].tipo != IT_OPC || TELA[k].op < 0 || TELA[k].op >= AJ_N) continue;
+    if (n++ != i) continue;
+    *op = TELA[k].op; *sec = secDoItem[k];
+    *chave = CHAVE[*op] ? (CHAVE[*op][0] == '-' ? CHAVE[*op] + 1 : CHAVE[*op]) : "";
+    *rot = rotuloOpcao(*op);
+    return 1;
+  }
+  return 0;
+}
+void ajustes_teste_cena_desenhar(int op, float t, float x, float y, float w) {
+  ajcTesteT = t;
+  ajCenaGerada(uxSecaoDe(op), op, x, y, w);
+  ajcTesteT = -1.0f;
+}
 void ajustes_teste_tema(int tema, int vidro);
 void ajustes_teste_ux_captura(int cenario) {
   memcpy(valor, valorPadrao, sizeof valor);
@@ -7216,10 +7470,11 @@ int ajustes_teste_quadro(const char *id) {
   // NUVIO_SHOT_AVANCADAS=1: opcoes avancadas a mostra (a pilula ligada no indice).
   if (getenv("NUVIO_SHOT_AVANCADAS")) valor[AJ_AVANCADAS] = 0;
   uxCancelar(); uxAviso[0] = 0; uxRetornarOp = -1;
+  memset(maisAberto, 0, sizeof maisAberto);
   scrollY = velY = 0; paginaA = 1;
-  filAberta = 0; riscoFolha = 0;
+  filAberta = 0; riscoFolha = 0; apoioAberto = 0;
   focarSecao(0); focoIndice = 1;
-  ajArteFundoN = 12; ajMemFixa = 0; ajQuadroAddons = 0; ajVinculoTeste = 0;
+  ajArteFundoN = 12; ajMemFixa = 0; ajQuadroAddons = 0; ajQuadroPlugins = 0; ajVinculoTeste = 0;
   if (teclado_aberto()) { SDL_Event e = { 0 }; e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_ESCAPE; teclado_evento(&e); }
   aj2PoseFixa = 0;
   if (!strncmp(id, "v2-", 3)) {   // Ajustes v2 (ajustes-v2.html): os quadros do mockup
@@ -7237,6 +7492,16 @@ int ajustes_teste_quadro(const char *id) {
       if (sN >= nSecoes) return 0;
       focar(primeiroDaSecao(sN)); focoIndice = 0;
     }
+    // 2.0.3: "v2-mais-N" = a linha "Mais opcoes" da categoria N em foco;
+    // "v2-mais-aberto-N" = a mesma, aberta (as avancadas logo abaixo).
+    else if (!strncmp(id, "v2-mais-", 8)) {
+      int ab = !strncmp(id + 8, "aberto-", 7), sN = atoi(id + 8 + (ab ? 7 : 0));
+      if (sN < 0 || sN >= nSecoes || maisItem[sN] < 0) return 0;
+      maisAberto[sN] = ab;
+      focar(maisItem[sN]); focoIndice = 0;
+    }
+    // "v2-topo-T" = o alvo T do alto da grade (0 Buscar ... 4 Resolver).
+    else if (!strncmp(id, "v2-topo-", 8)) { focarSecao(0); focoIndice = 1; uxTopo = atoi(id + 8); }
     else if (!strcmp(id, "v2-menu-passando")) { ajArteFundoN = 13; focarSecao(1); uxIndice = 3; focoIndice = 1; }
     else if (!strcmp(id, "v2-aberto") || !strcmp(id, "v2-130")) focarOpcao(AJ_HOME_LAYOUT);
     else if (!strcmp(id, "v2-transicao")) {
@@ -7278,6 +7543,7 @@ int ajustes_teste_quadro(const char *id) {
     if (primeira < 0) return 0;
     focarOpcao(primeira);
   }
+  else if (!strcmp(id, "apoio-painel")) { ajArteFundoN = 12; focarOpcao(AJ_APOIAR); apoioAbrir(); }
   else if (!strncmp(id, "guia", 4)) { if (!ajustesTesteGuia(id)) return 0; }
   else if (!strcmp(id, "principal")) { focarOpcao(AJ_HOME_LAYOUT); }
   // 2.0 N1: logo e abertura. NUVIO_N1_LOGO / NUVIO_N1_ABERT escolhem o valor salvo.
@@ -7348,6 +7614,7 @@ int ajustes_teste_quadro(const char *id) {
       }
     ajQuadroAddons = 2;
   }
+  else if (!strcmp(id, "plugins")) { ajArteFundoN = 3; ajQuadroPlugins = 1; }
   else return 0;
   scrollY = velY = 0;
   return 1;

@@ -1,4 +1,6 @@
 static int aj2GrupoDe(int s);   // ajustes_ux_v2.inc: o grupo (coluna da grade) da categoria
+static void guiaIrCapitulo(const char *icone);   // ajustes_ux_guia.inc
+enum { AJ2_T_BUSCA = 0, AJ2_T_AV, AJ2_T_PERFIL, AJ2_T_TOUR, AJ2_T_RESOLVER, AJ2_T_N };
 static int ajEmLinha(int op);
 static int ajReguaMover(int v, int dx, int dy);
 // Interação do seletor: só OK aplica; foco e rascunho nunca persistem.
@@ -48,18 +50,41 @@ static int uxRequisito(int op) {
     case AJ_TMDB_ELENCO: case AJ_TMDB_PROD: case AJ_TMDB_REDES: case AJ_TMDB_EPS:
     case AJ_TMDB_TRAILERS: case AJ_TMDB_MAIS: case AJ_TMDB_COL: case AJ_TMDB_CW:
       return AJ_TMDB_LIGADO;
-    case AJ_MDB_CHAVE: case AJ_MDB_TRAKT: case AJ_MDB_IMDB: case AJ_MDB_TMDB:
+    case AJ_MDB_TRAKT: case AJ_MDB_IMDB: case AJ_MDB_TMDB:
     case AJ_MDB_LETTER: case AJ_MDB_TOMATES: case AJ_MDB_AUDIENCIA:
     case AJ_MDB_META: case AJ_MDB_MAL: return AJ_MDB_LIGADO;
     case AJ_NT_TOMATES: case AJ_NT_AUDIENCIA: case AJ_NT_META: case AJ_NT_METAUSER:
     case AJ_NT_TMDB: case AJ_NT_LETTER: case AJ_NT_MAL: case AJ_NT_EBERT: case AJ_NT_SCORE:
-      return lig(AJ_MDB_LIGADO) ? AJ_MDB_CHAVE : AJ_MDB_LIGADO;
+      return AJ_MDB_CHAVE;   // 2.0.3: o MDBList liga junto com a nota (notaLigarPar)
     case AJ_POSTER_INST: case AJ_POSTER_TOKEN: case AJ_POSTER_EXTRA:
     case AJ_POSTER_CHAVE: case AJ_POSTER_MODELO: case AJ_POSTER_TESTAR:
     case AJ_ADDON_POSTER: return AJ_POSTER_PROV;
     case AJ_ADDON_LOGO: return lig(AJ_TMDB_LIGADO) ? AJ_TMDB_ARTE : AJ_TMDB_LIGADO;
     default: return -1;
   }
+}
+// 2.0.3 (M3): "OK liga as duas". Liga, na ordem, os interruptores de que a
+// linha depende (ate tres degraus: Continuar > Miniatura > Desfocar) e, se a
+// linha tambem e um interruptor desligado, ela junto. Primeiro ensaia em
+// valor[] e desfaz: so liga se no fim a linha ficaria ativa. Devolve 2 (liga
+// as duas), 1 (liga so o requisito) ou 0 (nao da: o OK mostra o requisito).
+static int uxLigarRequisitos(int op, int aplicar) {
+  int salvo[AJ_N], ligar[4], n = 0, k, res;
+  if (op < 0 || op >= AJ_N || !inativa(op)) return 0;
+  memcpy(salvo, valor, sizeof salvo);
+  for (k = 0; k < 3 && inativa(op); k++) {
+    int req = uxRequisito(op);
+    if (req < 0 || !ehInterruptor(req) || lig(req) || inativa(req)) break;
+    valor[req] = 0; ligar[n++] = req;
+  }
+  res = n > 0 && !inativa(op) ? (ehInterruptor(op) && !lig(op) ? 2 : 1) : 0;
+  memcpy(valor, salvo, sizeof salvo);
+  if (!aplicar || !res) return res;
+  for (k = 0; k < n; k++)
+    if (!definirValorDireto(ligar[k], 0)) { uxNotificar("Não foi possível salvar. O valor anterior foi mantido."); return 0; }
+  if (res == 2) definirValorDireto(op, 0);
+  uxNotificar("Ajuste salvo nesta TV.");
+  return res;
 }
 static void uxAbrirEditor(int op) {
   if (op < 0 || op >= AJ_N || soLeitura(op)) return;
@@ -186,36 +211,50 @@ static int uxEvento(SDL_Keycode k) {
     uxPediuBusca = 2; uxVeioBusca = 0; return 1;
   }
   if (focoIndice) {
-    // 2.0.2: o indice e a GRADE (ajustes_ux_v2.inc, aj2DesenharGrade). No alto,
-    // uma fileira: Buscar (0), Diferentes do padrao (1) e Avancadas (uxChipAv),
-    // cada uma sobre uma coluna. Embaixo, uma coluna por grupo (Telas, Assistir,
-    // Conta e sistema): Cima/Baixo andam na coluna, Esquerda/Direita trocam de
-    // coluna na mesma altura, OK abre. Esquerda na primeira coluna sai.
+    // 2.0.3: o indice e a GRADE do mockup v3 (ajustes_ux_v2.inc). No alto, as
+    // tres pilulas (Buscar, Avancadas, Perfil) e embaixo delas os dois cartoes
+    // de descoberta (O que o Nuvio faz? sobre Assistir e Telas, Resolver um
+    // problema sobre Conta e sistema). Depois, uma coluna por grupo: Cima/Baixo
+    // andam na coluna, Esquerda/Direita trocam de coluna na mesma altura, OK
+    // abre. Esquerda na primeira peca de uma fileira sai.
     int ini[4] = { 0, nSecoes, nSecoes, nSecoes }, s_;
     for (s_ = nSecoes - 1; s_ >= 0; s_--) ini[aj2GrupoDe(s_)] = s_;
     if (ini[2] < ini[1]) ini[2] = ini[1];
-    if (uxChipAv || uxIndice < 2) {
-      int c = uxChipAv ? 2 : uxIndice;
-      if (k == SDLK_DOWN) {
-        int dest = ini[c] < nSecoes ? ini[c] : 0;
-        uxChipAv = 0; uxIndice = dest + 2; uxVeioBusca = 0; focarSecao(dest);
-        return 1;
-      }
+    if (uxTopo >= 0) {
+      int t = uxTopo;
+      if (uxVoltar(k)) { sair = 1; return 1; }
       if (uxOk(k)) {
-        if (c == 0) { uxVeioBusca = 0; uxPediuBusca = 1; return 1; }
-        if (c == 1) { focoIndice = 0; uxListarDiferencas(); return 1; }
-        // Avancadas: liga/desliga as opcoes avancadas em TODAS as categorias.
-        { int novo = valor[AJ_AVANCADAS] == 0 ? 1 : 0;
+        if (t == AJ2_T_BUSCA) { uxVeioBusca = 0; uxPediuBusca = 1; return 1; }
+        if (t == AJ2_T_AV) {   // liga/desliga as opcoes avancadas em TODAS as categorias
+          int novo = valor[AJ_AVANCADAS] == 0 ? 1 : 0;
           if (definirValorDireto(AJ_AVANCADAS, novo)) uxNotificar("Ajuste salvo nesta TV.");
-          else uxNotificar("Não foi possível salvar. O valor anterior foi mantido."); }
+          else uxNotificar("Não foi possível salvar. O valor anterior foi mantido.");
+          return 1;
+        }
+        if (t == AJ2_T_PERFIL) { focarOpcao(AJ_PERFIL_ATIVO); return 1; }
+        // Os cartoes de descoberta abrem o Guia de uso (o tour completo, com
+        // "Ligar agora" por funcao, e da 2.1): o do problema ja no capitulo
+        // "Problemas comuns". Voltar devolve a este cartao.
+        guiaAbrir(0); guiaDoIndice = 1;
+        if (t == AJ2_T_RESOLVER) guiaIrCapitulo("aj_life-buoy");
         return 1;
       }
-      if (uxVoltar(k) || (k == SDLK_LEFT && c == 0)) { sair = 1; return 1; }
-      if (k == SDLK_LEFT) c--;
-      else if (k == SDLK_RIGHT && c < 2) c++;
-      else return 1;
-      uxChipAv = c == 2; uxIndice = c == 2 ? 1 : c; uxVeioBusca = 0;
-      if (c == 1) uxListarDiferencas();
+      if (k == SDLK_LEFT) {
+        if (t == AJ2_T_BUSCA || t == AJ2_T_TOUR) { sair = 1; return 1; }
+        uxTopo = t - 1;
+      } else if (k == SDLK_RIGHT) {
+        if (t == AJ2_T_BUSCA || t == AJ2_T_AV || t == AJ2_T_TOUR) uxTopo = t + 1;
+      } else if (k == SDLK_DOWN) {
+        if (t <= AJ2_T_AV) uxTopo = AJ2_T_TOUR;
+        else if (t == AJ2_T_PERFIL) uxTopo = AJ2_T_RESOLVER;
+        else {
+          int g = t == AJ2_T_TOUR ? 0 : 2, dest = ini[g] < nSecoes ? ini[g] : 0;
+          uxVeioBusca = 0; focarSecao(dest); uxIndice = dest + 2;
+        }
+      } else if (k == SDLK_UP) {
+        if (t == AJ2_T_TOUR) uxTopo = AJ2_T_BUSCA;
+        else if (t == AJ2_T_RESOLVER) uxTopo = AJ2_T_PERFIL;
+      }
       return 1;
     }
     { int sec = uxIndice - 2, g = sec < ini[1] ? 0 : sec < ini[2] ? 1 : 2, lin = sec - ini[g], dest = -1;
@@ -223,7 +262,7 @@ static int uxEvento(SDL_Keycode k) {
       if (uxOk(k)) { focoIndice = 0; return 1; }
       if (k == SDLK_UP) {
         if (lin > 0) dest = sec - 1;
-        else { uxChipAv = g == 2; uxIndice = g == 2 ? 1 : g; uxVeioBusca = 0; if (g >= 1) uxListarDiferencas(); return 1; }
+        else { uxTopo = g == 2 ? AJ2_T_RESOLVER : AJ2_T_TOUR; uxVeioBusca = 0; return 1; }
       }
       if (k == SDLK_DOWN && sec + 1 < ini[g + 1]) dest = sec + 1;
       if (k == SDLK_LEFT && g == 0) { sair = 1; return 1; }
@@ -260,6 +299,14 @@ static int uxEvento(SDL_Keycode k) {
   }
   if (k == SDLK_RIGHT) return 1;
   if (uxOk(k) && focoOp >= 0 && uxAlternarDireto(focoOp)) return 1;
-  if (uxOk(k) && focoOp >= 0 && inativa(focoOp)) { uxAbrirEditor(focoOp); return 1; }
+  // Linha apagada (2.0.3): OK liga o que falta, como a propria linha diz; quando
+  // o requisito nao e um interruptor (layout, chave da conta...), leva ate ele
+  // e Voltar devolve aqui. A modal de dependencia ficou para os atalhos.
+  if (uxOk(k) && focoOp >= 0 && inativa(focoOp)) {
+    int req = uxRequisito(focoOp);
+    if (uxLigarRequisitos(focoOp, 1)) return 1;
+    if (req >= 0) { int op = focoOp; uxCancelar(); focarOpcao(req); uxRetornarOp = op; return 1; }
+    uxAbrirEditor(focoOp); return 1;
+  }
   return 0; // Ações existentes: conta, teclado, fileiras, diagnóstico.
 }

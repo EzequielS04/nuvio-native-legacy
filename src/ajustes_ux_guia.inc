@@ -154,6 +154,7 @@ static void guiaAbrir(int daNov) {
 }
 static void guiaFechar(void) {
   guiaAberto = 0;
+  guiaDoIndice = 0;
   guiaExemplo = 0;
   gfx_mini_liberar(&guiaMiniVis);
   gfx_mini_liberar(&guiaMiniEx);
@@ -161,10 +162,21 @@ static void guiaFechar(void) {
 // Sai pelo Voltar: para o cartao, se veio dele; senao, a linha do guia em
 // Sobre e ajuda.
 static void guiaSair(void) {
-  int nov = gv.daNov;
+  int nov = gv.daNov, doIndice = guiaDoIndice;
   guiaFechar();
   if (nov) pediuNovidades = 1;
+  else if (doIndice) focoIndice = 1;   // volta ao cartao da grade (uxTopo ficou nele)
   else focarOpcao(AJ_GUIA);
+}
+// "Resolver um problema" (grade, 2.0.3): o guia ja no capitulo cujo icone e
+// este, com a primeira entrada em foco.
+static void guiaIrCapitulo(const char *icone) {
+  int c;
+  for (c = 0; c < GUIA_NCAPS; c++)
+    if (!strcmp(GUIA_CAPS[c].icone, icone)) {
+      gv.idx = GI_CAP0 + c; gv.col = GC_LISTA; gv.ent = guiaPrimeira(gv.idx);
+      return;
+    }
 }
 
 // --- GEOMETRIA --------------------------------------------------------------------
@@ -223,7 +235,10 @@ static float guiaTrilha(const char *onde, float x, float y, float w, float a) {
       char *q = strstr(p, " › ");
       size_t l = q ? (size_t)(q - p) : strlen(p);
       while (l && p[l - 1] == ' ') l--;
-      snprintf(seg[n++], sizeof seg[0], "%.*s", (int)l, p);
+      { char cru[120];
+        snprintf(cru, sizeof cru, "%.*s", (int)l, p);
+        // 2.0.3: o rotulo novo da linha, se o guia ainda diz o antigo.
+        snprintf(seg[n++], sizeof seg[0], "%s", rotuloAtualDoAntigo(cru)); }
       if (!q) break;
       p = q + strlen(" › ");
     }
@@ -595,7 +610,7 @@ static void guiaDesenharIndice(const GuiaVista *v, float a) {
   ajIlha(il, 32, a, 0);
   for (j = 0; j < GI_CAP0 + GUIA_NCAPS; j++) {
     int sel = j == v->idx, foco = sel && v->col == GC_INDICE, at = sel && !foco;
-    const char *t = j == GI_BUSCA ? "Buscar no guia" : j == GI_NOVO ? "Novo na 1.8.0" : GUIA_CAPS[j - GI_CAP0].titulo;
+    const char *t = j == GI_BUSCA ? "Buscar no guia" : j == GI_NOVO ? "Novo na 2.0" : GUIA_CAPS[j - GI_CAP0].titulo;
     const char *ic = j == GI_BUSCA ? "aj_search" : j == GI_NOVO ? "aj_sparkles" : GUIA_CAPS[j - GI_CAP0].icone;
     GfxRect r;
     float al = foco || at ? 1.0f : 0.66f;
@@ -669,7 +684,7 @@ static void guiaDesenharLista(const GuiaVista *v, float a) {
   ajIlha(fr, 36, a, 0);
   if (v->idx == GI_NOVO) {
     snprintf(kick, sizeof kick, "%s", "Guia de uso");
-    snprintf(tit, sizeof tit, "%s", "Novo na 1.8.0");
+    snprintf(tit, sizeof tit, "%s", "Novo na 2.0");
     snprintf(sub, sizeof sub, i18n("%d recursos novos ou que mudaram nesta versão"), guiaNovos());
   } else {
     int c = v->idx >= GI_CAP0 ? v->idx - GI_CAP0 : 0;
@@ -750,7 +765,7 @@ static void guiaDesenharInspetor(const GuiaVista *v, float a) {
     ph = guiaVisual(g->visual, e, x, y, w);
     if (ph > 0) y += ph + 24; else y += 4;
     { float kw = ajCaps(TXT_AJ_KBD, GUIA_CAPS[g->cap].titulo, 1.96f, x, y, 0.45f * a);
-      if (g->novo) guiaNovoMarca("Novo na 1.8.0", x + kw + 12, y + 8.5f, a); }
+      if (g->novo) guiaNovoMarca("Novo na 2.0", x + kw + 12, y + 8.5f, a); }
     y += 17 + 8;
     y += ajBloco(TXT_AJ_INSP, g->titulo, x, y, w, 38.4f, a, 2);
     y += 10;
@@ -808,19 +823,19 @@ static void guiaDesenharInspetor(const GuiaVista *v, float a) {
     snprintf(q, sizeof q, "%d", guiaNoCap(c));
     snprintf(q2, sizeof q2, "%d", guiaNovosNoCap(c));
     y += ajMeta(i18n("Recursos"), q, x, y, w, a);
-    y += ajMeta(i18n("Novo na 1.8.0"), q2, x, y, w, a);
+    y += ajMeta(i18n("Novo na 2.0"), q2, x, y, w, a);
     d[nd++] = (AjDica){ "→", "Recursos" };
     d[nd++] = (AjDica){ "↑ ↓", "Capítulos" };
     d[nd++] = (AjDica){ "Voltar", v->daNov ? "Novidades da 1.8.0" : "Ajustes" };
   } else {
-    // "Buscar no guia" e "Novo na 1.8.0" com o foco no indice.
+    // "Buscar no guia" e "Novo na 2.0" com o foco no indice.
     int novo = v->idx == GI_NOVO;
     char t[160];
     ph = guiaVisual(novo ? GV_VIDRO : GV_GUIA, -1, x, y, w);
     if (ph > 0) y += ph + 24; else y += 4;
     ajCaps(TXT_AJ_KBD, "Guia de uso", 1.96f, x, y, 0.45f * a);
     y += 17 + 8;
-    y += ajBloco(TXT_AJ_INSP, novo ? "Novo na 1.8.0" : "Buscar no guia", x, y, w, 38.4f, a, 2);
+    y += ajBloco(TXT_AJ_INSP, novo ? "Novo na 2.0" : "Buscar no guia", x, y, w, 38.4f, a, 2);
     y += 10;
     if (novo) snprintf(t, sizeof t, i18n("%d recursos novos ou que mudaram nesta versão"), guiaNovos());
     else snprintf(t, sizeof t, "%s", i18n("Procure um recurso pelo nome ou pelo que ele faz. Os ajustes que casam com a busca vêm junto."));
@@ -907,7 +922,7 @@ static void guiaInspetorAjustes(GfxRect ir) {
   snprintf(q, sizeof q, i18n("%d em %d capítulos"), GUIA_NENT, GUIA_NCAPS);
   snprintf(q2, sizeof q2, i18n("%d recursos"), guiaNovos());
   y += ajMeta(i18n("Recursos"), q, x, y, w, 1);
-  y += ajMeta(i18n("Novo na 1.8.0"), q2, x, y, w, 1);
+  y += ajMeta(i18n("Novo na 2.0"), q2, x, y, w, 1);
   y += 22.0f;
   ajKicker("Capítulos", x, y + 1, 1);
   y += 29.0f;

@@ -535,7 +535,8 @@ static void ajcCenaPlayer(int op) {
       ajc_vidro(40, 80 - 20 * (1 - k), 300, 150, 18, k);
       ajc_ret(60, 100 - 20 * (1 - k), 160, 20, 6, 1, 1, 1, 0.9f * k);
       ajc_barras(60, 136 - 20 * (1 - k), 250, 4, k);
-      ajc_play(320, 150, 50, 1 - k * 0.4f);
+      if (ajcLig(op) < 0.5f) ajc_ladrilho("aj_pause", 320, 150, 60, 0, 0.9f);   // desligado: so o pause, sem painel
+      else ajc_play(320, 150, 50, 1 - k * 0.4f);
       ajcChaveCanto(ajcLig(op)); break; }
     case AJ_REACAO_CREDITOS: {   // nos creditos: a pergunta aparece
       float k = ajcLig(op) * ajc_onda(4.0f);
@@ -804,8 +805,17 @@ static void ajcCenaIcone(int op, int sec) {
   ajc_barra(260, 256, 120, 0.3f);
 }
 
+// --- cenas proprias por opcao (2.0.3), uma pasta por grupo de categorias ---------------
+#include "ajustes_ux_cenas_reproducao.inc"
+#include "ajustes_ux_cenas_cartazes.inc"
+#include "ajustes_ux_cenas_servicos.inc"
+#include "ajustes_ux_cenas_home.inc"
+#include "ajustes_ux_cenas_titulo.inc"
+
 // --- despacho ------------------------------------------------------------------------
 static void ajcCenaOpcao(int sec, int op) {
+  if (ajcNovaReproducao(sec, op) || ajcNovaCartazes(sec, op) || ajcNovaServicos(sec, op) ||
+      ajcNovaHome(sec, op) || ajcNovaTitulo(sec, op)) return;
   switch (op) {
     case AJ_HOME_LAYOUT: ajcCenaLayouts(); return;
     case AJ_PS_FUNDO: case AJ_PS_CONTINUAR: ajcCenaPerfis(op); return;
@@ -830,6 +840,14 @@ static void ajcCenaOpcao(int sec, int op) {
     case AJ_XTREAM_SERVIDOR: case AJ_XTREAM_USUARIO: case AJ_XTREAM_SENHA: case AJ_XTREAM_CONTA: case AJ_XTREAM_LIMPAR:
     case AJ_STALKER_PORTAL: case AJ_STALKER_MAC: case AJ_STALKER_LIMPAR:
       ajcCenaServico(op, "aj_tv-minimal-play"); return;
+    default: break;
+  }
+  // As opcoes de trailer moram em Cartazes e trailers, mas a cena e a do trailer.
+  if (sec == AJS_CARTAZES) switch (op) {
+    case AJ_HERO_TRAILER: case AJ_FOCO_TRAILER: case AJ_DET_TRAILER_AUTO: case AJ_DET_TRAILER:
+    case AJ_HERO_TRAILER_SOM: case AJ_DET_TRAILER_SOM: case AJ_TRAILER_FONTE: case AJ_HERO_TRAILER_ESPERA:
+    case AJ_TRAILER_QUAL: case AJ_TRAILER_ASPECTO: case AJ_TRAILER_ZOOM_TPK: case AJ_LOGO_TRAILER:
+      sec = AJS_TRAILERS; break;
     default: break;
   }
   switch (sec) {
