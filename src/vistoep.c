@@ -146,6 +146,12 @@ int vistoep_marcar_lote(const char *imdb, const VistoPar *pares, int qtd, int vi
   return mudou;
 }
 
+int vistoep_ajustar_vistos(int baseTrakt, int contarBase, int contarAgora, int exibidos) {
+  int v = baseTrakt + (contarAgora - contarBase);
+  if (v > exibidos) v = exibidos;
+  return v < 0 ? 0 : v;
+}
+
 int vistoep_aplicar(const char *imdb, const VistoPar *lote, int n, int visto,
                     VistoPar *envio, int *ja) {
   int i, k = 0;
