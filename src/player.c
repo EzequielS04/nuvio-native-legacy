@@ -3463,9 +3463,19 @@ static double escalaFonteAss(void) {
 // Lugar que a segunda legenda ocupa EMBAIXO da principal ("Junto da
 // principal"): a principal sobe isso. Zero fora desse modo.
 static float leg2Reserva;
+float player_base_legenda(float baseNormal, int cartaoProximoNoAr) {
+  return cartaoProximoNoAr ? 690.f : baseNormal;
+}
 static float baseLegendaPrincipal(void) {
   float base = (visivel && !faixas_estilo_topo() ? 760.f : 1000.f) - leg2Reserva;
-  if (ofertaProximo()) base = 690.f;
+  // A LEGENDA SOBE SO ENQUANTO O CARTAO ESTA NA TELA (2.0.3). Subia pela
+  // JANELA do cartao (a oferta do proximo), nao pelo cartao: ela continua
+  // verdadeira depois de Voltar/Baixo dispensar o cartao (e ate o fim do
+  // episodio), e tambem quando o cartao nao chega a subir (sem proximo na
+  // lista do posplay). O relato da Samsung: o cartao apareceu no meio do
+  // episodio, foi dispensado, e a legenda ficou no meio da tela ate o episodio
+  // seguinte. Vale para todo alvo: o overlay de legenda e o mesmo.
+  base = player_base_legenda(base, posplay_sobre_video());
   // Abaixo do padrao (3) o passo e de 20 e nao de 48: com 48 as posicoes 1 e 2
   // punham a base em 1144 e 1096, fora da tela de 1080 — a legenda sumia, e a
   // previa da barra de estilo mostrou isso na primeira captura.

@@ -117,6 +117,37 @@ int main(void) {
   assert(!posplay_visivel() && !posplay_pediu_episodio(&t, &e));
   puts("ok  Baixo devolve o player sem pedir episodio");
 
+  // 4b. 2.0.3, SAMSUNG: A LEGENDA SEGUE O CARTAO. Ela subia por ofertaProximo()
+  //     (a JANELA, verdadeira ate o fim do episodio) e ficava no meio da tela
+  //     depois de o cartao sumir. Agora sobe so com o cartao NA TELA e volta no
+  //     quadro em que ele some: Voltar, Baixo, OK, contagem.
+  { const float normal = 1000.0f;
+    int tec[3] = { SDLK_AC_BACK, SDLK_DOWN, SDLK_RETURN }, k;
+    for (k = 0; k < 3; k++) {
+      posplay_fechar();
+      abrirPainel();
+      assert(posplay_sobre_video());
+      assert(player_base_legenda(normal, posplay_sobre_video()) == 690.0f);
+      tecla(tec[k]);
+      posplay_pediu_episodio(&t, &e);
+      // a janela continua aberta (janelaSerie = 1) nos quadros seguintes
+      posplay_atualizar(0.016f, 1016, 3016.0, 3600.0, 1, 0, 1);
+      posplay_atualizar(0.016f, 1032, 3032.0, 3600.0, 1, 0, 1);
+      assert(!posplay_sobre_video());
+      assert(player_base_legenda(normal, posplay_sobre_video()) == normal);
+    }
+    // Contagem encerrada: o cartao some e a legenda desce junto.
+    posplay_fechar();
+    aquecer(3600.0, 1);
+    posplay_atualizar(0.016f, 1000, 3597.0, 3600.0, 1, 0, 1);
+    assert(player_base_legenda(normal, posplay_sobre_video()) == 690.0f);
+    posplay_atualizar(0.016f, 1000 + 3100, 3600.0, 3600.0, 1, 0, 1);
+    assert(player_base_legenda(normal, posplay_sobre_video()) == normal);
+    posplay_pediu_episodio(&t, &e);
+    posplay_fechar();
+  }
+  puts("ok  2.0.3: a legenda sobe com o cartao e desce no quadro em que ele some");
+
   // 5. CONTAGEM FINAL. O cabecalho "A seguir em %d s", a constante de 5 s e o
   //    bloco que consome `fecharEm` existiam desde o inicio; faltava a linha
   //    que arma o relogio, entao o painel ficava em "A seguir" para sempre e
@@ -147,6 +178,8 @@ int main(void) {
   aquecer(3600.0, 1);
   posplay_atualizar(0.016f, 1000, 3597.0, 3600.0, 1, 0, 1);
   assert(!posplay_visivel());
+  // 2.0.3: janela aberta SEM cartao: a legenda nem sobe.
+  assert(player_base_legenda(1000.0f, posplay_sobre_video()) == 1000.0f);
   posplay_atualizar(0.016f, 1000 + 9000, 3600.0, 3600.0, 1, 0, 1);
   assert(!posplay_pediu_episodio(&t, &e));
   puts("ok  ultimo episodio nao oferece proximo");
@@ -290,14 +323,25 @@ int main(void) {
       { "marcador aceito, ainda antes dele",   1240.0, 1350.0, 1290.0, 0 },
       { "marcador aceito, chegou nele",        1290.0, 1350.0, 1290.0, 1 },
       { "marcador aceito, depois dele",        1330.0, 1350.0, 1290.0, 1 },
-      // Sem marcador nenhum a regra dos 2 minutos continua sendo a regra.
-      { "sem marcador, dentro dos 2 min",      1240.0, 1350.0,    0.0, 1 },
-      { "sem marcador, fora dos 2 min",        1200.0, 1350.0,    0.0, 0 },
+      // SEM MARCADOR (2.0.3): tempo FIXO antes do fim, nunca porcentagem —
+      // 40 s (intro_fim_estimado); era "os 2 min finais".
+      { "sem marcador, 40 s finais",           1311.0, 1350.0,    0.0, 1 },
+      { "sem marcador, 110 s do fim (antes: 2 min)", 1240.0, 1350.0, 0.0, 0 },
+      { "sem marcador, 1 h, 39 s do fim",      3561.0, 3600.0,    0.0, 1 },
+      { "sem marcador, 1 h, 41 s do fim",      3559.0, 3600.0,    0.0, 0 },
+      // Episodio < 10 min: 15 s.
+      { "8 min, 15 s finais",                   465.0,  480.0,    0.0, 1 },
+      { "8 min, 20 s do fim",                   460.0,  480.0,    0.0, 0 },
+      // 22 min com "creditos" a 5 min do fim (17:00): a janela antiga (300 s)
+      // aceitava; a nova (15% = 198 s) recusa — e o cartao do meio do episodio.
+      { "22 min, marcador a 5 min do fim",     1020.0, 1320.0, 1020.0, 0 },
+      { "22 min, marcador a 3 min do fim",     1140.0, 1320.0, 1140.0, 1 },
       // Marcador absurdo (creditos no meio do episodio) e RECUSADO pela
       // sanidade e nao pode calar a regra de baixo — senao o cartao nunca
       // apareceria naquele episodio.
       { "marcador recusado, meio do episodio", 2000.0, 3000.0, 1000.0, 0 },
-      { "marcador recusado, fim do episodio",  2900.0, 3000.0, 1000.0, 1 },
+      { "marcador recusado, fim do episodio",  2961.0, 3000.0, 1000.0, 1 },
+      { "marcador recusado, 100 s do fim",     2900.0, 3000.0, 1000.0, 0 },
       // Duracao invalida: nao decide nada.
       { "sem duracao",                            0.0,    0.0,    0.0, 0 },
       // 2.0.1, casos tirados de log. TCL: "2 min finais: pos 0s de 30s".
@@ -307,9 +351,10 @@ int main(void) {
       { "536 s falsos, marcador adiante",       416.0,  536.0, 1335.0, 0 },
       { "536 s falsos, chegou no marcador",    1335.0,  536.0, 1335.0, 1 },
       // Uma hora com creditos a 369 s do fim: sobra mais que a janela, quem
-      // decide sao os 2 min finais.
+      // decide a estimativa fixa de 40 s.
       { "1 h, marcador fora da janela",        3231.0, 3600.0, 3231.0, 0 },
-      { "1 h, 2 min finais",                   3480.0, 3600.0, 3231.0, 1 },
+      { "1 h, 2 min finais (antes abria)",     3480.0, 3600.0, 3231.0, 0 },
+      { "1 h, 40 s finais",                    3560.0, 3600.0, 3231.0, 1 },
     };
     for (size_t k3 = 0; k3 < sizeof cs / sizeof *cs; k3++) {
       int r = player_regra_proximo(cs[k3].pos, cs[k3].dur, cs[k3].cred);
