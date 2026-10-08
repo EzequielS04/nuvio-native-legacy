@@ -108,6 +108,9 @@ void ponteiro_teste_relogio(Uint32 (*fn)(void));
 void ponteiro_teste_janela(int w, int h);
 // Disponibilidade de toque injetavel, sem precisar de hardware no teste.
 void ponteiro_teste_toque(int ligado);
+// A lista que o hit-test le agora (a do ultimo quadro fechado): os testes de
+// tela conferem o que cada tela registrou, sem saber a geometria dela.
+int  ponteiro_teste_lista(const PonteiroAlvo **v);
 // SDL_webOSCursorVisibility de mentira (so com -DNV_PONT_WEBOS_TESTE).
 void ponteiro_teste_cursor_sistema(SDL_bool (*fn)(SDL_bool));
 
