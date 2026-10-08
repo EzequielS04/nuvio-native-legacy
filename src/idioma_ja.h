@@ -3967,7 +3967,7 @@
   T("Segurar OK em Reproduzir", "再生 で OK を長押し"),
   T("Segurar OK num cartaz", "ポスターで OK を長押し"),
   T("Segurar ↑ ↓", "↑ ↓ 長押し"),
-  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe. Com um vídeo tocando, Estatísticas mostra a velocidade e o buffer ao vivo.", "CH+ を長押しするとアイランドがクイック設定パネルになり、好きなショートカットを置けます。動画再生中は「統計」で速度とバッファをリアルタイム表示。"),
+  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe.", "CH+ を長押しするとアイランドがクイック設定パネルになり、好きなショートカットを置けます。"),
   T("Segure CH+ para abrir, com atalhos que você escolhe.", "CH+ 長押しで開き、ショートカットは自由に選べます。"),
   T("Segure CH+ para abrir.", "CH+を長押しで開きます。"),
   T("Segure OK", "OK を長押し"),

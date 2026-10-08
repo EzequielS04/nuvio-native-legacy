@@ -899,7 +899,7 @@
    "t": "Central de controle",
    "ic": "sliders-horizontal",
    "novo": 1,
-   "txt": "Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe. Com um vídeo tocando, Estatísticas mostra a velocidade e o buffer ao vivo.",
+   "txt": "Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe.",
    "onde": "Segurar CH+",
    "acao": [],
    "fonte": "docs/releases/2.0.x/NOTAS.md",
@@ -1432,7 +1432,7 @@
    "cap": "desempenho",
    "t": "Teste de velocidade",
    "ic": "zap",
-   "txt": "Mede a velocidade das fontes, por add-on ou todas de uma vez, e diz o maior arquivo que toca sem parar. O resultado pode ir para quem faz o app.",
+   "txt": "Diz o maior arquivo que toca sem parar, por filme de 2 h e por episódio. Não muda nenhum ajuste.",
    "onde": "Ajustes › Esta TV › Teste de velocidade",
    "acao": [
     "Abrir em Ajustes"
@@ -1440,7 +1440,7 @@
    "fonte": "novidades148.c:468-470",
    "prova": "ajustes.c:799; ajustes.c:3879",
    "visual": "Resultado do teste (ajustes-mock quadro velocidade)",
-   "novo": 1
+   "novo": 0
   },
   {
    "id": "d-mem",

@@ -3967,7 +3967,7 @@
   T("Segurar OK em Reproduzir", "Giữ OK trên Phát"),
   T("Segurar OK num cartaz", "Giữ OK trên áp phích"),
   T("Segurar ↑ ↓", "Giữ ↑ ↓"),
-  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe. Com um vídeo tocando, Estatísticas mostra a velocidade e o buffer ao vivo.", "Giữ CH+, đảo mở ra thành bảng cài đặt nhanh với lối tắt bạn chọn. Khi đang phát video, Thống kê hiện tốc độ và bộ đệm trực tiếp."),
+  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe.", "Giữ CH+, đảo mở ra thành bảng cài đặt nhanh với lối tắt bạn chọn."),
   T("Segure CH+ para abrir, com atalhos que você escolhe.", "Giữ CH+ để mở, với các lối tắt bạn chọn."),
   T("Segure CH+ para abrir.", "Giữ CH+ để mở."),
   T("Segure OK", "Giữ OK"),

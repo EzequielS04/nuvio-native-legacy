@@ -3966,7 +3966,7 @@
   T("Segurar OK em Reproduzir", "Ține apăsat OK pe Redă"),
   T("Segurar OK num cartaz", "Ține apăsat OK pe un afiș"),
   T("Segurar ↑ ↓", "Ține ↑ ↓"),
-  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe. Com um vídeo tocando, Estatísticas mostra a velocidade e o buffer ao vivo.", "Ține apăsat CH+ și insula devine un panou de setări rapide, cu scurtături alese de tine. Cu un video pornit, Statistici arată viteza și bufferul în direct."),
+  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe.", "Ține apăsat CH+ și insula devine un panou de setări rapide, cu scurtături alese de tine."),
   T("Segure CH+ para abrir, com atalhos que você escolhe.", "Ține CH+ pentru a o deschide, cu scurtăturile alese de tine."),
   T("Segure CH+ para abrir.", "Ține apăsat CH+ ca să-l deschizi."),
   T("Segure OK", "Ține apăsat OK"),

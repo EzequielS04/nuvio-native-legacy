@@ -3967,7 +3967,7 @@
   T("Segurar OK em Reproduzir", "Hold OK på Spill av"),
   T("Segurar OK num cartaz", "Hold OK på en plakat"),
   T("Segurar ↑ ↓", "Hold ↑ ↓"),
-  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe. Com um vídeo tocando, Estatísticas mostra a velocidade e o buffer ao vivo.", "Hold inne CH+, så blir øya et panel med hurtiginnstillinger og snarveier du velger. Når en video spilles, viser Statistikk hastighet og buffer live."),
+  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe.", "Hold inne CH+, så blir øya et panel med hurtiginnstillinger og snarveier du velger."),
   T("Segure CH+ para abrir, com atalhos que você escolhe.", "Hold CH+ for å åpne, med snarveier du velger."),
   T("Segure CH+ para abrir.", "Hold CH+ for å åpne."),
   T("Segure OK", "Hold inne OK"),

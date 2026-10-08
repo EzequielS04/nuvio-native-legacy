@@ -3967,7 +3967,7 @@
   T("Segurar OK em Reproduzir", "Tahan OK pada Putar"),
   T("Segurar OK num cartaz", "Tahan OK pada poster"),
   T("Segurar ↑ ↓", "Tahan ↑ ↓"),
-  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe. Com um vídeo tocando, Estatísticas mostra a velocidade e o buffer ao vivo.", "Tahan CH+ dan pulau menjadi panel pengaturan cepat, dengan pintasan pilihan Anda. Saat video diputar, Statistik menampilkan kecepatan dan buffer secara langsung."),
+  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe.", "Tahan CH+ dan pulau menjadi panel pengaturan cepat, dengan pintasan pilihan Anda."),
   T("Segure CH+ para abrir, com atalhos que você escolhe.", "Tahan CH+ untuk membuka, dengan pintasan pilihan Anda."),
   T("Segure CH+ para abrir.", "Tahan CH+ untuk membuka."),
   T("Segure OK", "Tahan OK"),

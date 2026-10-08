@@ -3967,7 +3967,7 @@
   T("Segurar OK em Reproduzir", "在播放上按住 OK"),
   T("Segurar OK num cartaz", "在海报上按住 OK"),
   T("Segurar ↑ ↓", "按住 ↑ ↓"),
-  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe. Com um vídeo tocando, Estatísticas mostra a velocidade e o buffer ao vivo.", "按住 CH+，岛会展开成快捷设置面板，快捷方式由你选择。播放视频时，“统计”实时显示速度和缓冲。"),
+  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe.", "按住 CH+，岛会展开成快捷设置面板，快捷方式由你选择。"),
   T("Segure CH+ para abrir, com atalhos que você escolhe.", "长按 CH+ 打开，快捷方式自选。"),
   T("Segure CH+ para abrir.", "长按 CH+ 打开。"),
   T("Segure OK", "长按 OK"),

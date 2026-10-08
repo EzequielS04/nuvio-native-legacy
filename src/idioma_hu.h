@@ -3967,7 +3967,7 @@
   T("Segurar OK em Reproduzir", "OK nyomva tartása a Lejátszáson"),
   T("Segurar OK num cartaz", "OK nyomva tartása egy plakáton"),
   T("Segurar ↑ ↓", "↑ ↓ nyomva"),
-  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe. Com um vídeo tocando, Estatísticas mostra a velocidade e o buffer ao vivo.", "Tartsd lenyomva a CH+-t, és a sziget gyorsbeállítás-panellé nyílik, általad választott parancsikonokkal. Lejátszás közben a Statisztika élőben mutatja a sebességet és a puffert."),
+  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe.", "Tartsd lenyomva a CH+-t, és a sziget gyorsbeállítás-panellé nyílik, általad választott parancsikonokkal."),
   T("Segure CH+ para abrir, com atalhos que você escolhe.", "Tartsa lenyomva a CH+ gombot, saját parancsikonokkal."),
   T("Segure CH+ para abrir.", "Tartsd lenyomva a CH+ gombot a megnyitáshoz."),
   T("Segure OK", "Tartsd lenyomva az OK-t"),

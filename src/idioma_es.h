@@ -3966,7 +3966,7 @@
   T("Segurar OK em Reproduzir", "Mantener OK en Reproducir"),
   T("Segurar OK num cartaz", "Mantener OK en un póster"),
   T("Segurar ↑ ↓", "Mantener ↑ ↓"),
-  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe. Com um vídeo tocando, Estatísticas mostra a velocidade e o buffer ao vivo.", "Mantén CH+ y la isla se abre en ajustes rápidos, con los atajos que elijas. Con un vídeo en marcha, Estadísticas muestra la velocidad y el búfer en vivo."),
+  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe.", "Mantén CH+ y la isla se abre en ajustes rápidos, con los atajos que elijas."),
   T("Segure CH+ para abrir, com atalhos que você escolhe.", "Mantén CH+ para abrirla, con los atajos que elijas."),
   T("Segure CH+ para abrir.", "Mantén CH+ para abrirlo."),
   T("Segure OK", "Mantén OK"),

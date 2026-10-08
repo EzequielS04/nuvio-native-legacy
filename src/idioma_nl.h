@@ -3967,7 +3967,7 @@
   T("Segurar OK em Reproduzir", "OK vasthouden op Afspelen"),
   T("Segurar OK num cartaz", "OK vasthouden op een poster"),
   T("Segurar ↑ ↓", "↑ ↓ ingedrukt"),
-  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe. Com um vídeo tocando, Estatísticas mostra a velocidade e o buffer ao vivo.", "Houd CH+ ingedrukt en het eiland wordt een paneel met snelle instellingen, met snelkoppelingen naar keuze. Speelt er een video, dan toont Statistieken snelheid en buffer live."),
+  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe.", "Houd CH+ ingedrukt en het eiland wordt een paneel met snelle instellingen, met snelkoppelingen naar keuze."),
   T("Segure CH+ para abrir, com atalhos que você escolhe.", "Houd CH+ ingedrukt om te openen, met eigen sneltoetsen."),
   T("Segure CH+ para abrir.", "Houd CH+ ingedrukt om te openen."),
   T("Segure OK", "Houd OK ingedrukt"),

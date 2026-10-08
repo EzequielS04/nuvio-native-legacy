@@ -3967,7 +3967,7 @@
   T("Segurar OK em Reproduzir", "Laikyti OK ant Leisti"),
   T("Segurar OK num cartaz", "Laikyti OK ant plakato"),
   T("Segurar ↑ ↓", "Laikyti ↑ ↓"),
-  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe. Com um vídeo tocando, Estatísticas mostra a velocidade e o buffer ao vivo.", "Laikykite CH+ ir sala tampa greitųjų nustatymų skydeliu su jūsų pasirinktomis nuorodomis. Grojant vaizdo įrašui, Statistika gyvai rodo greitį ir buferį."),
+  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe.", "Laikykite CH+ ir sala tampa greitųjų nustatymų skydeliu su jūsų pasirinktomis nuorodomis."),
   T("Segure CH+ para abrir, com atalhos que você escolhe.", "Laikykite CH+, kad atidarytumėte, su jūsų nuorodomis."),
   T("Segure CH+ para abrir.", "Palaikykite CH+, kad atidarytumėte."),
   T("Segure OK", "Palaikykite OK"),

@@ -3966,7 +3966,7 @@
   { "Segurar OK em Reproduzir", "Hold OK on Play" },
   { "Segurar OK num cartaz", "Hold OK on a poster" },
   { "Segurar ↑ ↓", "Hold ↑ ↓" },
-  { "Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe. Com um vídeo tocando, Estatísticas mostra a velocidade e o buffer ao vivo.", "Hold CH+ and the island opens into quick settings, with shortcuts you pick. With a video playing, Statistics shows speed and buffer live." },
+  { "Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe.", "Hold CH+ and the island opens into quick settings, with shortcuts you pick." },
   { "Segure CH+ para abrir, com atalhos que você escolhe.", "Hold CH+ to open it, with shortcuts you choose." },
   { "Segure CH+ para abrir.", "Hold CH+ to open it." },
   { "Segure OK", "Hold OK" },

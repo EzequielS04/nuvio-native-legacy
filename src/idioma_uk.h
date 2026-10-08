@@ -3966,7 +3966,7 @@
   T("Segurar OK em Reproduzir", "Утримуйте OK на Дивитися"),
   T("Segurar OK num cartaz", "Утримуйте OK на постері"),
   T("Segurar ↑ ↓", "Утримувати ↑ ↓"),
-  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe. Com um vídeo tocando, Estatísticas mostra a velocidade e o buffer ao vivo.", "Утримуйте CH+, і острів стає панеллю швидких налаштувань з ярликами, які ви обираєте. Під час відео «Статистика» показує швидкість і буфер наживо."),
+  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe.", "Утримуйте CH+, і острів стає панеллю швидких налаштувань з ярликами, які ви обираєте."),
   T("Segure CH+ para abrir, com atalhos que você escolhe.", "Утримуйте CH+, щоб відкрити, з вашими ярликами."),
   T("Segure CH+ para abrir.", "Утримуйте CH+, щоб відкрити."),
   T("Segure OK", "Утримуйте OK"),

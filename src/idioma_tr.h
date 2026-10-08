@@ -3967,7 +3967,7 @@
   T("Segurar OK em Reproduzir", "Oynat'ta OK'yi basılı tut"),
   T("Segurar OK num cartaz", "Bir afişte OK'yi basılı tut"),
   T("Segurar ↑ ↓", "↑ ↓ basılı tut"),
-  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe. Com um vídeo tocando, Estatísticas mostra a velocidade e o buffer ao vivo.", "CH+’ya basılı tutun, ada seçtiğiniz kısayollarla hızlı ayarlar paneline dönüşür. Video oynarken İstatistikler hızı ve tamponu canlı gösterir."),
+  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe.", "CH+’ya basılı tutun, ada seçtiğiniz kısayollarla hızlı ayarlar paneline dönüşür."),
   T("Segure CH+ para abrir, com atalhos que você escolhe.", "Açmak için CH+ basılı tutun, kısayolları siz seçin."),
   T("Segure CH+ para abrir.", "Açmak için CH+ tuşunu basılı tutun."),
   T("Segure OK", "OK’e basılı tutun"),

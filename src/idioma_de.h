@@ -3966,7 +3966,7 @@
   T("Segurar OK em Reproduzir", "OK auf Abspielen halten"),
   T("Segurar OK num cartaz", "OK auf einem Poster halten"),
   T("Segurar ↑ ↓", "↑ ↓ halten"),
-  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe. Com um vídeo tocando, Estatísticas mostra a velocidade e o buffer ao vivo.", "Halten Sie CH+ und die Insel wird zu Schnelleinstellungen mit Kürzeln Ihrer Wahl. Läuft ein Video, zeigt Statistik Geschwindigkeit und Puffer live."),
+  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe.", "Halten Sie CH+ und die Insel wird zu Schnelleinstellungen mit Kürzeln Ihrer Wahl."),
   T("Segure CH+ para abrir, com atalhos que você escolhe.", "CH+ halten zum Öffnen, mit Kurzbefehlen deiner Wahl."),
   T("Segure CH+ para abrir.", "CH+ halten zum Öffnen."),
   T("Segure OK", "OK gedrückt halten"),

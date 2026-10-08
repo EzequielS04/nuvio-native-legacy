@@ -3966,7 +3966,7 @@
   T("Segurar OK em Reproduzir", "Maintenir OK sur Lire"),
   T("Segurar OK num cartaz", "Maintenir OK sur une affiche"),
   T("Segurar ↑ ↓", "Maintenir ↑ ↓"),
-  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe. Com um vídeo tocando, Estatísticas mostra a velocidade e o buffer ao vivo.", "Maintenez CH+ et l’îlot devient un panneau de réglages rapides, avec les raccourcis de votre choix. Pendant une vidéo, Statistiques affiche le débit et la mémoire tampon en direct."),
+  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe.", "Maintenez CH+ et l’îlot devient un panneau de réglages rapides, avec les raccourcis de votre choix."),
   T("Segure CH+ para abrir, com atalhos que você escolhe.", "Maintenez CH+ pour l'ouvrir, avec vos raccourcis."),
   T("Segure CH+ para abrir.", "Maintenez CH+ pour l'ouvrir."),
   T("Segure OK", "Maintenez OK"),

@@ -3967,7 +3967,7 @@
   T("Segurar OK em Reproduzir", "Pridrži OK na Predvajaj"),
   T("Segurar OK num cartaz", "Pridrži OK na plakatu"),
   T("Segurar ↑ ↓", "Drži ↑ ↓"),
-  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe. Com um vídeo tocando, Estatísticas mostra a velocidade e o buffer ao vivo.", "Pridržite CH+ in otok postane plošča hitrih nastavitev z bližnjicami po vaši izbiri. Med predvajanjem Statistika v živo kaže hitrost in medpomnilnik."),
+  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe.", "Pridržite CH+ in otok postane plošča hitrih nastavitev z bližnjicami po vaši izbiri."),
   T("Segure CH+ para abrir, com atalhos que você escolhe.", "Pridržite CH+ za odpiranje, z bližnjicami po izbiri."),
   T("Segure CH+ para abrir.", "Pridržite CH+ za odpiranje."),
   T("Segure OK", "Pridržite OK"),

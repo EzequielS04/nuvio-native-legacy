@@ -3967,7 +3967,7 @@
   T("Segurar OK em Reproduzir", "Κρατήστε το OK στην Αναπαραγωγή"),
   T("Segurar OK num cartaz", "Κρατήστε το OK σε μια αφίσα"),
   T("Segurar ↑ ↓", "Κράτημα ↑ ↓"),
-  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe. Com um vídeo tocando, Estatísticas mostra a velocidade e o buffer ao vivo.", "Κρατήστε το CH+ και το νησί γίνεται πίνακας γρήγορων ρυθμίσεων, με συντομεύσεις της επιλογής σας. Με βίντεο σε αναπαραγωγή, τα Στατιστικά δείχνουν ζωντανά ταχύτητα και buffer."),
+  T("Segure CH+ e a ilha vira um painel de ajustes rápidos, com atalhos que você escolhe.", "Κρατήστε το CH+ και το νησί γίνεται πίνακας γρήγορων ρυθμίσεων, με συντομεύσεις της επιλογής σας."),
   T("Segure CH+ para abrir, com atalhos que você escolhe.", "Κρατήστε CH+ για άνοιγμα, με δικές σας συντομεύσεις."),
   T("Segure CH+ para abrir.", "Κρατήστε το CH+ για άνοιγμα."),
   T("Segure OK", "Κρατήστε πατημένο το OK"),
