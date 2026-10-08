@@ -271,8 +271,13 @@ int rede_pedir(const RedePedido *p, RedeResposta *r) {
     unsigned k;
     if (pedidoParar(&c)) break;
     if (lista) { slist_free(lista); lista = NULL; }
-    for (k = 0; headersPermitidos && p->cabecalhos && p->cabecalhos[k]; k++) {
-      void *nova = slist_append(lista, p->cabecalhos[k]);
+    for (k = 0; p->cabecalhos && p->cabecalhos[k]; k++) {
+      void *nova;
+      /* #203: Range is not a credential and must reach the CDN a debrid link
+       * redirects to; without it every speed-test connection read byte 0 (200)
+       * and the extra Android connections were never summed. */
+      if (!headersPermitidos && strncasecmp(p->cabecalhos[k], "Range:", 6)) continue;
+      nova = slist_append(lista, p->cabecalhos[k]);
       if (!nova) { r->erro = REDE_MEMORIA; break; }
       lista = nova;
     }
