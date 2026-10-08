@@ -3596,7 +3596,7 @@ static unsigned long long descAgoraMs(void) {
 //
 // O fio e DESTACADO e o pedido tem dono: montar() que desiste no meio (volta
 // condenada) larga o pedido e quem termina por ultimo libera.
-#define LISTA_TRAKT_MAX 400
+#define LISTA_TRAKT_MAX TRAKT_LISTA_MAX
 typedef struct {
   CatItem *wl, *col;
   int nWl, nCol;
@@ -3610,10 +3610,8 @@ static void listasLiberar(ListasTrakt *j) {
 }
 
 static CatItem *listaBuscar(const char *qual, int *n) {
-  CatItem *v = malloc(sizeof(CatItem) * LISTA_TRAKT_MAX), *menor;
-  *n = 0;
-  if (!v) return NULL;
-  *n = trakt_lista(qual, v, LISTA_TRAKT_MAX);
+  CatItem *v = NULL, *menor;
+  *n = trakt_lista_cresc(qual, &v, LISTA_TRAKT_MAX);
   if (*n <= 0) { free(v); *n = 0; return NULL; }
   menor = realloc(v, sizeof(CatItem) * (size_t)*n);
   return menor ? menor : v;
@@ -4512,9 +4510,9 @@ static void *montar(void *u) {
     listasLiberar(listas);
     listas = NULL;
   } else {
-    GARANTE(400);
+    GARANTE(TRAKT_LISTA_MAX);
     n += trakt_lista("watchlist",  lote + n, cap - n);
-    GARANTE(400);
+    GARANTE(TRAKT_LISTA_MAX);
     n += trakt_lista("collection", lote + n, cap - n);
   }
   // PLAN TO WATCH DO SIMKL (issue #110), SO QUANDO O "+" SALVA LA. E a mesma

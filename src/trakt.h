@@ -125,6 +125,12 @@ int  trakt_scrobble(int evento, const char *imdb, double posSeg, double durSeg);
 // Watchlist ("Minha Lista") e colecao ("Comprados") do dono. `qual` e
 // "watchlist" ou "collection". BLOQUEIA — chamar do fio de descoberta.
 int  trakt_lista(const char *qual, CatItem *saida, int max);
+// A MESMA LEITURA, mas o vetor cresce por realloc (devolve em *saida, liberar
+// com free). Evita reservar TRAKT_LISTA_MAX * sizeof(CatItem) (16 KB cada) de
+// antemao. Pagina a watchlist; para no teto.
+int  trakt_lista_cresc(const char *qual, CatItem **saida, int max);
+// Teto de itens POR LISTA (watchlist, colecao), filmes + series.
+#define TRAKT_LISTA_MAX 400
 
 // Acrescenta ou tira o titulo da WATCHLIST do dono. Nao bloqueia. O estado de
 // leitura ja vem em CatItem.naLista, preenchido por trakt_lista na descoberta —
