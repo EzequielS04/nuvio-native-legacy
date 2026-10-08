@@ -139,6 +139,13 @@ def copiar_dados():
         p = DADOS / n
         if not p.exists():
             p.write_text("1\n")
+    # O cartao "Recomendacao de um amigo" abre sozinho na Home, uma vez por
+    # recomendacao nova, e e MODAL: engole toda tecla menos OK/Voltar
+    # (app.c: recomenda_aberta -> recomenda_evento). Sem a marca de "ja
+    # anunciado" na copia, o Cima do painel de Salvos morria nele. A marca e
+    # so um arquivo local; nada vai ao servidor (so OK -> recomenda_marcar_vistas
+    # escreve la, e o smoke nunca aperta OK nele).
+    (DADOS / "recomendacoes-cartao.txt").write_text("99999999999999999\n")
 
 
 def ler_progresso(perfil):
