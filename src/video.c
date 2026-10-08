@@ -54,6 +54,9 @@ static volatile int dvAudios;
 // que o caminho nao alimenta; -1 = nenhuma. O iniciarDts a entrega ao motor.
 static int dvAudioMkvOrd = -1;
 static int dvHabilitado, dtsModoDv, dvRecuoAviso;
+// O player ainda nao pediu o ponto salvo ao player da TV (video_dv_segurar):
+// a troca para o caminho espera, para nascer na posicao certa.
+static int dvSegurar;
 // The audio track a Dolby Vision session of this URL last played (file
 // ordinal + language). Leaving the film and resuming the same source reopens
 // it natively with the TV's default track; the path starts on this one.
@@ -2071,7 +2074,7 @@ int video_tocar(const char *url) {
   dtsTentou = 0; dtsRevisao = 0; dtsSaida[0] = 0; dtsNativePending = 0; dtsEstado = 0;
   dtsHabilitado = dts_playback_enabled() && dtsLiberadoNestaTv();
   printf("[dts] fallback %s\n", dtsHabilitado ? "available" : "unavailable");
-  dvSondado = dvMkvPerfil = dvAudios = 0; dtsModoDv = 0; dvAudioMkvOrd = -1;
+  dvSondado = dvMkvPerfil = dvAudios = 0; dtsModoDv = 0; dvAudioMkvOrd = -1; dvSegurar = 0;
   nv_dvsonda_zerar(&mkvRetry); mkvRetryEm = 0;
   dvHabilitado = dvLiberadoNestaTv();
   fflush(stdout);
@@ -2115,7 +2118,7 @@ void video_bombear(void) {
   acbBindRecolher();
   if (ligado) acbConfigurarTipo(dtsSessao != NULL);
   if (dtsSessao) bombearDts();
-  else if (dvHabilitado && !dtsNativePending && !dtsTentou && !modoLoad && urlAtual[0] && dvPronto()) {
+  else if (dvHabilitado && !dtsNativePending && !dtsTentou && !modoLoad && urlAtual[0] && !dvSegurar && dvPronto()) {
     dtsModoDv = 1;
     iniciarDts(-1);
   }
@@ -2530,6 +2533,7 @@ static void pararSessao(void) {
   legUrlAoCarregar[0] = 0;
   pausaPedida = 0; seekEm = 0; mkvPendente = 0;
   nv_seek_zerar(&seekRetry); seekRetryEm = 0;
+  seekEnvEm = 0;   // seek sem seekDone morre com a sessao (iniciarDts le os tres)
   mkvRetryEm = 0;   // sonda reagendada morre com a sessao (o contador zera em video_tocar)
   pausaConfirmada = 0;
   if (ligado && midia[0] && !tinhaDts) {
@@ -2680,7 +2684,12 @@ static int iniciarDts(int stream) {
   if (bindAtivo()) return 0;
   DtsTrack selected;
   const VideoFaixa *a = video_audio(audioAtual);
-  double alvo = posSeg;
+  // A POSICAO DE PARTIDA. Um seek pedido ao player da TV e ainda nao feito (o
+  // ponto salvo da retomada, mandado 350 ms depois do pedido, ou ja enviado sem
+  // seekDone) e a posicao certa; posSeg nao, porque o currentTime da TV volta a
+  // escreve-lo com a posicao antiga ate o seek acontecer. O pararSessao abaixo
+  // zera o seekEm, e o caminho nascia no inicio do arquivo em vez do ponto salvo.
+  double alvo = (seekEm || seekEnvEm || seekRetryEm) ? seekAlvo : posSeg;
   int paused = pausaPedida, ordinal = audioAtual, count = nAudio, trocada = 0;
   memset(&selected, 0, sizeof selected);
   if (a) {
@@ -3144,6 +3153,21 @@ double video_duracao(void)  { return durSeg; }
 double video_buffer_fim(void) { return bufferSeg; }
 int    video_tocando(void)  { return tocando; }
 int    video_pronto(void)   { return pronto; }
+// O "COMECA PAUSADO" DO DOLBY VISION EM MKV (#203, C9 do dono, 08/10). No
+// caminho proprio o `pronto` sobe no loadCompleted (sincronizarPlanoDts:
+// prepared && native_loaded), mas o primeiro quadro so vem depois de o worker
+// encher o pipeline: 3,4 s na C9 em 07/10 (loadCompleted 204769, `playing`
+// 208141) e 10 s na fonte lenta de 08/10 (516911 -> 526691). O worker NAO pausa
+// nada ali (worker-rate pause=0, native-play-accepted count=1 logo depois do
+// loadCompleted). Quem lia "pronto e nao tocando" como pausa era o player:
+// player_carregando() = !video_pronto() ja era 0, e o painel de pausa subia aos
+// 5 s (PAUSAO_ESPERA_MS) com a ficha do titulo — e a retomada "de quem abre
+// pausado" (2,5 s depois de pronto) mandava um seek que recarrega o caminho.
+// Isto separa o preroll da pausa: carregado, sem `playing`, sem pausa nossa.
+int    video_iniciando(void) {
+  return dtsSessao && pronto && !tocando && !pausaPedida && !falhou && !terminou;
+}
+void   video_dv_segurar(int segurar) { dvSegurar = segurar ? 1 : 0; }
 // Ha midia carregada. O furo na superficie usa ISTO e nao o loadCompleted:
 // abrir o buraco cedo nao custa nada (atras dele so existe o plano de video) e
 // esperar o evento deixaria a tela desenhada por cima do video se o evento

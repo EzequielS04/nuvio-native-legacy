@@ -2830,6 +2830,10 @@ static void introTmdbTardio(Uint32 agora) {
 
 void player_atualizar(float dt, Uint32 agora) {
   if (retido) { player_validar_retido(agora); return; }
+  // DV EM MKV NASCE NO PONTO SALVO: enquanto a retomada nao foi pedida ao
+  // player da TV, a troca para o caminho do DV espera (video.c, iniciarDts le o
+  // seek pendente). Sem ponto salvo nao ha o que esperar.
+  video_dv_segurar(comVideo && !retomadaAplicada && retomarPct > 0 && !ehCanal());
   // AUDIO QUE A TV NAO TOCA (uMS errorCode 200, registro 1545): o video segue
   // mudo, e sem isto a pessoa nao tinha como saber que era a fonte e nao o
   // volume. Um aviso por sessao, 6 s, no lugar do de proporcao.
@@ -3013,6 +3017,9 @@ void player_atualizar(float dt, Uint32 agora) {
     // Retomada so com o pipeline ASSENTADO: pronto + tocando (ou 2,5 s depois
     // de pronto, para quem abre pausado). Seek logo no loadCompleted e o que o
     // uMS recusa com "seek Failure" (#246).
+    // O PRELOAD DO CAMINHO PROPRIO (DV/DTS, video_iniciando) nao e "abrir
+    // pausado": la o seek recarrega o fluxo inteiro (native-seek-reload) e o
+    // primeiro quadro ainda vem sozinho. Espera o `playing`.
     static Uint32 prontoDesde;
     if (retomadaAplicada || !video_pronto()) prontoDesde = 0;
     else if (!prontoDesde) prontoDesde = agora | 1;
@@ -3020,7 +3027,7 @@ void player_atualizar(float dt, Uint32 agora) {
 #ifdef NV_ANDROID
         1
 #else
-        (video_tocando() || (int)(agora - prontoDesde) >= 2500)
+        (video_tocando() || (!video_iniciando() && (int)(agora - prontoDesde) >= 2500))
 #endif
         ) {
 #ifdef NV_ANDROID
@@ -3234,6 +3241,10 @@ void player_atualizar(float dt, Uint32 agora) {
                    // piscando" do relato.
                    !ehCanal() && !tocando && !scrubbing && !retomandoSalto && !saindo && !erroFonte &&
                    !player_carregando() &&
+                   // O preroll do caminho proprio (DV/DTS) nao e pausa: o
+                   // fluxo carregou e o primeiro quadro ainda nao veio. Era o
+                   // "comeca pausado" do Dolby Vision em MKV (video_iniciando).
+                   !video_iniciando() &&
                    !episodios_aberto() && !stream_folha_aberta() &&
                    !faixas_aberta() && !ofertaProximo() && !posplay_visivel(),
                    idxAtual(), item() ? item()->imdb : "", linhaEp);
