@@ -150,6 +150,7 @@ static int foiPedido(const char *id) {
 // ------------------------------------------------ "o sync" entre a rede e o fim
 enum { NADA, COLECAO_SEM_EFEITO, COLECAO_ENGOLE, REGISTRO_CRESCE, TROCA_DONO };
 static volatile int mudancaArmada = NADA;
+int   trakt_lista_cresc(const char *q, CatItem **s, int m) { (void)q; (void)s; (void)m; return 0; }
 int trakt_lista(const char *q, CatItem *s, int m) { (void)q; (void)s; (void)m; return 0; }
 int simkl_plantowatch(CatItem *s, int m) {
   (void)s; (void)m;
