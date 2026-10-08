@@ -2198,6 +2198,10 @@ static int ofertaProximo(void) {
 // aparelho nao existe comando que aconteca com a barra escondida sem trazer a
 // barra junto — o usuario precisa ver o efeito do que apertou.
 static void acordar(void) { visivel = 1; ultimoInput = SDL_GetTicks(); }
+// Tira os controles da frente (BAIXO na fileira, CIMA no topo, #305). Nao
+// chama acordar(): isso os recolocaria no mesmo evento e o comando pareceria
+// quebrado. O proximo toque direcional os revela de novo.
+static void esconderControles(void) { barraFoco = 0; visivel = 0; ultimoInput = SDL_GetTicks(); }
 
 // AS DUAS LINHAS DO CANAL no OSD: "AGORA hh:mm–hh:mm · titulo" e "A SEGUIR
 // hh:mm · titulo", da grade EPG. Sem grade real o canal se mostra como
@@ -2666,6 +2670,7 @@ void player_evento(const SDL_Event *e) {
       posSeg = (float)puloDestino(fim); if (comVideo) video_buscar(posSeg);
       skipFoco = 0; acordar(); return;
     } else if (k == SDLK_DOWN) { skipFoco = 0; acordar(); return; }
+    else if (k == SDLK_UP) { skipFoco = 0; esconderControles(); return; }   // #305
     // CIMA nao abre mais a folha de Audio daqui (pedido do dono, 03/10): acima
     // do botao de pular nao ha nada. Esquerda/direita: nada ao lado.
     else { acordar(); return; }
@@ -2710,6 +2715,7 @@ void player_evento(const SDL_Event *e) {
   if (k == SDLK_UP) {
     if (!barraFoco) barraFoco = 1;
     else if (trechoPulavel(NULL)) skipFoco = 1;
+    else { esconderControles(); return; }   // #305: CIMA no topo tira a interface da frente
     acordar();
     return;
   }
@@ -2725,9 +2731,7 @@ void player_evento(const SDL_Event *e) {
     // BAIXO a partir da fileira significa "tirar os controles da frente".
     // Nao chama acordar(): isso recolocaria a barra no mesmo evento e faria o
     // comando parecer quebrado. O proximo toque direcional a revela de novo.
-    barraFoco = 0;
-    visivel = 0;
-    ultimoInput = SDL_GetTicks();
+    esconderControles();
     return;
   }
   // Sem rotacao nas pontas: a fileira e curta e cabe inteira no olhar; dar a
