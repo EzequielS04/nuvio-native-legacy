@@ -329,6 +329,35 @@ static int ehSvg(const char *s) {
   return n > 4 && !strcmp(s + n - 4, ".svg");
 }
 
+// URL DE ARTE INTEIRA OU NENHUMA (#361). js_texto corta calado no tamanho do
+// destino, e um PREFIXO de URL nao e uma URL: o cartaz de provedor com nota
+// (pictorium, ~600 caracteres com a query) virava um 404 que ninguem via. Le
+// num buffer maior que qualquer campo de arte e so copia se couber; se nao
+// couber, o campo fica vazio — quem desenha cai na arte seguinte (metahub,
+// cartaz, nome) — e o registro diz qual campo e de quantos bytes.
+//   1 = copiada, 0 = ausente, -1 = nao cabe (vazia, com linha no registro).
+// `soRaiz`: so a chave da raiz do objeto (js_texto_raiz_em); 0 tenta a raiz e
+// depois a primeira de qualquer nivel, a ordem de deMeta (#200).
+#define DESC_URL_LIDA 2048
+static int urlArteInteira(const char *ini, const char *fim, const char *chave,
+                          int soRaiz, char *dst, size_t tam, const char *dono) {
+  char v[DESC_URL_LIDA];
+  size_t n;
+  dst[0] = 0;
+  if (!js_texto_raiz_em(ini, fim, chave, v, sizeof v) &&
+      (soRaiz || !js_texto(ini, fim, chave, v, sizeof v))) return 0;
+  n = strlen(v);
+  if (n >= tam) {
+    printf("[descoberta] %s de \"%s\" tem %s%zu bytes e o campo guarda %zu: "
+           "descartada inteira, nao cortada (#361)\n", chave, dono && dono[0] ? dono : "?",
+           n + 1 >= sizeof v ? ">=" : "", n, tam - 1);
+    fflush(stdout);
+    return -1;
+  }
+  memcpy(dst, v, n + 1);
+  return 1;
+}
+
 // Primeiro provedor do array `chave` dentro de [ini,fim): nome e logo no
 // formato w92 do TMDB. flatrate/rent/buy sao arrays de provedores; o primeiro
 // e o principal na pratica (o TMDB ordena por relevancia local).
@@ -1100,17 +1129,18 @@ static int deMeta(const char *ini, const char *fim, const char *tipo, CatItem *d
   // primeira chave de qualquer nivel: o card mostrava o cartaz do TMDB, sem a
   // nota, so nos titulos que vinham do cache dele. A raiz manda; o aninhado so
   // entra quando a raiz nao tem o campo (era o comportamento de antes).
-  if (!js_texto_raiz_em(ini, fim, "poster", d->poster, sizeof d->poster) &&
-      !js_texto(ini, fim, "poster", d->poster, sizeof d->poster)) return 0;
-  if (!js_texto_raiz_em(ini, fim, "background", d->backdrop, sizeof d->backdrop))
-    js_texto(ini, fim, "background", d->backdrop, sizeof d->backdrop);
+  //
+  // Poster comprido demais ate para os 1024 (#361): o titulo fica, sem cartaz
+  // e com a linha no registro — sumir da fileira seria o defeito calado.
+  if (!urlArteInteira(ini, fim, "poster", 0, d->poster, sizeof d->poster, d->titulo))
+    return 0;
+  urlArteInteira(ini, fim, "background", 0, d->backdrop, sizeof d->backdrop, d->titulo);
   snprintf(d->backdropCatalogo, sizeof d->backdropCatalogo, "%s", d->backdrop);
   if (strstr(d->backdrop, "image.tmdb.org/t/p/"))
     snprintf(d->backdropTmdb, sizeof d->backdropTmdb, "%s", d->backdrop);
   if (strstr(d->backdrop, "media.trakt.tv/"))
     snprintf(d->backdropTrakt, sizeof d->backdropTrakt, "%s", d->backdrop);
-  if (!js_texto_raiz_em(ini, fim, "logo", d->logo, sizeof d->logo))
-    js_texto(ini, fim, "logo", d->logo, sizeof d->logo);
+  urlArteInteira(ini, fim, "logo", 0, d->logo, sizeof d->logo, d->titulo);
   // LOGO IGUAL AO POSTER NAO E LOGO. MEDIDO no catalogo gravado da C9 em 18/09:
   // o Xperience manda, para "O Fim da Rua", o MESMO arquivo do TMDB
   // (4kfDP13cYwCx55YP2gLGtcUFZlC.jpg) em `poster` e em `logo` — e um addon
@@ -1141,7 +1171,12 @@ static int deMeta(const char *ini, const char *fim, const char *tipo, CatItem *d
                (int)(o - d->backdrop), d->backdrop, o + 14);
       snprintf(d->backdrop, sizeof d->backdrop, "%s", novo);
     } }
-  if (!d->backdrop[0]) snprintf(d->backdrop, sizeof d->backdrop, "%s", d->poster);
+  // So se o poster CABE no fundo (512 contra 1024, #361): o cartaz de ~600
+  // caracteres entrava aqui cortado, e o card deitado, o destaque e a busca
+  // pedem `backdrop` antes do poster — o 404 era deles. Sem fundo, todos ja
+  // caem no metahub pelo id e depois no proprio poster inteiro.
+  if (!d->backdrop[0] && strlen(d->poster) < sizeof d->backdrop)
+    snprintf(d->backdrop, sizeof d->backdrop, "%s", d->poster);
   // A variante de catálogo é a mesma arte que alimenta o card, já com a
   // dimensão segura para a TV. O TMDB/Trakt ficam em campos separados quando
   // chegam por seus próprios caminhos.
@@ -5344,8 +5379,8 @@ static int arteDoAddon(const char *tipo, const char *id, char *logo, size_t nl,
       m += 6;
       while (*m == ' ' || *m == ':' || *m == '\n' || *m == '\t' || *m == '\r') m++;
       if (*m == '{') {
-        js_texto_raiz_em(m, NULL, "logo", logo, nl);
-        js_texto_raiz_em(m, NULL, "background", fundo, nf);
+        urlArteInteira(m, NULL, "logo", 1, logo, nl, id);
+        urlArteInteira(m, NULL, "background", 1, fundo, nf, id);
         if (ehSvg(logo) || strncmp(logo, "http", 4)) logo[0] = 0;
         if (ehSvg(fundo) || strncmp(fundo, "http", 4)) fundo[0] = 0;
       }
@@ -7709,7 +7744,8 @@ void desc_pedir_titulo_semente(const char *imdb, long tmdb, const char *tipo,
   snprintf(s.titulo, sizeof s.titulo, "%s", titulo);
   snprintf(s.meta, sizeof s.meta, "%.4s", ano ? ano : "");
   snprintf(s.poster, sizeof s.poster, "%s", poster);
-  snprintf(s.backdrop, sizeof s.backdrop, "%s", poster);
+  if (strlen(poster) < sizeof s.backdrop)   // cortado seria 404 (#361)
+    snprintf(s.backdrop, sizeof s.backdrop, "%s", poster);
   if (tipo && (!strcmp(tipo, "tv") || !strcmp(tipo, "series"))) snprintf(s.tipo, sizeof s.tipo, "series");
   else if (tipo && !strcmp(tipo, "movie")) snprintf(s.tipo, sizeof s.tipo, "movie");
   if (s.tipo[0]) snprintf(s.genero, sizeof s.genero, "%s", i18n(rotuloTipoSing(s.tipo)));

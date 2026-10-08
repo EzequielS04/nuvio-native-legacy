@@ -35,7 +35,7 @@ typedef struct {
   long long ms;        // quando a pessoa fez o gesto
   long long confMs;
   char nome[160];
-  char poster[400];
+  char poster[1024];   // o de CatItem.poster (#361); o arquivo e texto com TAB
 } Ent;
 
 static pthread_mutex_t trava = PTHREAD_MUTEX_INITIALIZER;
@@ -115,7 +115,7 @@ static void gravar(void) {
   char arq[128], *buf, *p;
   size_t tam = 64;
   int i;
-  for (i = 0; i < nEnt; i++) tam += 700;
+  for (i = 0; i < nEnt; i++) tam += sizeof(Ent) + 64;   // linha <= campos + TABs
   buf = (char *)malloc(tam);
   if (!buf) return;
   p = buf;

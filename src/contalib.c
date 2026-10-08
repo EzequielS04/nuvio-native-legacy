@@ -139,6 +139,24 @@ static int vagaPara(const ContaLibItem *novo, int k, int cap,
   return (velho >= 0 && v->addedMs > novo[velho].addedMs) ? velho : -1;
 }
 
+// URL de arte inteira ou nenhuma (#361): um prefixo cortado por js_texto e um
+// 404 calado. Sem ela, montarItem cai no metahub pelo id; o registro diz qual.
+static void urlInteira(const char *p, const char *f, const char *chave,
+                       char *dst, size_t tam, const char *id) {
+  char v[2048];
+  size_t n;
+  dst[0] = 0;
+  if (!js_texto(p, f, chave, v, sizeof v)) return;
+  n = strlen(v);
+  if (n >= tam) {
+    printf("[contalib] %s de %s tem %s%zu bytes e o campo guarda %zu: descartada, "
+           "nao cortada (#361)\n", chave, id, n + 1 >= sizeof v ? ">=" : "", n, tam - 1);
+    fflush(stdout);
+    return;
+  }
+  memcpy(dst, v, n + 1);
+}
+
 int contalib_ler_biblioteca(const char *json) {
   ContaLibItem *novo;
   ContaLibItem linha;
@@ -176,8 +194,8 @@ int contalib_ler_biblioteca(const char *json) {
              tipoBase(js_texto(p, f, "content_type", t, sizeof t) ? t : NULL));
     if (!js_texto(p, f, "name", d->titulo, sizeof d->titulo))
       js_texto(p, f, "title", d->titulo, sizeof d->titulo);
-    js_texto(p, f, "poster", d->poster, sizeof d->poster);
-    js_texto(p, f, "background", d->backdrop, sizeof d->backdrop);
+    urlInteira(p, f, "poster", d->poster, sizeof d->poster, d->id);
+    urlInteira(p, f, "background", d->backdrop, sizeof d->backdrop, d->id);
     js_texto(p, f, "release_info", d->meta, sizeof d->meta);
     comporGenero(d->genero, sizeof d->genero, d->tipo, p, f);
     // imdb_rating vem 0..10 (e as vezes como string; js_num aceita as duas).

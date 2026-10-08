@@ -74,6 +74,7 @@ New Settings, a new episode menu, the Magic Remote pointer on almost every scree
 - **Sync** summary is translated on the spot, and the Continue Watching source "Both" is now "All sources" (#312). With your own Seekr key there is no 50-lookup cap and no counter.
 - A username and password inside an add-on URL no longer show up in the log.
 - The log is sent once per session, at most 64 KB, and records the settings you change.
+- **Posters with long image URLs** (over ~500 characters, such as rating-poster services) are no longer cut on the backdrop, the title page, Saved and the account library, so they load; a background or logo URL too long to keep is dropped with a log line instead of loading as a broken link (#361).
 
 ## Notes
 
