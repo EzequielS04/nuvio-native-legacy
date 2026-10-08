@@ -46,6 +46,8 @@ nao existe: o pacote sairia sem servidor e sem login).
 
 ## Ordem
 
+0. **Auditoria**: `bash tools/auditoria-release.sh` na arvore que vai sair
+   (docs/auditoria-release.md). FAIL para a release; NAO VERIFICADO se explica.
 1. **Versao**: `deploy/app/appinfo.json` e `tools/tizen-config.xml`. Commit
    `vX.Y.Z`. O `.tpk` pega sozinho (`tools/tpk.sh` reescreve os manifestos no
    build e a ferramenta devolve o original depois).

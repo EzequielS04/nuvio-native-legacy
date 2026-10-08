@@ -56,6 +56,7 @@ A impressão SHA-256 do certificado está fixada em `tools/release-android.sh` (
 
 A ordem da versão inteira está na skill **`samsung-release`**. O Android é o passo 4 dela.
 
+0. Auditoria antes de tudo: `bash tools/auditoria-release.sh` (docs/auditoria-release.md).
 1. Versão em `deploy/app/appinfo.json` e `tools/tizen-config.xml`, como sempre. O Android lê o `versionName` daí e calcula o `versionCode` como `X*10000+Y*100+Z`.
 2. LG: igual.
 3. Samsung: `tools/release-samsung.sh`, igual.
