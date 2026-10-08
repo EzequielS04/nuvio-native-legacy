@@ -18,25 +18,26 @@
 
 #define SALTO_SEG           10.0f
 #define SALTO_INTERVALO_MS  300u     // ~3 passos por segundo, qualquer repeticao
-#define SALTO_T1_MS        1500u     // ate aqui: 10 s por passo
-#define SALTO_T2_MS        4000u     // ate aqui: 30 s
-#define SALTO_T3_MS        8000u     // ate aqui: 60 s; depois, o teto
-#define SALTO_TETO_SEG      120.0f
-// Episodio curto: 120 s por passo e quase um quinto do episodio. Abaixo de 40
-// min o teto cai para 60 s.
-#define SALTO_CURTO_SEG     (40.0f * 60.0f)
-#define SALTO_TETO_CURTO    60.0f
+#define SALTO_T1_MS        1500u     // ate aqui: 10 s por passo (o toque e a primeira volta)
+// RAMPA PROPORCIONAL A DURACAO (#340). Depois de T1 a velocidade (segundos de
+// midia por segundo segurado) sobe linear de V0 (o ritmo de 10 s a cada 300 ms)
+// ate DURACAO/SALTO_VMAX_DIV, em SALTO_RAMPA_MS. Atravessar o arquivo inteiro
+// leva ~9-11 s para 20 min, 2 h ou 3 h; antes eram 120 s por passo no teto, ou
+// seja, ~7 min de aperto num filme de 2 h.
+#define SALTO_RAMPA_MS     3000u
+#define SALTO_VMAX_DIV     7.0f
+#define SALTO_V0           (SALTO_SEG * 1000.0f / SALTO_INTERVALO_MS)
 
 // Passo (segundos) para quem esta com a tecla ha `heldMs` numa midia de
-// `duracaoSeg`.
+// `duracaoSeg`. Funcao pura: o player so soma e o clamp [0,dur] e dele.
 static inline float salto_passo(unsigned heldMs, float duracaoSeg) {
-  float teto = (duracaoSeg > 0.0f && duracaoSeg < SALTO_CURTO_SEG)
-             ? SALTO_TETO_CURTO : SALTO_TETO_SEG;
-  float p = SALTO_SEG;
-  if      (heldMs >= SALTO_T3_MS) p = SALTO_SEG * 12.0f;
-  else if (heldMs >= SALTO_T2_MS) p = SALTO_SEG * 6.0f;
-  else if (heldMs >= SALTO_T1_MS) p = SALTO_SEG * 3.0f;
-  return p > teto ? teto : p;
+  float vmax = duracaoSeg > 0.0f ? duracaoSeg / SALTO_VMAX_DIV : 0.0f;
+  if (heldMs < SALTO_T1_MS || vmax <= SALTO_V0) return SALTO_SEG;
+  float f = (float)(heldMs - SALTO_T1_MS) / (float)SALTO_RAMPA_MS;
+  if (f > 1.0f) f = 1.0f;
+  float v = SALTO_V0 + (vmax - SALTO_V0) * f;
+  float p = v * SALTO_INTERVALO_MS / 1000.0f;
+  return p < SALTO_SEG ? SALTO_SEG : p;
 }
 
 // ESTADO DA RAJADA e a regra de quem e toque e quem e tecla segurada.
