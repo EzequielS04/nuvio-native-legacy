@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include "credfio.h"
 
 // O VINCULO E POR PERFIL (simkl-p<N>.txt), pelo mesmo motivo e com a mesma
 // migracao do Trakt (ver o topo de traktauth.c): o simkl.txt antigo e do
@@ -264,6 +265,7 @@ void simklauth_comecar(void) {
 }
 
 void simklauth_passo(unsigned agoraMs) {
+  { int res; credfio_resultado("simkl", &res); }   // so libera o lugar (#203)
   if (fioVivo && fioPronto) { fioVivo = 0; fioPronto = 0; }
   if (fioVivo) return;
   // Pedido feito com um fio do perfil anterior ainda no ar: sai agora.
@@ -271,16 +273,20 @@ void simklauth_passo(unsigned agoraMs) {
 
   if (tokenNovo) {
     Jsw c;
-    tokenNovo = 0;
+    int saiu;
     gravar();
     jsw_iniciar(&c);
     jsw_obj_ini(&c);
     jsw_cs(&c, "access_token", token);
     jsw_obj_fim(&c);
-    sync_empurrar_credencial("simkl", jsw_texto_final(&c));
+    // Fio proprio (#203). Se ja ha um no ar, tokenNovo fica e tenta no proximo quadro.
+    saiu = credfio_iniciar("simkl", jsw_texto_final(&c));
     jsw_livre(&c);
-    printf("[simkl] vinculado nesta TV\n");
-    fflush(stdout);
+    if (saiu) {
+      tokenNovo = 0;
+      printf("[simkl] vinculado nesta TV\n");
+      fflush(stdout);
+    }
   }
 
   if (estado != SMK_AGUARDANDO) return;
