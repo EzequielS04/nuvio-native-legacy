@@ -1,6 +1,6 @@
 #!/bin/bash
 # Teto e paginacao das listas (Trakt, Simkl, conta). Sem rede; roda cada teste
-# duas vezes: build de TV (teto antigo) e -DNV_ANDROID (teto novo).
+# duas vezes: build de TV e -DNV_ANDROID (tetos iguais; so a paginacao do Trakt muda).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 dir=$(mktemp -d "${TMPDIR:-/tmp}/nuvio-biblimites.XXXXXX")

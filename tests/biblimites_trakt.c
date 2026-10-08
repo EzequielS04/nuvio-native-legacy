@@ -1,7 +1,7 @@
 // Teto e paginacao das listas do Trakt (#6 Shield: biblioteca com 213 de 1600+).
 // Sem rede: o Trakt falso pagina a watchlist por ?page=&limit= (cada pagina
-// capada em 500, como o servidor pode fazer) e responde a colecao inteira de
-// uma vez. Compilado duas vezes: com e sem -DNV_ANDROID.
+// capada em PAG_SERVIDOR, como o servidor pode fazer) e responde a colecao inteira de
+// uma vez. Compilado com e sem -DNV_ANDROID (os tetos sao os mesmos nas duas).
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,15 +10,12 @@
 #include <fcntl.h>
 #include "../src/trakt.c"
 #ifndef TRAKT_LISTA_MAX   /* codigo antigo (prova de que o teste falha antes) */
-#ifdef NV_ANDROID
-#define TRAKT_LISTA_MAX 2000
-#else
 #define TRAKT_LISTA_MAX 400
-#endif
 #define SEM_CRESC 1
 #endif
 
 static int falhas, nPedidos, nPaginasWl;
+#define PAG_SERVIDOR 150
 static int filmesWl = 1100, seriesWl = 500, filmesCol = 600;
 static void verifica(int ok, const char *caso) {
   if (!ok) { fprintf(stderr, "FAIL: %s\n", caso); falhas++; }
@@ -55,7 +52,7 @@ char *rede_baixar_com(const char *url, int segundos, const char *const *cab) {
   // resposta sem paginar e exatamente o sintoma do Shield: 213 de 1600+).
   if (!pg) return itens(0, total < 250 ? total : 250, serie);
   assert(sscanf(pg, "?page=%d&limit=%d", &p, &lim) == 2 && p > 0 && lim > 0);
-  if (lim > 500) lim = 500;
+  if (lim > PAG_SERVIDOR) lim = PAG_SERVIDOR;
   nPaginasWl++;
   ini = (p - 1) * lim;
   q = ini < total ? total - ini : 0;
@@ -91,42 +88,46 @@ static void captura(int liga) {
 
 int main(void) {
   CatItem *v;
-  int n, esperado, logpath = 0;
-  (void)logpath;
+  int n, i, rep = 0;
   ligado = 1;
   snprintf(token, sizeof token, "t"); snprintf(cliente, sizeof cliente, "c");
-#ifdef NV_ANDROID
-  esperado = 1600;
-#else
-  esperado = 400;
-#endif
-  verifica(TRAKT_LISTA_MAX == (esperado > 400 ? 2000 : 400), "TRAKT_LISTA_MAX por plataforma");
+  verifica(TRAKT_LISTA_MAX == 400, "TRAKT_LISTA_MAX == 400 (igual TV e Android)");
 
+  // 1600 na conta, servidor devolve 150 por pagina: precisa de varias paginas
+  // e guardar exatamente o teto (400); o resto fica de fora, com aviso.
   captura(1);
   v = malloc(sizeof(CatItem) * (size_t)TRAKT_LISTA_MAX);
   n = trakt_lista("watchlist", v, TRAKT_LISTA_MAX);
   captura(0);
-  verifica(n == esperado, "watchlist: itens guardados == teto/plataforma");
-#ifdef NV_ANDROID
-  verifica(strstr(logbuf, "watchlist: 1600 de 1600 (paginas 6)") != NULL, "log N de M com paginas");
-  verifica(!strstr(logbuf, "teto"), "sem aviso de teto quando cabe");
-  { int i, rep = 0;
-    for (i = 1; i < n; i++) if (!strcmp(v[i].imdb, v[i-1].imdb)) rep++;
-    verifica(!rep && !strcmp(v[1099].tipo, "movie") && !strcmp(v[1100].tipo, "series"),
-             "sem duplicata e filmes antes de series"); }
-#else
-  verifica(strstr(logbuf, "watchlist: 400 de 400") != NULL ||
-           strstr(logbuf, "watchlist: 400 de ") != NULL, "log N de M");
-  verifica(strstr(logbuf, "teto 400 da plataforma") != NULL, "log do teto no TV");
-  verifica(nPaginasWl <= 3, "TV nao pede alem do teto");
-#endif
+  verifica(n == TRAKT_LISTA_MAX, "watchlist: guarda exatamente o teto");
+  verifica(nPaginasWl > 1, "watchlist: mais de uma pagina pedida");
+  verifica(nPaginasWl <= 5, "watchlist: nao pede alem do teto");
+  verifica(strstr(logbuf, "watchlist: 400 de ") != NULL && strstr(logbuf, "(paginas ") != NULL,
+           "log N de M (paginas X)");
+  verifica(strstr(logbuf, "teto 400 da plataforma; ") != NULL &&
+           strstr(logbuf, " ficaram de fora") != NULL, "log do teto e dos que ficaram de fora");
+  for (i = 1; i < n; i++) if (!strcmp(v[i].imdb, v[i-1].imdb)) rep++;
+  verifica(!rep && !strcmp(v[0].imdb, "tt0000000") && !strcmp(v[399].imdb, "tt0000399") &&
+           !strcmp(v[399].tipo, "movie"), "sem duplicata, na ordem, filmes antes de series");
   free(v);
 #ifndef SEM_CRESC
   { CatItem *w = NULL;
     int m = trakt_lista_cresc("watchlist", &w, TRAKT_LISTA_MAX);
-    verifica(m == esperado && w && !strcmp(w[0].imdb, "tt0000000"), "variante crescente igual a fixa");
+    verifica(m == TRAKT_LISTA_MAX && w && !strcmp(w[0].imdb, "tt0000000") &&
+             !strcmp(w[399].imdb, "tt0000399"), "variante crescente igual a fixa");
     free(w); }
 #endif
+
+  // Conta que cabe no teto: paginas ate esgotar, tudo guardado, sem aviso.
+  filmesWl = 200; seriesWl = 100; nPaginasWl = 0;
+  captura(1);
+  v = malloc(sizeof(CatItem) * (size_t)TRAKT_LISTA_MAX);
+  n = trakt_lista("watchlist", v, TRAKT_LISTA_MAX);
+  captura(0);
+  verifica(n == 300 && nPaginasWl > 2, "conta menor que o teto: tudo, varias paginas");
+  verifica(!strstr(logbuf, "ficaram de fora"), "sem aviso de teto quando cabe");
+  verifica(!strcmp(v[200].tipo, "series"), "series depois dos filmes");
+  free(v);
 
   nPedidos = 0;
   captura(1);

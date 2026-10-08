@@ -99,14 +99,6 @@ int simkl_e_a_seguir(const char *id);
 
 // O Plan to Watch inteiro (filmes e series), com naLista = 1.
 int simkl_plantowatch(CatItem *saida, int max);
-// Teto do Plan to Watch (filmes + series). O endpoint all-items nao pagina: devolve
-// a lista inteira numa resposta, entao o teto e so memoria. Android com folga;
-// Tizen/webOS no valor antigo (300 no lote, 400 na tabela de marcas).
-#ifdef NV_ANDROID
-#define SIMKL_PTW_MAX 1000
-#else
-#define SIMKL_PTW_MAX 300
-#endif
 // 1 quando `imdb` estava no Plan to Watch na ultima leitura (ou foi posto la
 // por este app depois dela). E a GUARDA do "-": ver simkl_lista_tipo.
 int simkl_na_plantowatch(const char *imdb);

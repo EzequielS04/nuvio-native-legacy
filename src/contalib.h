@@ -53,26 +53,14 @@
 // na ordem da resposta, que nao e a de adicao — o titulo novo era o que caia.
 // Agora o corte, quando existe, guarda os MAIS RECENTES por `added_at` e o log
 // diz quantos ficaram de fora.
-//
-// ANDROID (#6 Shield: conta com 1600+ titulos mostrava 213): sem o teto de
-// 128 MiB do WASM. 2000 itens * 1488 B = ~3 MB, e cada um que falta no
-// catalogo vira um CatItem de 16 KB (~33 MB transitorios no pior caso).
-#ifdef NV_ANDROID
-#define CONTALIB_MAX        2000
-#else
 #define CONTALIB_MAX        500
-#endif
 // Paginacao de `sync_pull_library`, como o web faz: paginas de CONTALIB_PAGINA
 // ate uma vir incompleta. So assim da para saber quais sao os mais recentes
 // quando a conta tem mais que o teto — o servidor nao promete ordem. Ate
 // CONTALIB_PAGINAS paginas (2000 linhas, ~2 MB de corpo transitorio no fio do
 // sync); o que passar disso nao e baixado, e o log diz.
 #define CONTALIB_PAGINA     500
-#ifdef NV_ANDROID
-#define CONTALIB_PAGINAS    8      // 4000 linhas > CONTALIB_MAX
-#else
 #define CONTALIB_PAGINAS    4
-#endif
 // Vistos custam 48 bytes cada; o teto aqui pode ser folgado.
 #define CONTALIB_VISTO_MAX  2700
 // Paginacao de `sync_pull_watched_items`, como o web (pullRemoteWatchedItems,

@@ -4503,8 +4503,8 @@ static void *montar(void *u) {
     // Samsung roda com teto de 128 MiB. O lote ja cresce por GARANTE; os
     // repetidos saem na compactacao logo abaixo.
     int k, w, np, novos;
-    GARANTE(SIMKL_PTW_MAX);
-    np = simkl_plantowatch(lote + n, cap - n < SIMKL_PTW_MAX ? cap - n : SIMKL_PTW_MAX);
+    GARANTE(300);
+    np = simkl_plantowatch(lote + n, cap - n < 300 ? cap - n : 300);
     for (k = n, w = n; k < n + np; k++) {
       int jj, ja = 0;
       for (jj = 0; jj < n; jj++)

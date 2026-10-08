@@ -129,13 +129,8 @@ int  trakt_lista(const char *qual, CatItem *saida, int max);
 // com free). Evita reservar TRAKT_LISTA_MAX * sizeof(CatItem) (16 KB cada) de
 // antemao. Pagina a watchlist; para no teto.
 int  trakt_lista_cresc(const char *qual, CatItem **saida, int max);
-// Teto de itens POR LISTA (watchlist, colecao), filmes + series. Android tem
-// memoria de sobra; Tizen/webOS/WASM rodam com ~128 MiB e ficam no valor antigo.
-#ifdef NV_ANDROID
-#define TRAKT_LISTA_MAX 2000
-#else
+// Teto de itens POR LISTA (watchlist, colecao), filmes + series.
 #define TRAKT_LISTA_MAX 400
-#endif
 
 // Acrescenta ou tira o titulo da WATCHLIST do dono. Nao bloqueia. O estado de
 // leitura ja vem em CatItem.naLista, preenchido por trakt_lista na descoberta —
