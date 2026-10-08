@@ -671,17 +671,17 @@ static const char *V_RAIL[]      = { "Recolhida", "Fixa" };
 static const char *V_CW[]        = { "Card", "Largo", "P\xc3\xb4ster" };
 // FONTE do "Continuar assistindo". As duas ja existem e ja sao fundidas em
 // montarContinuar (descoberta.c); isto so escolhe quais entram.
-//   Ambas  = conta primeiro, Trakt e Simkl preenchendo o que falta
+//   Todas  = conta primeiro, Trakt e Simkl preenchendo o que falta
 //   Conta  = so o progresso da conta Nuvio (syncprog.c)
 //   Trakt  = so o /sync/playback do Trakt
 //   Simkl  = so o /sync/playback e o "watching" do Simkl (simkl.c, #110)
 // O INDICE E O QUE ESTA GRAVADO em ajustes.txt ("cwFonteLocal N"), entao a
 // ordem e contrato: "Simkl" entrou NO FIM para quem ja tinha 1 ou 2 continuar
 // lendo Conta e Trakt. Os numeros tem nome em ajustes.h (AJ_CWF_*), e
-// tests/simkl_cw.sh confere rotulo por indice. "Ambas" continua com o nome
-// antigo mesmo sendo tres: e o rotulo que quem ja usa conhece, o Simkl so
-// entra nela com vinculo feito, e a ajuda da linha diz a regra inteira.
-static const char *V_CW_FONTE[]  = { "Ambas", "Conta Nuvio", "Trakt", "Simkl" };
+// tests/simkl_cw.sh confere rotulo por indice. O rotulo era "Ambas"
+// (ambas o que? #312); agora "Todas as fontes": o Simkl so entra com vinculo
+// feito, e a ajuda da linha diz a regra inteira. O valor gravado nao mudou.
+static const char *V_CW_FONTE[]  = { "Todas as fontes", "Conta Nuvio", "Trakt", "Simkl" };
 // `continueWatchingSortMode`, normalizado em normalizeContinueWatchingSortMode.
 static const char *V_CW_ORDEM[]  = { "Padrão", "Estilo streaming", "Separar futuros" };
 // Itens por fileira da Home (#163). O INDICE e o que fica gravado; o numero de
@@ -2528,7 +2528,8 @@ static const char *fanartMascarada(void) {
 // Two local key sources: the package default (NV_SEEKR_API_KEY) and a personal
 // override in seekr.txt, never in account preferences. The personal key is
 // masked and takes priority; removing it restores the package default.
-// The TV's budget of50lookups per day applies to either key.
+// The TV's budget of 50 lookups per day applies to the package default only;
+// a personal key follows its own Seekr plan (no local cap, no fixed number).
 #ifndef NV_SEEKR_API_KEY
 #define NV_SEEKR_API_KEY ""
 #endif
@@ -2548,6 +2549,7 @@ static void seekrCarregar(void) {
   t = dados_ler("seekr.txt");
   seekrLimpar(seekrChave, sizeof seekrChave, t);
   free(t);
+  seekr_chave_propria(seekrChave[0] != 0);
   seekr_definir_chave(seekrChave[0] ? seekrChave : NV_SEEKR_API_KEY);
 }
 static void seekrDefinir(const char *txt) {
@@ -2560,6 +2562,7 @@ static void seekrDefinir(const char *txt) {
     return; // Keep the effective and durable old key consistent on failure.
   }
   snprintf(seekrChave, sizeof seekrChave, "%s", nova);
+  seekr_chave_propria(seekrChave[0] != 0);
   seekr_definir_chave(seekrChave[0] ? seekrChave : NV_SEEKR_API_KEY);
 }
 static const char *seekrMascarada(void) {
@@ -2831,23 +2834,26 @@ static const char *seekrAjuda(int op) {
   const char *situacao = i18n(seekr_estado_rotulo(seekr_estado()));
   if (seekrSalvarFalhou)
     situacao = i18n("Não foi possível salvar a chave. A chave anterior foi mantida.");
-  else if (!u.persistente)
+  else if (!u.chavePropria && !u.persistente)
     situacao = i18n(seekr_estado_rotulo(SEEKR_ARMAZENAMENTO_INDISPONIVEL));
-  else if (u.relogioAtrasado)
+  else if (!u.chavePropria && u.relogioAtrasado)
     situacao = i18n("Confira a data e a hora desta TV. O contador não foi reiniciado.");
-  if (u.persistente)
+  if (u.chavePropria) uso[0] = 0;   // plano da chave pessoal: sem numero fixo aqui
+  else if (u.persistente)
     snprintf(uso, sizeof uso, i18n("%d de %d consultas hoje (UTC)"), u.usadas, u.limite);
   else snprintf(uso, sizeof uso, "%s", i18n("Uso do Seekr indisponível"));
   long long quando = seekr_estado() == SEEKR_LIMITE_PROVEDOR ? u.retryUtc : u.reinicioUtc;
-  if (u.persistente && !u.relogioAtrasado && seekr_horario_local(quando, hora, sizeof hora))
+  if ((!u.chavePropria || seekr_estado() == SEEKR_LIMITE_PROVEDOR) && u.persistente && !u.relogioAtrasado && seekr_horario_local(quando, hora, sizeof hora))
     snprintf(libera, sizeof libera, i18n(seekr_estado() == SEEKR_LIMITE_PROVEDOR ?
              "Tente após %s (hora local)" : "Renova em %s (hora local)"), hora);
   const char *sobre = op == AJ_SEEKR_TESTAR ?
-    "Testar a chave não gasta consultas. Os limites do Seekr são separados do limite desta TV." :
+    (u.chavePropria ? "Testar a chave não gasta consultas. Os limites são os do plano da sua chave no Seekr." :
+    "Testar a chave não gasta consultas. Os limites do Seekr são separados do limite desta TV.") :
+    u.chavePropria ? "Com a sua chave, valem os limites do seu plano no Seekr; esta TV não impõe um limite próprio. Cache não gasta consultas." :
     "Até 50 consultas por instalação e dia UTC, compartilhadas por todos os perfis e chaves. Cache não gasta consultas; uma tentativa enviada à rede gasta mesmo se falhar.";
   // The Settings inspector has four lines. Keep live usage/reset/state ahead
   // of explanatory copy so a long translation cannot hide the actionable data.
-  snprintf(texto, sizeof texto, "%s\n%s%s%s\n%s", uso, libera,
+  snprintf(texto, sizeof texto, "%s%s%s%s%s\n%s", uso, uso[0] ? "\n" : "", libera,
            libera[0] ? "\n" : "", situacao, i18n(sobre));
   return texto;
 }
@@ -4499,7 +4505,8 @@ static const char *textoLeitura(int op) {
   if (op == AJ_SEEKR_TESTAR) {
     static char seekrValor[160];
     SeekrUso u; seekr_uso(&u);
-    if (u.persistente)
+    if (u.chavePropria) snprintf(seekrValor, sizeof seekrValor, "%s", skTesteTexto());
+    else if (u.persistente)
       snprintf(seekrValor, sizeof seekrValor, i18n("%s · %d/%d"), skTesteTexto(), u.usadas, u.limite);
     else snprintf(seekrValor, sizeof seekrValor, "%s", i18n("Uso do Seekr indisponível"));
     return seekrValor;
@@ -5001,7 +5008,7 @@ static const char *ajudaOpcao(int op) {
     // --- Continuar assistindo
     case AJ_CW_LIGADO: return "A fileira de retomada, com o que você deixou pela metade e o próximo episódio das séries que acompanha.";
     case AJ_CW_OK: return "O que o OK faz no card da retomada: toca de onde parou, ou abre a página do título. Segurar OK abre o menu nos dois casos.";
-    case AJ_CW_FONTE: return "De onde vem a fileira de retomada. \"Ambas\" usa a conta Nuvio e completa com o Trakt e, se estiver vinculado, com o Simkl.";
+    case AJ_CW_FONTE: return "De onde vem a fileira de retomada. \"Todas as fontes\" usa a conta Nuvio e completa com o Trakt e, se estiver vinculado, com o Simkl.";
     case AJ_CW_ESTILO: return "A forma do card da retomada: quadrado com a arte, deitado largo, ou o cartaz em pé.";
     case AJ_CW_THUMB: return "Usa a imagem do próprio episódio no card, em vez da arte da série.";
     case AJ_CW_BLUR_PROX: case AJ_DET_BLUR_NAO_VISTOS: return "Oculta detalhes da miniatura para evitar spoilers de episódios ainda não assistidos.";
