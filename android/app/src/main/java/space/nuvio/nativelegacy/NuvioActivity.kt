@@ -422,11 +422,20 @@ class NuvioActivity : SDLActivity() {
         env("NUVIO_LOCALE", java.util.Locale.getDefault().toLanguageTag())
         env("NUVIO_TV_INFO", "${Build.MANUFACTURER} ${Build.MODEL}|${Build.VERSION.SDK_INT}|${Build.VERSION.RELEASE}|$versao")
         env("NUVIO_SAIDA_ANTERIOR", saidaAnterior())
+        // Decoders de video do aparelho, para o log do D1 (#318): a deteccao de
+        // MStar (NvPlayer.mstar) so aparecia no logcat e nunca soubemos se casou.
+        env("NUVIO_DECODERS", decodersDeVideo())
         // Onde o crash nativo anterior aconteceu (Tombstone.kt); android.c imprime.
         env("NUVIO_QUEDA_ANDROID", quedaAnterior.joinToString("\n"))
     }
 
     private var quedaAnterior: List<String> = emptyList()
+
+    private fun decodersDeVideo(): String = try {
+        android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).codecInfos
+            .filter { !it.isEncoder && it.supportedTypes.any { t -> t.startsWith("video/") } }
+            .joinToString(",") { it.name }.take(400)
+    } catch (e: Throwable) { "" }
 
     // POR QUE O PROCESSO ANTERIOR MORREU, segundo o proprio Android (11+). O log
     // do app nao ve ANR, crash nativo nem o low memory killer: a sessao

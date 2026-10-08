@@ -5,6 +5,7 @@
 #include <SDL.h>
 #include <stdio.h>
 #include "gl_compat.h"
+#include <sys/system_properties.h>
 
 #ifndef GL_TIME_ELAPSED_EXT
 #define GL_TIME_ELAPSED_EXT           0x88BF
@@ -45,6 +46,16 @@ static int n;
 static float amostras[NAMOSTRAS];   // frames of the current window, for the p90
 
 void gputempo_iniciar(void) {
+  // SO DIAGNOSTICO, DESLIGADO POR PADRAO (#318). Ligado em todo quadro na
+  // 2.0.1, ele nao acelera nada (so mede) e no Xiaomi MiTV-AFKR0 (Mali-G31)
+  // devolveu lixo (med=217020518528 ms) junto com a tela piscando; a
+  // teste-318.1 sem ele consertou. Para medir numa TV de bancada:
+  //   adb shell setprop debug.nuvio.gputempo 1   (lido so na abertura)
+  { char pv[PROP_VALUE_MAX] = "";
+    if (__system_property_get("debug.nuvio.gputempo", pv) <= 0 || !pv[0] || pv[0] == '0') {
+      printf("[gpu-tempo] desligado (diagnostico: debug.nuvio.gputempo 1)\n");
+      return;
+    } }
   if (!SDL_GL_ExtensionSupported("GL_EXT_disjoint_timer_query")) {
     printf("[gpu-tempo] sem GL_EXT_disjoint_timer_query: GPU nao medida\n");
     return;
@@ -65,7 +76,12 @@ void gputempo_iniciar(void) {
 
 // Harvest every finished query, oldest first; stop at the first one still
 // running (results come back in order).
+// The spec says a result is only trustworthy if GL_GPU_DISJOINT_EXT reads 0
+// AFTER it was fetched; a disjoint drops everything in flight and the window.
+// A value over 1 s is a broken counter, not a frame (the Xiaomi's
+// 217020518528 ms): dropped too.
 static void colherProntas(void) {
+  GLint disj = 0;
   while (nFila > 0) {
     GLuint pronto = 0;
     NvGLuint64 ns = 0;
@@ -73,6 +89,9 @@ static void colherProntas(void) {
     if (!pronto) break;
     pGetUi64v(q[cauda], GL_QUERY_RESULT_EXT, &ns);
     cauda = (cauda + 1) % NQ; nFila--;
+    glGetIntegerv(GL_GPU_DISJOINT_EXT, &disj);
+    if (disj) { soma = 0; pior = 0; n = 0; cauda = cab; nFila = 0; break; }
+    if (ns == 0 || ns > 1000000000ULL) continue;
     { double ms = (double)ns / 1e6;
       ult = ms; soma += ms; if (n < NAMOSTRAS) amostras[n] = (float)ms; n++;
       if (ms > pior) pior = ms; }
@@ -82,7 +101,7 @@ static void colherProntas(void) {
 void gputempo_quadro_inicio(void) {
   GLint disj = 0;
   if (!ligado || aberto) return;
-  glGetIntegerv(GL_GPU_DISJOINT_EXT, &disj);
+  glGetIntegerv(GL_GPU_DISJOINT_EXT, &disj);   // also clears the flag
   if (disj) { soma = 0; pior = 0; n = 0; }   // clock jumped: the window is garbage
   colherProntas();
   if (nFila >= NQ) return;                   // ring full: skip this frame, never block

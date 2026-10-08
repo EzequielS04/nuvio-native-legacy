@@ -2468,14 +2468,25 @@ void gfx_fundo_din_desenhar(const float topo[3], float queda) {
     dinPendente = 1;
     ambPendente = 0; ambIntacta = 0;
     // Adiado ate o fim do quadro (ver dinAdiado): so com a tela ainda vazia e
-    // um buffer de profundidade na janela.
+    // um canal alfa de verdade na janela. Sem alfa (EGL de reserva RGB888 ou
+    // RGB565, main.c) o ONE_MINUS_DST_ALPHA le sempre 0 e o degrade nunca
+    // apareceria: fica o caminho antigo.
+    // #318: ficou ligado. O Xiaomi do relato estava no layout 0 (sem fundo da
+    // Dinamica) e consertou com a teste-318.1 do mesmo jeito; o que foi
+    // desligado de vez foram o descarte (gpunivel.c) e o gputempo.
     if (dinAdiadoOk < 0) {
 #ifdef NV_ANDROID
-      dinAdiadoOk = 1;
+      GLint fboAnt = fboLigado(), bitsA = 0;
+      if (fboAnt) glBindFramebuffer(GL_FRAMEBUFFER, 0);
+      glGetIntegerv(GL_ALPHA_BITS, &bitsA);
+      if (fboAnt) glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)fboAnt);
+      dinAdiadoOk = bitsA >= 8;
+      printf("[fundo-din] adiado para o fim do quadro: %s (alfa da janela %d bits)\n",
+             dinAdiadoOk ? "sim" : "nao", (int)bitsA);
 #else
       dinAdiadoOk = 0;
+      printf("[fundo-din] adiado para o fim do quadro: nao\n");
 #endif
-      printf("[fundo-din] adiado para o fim do quadro: %s\n", dinAdiadoOk ? "sim" : "nao");
     }
     dinAdiado = dinAdiadoOk && gfx_n_rect == 0 && !gfx_modos_desligados;
     if (dinAdiado) {
@@ -2578,6 +2589,31 @@ static void dinResolverAdiado(void) {
     if (x < NV_TELA_W) dinQuad(x, y0, NV_TELA_W, y1);
   }
   glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+  // ALFA 1 SOB OS CARTAZES (#318). Fora deles o degrade (alfa 1) ja fechou o
+  // alfa em 1; dentro, o alfa e o que o cartaz deixou, e um cartaz "opaco" com
+  // aArte 0,999 ou arte com transparencia deixaria alfa < 1 numa superficie
+  // TRANSLUCIDA (NuvioActivity: PixelFormat.TRANSLUCENT, media overlay), e o
+  // compositor mostraria o que estiver atras. Um clear so do alfa, com
+  // tesoura, em cada retangulo: nenhum fragmento sombreado, o RGB (ja
+  // premultiplicado sobre preto) fica igual. Nenhum furo vive ali: os dois
+  // furos resolvem o fundo antes de abrir o buraco (gfx_furo, gfx_furo_raio).
+  if (dinNOp > 0) {
+    float ex = (float)telaW / NV_TELA_W, ey = (float)telaH / NV_TELA_H;
+    glEnable(GL_SCISSOR_TEST);
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_TRUE);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    for (i = 0; i < dinNOp; i++) {
+      int x0 = (int)floorf(dinOp[i].x * ex + 0.5f), x1 = (int)floorf((dinOp[i].x + dinOp[i].w) * ex + 0.5f);
+      int y0 = (int)floorf((NV_TELA_H - (dinOp[i].y + dinOp[i].h)) * ey + 0.5f);
+      int y1 = (int)floorf((NV_TELA_H - dinOp[i].y) * ey + 0.5f);
+      if (x1 <= x0 || y1 <= y0) continue;
+      glScissor(x0, y0, x1 - x0, y1 - y0);
+      glClear(GL_COLOR_BUFFER_BIT);
+    }
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    if (rec) glScissor(recorteBox[0], recorteBox[1], recorteBox[2], recorteBox[3]);
+    else glDisable(GL_SCISSOR_TEST);
+  }
   gfxBlend(bl);
   memcpy(subAtual, sub, sizeof sub);
   gfx_tex_aspect_atual = aspAnt; gfx_desliza_atual = deslAnt; gfx_opacidade_grupo = g;
@@ -3017,6 +3053,9 @@ void gfx_furo(GfxRect r) {
 }
 
 void gfx_furo_raio(GfxRect r, float raio) {
+  // O fundo adiado sai ANTES do buraco, como no gfx_furo: resolvido depois,
+  // o ONE_MINUS_DST_ALPHA pintaria o degrade dentro do furo e o video sumiria.
+  dinDescarregar();
   gfxBlend(0);
   gfx_rect(r, 0, GFX_COR, 0, 0, 0, raio, 0, 0, 0, 0);
   gfxBlend(1);
@@ -3286,6 +3325,8 @@ void gfx_borrao_gerar(int via, unsigned int tex, float texAspecto) {
   if (!borFbo[a0] || !tex) return;
   GfxRect cheio = { 0, 0, NV_TELA_W, NV_TELA_H };
   gfx_ambiente_descarregar();   // pendente e da tela, nao deste alvo
+  { static int nLog;   // #318: o desfoque em FBO roda quando a tela nova traz arte nova
+    if (nLog < 40) { nLog++; printf("[transicao] desfoque de fundo (FBO %s) t=%u\n", via ? "home" : "detalhe", (unsigned)SDL_GetTicks()); } }
   ESC_REAL_INI();
   GFX_OUTRO_INI();
   GLint fboAnt = fboLigado(), vpAnt[4];
@@ -3424,6 +3465,8 @@ GLuint gfx_desfocado(GLuint src, const char *chave) {
     }
   if (desfGeradosQuadro >= NV_DESF_POR_QUADRO) return 0;
   gfx_ambiente_descarregar();   // pendente e da tela, nao deste alvo
+  { static int nLog;   // #318: idem, a copia desfocada de um cartaz
+    if (nLog < 40) { nLog++; printf("[transicao] copia desfocada (FBO) t=%u\n", (unsigned)SDL_GetTicks()); } }
   // Vaga: primeiro uma sem fonte, senao a usada ha mais tempo.
   for (i = 0; i < NV_DESF_N; i++)
     if (!desf[i].src) { vago = i; break; }
