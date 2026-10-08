@@ -30,6 +30,7 @@
 #include "cwfrente.h"
 #include "servidores.h"
 #include "descdebounce.h"
+#include "nlanc.h"
 #include <stdint.h>   /* uintptr_t: a geracao viaja no argumento do fio */
 #include <stdio.h>
 #include <string.h>
@@ -553,6 +554,16 @@ static void fotosDoElenco(CatItem *d, const char *imdbSerie, int serie, int mant
 // Definida adiante, junto do resto do parse de meta do Stremio; declarada aqui
 // porque a busca, logo abaixo, monta CatItem a partir da mesma resposta.
 static int deMeta(const char *ini, const char *fim, const char *tipo, CatItem *d);
+// "Ocultar nao lancados" (hideUnreleasedContent) nas fileiras da Home e na grade
+// de colecao / Ver tudo; ver nlanc.h. Desligado, nunca esconde nada.
+static int descOcultaNaoLancado(const CatItem *it) {
+  time_t t;
+  struct tm tmv;
+  if (!ajustes_ocultar_nao_lancados()) return 0;
+  t = time(NULL);
+  if (!gmtime_r(&t, &tmv)) return 0;
+  return nlanc_meta_futuro(it->meta, tmv.tm_year + 1900);
+}
 
 // --- DE QUAL ADDON VEIO O ITEM (CatItem.origem) ------------------------------
 //
@@ -1258,7 +1269,7 @@ static int lerCatalogo(const char *base, const char *tipo, const char *id,
     origemDaBase(base, orig, sizeof orig);      // ver CatItem.origem
     while (p && n < max && n < quantos) {
       const char *f = js_fim(p);
-      if (deMeta(p, f, tipo, &saida[n])) {
+      if (deMeta(p, f, tipo, &saida[n]) && !descOcultaNaoLancado(&saida[n])) {
         snprintf(saida[n].origem, sizeof saida[n].origem, "%s", orig);
         n++;
       }
@@ -7309,7 +7320,7 @@ static void *fioVerTudo(void *u) {
   (void)u;
   for (;;) {
   char url[NV_ADDON_PEDIDO_MAX], base[NV_ADDON_URL_MAX], type[8], id[96], genre[96], encoded[290], *corpo;
-  int raw=0, skip, cap, prov;unsigned generation;
+  int raw=0, ocultos=0, skip, cap, prov;unsigned generation;
   ColSource fonte;
   pthread_mutex_lock(&vtTrava);
   skip=vtPagina;generation=vtGeracao;prov=vtProvedor;
@@ -7339,7 +7350,9 @@ static void *fioVerTudo(void *u) {
             js_texto(p,f,"job",job,sizeof job);
             if (strcasecmp(job,"director")) continue;
           }
-          if (deMetaTmdb(p,f,padrao,&lote[nl])) nl++;
+          if (deMetaTmdb(p,f,padrao,&lote[nl])) {
+            if (descOcultaNaoLancado(&lote[nl])) ocultos++; else nl++;
+          }
         }
         if (!strcasecmp(fonte.tmdbTipo,"COLLECTION")||
             !strcasecmp(fonte.tmdbTipo,"PERSON")||
@@ -7347,7 +7360,7 @@ static void *fioVerTudo(void *u) {
         else {
           long tp=(long)js_num(corpo,NULL,"total_pages",0);
           long pg=(long)js_num(corpo,NULL,"page",skip);
-          if (!tp||pg>=tp||!nl) semMais=1;
+          if (!tp||pg>=tp||(!nl&&!ocultos)) semMais=1;
         }
         ok=1;
       }
@@ -7370,7 +7383,9 @@ static void *fioVerTudo(void *u) {
           const char *p=*corpo=='['?js_raiz_array(corpo):NULL;
           for(;p&&nl<48;p=js_prox(js_fim(p))) {
             const char *f=js_fim(p);raw++;
-            if (deMetaTrakt(p,f,fonte.midia,&lote[nl])) nl++;
+            if (deMetaTrakt(p,f,fonte.midia,&lote[nl])) {
+              if (descOcultaNaoLancado(&lote[nl])) ocultos++; else nl++;
+            }
           }
           // rede_baixar nao devolve cabecalhos; menos que a pagina cheia e o
           // fim da lista (o web le X-Pagination-Page-Count, mesmo efeito).
@@ -7385,7 +7400,7 @@ static void *fioVerTudo(void *u) {
     if (prov==2&&nl) trakt_enfeitar_lote(lote,nl);
     pthread_mutex_lock(&vtTrava);
     if(generation!=vtGeracao){pthread_mutex_unlock(&vtTrava);continue;}
-    { int added=0;
+    { int added=ocultos;   // pagina so de futuros nao encerra a paginacao
       for(int i=0;i<nl&&vtN<VT_MAX;i++){
         int dup=0;
         for(int j=0;j<vtN;j++)
@@ -7421,6 +7436,9 @@ static void *fioVerTudo(void *u) {
     const char *f=js_fim(p);raw++;
     CatItem it;
     if (deMeta(p, f, type, &it)) {
+      // Escondido ainda conta como "pagina com novidade": senao uma pagina so de
+      // futuros encerraria a paginacao do catalogo.
+      if (descOcultaNaoLancado(&it)) { added++; continue; }
       origemDaBase(base, it.origem, sizeof it.origem);
       pthread_mutex_lock(&vtTrava);
       int duplicate=0;

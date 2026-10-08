@@ -5,6 +5,7 @@ int ajustes_social(void) { return 1; }
 int ajustes_hist_conta(void) { return 1; }
 int ajustes_busca_cinemeta(void) { return 1; }
 int ajustes_busca_nuvio(void) { return 0; }   // #311: Primeiro (padrao)
+int ajustes_ocultar_nao_lancados(void) { return 0; }   // #369: descoberta.c le o ajuste
 #include "../src/descoberta.c"
 // descoberta.c passou a traduzir os rotulos que monta ("Filme", "Serie", a
 // data por extenso) e este teste nao linka idioma.c: linkar puxaria
