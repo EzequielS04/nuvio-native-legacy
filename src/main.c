@@ -32,7 +32,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#ifndef NV_SEM_WEBOS
+// SIGTERM tratado pelo app: webOS e desktop (Mac/Linux). No .tpk o host .NET e
+// dono do sinal, no Android o sistema mata sem SIGTERM util e no Tizen/WASM nao
+// ha sinal. Os desktops entram para o handler ser exercitavel por teste no Mac.
+#if !defined(__EMSCRIPTEN__) && !defined(NV_TPK) && !defined(NV_ANDROID)
+#define NV_SINAL_TERMINAR 1
 #include <signal.h>
 #endif
 #include <unistd.h>   // dup2 (o stderr no mesmo descritor do log)
@@ -111,7 +115,10 @@ static void aoMudarIdiomaAuto(const char *codigo, int fonte, int notificar) {
 
 #ifndef NV_SEM_WEBOS
 #include <dlfcn.h>
+#include <SDL2/SDL_syswm.h>
+#endif
 
+#ifdef NV_SINAL_TERMINAR
 static void aoSinalTerminar(int sig) {
   (void)sig;
   trailer_fechar();
@@ -120,7 +127,6 @@ static void aoSinalTerminar(int sig) {
   fflush(stdout);
   _exit(0);
 }
-#include <SDL2/SDL_syswm.h>
 #endif
 #include "layout.h"
 #include "plugins.h"
@@ -761,7 +767,7 @@ int main(int argc, char **argv) {
   // motivo. NULL = esta compilacao nao redireciona nada (o Mac, onde o log vai
   // para o terminal, e o alvo Tizen, onde nao ha arquivo util) — que e
   // exatamente o que o antigo #ifndef NV_SEM_WEBOS ja fazia.
-#ifndef NV_SEM_WEBOS
+#ifdef NV_SINAL_TERMINAR
   signal(SIGTERM, aoSinalTerminar);
 #endif
   { const char *log = registro_arquivo();
