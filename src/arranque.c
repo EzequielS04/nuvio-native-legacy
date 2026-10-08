@@ -15,7 +15,6 @@
 #define ARQ_ANTES   "/tmp/nuvio-arranque-anterior.txt"
 #define ARQ_QUEDA   "/tmp/nuvio-queda-arranque.txt"
 #define ARQ_PEND    "/tmp/nuvio-arranque-pendente.txt"  // relato ainda nao enviado
-#define ARQ_PEND    "/tmp/nuvio-arranque-pendente.txt"  // relato ainda nao enviado
 #define ARQ_FIM     "quadro-1"   // passou daqui = nao e falha de arranque
 
 void arranque_etapa(const char *nome) {
