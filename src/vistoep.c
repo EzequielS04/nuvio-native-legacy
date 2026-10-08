@@ -146,6 +146,23 @@ int vistoep_marcar_lote(const char *imdb, const VistoPar *pares, int qtd, int vi
   return mudou;
 }
 
+int vistoep_aplicar(const char *imdb, const VistoPar *lote, int n, int visto,
+                    VistoPar *envio, int *ja) {
+  int i, k = 0;
+  if (ja) *ja = 0;
+  if (!lote || !envio || n < 1) return 0;
+  pthread_mutex_lock(&trava);
+  for (i = 0; i < n; i++) {
+    if (estado(imdb, lote[i].temporada, lote[i].episodio) == (visto ? 1 : 0)) {
+      if (ja) (*ja)++;
+      continue;
+    }
+    if (definir(imdb, lote[i].temporada, lote[i].episodio, visto)) envio[k++] = lote[i];
+  }
+  pthread_mutex_unlock(&trava);
+  return k;
+}
+
 // ORDEM DE EPISODIO E (temporada, numero), nesta ordem — nao o numero sozinho.
 // A temporada 0 dos especiais fica ANTES da 1, que e onde o Trakt tambem a
 // coloca; marcar "ate aqui" no episodio 3 da temporada 2 nao pode arrastar a

@@ -74,6 +74,37 @@ static void loteSoContaMudancasEfetivas(void) {
   puts("ok  lote so conta entradas validas aceitas e respeita o teto do mapa");
 }
 
+// "Ate aqui" em T2E5 com S1 inteira e T2E1-4 vistos: so T2E5 muda. Antes mandava
+// os 15 e o Trakt duplicava os plays (Silo, TCL 08/10 11:46:23).
+static void ateAquiSoEnviaMudancas(void) {
+  VistoPar cat[20], lote[32], envio[32];
+  int i, n, ja = 0, k;
+  for (i = 0; i < 10; i++) { cat[i].temporada = 1; cat[i].episodio = (short)(i + 1);
+                             cat[10 + i].temporada = 2; cat[10 + i].episodio = (short)(i + 1); }
+  vistoep_esquecer();
+  for (i = 1; i <= 10; i++) vistoep_definir("tt14688458", 1, i, 1);
+  for (i = 1; i <= 10; i++) vistoep_definir("tt14688458", 2, i, i <= 4);
+  n = vistoep_lote("tt14688458", 1, 2, 5, cat, 20, 0, 0, lote, 32);
+  assert(n == 15);
+  k = vistoep_aplicar("tt14688458", lote, n, 1, envio, &ja);
+  assert(k == 1 && ja == 14);
+  assert(envio[0].temporada == 2 && envio[0].episodio == 5);
+  assert(vistoep_contar("tt14688458") == 15);          // local correto: 15 vistos
+  // de novo: nada a mandar
+  assert(vistoep_aplicar("tt14688458", lote, n, 1, envio, &ja) == 0 && ja == 15);
+  // desmarcar: so sai quem esta visto (T2E1-5), nao a temporada toda
+  n = vistoep_lote("tt14688458", 0, 2, 0, cat, 20, 0, 0, lote, 32);
+  assert(n == 10);
+  k = vistoep_aplicar("tt14688458", lote, n, 0, envio, &ja);
+  assert(k == 5 && ja == 5);
+  for (i = 0; i < k; i++) assert(envio[i].temporada == 2 && envio[i].episodio <= 5);
+  assert(vistoep_contar("tt14688458") == 10);
+  // titulo desconhecido: tudo conta como mudanca (repara o remoto)
+  vistoep_esquecer();
+  assert(vistoep_aplicar("tt14688458", lote, 3, 1, envio, &ja) == 3 && ja == 0);
+  puts("ok  ate aqui / temporada enviam so o que mudou");
+}
+
 int main(void) {
   int n;
 
@@ -195,6 +226,7 @@ int main(void) {
     puts("ok  saida nula conta sem truncar em max");
   }
 
+  ateAquiSoEnviaMudancas();
   booleanosENumerosInvalidos();
   loteSoContaMudancasEfetivas();
   puts("vistoep: tudo ok");
