@@ -2182,6 +2182,7 @@ void extras_resumo_definir(const char *imdb, const ExResumo *r) {
 }
 
 // Costura de teste: o estado que o fetch de /progress/watched deixa. Sem rede.
+// INTENCIONAL na build de release: nenhum codigo de src/ a chama (so tests/progresso_serie.c); inalcancavel na TV.
 void extras_teste_progresso(const char *id, int nVistos, int exibidos, int pt, int pe) {
   pthread_mutex_lock(&trava);
   snprintf(idPedido, sizeof idPedido, "%s", id);
