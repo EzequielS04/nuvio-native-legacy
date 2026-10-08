@@ -28,7 +28,13 @@
 
 // MEDIDAS do web (catalogSeeAllScreen, .seeall-card): cartaz de 248 de largura
 // e raio 12. A 1920 cabem 5 colunas com o gutter da tela dos dois lados.
-#define VT_COLS      (timeline ? 1 : 5)
+// #359: com a rail fixa da Moderna o x0 vai a ~218 e a 5a coluna entrava
+// ~42 px por baixo do painel da direita. Quantas colunas cabem sai de
+// vtColunas (x0 de ajustes_conteudo_x ate o painel); recolhida e Padrao
+// continuam com 5, como antes.
+static int vtColunas(void);
+#define VT_COLS      vtColunas()
+#define VT_COLS_MAX  5
 #define VT_CARD_W  248.0f
 #define VT_CARD_H  (timeline ? 236.0f : VT_CARD_W * 1.5f)
 #define VT_GAP_X    16.0f                 // .seeall-grid: gap 20px 16px
@@ -43,6 +49,7 @@
 // descia. Aqui nao ha fluxo nenhum — ele so nao recebe scrollY.
 #define VT_PAN_W   336.0f
 #define VT_PAN_X   (NV_TELA_W - 104.0f - VT_PAN_W)
+#define VT_PAN_VAO  24.0f   // vao minimo entre a ultima coluna e o painel
 #define VT_PAN_Y   VT_TOPO
 #define VT_PAN_ART_H 330.0f
 #define VT_PAN_ART_W 220.0f
@@ -52,6 +59,15 @@ static float anim, scrollY, velY;
 static char  titulo[96];
 static const ColFolder *collection;
 static int source, tabFocus, tabCursor, timeline, ranked;
+// Colunas que cabem entre o inicio do conteudo (a rail fixa entra por
+// ajustes_conteudo_x, a fonte unica do recuo) e o painel, com VT_PAN_VAO de
+// folga. Tira colunas, nao encolhe o cartaz (regra de ajustes_area_conteudo).
+static int vtColunas(void) {
+  float livre = VT_PAN_X - VT_PAN_VAO - ajustes_conteudo_x() + VT_GAP_X;
+  int n = (int)(livre / (VT_CARD_W + VT_GAP_X) + 0.001f);
+  if (timeline) return 1;
+  return n < 1 ? 1 : n > VT_COLS_MAX ? VT_COLS_MAX : n;
+}
 static float tabAnim[COL_SOURCE_MAX];
 static int order[VT_MAX], orderN=-1;
 static char catalogId[96];
@@ -708,7 +724,7 @@ void vertudo_desenhar(Uint32 agora) {
       txt_desenhar_alpha(ink,x,y,ac);
     }
   }
-  if(!n&&desc_vertudo_carregando())for(int i=0;i<5;i++)
+  if(!n&&desc_vertudo_carregando())for(int i=0;i<VT_COLS;i++)
     gfx_cor((GfxRect){x0+i*264,VT_TOPO,248,372},.06f,.12f,.13f,.15f,a);
   gfx_sem_recorte();
 
