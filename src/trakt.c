@@ -166,6 +166,10 @@ int trakt_recusada(void) { return estadoLer(&credRecusada); }
 // As tabelas da ultima leitura (definidas mais abaixo, junto de quem as
 // preenche). Os contadores ficam aqui porque trakt_esquecer os zera.
 static int nUlt, nProxIds, nPlay;
+// play[]/nPlay: trakt_continuar (fio da sincronizacao) zera e reescreve;
+// trakt_playback_remover (fio do menu, tirarremoto) le e apaga. Trava FOLHA:
+// ninguem toma outra trava com ela na mao, e nunca atravessa uma chamada de rede.
+static pthread_mutex_t playTrava = PTHREAD_MUTEX_INITIALIZER;
 static void proxMemLimpar(void);   // memoria do "a seguir" (mais abaixo)
 
 void trakt_esquecer(void) {
@@ -182,7 +186,8 @@ void trakt_esquecer(void) {
   // anterior continuariam respondendo trakt_e_a_seguir/trakt_playback_remover
   // para os cards do perfil novo. Zerar contadores so encurta uma varredura que
   // o fio da descoberta esteja fazendo — nunca a faz passar do fim.
-  nUlt = nProxIds = nPlay = 0;
+  nUlt = nProxIds = 0;
+  pthread_mutex_lock(&playTrava); nPlay = 0; pthread_mutex_unlock(&playTrava);
   proxMemLimpar();
   estadoEscrever(&credRecusada, 0);
   trakt_social_reavaliar();
@@ -856,7 +861,7 @@ int trakt_playback_remover(const char *imdb) {
   char *r;
   int i, st = 0, ok;
   int achou = 0, todos = 1;
-  long long id;
+  long long id, ids[TK_PLAY_MAX];
   if (!ligado || !imdb || !imdb[0]) return 0;
   snprintf(aut, sizeof aut, "Authorization: Bearer %s", token);
   snprintf(chaveCab, sizeof chaveCab, "trakt-api-key: %s", cliente);
@@ -866,11 +871,14 @@ int trakt_playback_remover(const char *imdb) {
   cab[3] = NULL;
   // TODOS OS REGISTROS DA CHAVE (#244). /sync/playback guarda um registro por
   // pausa; apagar so o primeiro deixava os outros devolvendo o item.
-  for (i = 0; i < nPlay; i++) {
-    if (strcmp(play[i].chave, imdb)) continue;
-    id = play[i].id;
-    if (!id) continue;
-    achou++;
+  // Os ids saem da tabela SOB playTrava e o DELETE vai sem ela: trakt_continuar
+  // pode reescrever a tabela enquanto a rede responde.
+  pthread_mutex_lock(&playTrava);
+  for (i = 0; i < nPlay; i++)
+    if (play[i].id && !strcmp(play[i].chave, imdb)) ids[achou++] = play[i].id;
+  pthread_mutex_unlock(&playTrava);
+  for (i = 0; i < achou; i++) {
+    id = ids[i];
     snprintf(url, sizeof url, "https://api.trakt.tv/sync/playback/%lld", id);
     r = rede_apagar(url, 20, cab, &st);
     ok = st >= 200 && st < 300;
@@ -881,7 +889,15 @@ int trakt_playback_remover(const char *imdb) {
     // SO ESQUECE O ID SE O SERVIDOR ACEITOU. Apagar a linha da tabela num 5xx
     // faria a segunda tentativa dizer "sem id" e a pessoa nunca mais conseguiria
     // remover aquele item sem reabrir o app.
-    if (ok) play[i].chave[0] = 0; else todos = 0;
+    if (ok) {
+      // A linha pode ter mudado de lugar (ou sumido) numa releitura: apaga
+      // pelo par chave+id, nao pelo indice.
+      int k;
+      pthread_mutex_lock(&playTrava);
+      for (k = 0; k < nPlay; k++)
+        if (play[k].id == id && !strcmp(play[k].chave, imdb)) play[k].chave[0] = 0;
+      pthread_mutex_unlock(&playTrava);
+    } else todos = 0;
   }
   if (!achou) {
     printf("[trakt] playback: sem id para %s (nao veio do Trakt)\n", imdb);
@@ -1350,9 +1366,11 @@ static int dedupObras(CatItem *v, int n) {
         snprintf(velho, sizeof velho, "%s", v[achou].imdb);
         v[achou] = v[i];
       } else snprintf(velho, sizeof velho, "%s", v[i].imdb);
+      pthread_mutex_lock(&playTrava);
       for (k = 0; k < nPlay; k++)
         if (!strcmp(play[k].chave, velho))
           snprintf(play[k].chave, sizeof play[k].chave, "%s", v[achou].imdb);
+      pthread_mutex_unlock(&playTrava);
       printf("[trakt] playback repetido de %.*s; fica o mais recente (%s)\n",
              (int)L, v[achou].imdb, v[achou].imdb); }
   }
@@ -1386,7 +1404,7 @@ int trakt_continuar(CatItem *saida, int max) {
   continuarFalhou = 0;
   HistoricoPedido pedido = historicoPedido();
   if (!cabecalhosPedido(pedido, cab, aut, sizeof aut, chave, sizeof chave)) return 0;
-  nPlay = 0;
+  pthread_mutex_lock(&playTrava); nPlay = 0; pthread_mutex_unlock(&playTrava);
   // Historico e filmes vistos em fios proprios enquanto o playback baixa. Sem
   // fio (pthread_create falhou, ou WebAssembly sem threads): ficam em serie,
   // depois do playback, como antes.
@@ -1463,13 +1481,14 @@ int trakt_continuar(CatItem *saida, int max) {
       //
       // O "id" do topo do objeto e o do registro; os blocos aninhados trazem
       // "ids" (plural), que nao casa com a busca por "id".
-      if (nPlay < TK_PLAY_MAX) {
-        double pid = js_num(p, f, "id", 0.0);
-        if (pid > 0.0) {
+      { double pid = js_num(p, f, "id", 0.0);
+        pthread_mutex_lock(&playTrava);
+        if (nPlay < TK_PLAY_MAX && pid > 0.0) {
           snprintf(play[nPlay].chave, sizeof play[nPlay].chave, "%s", d->imdb);
           play[nPlay].id = (long long)pid;
           nPlay++;
         }
+        pthread_mutex_unlock(&playTrava);
       }
       // Enfeitar fica para DEPOIS do laco, em paralelo. Aqui o item ja esta
       // montado: so falta a arte e a sinopse, que vem da rede.
