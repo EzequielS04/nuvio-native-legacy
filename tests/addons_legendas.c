@@ -75,23 +75,23 @@ int main(void) {
   ling_conta_legenda("ro"); ling_conta_legenda2("es"); run(1, "tt123", "movie");
   assert(nLegs == 3 && !strcmp(legs[0].idioma, "ron") && !strcmp(legs[1].idioma, "spa") && !strcmp(legs[2].idioma, "eng"));
 
-  char primeiro[16000], segundo[16000]; dense(primeiro, sizeof primeiro, 0); dense(segundo, sizeof segundo, 1);
+  char primeiro[32000], segundo[32000]; dense(primeiro, sizeof primeiro, 0); dense(segundo, sizeof segundo, 1);
   responses[0] = primeiro; responses[1] = segundo;
   run(1, "tt123", "movie");
   int counts[3] = {0}; const char *langs[] = {"ron", "spa", "eng"};
   for (int i = 0; i < nLegs; i++) for (int l = 0; l < 3; l++) if (!strcmp(legs[i].idioma, langs[l])) counts[l]++;
-  assert(nLegs == LEG_MAX && counts[0] == 4 && counts[1] == 4 && counts[2] == 4);
+  assert(nLegs == LEG_MAX && counts[0] == LEG_MAX / 3 && counts[1] == LEG_MAX / 3 && counts[2] == LEG_MAX / 3);
 
   // First provider has >12 candidates. Both must be requested and contribute,
   // with principal/secondary/English quotas and real origin attached.
   int antes = requests; run(2, "tt123", "movie"); assert(requests - antes == 2 && nLegs == LEG_MAX);
   int providers[2] = {0}; memset(counts, 0, sizeof counts);
   for (int i = 0; i < nLegs; i++) {
-    assert(!strcmp(legs[i].idioma, langs[i / 4]));
+    assert(!strcmp(legs[i].idioma, langs[i / (LEG_MAX / 3)]));
     for (int j = 0; j < 2; j++) if (!strcmp(legs[i].provedor, j ? "Subs.ro" : "OpenSubtitles")) providers[j]++;
-    counts[i / 4]++;
+    counts[i / (LEG_MAX / 3)]++;
   }
-  assert(providers[0] == 6 && providers[1] == 6 && counts[0] == 4 && counts[1] == 4 && counts[2] == 4);
+  assert(providers[0] == LEG_MAX / 2 && providers[1] == LEG_MAX / 2 && counts[0] == LEG_MAX / 3 && counts[1] == LEG_MAX / 3 && counts[2] == LEG_MAX / 3);
   ling_local_legenda("*"); antes = requests; run(2, "tt123", "movie");
   assert(requests - antes == 2 && nLegs == LEG_MAX);
   for (int i = 0; i < nLegs; i++) assert(!strcmp(legs[i].provedor, (i % 2) ? "Subs.ro" : "OpenSubtitles"));

@@ -337,8 +337,10 @@ static void pilPedir(void) {
 // escolha da pessoa. `voltar` devolve a primeira tentada (a escolha original).
 static int autoTroca(const char *idioma, const uint64_t *tent, int n, int voltar,
                      char *nome, unsigned tamNome) {
-  Legenda v[LEG_MAX];
-  int nv = addons_legendas_copiar(v, LEG_MAX, NULL, NULL), j, k;
+  Legenda *v = malloc(sizeof *v * LEG_MAX);
+  int nv, j, k;
+  if (!v) return 0;
+  nv = addons_legendas_copiar(v, LEG_MAX, NULL, NULL);
   for (j = 0; j < nv; j++) {
     int jaFoi = 0;
     uint64_t h = legsync_hash_url(v[j].url);
@@ -355,8 +357,10 @@ static int autoTroca(const char *idioma, const uint64_t *tent, int n, int voltar
     pilProvedorCurto(nome, pilProvedor, sizeof pilProvedor); pilHash = h;
     if (pil.espera) pilEsperaHash = h;
     if (pil.estado == PIL_APLICADA && !pil.espera) pilIr(PIL_SINCRONIZANDO, pilAgora());
+    free(v);
     return 1;
   }
+  free(v);
   return 0;
 }
 
@@ -793,11 +797,14 @@ static void legendaAutomatica(Uint32 agora) {
   // Varias legendas do idioma: a melhor, nao a primeira que respondeu (idioma
   // exato, nome parecido com o arquivo, a que ja deu certo neste titulo).
   if (r >= nEmb) {
-    Legenda v[LEG_MAX];
-    int nv = addons_legendas_copiar(v, LEG_MAX, NULL, NULL);
-    uint64_t lem = ci ? legauto_lembrada(ci->imdb[0] ? ci->imdb : ci->titulo, ling_legenda()) : 0;
-    int b = legauto_escolher(v, nv, ling_legenda(), video_url_atual(), NULL, 0, lem);
-    if (b >= 0 && b < nAdd) r = nEmb + b;
+    Legenda *v = malloc(sizeof *v * LEG_MAX);
+    if (v) {
+      int nv = addons_legendas_copiar(v, LEG_MAX, NULL, NULL);
+      uint64_t lem = ci ? legauto_lembrada(ci->imdb[0] ? ci->imdb : ci->titulo, ling_legenda()) : 0;
+      int b = legauto_escolher(v, nv, ling_legenda(), video_url_atual(), NULL, 0, lem);
+      if (b >= 0 && b < nAdd) r = nEmb + b;
+      free(v);
+    }
   }
   printf("[legenda] automatica: '%s' -> %s %d (%s%s) aos %u ms\n", ling_legenda(),
          r < nEmb ? "embutida" : "addon", r < nEmb ? r : r - nEmb,
@@ -1455,7 +1462,7 @@ void faixas_escolher_embutida(int i) {
 // live list may have been replaced since the snapshot, so the index is
 // resolved again by identity and the URL comes from the copy.
 void faixas_escolher_externa(const Legenda *l) {
-  Legenda v[LEG_MAX];
+  Legenda *v;
   char id[24], idv[24];
   int n, j;
   if (!l || !l->url[0]) return;
@@ -1467,11 +1474,13 @@ void faixas_escolher_externa(const Legenda *l) {
   if (!emTroca) pilExterna(l);
   legendasui_id_addon(l, id);
   legExterna = -1;
-  n = addons_legendas_copiar(v, LEG_MAX, NULL, NULL);
+  v = malloc(sizeof *v * LEG_MAX);
+  n = v ? addons_legendas_copiar(v, LEG_MAX, NULL, NULL) : 0;
   for (j = 0; j < n; j++) {
     legendasui_id_addon(&v[j], idv);
     if (!strcmp(id, idv)) { legExterna = video_n_legenda() + j; break; }
   }
+  free(v);
   snprintf(legExternaId, sizeof legExternaId, "%s", id);
 }
 const char *faixas_legenda_marca(int i) {

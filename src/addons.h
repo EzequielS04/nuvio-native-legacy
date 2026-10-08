@@ -139,7 +139,11 @@ int  addons_pendente_grupo_min(int (*f)(const char *nome, int plugin, void *u), 
 // {"subtitles":[{lang,url,subtitleFileName,...}]}. Sao dezenas por titulo, a
 // maioria em idiomas que nao interessam — por isso a lista e FILTRADA por
 // idioma antes de chegar na tela: 70 linhas para rolar seria pior que nenhuma.
-#define LEG_MAX 12
+// 36 = 12 por idioma com tres grupos (principal, secundario, ingles); com um
+// grupo so ("Todas"/sem preferencia) sao 36 de uma vez (#268). Cada Legenda tem
+// ~1,3 KB: copias de LEG_MAX NAO vao para a pilha (fio de 128 KB na LG/Tizen),
+// usam malloc (faixas.c, legendasui.c, addons.c).
+#define LEG_MAX 36
 
 typedef struct {
   char rotulo[64];   // "Portugues (BR)  ·  Silo.S01E05.WEB"
