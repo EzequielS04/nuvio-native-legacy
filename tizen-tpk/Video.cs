@@ -454,6 +454,12 @@ namespace NuvioTpk
             catch (Exception e) { Log("buscar: " + e.Message); }
         }
 
+        // Host 4/5 (Program40): move/redimensiona a janela ElmSharp do video.
+        // Devolve null se aplicou, ou a mensagem do erro. Fica null no 6+, que
+        // continua so com Mode=Roi + SetRoi (comportamento inalterado).
+        public Func<int, int, int, int, string> GeometriaJanela;
+        bool janelaMovida;
+
         void Janela(int x, int y, int w, int h)
         {
             if (player == null) return;
@@ -475,6 +481,7 @@ namespace NuvioTpk
                 // zoom. Agora so o quadro EXATO da tela vira LetterBox; qualquer
                 // ROI de zoom (origem negativa OU maior que a tela) passa cru ao
                 // SetRoi.
+                if (GeometriaJanela != null) { applied = JanelaTizen45(x, y, w, h, fullscreen); return; }
                 if (fullscreen) { player.DisplaySettings.Mode = PlayerDisplayMode.LetterBox; applied = true; return; }
                 player.DisplaySettings.Mode = PlayerDisplayMode.Roi;
                 player.DisplaySettings.SetRoi(new Rectangle(x, y, w, h));
@@ -482,6 +489,47 @@ namespace NuvioTpk
             }
             catch (Exception e) { ended = Stopwatch.GetTimestamp(); Log("[video-window] apply failed: " + e.Message); }
             finally { windowMetrics.Complete(applied, (ended != 0 ? ended : Stopwatch.GetTimestamp()) - started); }
+        }
+
+        // Tizen 4/5 (#203, botao de aspecto/zoom sem efeito). CAUSA PROVAVEL
+        // (nao provada em TV): Mode=Roi + SetRoi sobre um Display de janela
+        // ElmSharp e aceito sem excecao mas o plano de video do 4/5 o ignora, e
+        // o destino "tela cheia" (Esticar) cai em LetterBox, que nao muda nada.
+        // Aqui o retangulo de destino vira a GEOMETRIA da janela do video e o
+        // player preenche a janela (FullScreen). Se a janela falhar, tenta o
+        // ROI antigo. Cada passo vai ao log para a TV provar qual funcionou.
+        bool JanelaTizen45(int x, int y, int w, int h, bool fullscreen)
+        {
+            string rotulo = x + "," + y + " " + w + "x" + h;
+            if (fullscreen)
+            {
+                string e0 = janelaMovida ? GeometriaJanela(0, 0, telaW, telaH) : null;
+                janelaMovida = false;
+                player.DisplaySettings.Mode = PlayerDisplayMode.LetterBox;
+                Log("[aspect] tpk40 modo=letterbox " + rotulo + (e0 == null ? " ok" : " falhou: " + e0));
+                return e0 == null;
+            }
+            string erro = GeometriaJanela(x, y, w, h);
+            if (erro == null)
+            {
+                try
+                {
+                    player.DisplaySettings.Mode = PlayerDisplayMode.FullScreen;
+                    janelaMovida = true;
+                    Log("[aspect] tpk40 modo=janela+fullscreen " + rotulo + " ok");
+                    return true;
+                }
+                catch (Exception e) { erro = "Mode=FullScreen " + e.GetType().Name + ": " + e.Message; }
+            }
+            Log("[aspect] tpk40 modo=janela " + rotulo + " falhou: " + erro);
+            try
+            {
+                player.DisplaySettings.Mode = PlayerDisplayMode.Roi;
+                player.DisplaySettings.SetRoi(new Rectangle(x, y, w, h));
+                Log("[aspect] tpk40 modo=roi " + rotulo + " ok");
+                return true;
+            }
+            catch (Exception e) { Log("[aspect] tpk40 modo=roi " + rotulo + " falhou: " + e.GetType().Name + ": " + e.Message); return false; }
         }
     }
 }

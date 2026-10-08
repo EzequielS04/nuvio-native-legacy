@@ -645,6 +645,16 @@ void video_janela(int x, int y, int w, int h) { if (hJanela) hJanela(x, y, w, h)
 #ifndef NV_TPK_ZOOM_ROI
 #define NV_TPK_ZOOM_ROI 0
 #endif
+// #203: no 4/5 (NV_TPK40) o botao de aspecto do PLAYER ficava sem efeito: sem
+// recorte o ciclo so oferece "Original". O host 4/5 aplica o destino movendo a
+// janela do video (Video.cs JanelaTizen45), que nao e o ROI que apagava o plano
+// no Tizen 9, entao o player libera os modos de recorte la. O trailer segue
+// sem zoom (video_recorte_fonte_trailer) a nao ser que o ajuste esteja ligado.
+#ifdef NV_TPK40
+#define NV_TPK_PLAYER_RECORTE 1
+#else
+#define NV_TPK_PLAYER_RECORTE 0
+#endif
 // Flag de EXECUCAO (#241, #290): Ajustes > Trailers > "Zoom no trailer e no
 // player (experimental)" deixa cada dono testar na propria TV. Comeca no padrao de compilacao acima.
 static int zoomRoi = 0;
@@ -688,7 +698,7 @@ void video_janela_fonte(int sx, int sy, int sw, int sh, int dx, int dy, int dw, 
   fflush(stdout);
 
   // #290: o ajuste opt-in vale para o trailer E para o player (proporcao).
-  if (!NV_TPK_ZOOM_ROI && !zoomRoi && !roiNaTela(X, Y, W, H)) {
+  if (!NV_TPK_ZOOM_ROI && !NV_TPK_PLAYER_RECORTE && !zoomRoi && !roiNaTela(X, Y, W, H)) {
     if (roiForaLogado != sessao) {
       roiForaLogado = sessao;
       printf("[video] tpk: roi fora da tela nao vai ao plano, fica o destino %d,%d %dx%d (sem zoom)\n",
@@ -707,7 +717,7 @@ void video_janela_fonte(int sx, int sy, int sw, int sh, int dx, int dy, int dw, 
 // oferecia modos que cabem na tela, e num 16:9 todos dao o mesmo retangulo. O
 // mesmo ajuste experimental do trailer (desligado por padrao) libera os modos
 // de recorte/zoom no player.
-int  video_recorte_fonte(void) { return NV_TPK_ZOOM_ROI || zoomRoi; }
+int  video_recorte_fonte(void) { return NV_TPK_ZOOM_ROI || NV_TPK_PLAYER_RECORTE || zoomRoi; }
 int  video_recorte_fonte_trailer(void) { return NV_TPK_ZOOM_ROI || zoomRoi; }
 // O host prende o plano em mais de um ponto depois do prepare; um ROI pedido
 // cedo pode ser engolido. trailer.c/player.c repetem o pedido nos primeiros
