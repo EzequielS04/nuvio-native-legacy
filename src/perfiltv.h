@@ -35,6 +35,8 @@ const char *ptv_plataforma_nome(PtvPlataforma p);
 // Samsung 2019 — registro 8825: 22-29 fps na home com a CPU ociosa). Aritmetica
 // de texto, sem GL: gpunivel.c le a string e passa por ptv_definir_gpu_fraca.
 int  ptv_gpu_fraca(const char *renderer);
+// Utgard (Mali-400/450/470): o subconjunto mais fraco de ptv_gpu_fraca.
+int  ptv_gpu_utgard(const char *renderer);
 void ptv_definir_gpu_fraca(int fraca);
 int  ptv_gpu_fraca_atual(void);
 

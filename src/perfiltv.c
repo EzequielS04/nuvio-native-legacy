@@ -82,6 +82,11 @@ static int gpuFraca = 0;
 void ptv_definir_gpu_fraca(int f) { gpuFraca = f ? 1 : 0; }
 int  ptv_gpu_fraca_atual(void) { return gpuFraca; }
 
+int ptv_gpu_utgard(const char *r) {
+  const char *m = r ? strstr(r, "Mali-") : NULL;
+  return m && m[5] == '4' && m[6] >= '0' && m[6] <= '9';
+}
+
 int ptv_gpu_fraca(const char *r) {
   const char *m;
   if (!r) return 0;
@@ -89,7 +94,7 @@ int ptv_gpu_fraca(const char *r) {
   if (!m) return 0;
   m += 5;
   // Utgard (Mali-400/450/470): so GLES2, o mais fraco de todos.
-  if (m[0] == '4' && m[1] >= '0' && m[1] <= '9') return 1;
+  if (ptv_gpu_utgard(r)) return 1;
   // Midgard (Mali-T6xx/T7xx/T8xx) e o "Mali-TDVX" que a Samsung rebatiza.
   if (m[0] == 'T') return 1;
   return 0;
