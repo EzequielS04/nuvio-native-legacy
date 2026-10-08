@@ -63,6 +63,7 @@ typedef struct {
   char audioDe[16], audioPara[16];
   int saida, recusa;   // por que saiu (DVT_SAIDA_*, VIDEO_DV_NAO_*)
   int dica;            // nada mudou ha DVT_DICA_MS: a dica calma
+  unsigned sinaisVistos;   // os sinais do ultimo quadro (o que conta como mudanca)
   Uint32 entrouEm, mudouEm, saiuEm;
 } DvtelaEstado;
 
@@ -81,6 +82,9 @@ int  dvtela_ativa(void);
 // pausa nem o cartao de abertura enquanto isto for 1.
 int  dvtela_visivel(void);
 float dvtela_alfa(void);
+float dvtela_dica_alfa(void);
+// A arte do titulo (o fundo desfocado da tela); "" ou NULL = so o escuro.
+void dvtela_definir_arte(const char *url);
 // O quadro: passo da maquina, mola da entrada/saida e o log. Devolve
 // DVT_SAIDA_* no quadro em que a tela saiu.
 int  dvtela_atualizar(const DvtelaSinais *s, float dt, Uint32 agora);
