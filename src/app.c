@@ -2907,6 +2907,7 @@ void app_atualizar(float dt, Uint32 agora) {
         // quando a conta manda linhas, entao um perfil sem colecoes ficava
         // com as do anterior para sempre.
         col_esquecer_perfil();
+        desc_esquecer_catalogo_perfil();   // #294: fileiras do outro perfil saem da Home
         // OS SALVOS SAO DO PERFIL: a lista do anterior sai da tela (so os
         // titulos que o novo nao tem) e entra a deste.
         trocarSalvosDePerfil();

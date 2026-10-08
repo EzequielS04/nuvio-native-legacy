@@ -470,6 +470,28 @@ int main(void) {
       } } }
   puts("ok  tabela cheia so de escolhidas: fileira do app e topo da home nunca saem");
 
+  // #294: com a tabela cheia, colecao lida do disco (vista=0, fora da home)
+  // NAO e dispensavel: o catalogo novo toma a vaga de um catalogo.
+  fil_esquecer();
+  { int j, c = 0, n = 0;
+    FILE *arq = fopen("/tmp/fileirasui.txt", "w");
+    assert(arq);
+    fprintf(arq, "limite 7\nordem 1\n");
+    for (j = 0; j < FIL_MAX; j++)
+      fprintf(arq, "linha %s_%d\t0\t0\t1\tFileira %d\n",
+              j >= FIL_MAX - 3 ? "collection_g" : "cat", j, j);
+    fclose(arq);
+    usaArquivo = 1;
+    fil_teste_recarregar();
+    assert(fil_n() == FIL_MAX);
+    fil_registrar("addon_novo", "Novo", "addon", "movie", 5);
+    for (j = 0; j < fil_n(); j++) {
+      if (!strncmp(fil_chave(j), "collection_g_", 13)) c++;
+      if (!strcmp(fil_chave(j), "addon_novo")) n = 1;
+    }
+    assert(n && c == 3); }
+  puts("ok  tabela cheia: colecao nao e despejada na janela da troca de perfil");
+
   // MOVER PULA LINHA FORA DA HOME. A fantasma no meio nao come o movimento:
   // a fileira troca com a proxima VIVA, e a home muda junto.
   fil_esquecer();

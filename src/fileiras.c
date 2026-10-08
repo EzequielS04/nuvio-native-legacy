@@ -846,6 +846,15 @@ static void registrar(const char *chave, const char *titulo,
     //      e nenhuma esta na home — sem esta passada a fileira que a pessoa
     //      VE continuava fora da folha. Sai a ultima que nao esta na home,
     //      nao e do app, nao e do topo e nao esta oculta.
+    // #294: GRUPO DE COLECAO NUNCA SAI POR FALTA DE ESPACO. Na troca de perfil
+    // o arquivo do perfil novo carrega (762 de 768 linhas) e a descoberta
+    // registra centenas de catalogos ANTES de a conta devolver as colecoes
+    // (colecoes.c foi esvaziada na troca). Nessa janela as pastas lidas do
+    // disco tem vista=0 e naHome=0, ou seja, "dispensaveis": 5 delas (Canon &
+    // Best-Of, Awards, Directors...) saiam para catalogo entrar e voltavam
+    // depois NO FIM da lista — "as colecoes foram para o fim da Home" (logs
+    // 2KGKSE e DSWQTX). Colecao morta de verdade sai por
+    // fil_colecoes_reconciliar, que e quem sabe o que a conta ainda tem.
     if (nLinhas >= FIL_MAX) {
       int v = -1, k, passo, ligadas = 0, topo[FIL_MAX];
       for (k = 0; k < nLinhas; k++) {
@@ -861,6 +870,7 @@ static void registrar(const char *chave, const char *titulo,
           if (!linhas[k].naHome && (passo == 2 || !linhas[k].vista) &&
               !linhas[k].oculta && !topo[k] &&
               fil_origem_de(linhas[k].chave) != FIL_ORIGEM_APP &&
+              fil_origem_de(linhas[k].chave) != FIL_ORIGEM_COLECAO &&
               (passo >= 1 || (linhas[k].tipo == FIL_TIPO_AUTO &&
                               linhas[k].tam == FIL_TAM_PADRAO)))
             v = k;
