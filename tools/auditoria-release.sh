@@ -43,7 +43,7 @@ echo "=== 1/3 estatica (tools/auditoria/estatica.py)"
 if [ -x "$GRAPHIFY_PY" ]; then
   "$GRAPHIFY_PY" tools/auditoria/estatica.py | tee "$LOGS/estatica.txt"
   r=${PIPESTATUS[0]}
-  for n in 1 2 3 4 5 6; do
+  for n in 1 2 3 4 5 6 7; do
     linha=$(grep -E "^\[(PASS|FAIL)\] $n\. " "$LOGS/estatica.txt")
     [ -n "$linha" ] && RESUMO+=("$(echo "$linha" | sed -E 's/^\[(PASS|FAIL)\] /\1            estatica /')")
   done

@@ -764,7 +764,78 @@ def v6_duplicados(B):
     return R
 
 
-VERIFICACOES = [v1_entradas, v2_troca_perfil, v3_rotulos, v4_corridas, v5_bloqueio, v6_duplicados]
+# ---- 7 ----------------------------------------------------------------------
+PIPEFAIL_RE = re.compile(r"^\s*set\s+(-[A-Za-z]+\s+)*-[A-Za-z]*o\s+pipefail\b|^\s*set\s+-[A-Za-z]*o\s+pipefail\b",
+                         re.M)
+# Cabeca do comando a esquerda do pipe que conta como "saida de teste": binario
+# do teste ($tmp/t, ./bin, /tmp/x), compilador, interprete. echo/printf/rg/grep/
+# readelf/find... a esquerda nao: ali o status do pipe nao esconde falha de teste.
+CABECA_TESTE_RE = re.compile(r'^(?:"?\$|""|\./|/|\.\./|cc\b|clang|gcc\b|make\b|timeout\b|bash\b|sh\b|'
+                             r'python3?\b|node\b|java\b|kotlinc?\b)')
+
+
+def _logicas(texto):
+    """(linha, texto) por comando logico: junta `\\` no fim, tira comentario,
+    corpo de heredoc, aspas e linha de padrao de `case`."""
+    out, buf, ini, fim_here = [], "", 0, None
+    for n, l in enumerate(texto.split("\n"), 1):
+        if fim_here is not None:
+            if l.strip() == fim_here:
+                fim_here = None
+            continue
+        if not buf:
+            ini = n
+        s = re.sub(r"'[^']*'", "''", l)
+        s = re.sub(r'"(?:[^"\\]|\\.)*"', '""', s)
+        s = re.sub(r"(^|\s)#.*", "", s)
+        m = re.search(r"<<-?\s*\\?['\"]?(\w+)", l)
+        if m:
+            fim_here = m.group(1)
+        if s.rstrip().endswith("\\"):
+            buf += s.rstrip()[:-1] + " "
+            continue
+        buf += s
+        out.append((ini, buf))
+        buf = ""
+    return out
+
+
+def _pipe_de_teste(logica):
+    s = logica.split("||")[0].replace("|&", " | ")      # depois do || o pipe e do tratador
+    if re.match(r"^\s*[^\s()=]+(\s*\|\s*[^\s()=]+)*\)", s):      # padrao de case
+        return False
+    if re.match(r"^\s*case\b", s):
+        s = s.split(" in ", 1)[-1]
+        s = re.sub(r"[^\s;()]+\)", " ", s)
+    k = s.find("|")
+    if k < 0:
+        return False
+    esq = s[:k].strip()
+    esq = re.sub(r"^(if|while|until|then|do|!|\{|&&|\()\s*", "", esq)
+    esq = re.sub(r"^(\w+=\$\(\s*)", "", esq)
+    esq = re.sub(r"^(\w+=(?!\$\()\S*\s+)+", "", esq)
+    esq = re.sub(r"^(if|!)\s+", "", esq)
+    if "2>&1" in esq and re.search(r"-o\s", esq):                       # compilacao
+        return True
+    return bool(CABECA_TESTE_RE.match(esq))
+
+
+def v7_pipefail(B):
+    R = Resultado(7, "tests/*.sh que cala o status do teste num pipe (sem set -o pipefail)")
+    for f in sorted(glob.glob(str(B.raiz / "tests" / "*.sh"))):
+        t = open(f, errors="replace").read()
+        if PIPEFAIL_RE.search(t):
+            continue
+        ev = [f"{os.path.relpath(f, B.raiz)}:{n}: {re.sub(chr(32) + '+', chr(32), l.strip())[:90]}"
+              for n, l in _logicas(t) if _pipe_de_teste(l)]
+        if ev:
+            R.falha("7:" + os.path.basename(f), "pipe sem pipefail: o status e o do tail/grep/tee, "
+                    "um teste que falha sai 0", ev[:1])
+    return R
+
+
+VERIFICACOES = [v1_entradas, v2_troca_perfil, v3_rotulos, v4_corridas, v5_bloqueio, v6_duplicados,
+                v7_pipefail]
 COM_BASE = {4, 5, 6}
 
 
