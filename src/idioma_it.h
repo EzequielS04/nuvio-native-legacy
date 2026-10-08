@@ -2506,6 +2506,8 @@
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Mostra una miniatura del film sopra la barra mentre avanzi o torni indietro. Le immagini arrivano da Seekr (seekr.tv) e richiedono la tua chiave personale; ogni titolo aperto conta una richiesta della quota giornaliera."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Mostra una miniatura del film sopra la barra mentre vai avanti o indietro. Le immagini arrivano da Seekr (seekr.tv)."),
   T("Mostra, em todas as categorias, as opções técnicas marcadas como Avançado. Vale só para esta TV.", "Mostra in tutte le categorie le opzioni tecniche contrassegnate come Avanzato. Vale solo per questa TV."),
+  T("Mostrando %d de %d canais (limite de categorias)", "Mostrati %d canali su %d (limite di categorie)"),
+  T("Mostrando %d de %d canais (o que cabe nesta TV)", "Mostrati %d di %d canali (quanto entra in questa TV)"),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Solo contenitori MP4 (utile per trovare Dolby Vision in MP4). OK toglie il filtro."),
   T("Mostrando só fontes com áudio em português. OK tira o filtro.", "Solo fonti con audio in portoghese. OK toglie il filtro."),
   T("Mostrando só fontes que o debrid já tem: tocam na hora. OK tira o filtro.", "Solo fonti che il debrid ha già: partono subito. OK toglie il filtro."),

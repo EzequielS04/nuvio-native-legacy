@@ -2506,6 +2506,8 @@
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "快轉或倒轉時，在進度條上方顯示影片縮圖。圖片來自 Seekr（seekr.tv），需要您的個人金鑰；每開啟一個片名會消耗一次每日額度。"),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "快轉或倒轉時，在進度條上方顯示影片縮圖。圖片來自 Seekr（seekr.tv）。"),
   T("Mostra, em todas as categorias, as opções técnicas marcadas como Avançado. Vale só para esta TV.", "在所有分類中顯示標有「進階」的技術選項。僅適用於這台電視。"),
+  T("Mostrando %d de %d canais (limite de categorias)", "顯示 %d / %d 個頻道（分類數量上限）"),
+  T("Mostrando %d de %d canais (o que cabe nesta TV)", "顯示 %d / %d 個頻道 (此電視可容納的數量)"),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "僅顯示 MP4 容器（適合尋找 MP4 格式的 Dolby Vision）。按確定鍵取消篩選。"),
   T("Mostrando só fontes com áudio em português. OK tira o filtro.", "僅顯示有葡萄牙語音軌的來源。按 OK 取消篩選。"),
   T("Mostrando só fontes que o debrid já tem: tocam na hora. OK tira o filtro.", "僅顯示 debrid 中已有的來源：立即播放。按 OK 取消篩選。"),

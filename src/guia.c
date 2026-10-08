@@ -54,6 +54,7 @@
 #include "descoberta.h"  /* desc_repetir: addon novo so entra com ciclo novo */
 #include "stalker.h"
 #include "xtream.h"
+#include "guiacorte.h"   /* tetos e o aviso "Mostrando N de M" */
 #include "xtepg.h"     /* grade curta por canal do Xtream (#158) */
 #include "dados.h"
 #include "perfis.h"   /* perfis_ativo: o cache do guia e por perfil */
@@ -81,8 +82,9 @@
 #include <stdatomic.h>
 #include <time.h>
 
-#define G_MAX_CANAL  900
-#define G_MAX_CAT     48
+// Tetos: ver guiacorte.h (TV 900/48, Android TV 3000/128 e a conta de memoria).
+#define G_MAX_CANAL  GUIACORTE_MAX_CANAL
+#define G_MAX_CAT    GUIACORTE_MAX_CAT
 #define G_MAX_FAV    400
 // Cada addon pode declarar VARIOS catalogos de canal no manifesto; 8 so
 // bastava para um FrostView.
@@ -233,6 +235,8 @@ static char   sCats[G_MAX_CAT][64];  static int sNCats;
 enum { G_PARADO, G_BAIXANDO, G_PRONTO, G_FALHOU };
 static int estado = G_PARADO;
 static int fioVivo;
+static GuiaCorte sCorte;       // staging: o que a carga deixou de fora
+static GuiaCorte corte;        // publicado: o que o cabecalho mostra
 static int sOk;                 // staging: a carga achou canal (antes de pendPronto)
 static atomic_int pendPronto;   // release no fio de carga, acquire no desenho
 // Foco pedido com a lista ainda baixando; publicar() aplica ao chegar.
@@ -680,7 +684,17 @@ static int lerPagina(const GFonte *f, int skip, int teto, int *novos) {
       if (strlen(f->base) < sizeof c.base) snprintf(c.base, sizeof c.base, "%s", f->base);
       else { c.base[0] = 0; semBase++; }
       if (c.cat >= 0) { sCanais[sNCanais++] = c; (*novos)++; }
+      else sCorte.porCats++;
     }
+    p = js_prox(fim);
+  }
+  // Teto cheio com canais ainda na pagina: contam como perdidos (so o que esta
+  // nesta pagina; o que viria nas proximas o addon nao diz).
+  while (p && *p && sNCanais >= G_MAX_CANAL) {
+    const char *fim = js_fim(p);
+    char id[8];
+    if (!fim) break;
+    if (js_texto(p, fim, "id", id, sizeof id) || js_texto(p, fim, "name", id, sizeof id)) sCorte.porCanais++;
     p = js_prox(fim);
   }
   free(corpo);
@@ -829,6 +843,7 @@ static void *fioGuia(void *u) {
   int ok = 0;
   (void)u;
   sNCanais = 0; sNCats = 0; sFalhas = 0; sXtFalha = XT_OK;
+  memset(&sCorte, 0, sizeof sCorte);
   // Fontes das fileiras (descobertas no fio de desenho) primeiro — zero rede
   // extra. A sonda de manifestos completa com o que a home nao montou.
   // ADDON DESLIGADO NAO ENTRA POR AQUI TAMBEM. As fileiras da home so sao
@@ -898,7 +913,7 @@ static void *fioGuia(void *u) {
     XtreamCanal *xt = malloc(sizeof *xt * G_MAX_CANAL);
     int n = xt ? xtream_canais(xt, G_MAX_CANAL) : 0, i;
     if (xt) { sXtFalha = xtream_ultima_falha(); sXtHttp = xtream_ultimo_http(); }
-    for (i = 0; i < n && sNCanais < G_MAX_CANAL; i++) {
+    for (i = 0; i < n; i++) {
       GCanal c;
       if (sCanalPorId(xt[i].id) >= 0) continue;
       memset(&c, 0, sizeof c);
@@ -907,9 +922,11 @@ static void *fioGuia(void *u) {
       snprintf(c.nome, sizeof c.nome, "%s", xt[i].nome);
       snprintf(c.logo, sizeof c.logo, "%s", xt[i].logo);
       snprintf(c.epgId, sizeof c.epgId, "%s", xt[i].epgId);
-      c.cat = sCatDe(xt[i].categoria[0] ? xt[i].categoria : "Outros");
-      if (c.cat >= 0) { sCanais[sNCanais++] = c; ok = 1; }
+      c.cat = sNCanais < G_MAX_CANAL ? sCatDe(xt[i].categoria[0] ? xt[i].categoria : "Outros") : 0;
+      if (guiacorte_entra(&sCorte, sNCanais, c.cat >= 0)) { sCanais[sNCanais++] = c; ok = 1; }
     }
+    // O que o servidor tem alem do pedido (xtream_canais devolve ate `max`).
+    guiacorte_perdeu_canais(&sCorte, xtream_ultimo_total() - n);
     free(xt);
   }
   // FONTE ACHADA E NENHUMA PAGINA RESPONDEU tambem e "nao respondeu", e nao
@@ -1120,12 +1137,14 @@ static void publicar(void) {
       memcpy(sabe, sSabe, sizeof sSabe); nSabe = sNSabe;
       memcpy(fontes, sFontes, sizeof sFontes); nFontes = sNFontes;
       falhas = sFalhas; xtFalha = sXtFalha; xtHttp = sXtHttp;
+      corte = sCorte;
       printf("[guia] lista da rede igual a da tela: nao republicada\n");
       fflush(stdout);
       marco("guia: rede igual ao cache");
       return;
     }
     assinaturaPublicada = nova; }
+  corte = sCorte;
   memcpy(canais, sCanais, sizeof(GCanal) * (size_t)sNCanais);
   memcpy(cats, sCats, sizeof sCats);
   nCanais = sNCanais; nCats = sNCats;
@@ -1149,6 +1168,10 @@ static void publicar(void) {
   }
   printf("[guia] %d canais em %d categorias (%d favoritos)\n",
          nCanais, nCats, nFavOrd);
+  fflush(stdout);
+  if (guiacorte_cortou(&corte))
+    printf("[canais] n=%d de %d (corte: %s)\n", nCanais, guiacorte_total(&corte, nCanais),
+           guiacorte_motivo(&corte));
   fflush(stdout);
   marco("guia: lista da rede publicada");
   if (nCanais > 0) cacheGravar();
@@ -4126,6 +4149,13 @@ void guia_desenhar(Uint32 agora) {
     // telas cheias ou vencendo. E a causa de "nenhum canal toca" que se sabe
     // ANTES de tentar um canal. Lido do que o fio do guia guardou, sem rede.
     else if (xtream_configurado() && xtAviso(sub, sizeof sub)) { }
+    // O CORTE SE DIZ: o guia guarda um teto de canais/categorias (guiacorte.h)
+    // e antes cortava em silencio. Mesma frase da linha da fonte (feat/guia-tv).
+    else if (guiacorte_cortou(&corte))
+      guiacorte_linha(&corte, nCanais,
+                      guiacorte_por_canais(&corte) ? i18n("Mostrando %d de %d canais (o que cabe nesta TV)")
+                                                   : i18n("Mostrando %d de %d canais (limite de categorias)"),
+                      sub, sizeof sub);
     else
       snprintf(sub, sizeof sub, i18n("%d canais · %d categorias · segure %s para pular seção"),
                nCanais, nCats, "\xe2\x86\x91\xe2\x86\x93");

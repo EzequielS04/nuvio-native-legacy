@@ -2505,6 +2505,8 @@
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Показує мініатюру фільму над стрічкою, коли ви перемотуєте вперед або назад. Зображення надає Seekr (seekr.tv), потрібен ваш особистий ключ; кожна відкрита назва витрачає один запит денної квоти."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Показує мініатюру фільму над шкалою, коли ви перемотуєте вперед або назад. Зображення надходять від Seekr (seekr.tv)."),
   T("Mostra, em todas as categorias, as opções técnicas marcadas como Avançado. Vale só para esta TV.", "Показує в усіх категоріях технічні параметри з позначкою «Додатково». Діє лише на цьому телевізорі."),
+  T("Mostrando %d de %d canais (limite de categorias)", "Показано %d з %d каналів (ліміт категорій)"),
+  T("Mostrando %d de %d canais (o que cabe nesta TV)", "Показано %d з %d каналів (скільки вміщує цей ТВ)"),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Показано лише контейнери MP4 (зручно, щоб знайти Dolby Vision у MP4). OK знімає фільтр."),
   T("Mostrando só fontes com áudio em português. OK tira o filtro.", "Лише джерела з португальською доріжкою. OK знімає фільтр."),
   T("Mostrando só fontes que o debrid já tem: tocam na hora. OK tira o filtro.", "Лише джерела, які вже є в debrid: запускаються одразу. OK знімає фільтр."),

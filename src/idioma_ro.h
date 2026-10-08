@@ -2505,6 +2505,8 @@
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Arată o miniatură a filmului deasupra barei când derulezi înainte sau înapoi. Imaginile vin de la Seekr (seekr.tv) și cer cheia ta personală; fiecare titlu deschis consumă o cerere din cota zilnică."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Arată o miniatură a filmului deasupra barei când derulezi înainte sau înapoi. Imaginile vin de la Seekr (seekr.tv)."),
   T("Mostra, em todas as categorias, as opções técnicas marcadas como Avançado. Vale só para esta TV.", "Afișează în toate categoriile opțiunile tehnice marcate Avansat. Se aplică doar acestui TV."),
+  T("Mostrando %d de %d canais (limite de categorias)", "Se afișează %d din %d canale (limită de categorii)"),
+  T("Mostrando %d de %d canais (o que cabe nesta TV)", "Se afișează %d din %d canale (cât încape pe acest TV)"),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Se arată doar containere MP4 (util pentru a găsi Dolby Vision în MP4). OK scoate filtrul."),
   T("Mostrando só fontes com áudio em português. OK tira o filtro.", "Doar sursele cu audio în portugheză. OK scoate filtrul."),
   T("Mostrando só fontes que o debrid já tem: tocam na hora. OK tira o filtro.", "Doar sursele pe care debridul le are deja: pornesc imediat. OK scoate filtrul."),

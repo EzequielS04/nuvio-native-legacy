@@ -2506,6 +2506,8 @@
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Hiện ảnh thu nhỏ của phim phía trên thanh khi bạn tua tới hoặc lui. Ảnh lấy từ Seekr (seekr.tv) và cần khóa cá nhân của bạn; mỗi tựa mở ra tính một lượt truy vấn trong hạn mức hằng ngày."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Hiển thị ảnh thu nhỏ của phim phía trên thanh khi bạn tua tới hoặc lùi. Hình ảnh lấy từ Seekr (seekr.tv)."),
   T("Mostra, em todas as categorias, as opções técnicas marcadas como Avançado. Vale só para esta TV.", "Hiện các tùy chọn kỹ thuật được đánh dấu Nâng cao ở mọi danh mục. Chỉ áp dụng cho TV này."),
+  T("Mostrando %d de %d canais (limite de categorias)", "Hiển thị %d trên %d kênh (giới hạn danh mục)"),
+  T("Mostrando %d de %d canais (o que cabe nesta TV)", "Hiển thị %d trên %d kênh (vừa với TV này)"),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Chỉ hiển thị định dạng chứa MP4 (tiện để tìm Dolby Vision trong MP4). OK để xóa bộ lọc."),
   T("Mostrando só fontes com áudio em português. OK tira o filtro.", "Chỉ nguồn có âm thanh tiếng Bồ Đào Nha. OK để tắt bộ lọc."),
   T("Mostrando só fontes que o debrid já tem: tocam na hora. OK tira o filtro.", "Chỉ nguồn mà debrid đã có: phát ngay. OK để tắt bộ lọc."),

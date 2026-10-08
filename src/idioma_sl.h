@@ -2506,6 +2506,8 @@
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Med previjanjem naprej ali nazaj nad vrstico prikaže sličico filma. Slike prihajajo iz Seekr (seekr.tv) in zahtevajo vaš osebni ključ; vsak odprt naslov porabi eno poizvedbo dnevne kvote."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Med previjanjem naprej ali nazaj nad vrstico pokaže sličico filma. Slike prihajajo iz Seekr (seekr.tv)."),
   T("Mostra, em todas as categorias, as opções técnicas marcadas como Avançado. Vale só para esta TV.", "Prikaže tehnične možnosti, označene kot Napredno, v vseh kategorijah. Velja samo za ta televizor."),
+  T("Mostrando %d de %d canais (limite de categorias)", "Prikazanih %d od %d kanalov (omejitev kategorij)"),
+  T("Mostrando %d de %d canais (o que cabe nesta TV)", "Prikazanih %d od %d kanalov (kolikor jih gre na ta TV)"),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Prikazani so samo vsebniki MP4 (priročno za iskanje Dolby Vision v MP4). OK počisti filter."),
   T("Mostrando só fontes com áudio em português. OK tira o filtro.", "Samo viri s portugalskim zvokom. OK izklopi filter."),
   T("Mostrando só fontes que o debrid já tem: tocam na hora. OK tira o filtro.", "Samo viri, ki jih debrid že ima: začnejo takoj. OK izklopi filter."),
