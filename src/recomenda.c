@@ -3694,6 +3694,10 @@ int recomenda_enviar(const CatItem *ci, const char *paraId, int modelo,
   if (fila.cheia || envioEstado == REC_ENVIO_INDO) { SDL_UnlockMutex(mtx); return 0; }
   memset(&fila, 0, sizeof fila);
   snprintf(fila.imdb,   sizeof fila.imdb,   "%s", ci->imdb);
+  // O CARD DE CONTINUAR ASSISTINDO DE SERIE TRAZ "tt123:S:E" (descoberta.c), e
+  // o servidor so aceita /^tt\d+$/ (HTTP 400, issue #363). A recomendacao e do
+  // titulo, nao do episodio: corta no primeiro ':'.
+  { char *dp = strchr(fila.imdb, ':'); if (dp) *dp = 0; }
   snprintf(fila.tipo,   sizeof fila.tipo,   "%s", ci->tipo[0] ? ci->tipo : "movie");
   snprintf(fila.titulo, sizeof fila.titulo, "%s", ci->titulo);
   snprintf(fila.poster, sizeof fila.poster, "%s", ci->poster);
