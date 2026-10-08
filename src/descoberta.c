@@ -5855,6 +5855,9 @@ int desc_tmdb_notas_temporada_ex(const char *json, CatEp *eps, int n,
           char sin[sizeof eps[i].sinopse], nome[sizeof eps[i].nome];
           int mudou = 0, soVazio = (textos & DESC_EPT_SO_VAZIO) != 0;
           int runtime = (int)js_num(p, f, "runtime", 0);
+          // O TMDB TEM ESTE PAR: e o numero que o TheIntroDB entende sem
+          // remapear (2.0.3). Nao conta em `feitos` (nao e texto novo).
+          eps[i].tmdbT = temporada; eps[i].tmdbE = num;
           if (!eps[i].duracao[0] && runtime > 0 && runtime < 1440) {
             snprintf(eps[i].duracao, sizeof eps[i].duracao, "%d min", runtime);
             mudou = 1;
@@ -6900,7 +6903,15 @@ static void *buscarEps(void *u) {
                   free(c4);
                 } }
             }
-            if (preenchidas > 0 && (alvoItem = epAlvoDe(alvoItem, meuId)) >= 0 &&
+            { int marcados = 0;
+              for (i2 = 0; i2 < neps; i2++)
+                if (tmp[i2].tmdbE > 0) {
+                  const CatEp *e0 = cat_episodio(alvoItem, i2);
+                  tmp[i2].tmdbSerie = tmdbId;
+                  if (e0 && (e0->tmdbSerie != tmdbId || e0->tmdbE != tmp[i2].tmdbE)) marcados++;
+                }
+              if (marcados > 0 && preenchidas == 0) preenchidas = -marcados; }
+            if (preenchidas != 0 && (alvoItem = epAlvoDe(alvoItem, meuId)) >= 0 &&
                 cat_n_episodios(alvoItem) == neps) {
               cat_definir_episodios(alvoItem, tmp, neps);
               printf("[desc] %s: nota/sinopse TMDB em %d episodios\n",

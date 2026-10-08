@@ -11,5 +11,5 @@ flags=()
 if [ "${SANITIZE:-0}" = 1 ]; then flags+=(-fsanitize=address,undefined -fno-omit-frame-pointer); fi
 cc ${flags[@]+"${flags[@]}"} src/intro.c src/js.c src/credfonte.c tests/intro.c \
   -DNV_SHOT_HOOKS -Isrc -o /tmp/nuvio-intro-tests -O1 -g \
-  -Wall -Wno-deprecated-declarations -Wno-macro-redefined
+  -Wall -Wno-deprecated-declarations -Wno-macro-redefined -lpthread
 /tmp/nuvio-intro-tests

@@ -1,5 +1,6 @@
 #include "posplay.h"
 #include "intro.h"
+#include "proximo.h"
 #include "idioma.h"
 #include "catalogo.h"
 #include "extras.h"
@@ -24,19 +25,13 @@
 #include <math.h>
 #include <string.h>
 
-// Constantes do web 1.0.6 (postPlayRecommendationController), nao escolhidas
-// aqui: 90% para filme, 5 s de contagem final.
-// Recuo para filme SEM capitulo. Proporcional, com piso e teto: ver a nota em
-// posplay_atualizar. Fica registrado que o web usa 90% para nao parecer que o
-// numero se perdeu — 90% de 105 min sao dez minutos antes do fim.
-#define PP_FILME_FRAC     0.045
-#define PP_FILME_MIN_S    150.0
-#define PP_FILME_MAX_S    330.0
+// 5 s de contagem final: constante do web 1.0.6 (postPlayRecommendationController).
+// O web abre o painel de filme aos 90%; aqui, desde a 2.0.3, sem marcador e um
+// tempo FIXO antes do fim (intro_fim_estimado_filme, intro.h).
 #define PP_CONTAGEM_S     5
 // Guardas do #115 ("More like this aparece cedo demais — no comeco do
 // filme"). Ver posplay_regra_filme.
 #define PP_FILME_METADE   0.5     // nunca antes da metade da duracao
-#define PP_CRED_MIN_FRAC  0.75    // marcador antes disto nao e credito final
 #define PP_DUR_ESTAVEL_S  8.0     // duracao parada ha tanto tempo, no minimo
 
 // Cartazes dos relacionados, no tamanho da grade de "Ver tudo".
@@ -151,23 +146,27 @@ int posplay_abrir_relacionados(int idxCatalogo) {
 
 // O episodio SEGUINTE ao que esta tocando, na lista unica (ja ordenada por
 // temporada e episodio). Devolve 0 quando o que toca e o ultimo.
+// 2.0.3: a regra e prox_indice_seguinte, a MESMA de player_proximo_episodio
+// (que abre a janela). Era "o indice seguinte ao do episodio tocando": com o
+// episodio repetido na lista oferecia ele mesmo, e com o episodio fora da lista
+// nao oferecia nada enquanto a janela ja estava aberta (e a legenda, subida).
 static int acharProximo(int idxItem, int t, int e) {
   int n = cat_n_episodios(idxItem), i;
-  for (i = 0; i < n; i++) {
-    const CatEp *ep = cat_episodio(idxItem, i);
-    if (!ep || ep->temporada != t || ep->episodio != e) continue;
-    { const CatEp *px = cat_episodio(idxItem, i + 1);
-      if (!px) return 0;
-      proxT = px->temporada; proxE = px->episodio;
-      snprintf(proxNome, sizeof proxNome, "%s", px->nome);
-      return 1; }
-  }
-  return 0;
+  const CatEp *base = n > 0 ? cat_episodio(idxItem, 0) : NULL, *px;
+  if (!base) return 0;
+  i = prox_indice_seguinte(base, n, t, e);
+  px = i >= 0 ? cat_episodio(idxItem, i) : NULL;
+  if (!px) return 0;
+  proxT = px->temporada; proxE = px->episodio;
+  snprintf(proxNome, sizeof proxNome, "%s", px->nome);
+  return 1;
 }
 
 // Marcador de creditos que o FILME aceita. Ver posplay_regra_filme.
+// 2.0.3: a parte final do FILME e a de intro_creditos_janela_filme (12%,
+// 5-15 min), a mesma do botao de pular creditos; era o ultimo quarto.
 static int credAceito(double durSeg, double cred) {
-  return cred > 1.0 && cred >= durSeg * PP_CRED_MIN_FRAC && cred < durSeg;
+  return cred > 1.0 && cred < durSeg && durSeg - cred <= intro_creditos_janela_filme(durSeg);
 }
 
 // A REGRA DO FILME, sem estado (o teste chama direto).
@@ -197,25 +196,12 @@ int posplay_regra_filme(double posSeg, double durSeg, double creditosSeg) {
   if (durSeg <= 1.0) return 0;
   if (posSeg < durSeg * PP_FILME_METADE) return 0;
   if (credAceito(durSeg, creditosSeg)) return posSeg >= creditosSeg;
-  // FILME SEM CAPITULOS — e o caso comum, porque MUITA fonte e MP4 e nao
-  // Matroska. MEDIDO no log da TV: "mkv: fonte e MP4, sonda dispensada".
-  // Capitulo so existe no MKV; num MP4 nao ha o que ler e nao ha marcador.
-  //
-  // Sem marcador, so resta estimar, e a estimativa e PROPORCIONAL a duracao.
-  // Fixar minutos erra nos dois extremos: 3 min sobem com os creditos ja
-  // rolando num filme longo (a queixa) e 8 min roubam o desfecho de um curto.
-  // Credito costuma ficar perto de 4,5% do filme, com piso e teto para os
-  // casos que fogem da regra.
-  janela = durSeg * PP_FILME_FRAC;
-  if (janela < PP_FILME_MIN_S) janela = PP_FILME_MIN_S;
-  if (janela > PP_FILME_MAX_S) janela = PP_FILME_MAX_S;
-  // A JANELA NUNCA PASSA DE METADE DO FILME, e este teto vem por ultimo — de
-  // proposito, depois do piso, senao o piso o desfaz.
-  //
-  // Sem ele o piso de 150 s virava a regra em qualquer coisa mais curta que
-  // isso: `resta` comeca valendo a duracao inteira, entao no segundo ZERO ja
-  // era `resta <= janela` e o painel subia junto com o filme.
-  if (janela > durSeg * 0.5) janela = durSeg * 0.5;
+  // FILME SEM MARCADOR (MP4 nao tem capitulo; o TheIntroDB nao tem todo
+  // filme): tempo FIXO antes do fim, intro_fim_estimado_filme — 3 min, 90 s
+  // em filme de menos de 1 h, nada abaixo de 10 min. Decisao do dono em
+  // 07/10/2026: nada de porcentagem (era 4,5% da duracao, entre 150 e 330 s).
+  janela = intro_fim_estimado_filme(durSeg);
+  if (janela <= 0.0) return 0;
   resta = durSeg - posSeg;
   return resta > 0.0 && resta <= janela;
 }

@@ -338,21 +338,63 @@ static int acharTracks(const unsigned char *p, long n, MkvFaixa *saida, int max,
 // O ULTIMO NOME QUE CASA, e nao o primeiro (#115). Remux com "Opening Credits"
 // aos 90 s e "End Credits" no fim e comum, e o primeiro casamento punha o
 // painel de relacionados no comeco do filme. Varre de tras para frente.
+// Nome em minusculas ASCII (o acento de "créditos" fica como esta).
+static void nomeMinusculo(const char *nome, char *m, size_t tam) {
+  size_t j;
+  snprintf(m, tam, "%s", nome);
+  for (j = 0; m[j]; j++)
+    if (m[j] >= 'A' && m[j] <= 'Z') m[j] = (char)(m[j] - 'A' + 'a');
+}
+// `palavra` aparece em `m` como palavra inteira (nao "ed" dentro de "bed").
+static int temPalavra(const char *m, const char *palavra) {
+  size_t n = strlen(palavra);
+  const char *p = m;
+  while ((p = strstr(p, palavra)) != NULL) {
+    int antes = p == m || !((p[-1] >= 'a' && p[-1] <= 'z') || (p[-1] >= '0' && p[-1] <= '9'));
+    char d = p[n];
+    int depois = !((d >= 'a' && d <= 'z') || (d >= '0' && d <= '9'));
+    if (antes && depois) return 1;
+    p += n;
+  }
+  return 0;
+}
+// Capitulo de ABERTURA que tambem diz "credits" ("Opening Credits", "OP"):
+// nao e o fim. 2.0.3.
+static int nomeAbertura(const char *m) {
+  return strstr(m, "opening") || strstr(m, "intro") || strstr(m, "abertura") ||
+         temPalavra(m, "op");
+}
+// Previa do proximo episodio (anime: "Preview", "Next Episode", "Yokoku"):
+// vem DEPOIS do ED e nao e o inicio dos creditos.
+static int nomePrevia(const char *m) {
+  return strstr(m, "preview") || strstr(m, "next episode") || strstr(m, "next time") ||
+         strstr(m, "yokoku") || strstr(m, "avance") || strstr(m, "previa") ||
+         strstr(m, "prévia");
+}
+
 double mkv_creditos_nomeados(const MkvCap *caps, int n) {
   static const char *NOMES[] = { "credit", "crédit", "credito", "crédito",
-                                 "end title", "outro", "encerrament" };
+                                 "end title", "outro", "encerrament", "ending" };
   int i, k;
   for (i = n - 1; i >= 0; i--) {
     char m[64];
-    size_t j;
-    snprintf(m, sizeof m, "%s", caps[i].nome);
-    // Minusculas byte a byte. Serve para o ASCII dos rotulos que importam; o
-    // acento de "créditos" e comparado como esta, e por isso a lista tem as
-    // duas formas.
-    for (j = 0; m[j]; j++)
-      if (m[j] >= 'A' && m[j] <= 'Z') m[j] = (char)(m[j] - 'A' + 'a');
+    nomeMinusculo(caps[i].nome, m, sizeof m);
+    if (nomeAbertura(m)) continue;
+    // ANIME (2.0.3): "Ending" e "ED" sao os creditos. "ED" so como palavra.
+    if (temPalavra(m, "ed")) return caps[i].inicio;
     for (k = 0; k < (int)(sizeof NOMES / sizeof NOMES[0]); k++)
       if (strstr(m, NOMES[k])) return caps[i].inicio;
+  }
+  return 0.0;
+}
+
+double mkv_creditos_ultimo(const MkvCap *caps, int n) {
+  int i;
+  if (!caps || n < 2) return 0.0;
+  for (i = n - 1; i > 0; i--) {
+    char m[64];
+    nomeMinusculo(caps[i].nome, m, sizeof m);
+    if (!nomePrevia(m)) return caps[i].inicio;
   }
   return 0.0;
 }

@@ -72,6 +72,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "mkvass.h"
 #include "relogio.h"
 #include "intro.h"
+#include "proximo.h"
 #include "credfonte.h"
 #include "credaprende.h"
 #include "seekr.h"
@@ -538,6 +539,28 @@ static double credAvisadoEm, credAvisadoDur;
 static int duracaoReal, durCurtaAvisado, durPassouAvisado;
 static int concluiuAgora(double cred);
 static int introIdx=-1, introT=-1, introE=-1;
+// Com que id o TheIntroDB foi perguntado (0 = imdb). Muda quando o TMDB do
+// episodio chega depois da abertura (2.0.3): pede de novo por tmdb_id.
+static long introTmdb;
+
+// O EPISODIO TOCANDO NO TMDB, quando o fio de episodios o confirmou
+// (CatEp.tmdbSerie/tmdbT/tmdbE). Filme: o id do item. 0 = nao se sabe.
+static long tmdbDoTocando(int *tt, int *te) {
+  const CatItem *c = item();
+  *tt = *te = 0;
+  if (!c) return 0;
+  if (epT <= 0) return c->tmdb > 0 ? c->tmdb : 0;
+  for (int ix = idxAtual(), i = 0; i < cat_n_episodios(ix); i++) {
+    const CatEp *ep = cat_episodio(ix, i);
+    if (ep && ep->temporada == epT && ep->episodio == epE) {
+      if (ep->tmdbSerie > 0 && ep->tmdbT > 0 && ep->tmdbE > 0) {
+        *tt = ep->tmdbT; *te = ep->tmdbE; return ep->tmdbSerie;
+      }
+      return 0;
+    }
+  }
+  return 0;
+}
 static int retomadaAplicada, retomarPct;
 #ifdef NV_ANDROID
 static double retomarSeg;
@@ -578,16 +601,13 @@ int player_pediu_proximo(int *t,int *e) {
   if(!pedProxT||!pedProxE)return 0;
   if(t)*t=pedProxT;if(e)*e=pedProxE;pedProxT=pedProxE=0;return 1;
 }
+// A regra mora em prox_indice_seguinte (proximo.h), a mesma do cartao.
 const CatEp *player_proximo_episodio(void) {
-  const CatEp *melhor=NULL;
-  int ix=idxAtual(),n=cat_n_episodios(ix);
-  for(int i=0;i<n;i++) {
-    const CatEp *p=cat_episodio(ix,i);if(!p)continue;
-    if(p->temporada<epT||(p->temporada==epT&&p->episodio<=epE))continue;
-    if(!melhor||p->temporada<melhor->temporada||
-       (p->temporada==melhor->temporada&&p->episodio<melhor->episodio))melhor=p;
-  }
-  return melhor;
+  int ix=idxAtual(),n=cat_n_episodios(ix),i;
+  const CatEp *base=n>0?cat_episodio(ix,0):NULL;
+  if(!base)return NULL;
+  i=prox_indice_seguinte(base,n,epT,epE);
+  return i>=0?cat_episodio(ix,i):NULL;
 }
 // O MOTIVO DO CARTAO DE ERRO (issue #112). O cartao dizia sempre "Nao foi
 // possivel abrir a fonte / Abra Fontes para escolher outra opcao" — e para um
@@ -694,8 +714,10 @@ void player_definir_episodio(int t, int e) {
   if (strcmp(c->tipo, "series")) {
     epT = epE = 0;
     if (idx != introIdx || introT || introE) {
+      int tt, te;
       introIdx = idx; introT = introE = 0;
-      intro_pedir(c->imdb, 0, 0);
+      introTmdb = tmdbDoTocando(&tt, &te);
+      intro_pedir_ids(c->imdb, introTmdb, 0, 0, 0.0, 0.0);
       credAvisado = credFimAvisado = semProxAvisado = 0; credAvisadoEm = credAvisadoDur = 0;
     }
     return;
@@ -746,7 +768,9 @@ void player_definir_episodio(int t, int e) {
         if(ep->episodio==epE-1)dA=duracaoTexto(ep->duracao);
         else if(ep->episodio==epE+1)dP=duracaoTexto(ep->duracao);
       }
-      intro_pedir_vizinhos(c->imdb,epT,epE,dA,dP); }
+      { int tt, te; introTmdb = tmdbDoTocando(&tt, &te);
+        if (introTmdb > 0) intro_pedir_ids(c->imdb, introTmdb, tt, te, dA, dP);
+        else intro_pedir_ids(c->imdb, 0, epT, epE, dA, dP); } }
     credAvisado=credFimAvisado=semProxAvisado=0;credAvisadoEm=credAvisadoDur=0;
   }
 }
@@ -2034,17 +2058,13 @@ static int temUltimoBotao(void) {
 // agora aceita-se o que sobra ate 8% da duracao ou 5 min, o que for MAIOR,
 // com teto de 10 min:
 //     25 min -> 300 s     50 min -> 300 s     3 h -> 600 s
-#define PLR_CRED_FRACAO 0.08
-#define PLR_CRED_BASE_S 300.0
-#define PLR_CRED_TETO_S 600.0
-#define PLR_CRED_PISO_S 120.0   // estimativa sem marcador: os 2 min finais
-
-static double credJanelaDe(double durSeg) {
-  double j = durSeg * PLR_CRED_FRACAO;
-  if (j < PLR_CRED_BASE_S) j = PLR_CRED_BASE_S;
-  if (j > PLR_CRED_TETO_S) j = PLR_CRED_TETO_S;
-  return j;
-}
+//
+// 2.0.3 (dono: "o cartao apareceu no meio do episodio"): a janela passou a
+// ser a mesma do botao de pular creditos, intro_creditos_janela — 15% com piso
+// de 2 min e teto de 5 min. 25 min -> 225 s (o caso do R8, 154 s, continua
+// aceito), 22 min -> 198 s (antes 300 s = 23% do episodio), 45 min+ -> 300 s.
+// O teto de 10 min para episodio longo saiu: dez minutos antes do fim e o #34.
+static double credJanelaDe(double durSeg) { return intro_creditos_janela(durSeg); }
 static double credJanela(void) { return credJanelaDe(duracaoSeg); }
 
 // A REGRA SOZINHA, sem o estado do player e sem log: e o que o teste consegue
@@ -2054,11 +2074,13 @@ int player_regra_proximo(double posSeg, double durSeg, double cred) {
   if (durSeg <= 1.0) return 0;
   if (cred > 1.0 && durSeg - cred <= credJanelaDe(durSeg))
     return posSeg >= cred;   // marcador aceito: ele manda, e so ele
-  // PISO DA ESTIMATIVA. Log da TCL na 2.0.0: "2 min finais: pos 0s de 30s" — o
-  // pipeline informou 30 s e os "2 minutos finais" eram o video inteiro, do
-  // segundo zero. Abaixo de duas janelas nao ha "fim" para estimar.
-  if (durSeg < 2.0 * PLR_CRED_PISO_S) return 0;
-  return durSeg - posSeg <= PLR_CRED_PISO_S;
+  // SEM MARCADOR: TEMPO FIXO antes do fim, nunca porcentagem (2.0.3, dono).
+  // Era "os 2 min finais"; agora sao os creditos tipicos (intro_fim_estimado:
+  // 40 s, 15 s em episodio < 10 min). Log da TCL na 2.0.0: "2 min finais: pos
+  // 0s de 30s" — abaixo de 2 min de duracao nao ha "fim" para estimar.
+  { double fimEst = intro_fim_estimado(durSeg);
+    if (fimEst <= 0.0) return 0;
+    return durSeg - posSeg <= fimEst; }
 }
 
 // A DURACAO INFORMADA NAO E A DO EPISODIO. Log de webOS na 2.0.0: uma fonte MP4
@@ -2127,7 +2149,7 @@ static int ofertaProximo(void) {
   // 2 minutos finais, com o tamanho da lista e se ela ainda estava chegando.
   // Lista vazia = o player abriu sem os episodios do titulo; lista cheia sem
   // proximo = fim da serie, ou a temporada seguinte ainda nao esta no addon.
-  if(!p&&epT>0&&duracaoSeg>1&&duracaoSeg-posSeg<=PLR_CRED_PISO_S&&!semProxAvisado){
+  if(!p&&epT>0&&duracaoSeg>1&&duracaoSeg-posSeg<=INTRO_CRED_MIN_S&&!semProxAvisado){
     semProxAvisado=1;
     printf("[posplay] sem proximo episodio depois de T%dE%d: lista com %d episodios%s\n",
            epT,epE,cat_n_episodios(idxAtual()),desc_episodios_carregando(idxAtual())?" (ainda carregando)":"");
@@ -2185,8 +2207,8 @@ static int ofertaProximo(void) {
   if (player_regra_proximo(posSeg, duracaoSeg, 0.0)) {
     if (!credFimAvisado) {
       credFimAvisado = 1;
-      printf("[posplay] 2 min finais: pos %.0fs de %.0fs\n",
-             (double)posSeg, (double)duracaoSeg);
+      printf("[posplay] estimativa sem marcador (%.0f s antes do fim): pos %.0fs de %.0fs\n",
+             intro_fim_estimado(duracaoSeg), (double)posSeg, (double)duracaoSeg);
       fflush(stdout);
     }
     return 1;
@@ -2743,6 +2765,33 @@ void player_evento(const SDL_Event *e) {
   acordar();
 }
 
+  // O TMDB DO EPISODIO CHEGOU DEPOIS DO PEDIDO (o fio de episodios enriquece a
+  // lista depois de publica-la): pergunta de novo por tmdb_id, uma vez. 2.0.3.
+static void introTmdbTardio(Uint32 agora) {
+  if (!ehCanal() && introIdx >= 0 && introIdx == idx && introTmdb <= 0) {
+    static Uint32 visto;
+    if ((Uint32)(agora - visto) > 1000u) {
+      int tt, te; long tm;
+      const CatItem *cx = item();
+      visto = agora;
+      tm = tmdbDoTocando(&tt, &te);
+      if (tm > 0 && cx) {
+        double dA = 0, dP = 0;
+        introTmdb = tm;
+        if (epT > 0)
+          for (int ix = idxAtual(), i = 0; i < cat_n_episodios(ix); i++) {
+            const CatEp *ep = cat_episodio(ix, i);
+            if (!ep || ep->temporada != epT) continue;
+            if (ep->episodio == epE - 1) dA = duracaoTexto(ep->duracao);
+            else if (ep->episodio == epE + 1) dP = duracaoTexto(ep->duracao);
+          }
+        printf("[intro] tmdb %ld chegou depois: pedindo de novo por tmdb_id\n", tm); fflush(stdout);
+        intro_pedir_ids(cx->imdb, tm, epT > 0 ? tt : 0, epT > 0 ? te : 0, dA, dP);
+      }
+    }
+  }
+}
+
 void player_atualizar(float dt, Uint32 agora) {
   if (retido) { player_validar_retido(agora); return; }
   // AUDIO QUE A TV NAO TOCA (uMS errorCode 200, registro 1545): o video segue
@@ -3105,6 +3154,7 @@ void player_atualizar(float dt, Uint32 agora) {
   if (visivel && tocando && !player_carregando() && !episodios_aberto() &&
       !stream_folha_aberta() && !faixas_aberta() && agora - ultimoInput > PLR_ESCONDE_MS) visivel = 0;
   if (epT > 0 && !strstr(linhaEp, " · ")) player_definir_episodio(epT, epE);
+  introTmdbTardio(agora);
 
   // PAINEL DE PAUSA. A condicao e a traducao de canShowPauseOverlay
   // (playerScreen.js:7299): pausado, com imagem na tela, sem nenhuma folha
@@ -3492,9 +3542,19 @@ static double escalaFonteAss(void) {
 // Lugar que a segunda legenda ocupa EMBAIXO da principal ("Junto da
 // principal"): a principal sobe isso. Zero fora desse modo.
 static float leg2Reserva;
+float player_base_legenda(float baseNormal, int cartaoProximoNoAr) {
+  return cartaoProximoNoAr ? 690.f : baseNormal;
+}
 static float baseLegendaPrincipal(void) {
   float base = (visivel && !faixas_estilo_topo() ? 760.f : 1000.f) - leg2Reserva;
-  if (ofertaProximo()) base = 690.f;
+  // A LEGENDA SOBE SO ENQUANTO O CARTAO ESTA NA TELA (2.0.3). Subia pela
+  // JANELA do cartao (a oferta do proximo), nao pelo cartao: ela continua
+  // verdadeira depois de Voltar/Baixo dispensar o cartao (e ate o fim do
+  // episodio), e tambem quando o cartao nao chega a subir (sem proximo na
+  // lista do posplay). O relato da Samsung: o cartao apareceu no meio do
+  // episodio, foi dispensado, e a legenda ficou no meio da tela ate o episodio
+  // seguinte. Vale para todo alvo: o overlay de legenda e o mesmo.
+  base = player_base_legenda(base, posplay_sobre_video());
   // Abaixo do padrao (3) o passo e de 20 e nao de 48: com 48 as posicoes 1 e 2
   // punham a base em 1144 e 1096, fora da tela de 1080 — a legenda sumia, e a
   // previa da barra de estilo mostrou isso na primeira captura.
