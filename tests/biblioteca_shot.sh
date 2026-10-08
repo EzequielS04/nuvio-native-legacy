@@ -6,7 +6,7 @@
 #
 # NUVIO_DADOS e uma pasta temporaria e o programa recusa rodar se dados_dir()
 # nao for ela: fixar uma lista GRAVA.
-set -eu
+set -euo pipefail
 cd "$(dirname "$0")/.."
 saida="${1:-/tmp/nuvio-biblioteca}"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/nuvio-bibshot-XXXXXX")"
