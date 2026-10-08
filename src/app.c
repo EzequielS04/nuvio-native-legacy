@@ -624,6 +624,11 @@ static void trocarTela(Tela nova) {
   if (nova != TELA_SOCIAL) socialDoPerfil = 0;
   if (tela == TELA_AJUSTES) ajustes_encerrar();
   if (tela == TELA_LIVETV_DIAG) livetvdiag_encerrar();
+  // ESQUERDA na borda do Perfil so pede a barra e deixa a pagina aberta (#371).
+  // Se o roteador vai para OUTRA tela (barra proibida no PiP, ou um destino da
+  // barra), o Perfil fecha aqui: senao perfil_atualizar/socialvis_atualizar
+  // seguiam rodando todo quadro. Voltar ao Perfil passa por perfil_abrir.
+  if (tela == TELA_PERFIL) perfil_fechar();
   // #318: a tela piscava e congelava logo depois de uma troca de tela
   // (Android). A linha fica para o proximo relato, com teto: as 120 primeiras
   // trocas e depois no maximo uma a cada 10 s.
