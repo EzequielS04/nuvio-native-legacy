@@ -196,6 +196,15 @@ int trakt_lista(const char *q, CatItem *s, int m) {
   }
   return i;
 }
+// Mesmo dublê, na forma que cresce: descoberta.c pede a lista por aqui agora.
+int trakt_lista_cresc(const char *q, CatItem **s, int m) {
+  int n;
+  *s = m > 0 ? calloc((size_t)m, sizeof(CatItem)) : NULL;
+  if (!*s) return 0;
+  n = trakt_lista(q, *s, m);
+  if (n <= 0) { free(*s); *s = NULL; return 0; }
+  return n;
+}
 // O "sync" que chega entre o Trakt e a leitura da lista de addons.
 enum { S_NADA, S_ADDONS, S_CREDENCIAL };
 static volatile int armadoSocial = S_NADA;
