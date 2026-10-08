@@ -2,6 +2,9 @@
 #include <time.h>
 #include <assert.h>
 #include <unistd.h>
+// Antes do #undef __APPLE__: gl_compat.h (via ajustes.h) escolhe o GL do Mac.
+#include "ajustes.h"
+#undef __APPLE__
 static int fake_sleep(const struct timespec *, struct timespec *);
 #define nanosleep fake_sleep
 #include "../src/video.c"

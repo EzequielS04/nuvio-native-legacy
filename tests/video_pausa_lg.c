@@ -21,6 +21,8 @@
 #include <unistd.h>
 #include <dlfcn.h>
 #include <assert.h>
+// Antes do #undef __APPLE__: gl_compat.h (via ajustes.h) escolhe o GL do Mac.
+#include "ajustes.h"
 #undef __APPLE__
 #include "../src/video.c"
 
@@ -94,6 +96,8 @@ int main(void) {
   screensaverCallback(NULL, (LSMessage *)active, NULL);
   assert(respostas == 1 && strstr(resposta, "\"ack\":false") &&
          strstr(resposta, "\"timestamp\":1700000000123456}"));
+  // Sem a tela de descanso do Nuvio (esmaecer real, linkado): ela segura o protetor da TV.
+  esmaecer_estilo(ESM_ESTILO_ESCURECER);
   pausaPedida = 1;
   screensaverCallback(NULL, (LSMessage *)active, NULL);
   assert(strstr(resposta, "\"ack\":true"));
