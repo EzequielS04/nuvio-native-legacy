@@ -106,6 +106,26 @@ static void lerTexto(const unsigned char *p, long n, char *dst, size_t tam) {
 #define ID_BLOCKADDMAP 0x41E4UL      // BlockAdditionMapping (Dolby Vision config)
 #define ID_BLOCKADDTYPE 0x41E7UL     // BlockAddIDType: 'dvcC' / 'dvvC'
 #define ID_BLOCKADDDATA 0x41EDUL     // BlockAddIDExtraData: the DOVI record
+#define ID_CODECPRIV   0x63A2UL      // CodecPrivate (hvcC no HEVC)
+
+// hvcC (ISO/IEC 14496-15): lengthSizeMinusOne no byte 21, numOfArrays no 22,
+// depois arrays {tipo&0x3F, u16 numNalus, {u16 len, NAL}...}. Marca se algum
+// array e de NAL tipo 62 (RPU de Dolby Vision) — lugar NAO padrao, mas e o
+// unico outro canto do cabecalho onde um remux poderia ter posto o DV.
+static void lerHvcc(const unsigned char *v, long n, MkvFaixa *f) {
+  long o;
+  int a, nA;
+  if (n < 23 || v[0] != 1) return;
+  f->nalTam = (v[21] & 3) + 1;
+  nA = v[22];
+  o = 23;
+  for (a = 0; a < nA && o + 3 <= n; a++) {
+    int tipo = v[o] & 0x3F, k, nN = (v[o + 1] << 8) | v[o + 2];
+    o += 3;
+    if (tipo == 62) f->hvccNal62 = 1;
+    for (k = 0; k < nN && o + 2 <= n; k++) o += 2 + ((v[o] << 8) | v[o + 1]);
+  }
+}
 
 // Le os TrackEntry de dentro de um Tracks ja localizado.
 static int lerTracks(const unsigned char *p, long n, MkvFaixa *saida, int max) {
@@ -144,6 +164,7 @@ static int lerTracks(const unsigned char *p, long n, MkvFaixa *saida, int max) {
           }
           else if (fid == ID_NAME)    lerTexto(v, ftam, f.nome,  sizeof f.nome);
           else if (fid == ID_CODECID) lerTexto(v, ftam, f.codec, sizeof f.codec);
+          else if (fid == ID_CODECPRIV) { f.cpN = ftam; lerHvcc(v, ftam, &f); }
           else if (fid == ID_FLAGFORCED) f.forcado = lerUint(v, ftam) != 0;
           else if (fid == ID_FLAGHEARING) f.sdh = lerUint(v, ftam) != 0;
           // Channels mora um nivel abaixo, em Audio. O .tpk nao tem outra
@@ -181,6 +202,7 @@ static int lerTracks(const unsigned char *p, long n, MkvFaixa *saida, int max) {
               else if (aid == ID_BLOCKADDDATA) { dado = v + r; dadoN = atam; }
               r += atam;
             }
+            f.bamN++; f.bamTipo = tipo;
             if ((tipo == 0x64766343UL || tipo == 0x64767643UL) && dado && dadoN >= 5) {
               f.dvPerfil = dado[2] >> 1;
               f.dvNivel  = ((dado[2] & 1) << 5) | (dado[3] >> 3);
@@ -192,6 +214,7 @@ static int lerTracks(const unsigned char *p, long n, MkvFaixa *saida, int max) {
           } }
         q += ftam;
       }
+      f.entradaInteira = q == tam;
       if (f.numero > 0) saida[achou++] = f;
     }
     o += tam;
@@ -277,6 +300,9 @@ static int lerCapitulos(const unsigned char *p, long n, MkvCap *saida, int max) 
 // incompleta). So mkv_faixas_do_trecho olha: ali o trecho e o da pre-busca, e
 // lista incompleta manda a sonda para a rede como antes.
 static int tracksCortado;
+// Para o mkv_diag: Tracks visto na ultima acharTracks, e o tamanho declarado.
+static int tkAchado;
+static long tkTam;
 // Onde o Chapters mora, pelo SeekHead (203-capitulos): posicao ABSOLUTA no
 // arquivo (-1 = o SeekHead nao disse). 64 bits: Chapters no fim de um remux de
 // mais de 2 GB nao cabe num long de 32 bits.
@@ -326,6 +352,7 @@ static int acharTracks(const unsigned char *p, long n, MkvFaixa *saida, int max,
   int nFaixas = 0;
   if (nCaps) *nCaps = 0;
   tracksCortado = 0;
+  tkAchado = 0; tkTam = 0;
   segIni = 0; posChapters = -1;
   while (o < n) {
     int ui = 0, ut = 0;
@@ -345,6 +372,7 @@ static int acharTracks(const unsigned char *p, long n, MkvFaixa *saida, int max,
     if (id == ID_TRACKS) {
       long disp = n - o;
       long t = tam > disp ? disp : tam;   // cabecalho maior que o trecho baixado
+      tkAchado = 1; tkTam = tam;
       nFaixas = lerTracks(p + o, t, saida, max);
       // Tracks cortado pelo trecho: a lista sai INCOMPLETA e o casamento pelo
       // ordinal (mkv_casar_legendas) vai dar "nenhum" — dizer isso no log e o
@@ -519,6 +547,147 @@ double mkv_previa_nomeada(const MkvCap *caps, int n) {
   return nomePrevia(m) ? caps[n - 1].inicio : 0.0;
 }
 
+// --- RPU de Dolby Vision em banda (203-dvrpu) ----------------------------------
+//
+// Ha remux com o RPU (NAL HEVC tipo 62, UNSPEC62) em todo quadro e SEM o dvcC
+// no cabecalho: ffmpeg antigo e muxers que nao conhecem BlockAdditionMapping
+// copiam o fluxo e perdem a configuracao. O Kodi tambem nao os reconhece
+// (DVDDemuxFFmpeg::DetermineHdrType so olha AV_PKT_DATA_DOVI_CONF). Aqui so se
+// MEDE: o primeiro quadro de video do primeiro Cluster tem NAL 62 ou nao.
+#define ID_CLUSTER     0x1F43B675UL
+#define ID_SIMPLEBLOCK 0xA3UL
+#define ID_BLOCKGROUP  0xA0UL
+#define ID_BLOCK       0xA1UL
+
+static MkvDiag diag = { 0, 0, 0, 0, -1, 0, -1, -1, -1, -1 };
+const MkvDiag *mkv_diag(void) { return &diag; }
+
+int mkv_quadro_tem_rpu(const unsigned char *p, long n, int nalTam, int *rpuTipo, int *rpuPerfil) {
+  long o = 0;
+  if (!p || nalTam < 1 || nalTam > 4) return -1;
+  while (o + nalTam + 2 <= n) {
+    long len = 0;
+    int i;
+    for (i = 0; i < nalTam; i++) len = (len << 8) | p[o + i];
+    o += nalTam;
+    if (len < 2 || o + len > n) return -1;
+    if (((p[o] >> 1) & 0x3F) == 62) {
+      // rbsp sem os bytes de prevencao (00 00 03) dos primeiros bytes; depois
+      // rpu_nal_prefix 0x19, rpu_type u(6), rpu_format u(11) e, se rpu_type
+      // for 2, vdr_rpu_profile u(4) (0 = perfil 5; 1 = perfil 7 ou 8).
+      unsigned char b[8];
+      long k = o + 2;
+      int m = 0, zeros = 0;
+      while (k < o + len && m < 8) {
+        if (zeros >= 2 && p[k] == 3) { zeros = 0; k++; continue; }
+        zeros = p[k] == 0 ? zeros + 1 : 0;
+        b[m++] = p[k++];
+      }
+      if (rpuTipo) *rpuTipo = -1;
+      if (rpuPerfil) *rpuPerfil = -1;
+      if (m >= 5 && b[0] == 0x19) {
+        unsigned long bits = ((unsigned long)b[1] << 24) | ((unsigned long)b[2] << 16) |
+                             ((unsigned long)b[3] << 8) | b[4];
+        int tipo = (int)(bits >> 26);
+        if (rpuTipo) *rpuTipo = tipo;
+        if (tipo == 2 && rpuPerfil) *rpuPerfil = (int)((bits >> 11) & 0xF);
+      }
+      return 1;
+    }
+    o += len;
+  }
+  return o == n ? 0 : -1;
+}
+
+// Um Block/SimpleBlock: numero da faixa (vint), 2 bytes de tempo, 1 de flags.
+// Devolve o deslocamento dos dados do quadro, ou -1 (outra faixa, lacing, curto).
+static long cabBloco(const unsigned char *p, long n, int faixa) {
+  int u = 0;
+  long num = lerTam(p, n, &u);
+  if (num != faixa || n < u + 3) return -1;
+  if ((p[u + 2] >> 1) & 3) return -1;      // lacing: video nao usa
+  return u + 3;
+}
+
+// Elementos de um Cluster (ou BlockGroup) a partir de p[0]; `base` e a posicao
+// absoluta de p[0] e `fim` o fim do contentor (ou do trecho). 1 = decidiu.
+static int rpuNoContentor(const unsigned char *p, long n, long long base, int faixa, int nalTam) {
+  long o = 0;
+  while (o < n) {
+    int ui = 0, ut = 0;
+    unsigned long id = lerId(p + o, n - o, &ui);
+    long tam, h;
+    if (!id) return 0;
+    tam = lerTam(p + o + ui, n - o - ui, &ut);
+    if (tam < 0) return 0;
+    o += ui + ut;
+    if (id == ID_BLOCKGROUP) {
+      if (rpuNoContentor(p + o, tam > n - o ? n - o : tam, base + o, faixa, nalTam)) return 1;
+    } else if (id == ID_SIMPLEBLOCK || id == ID_BLOCK) {
+      long disp = tam > n - o ? n - o : tam;
+      h = cabBloco(p + o, disp, faixa);
+      if (h >= 0) {
+        if (tam > n - o) {                 // quadro cortado pelo trecho
+          diag.blocoIni = base + o + h; diag.blocoFim = base + o + tam;
+          return 1;
+        }
+        { int r = mkv_quadro_tem_rpu(p + o + h, tam - h, nalTam, &diag.rpuTipo, &diag.rpuPerfil);
+          if (r >= 0) diag.quadros++;
+          if (r == 1) { diag.rpu = 1; return 1; }
+          if (r == 0) { diag.rpu = 0; return 1; } }   // DV poe RPU em TODO quadro
+      }
+    }
+    if (tam > n - o) return 0;
+    o += tam;
+  }
+  return 0;
+}
+
+static void diagTrecho(const unsigned char *p, long n, const MkvFaixa *fx, int nf) {
+  int faixa = 0, nalTam = 0, j;
+  long o = 0;
+  memset(&diag, 0, sizeof diag);
+  diag.rpu = -1; diag.rpuTipo = diag.rpuPerfil = -1; diag.blocoIni = diag.blocoFim = -1;
+  diag.lidos = n; diag.tracksAchado = tkAchado; diag.tracksTam = tkTam;
+  diag.tracksInteiro = tkAchado && !tracksCortado;
+  for (j = 0; j < nf; j++) if (fx[j].tipo == 1) { faixa = fx[j].numero; nalTam = fx[j].nalTam; break; }
+  if (!faixa || !nalTam) return;
+  while (o < n) {
+    int ui = 0, ut = 0;
+    unsigned long id = lerId(p + o, n - o, &ui);
+    long tam;
+    if (!id) return;
+    tam = lerTam(p + o + ui, n - o - ui, &ut);
+    if (tam == -1) return;
+    o += ui + ut;
+    if (id == ID_SEGMENT) continue;
+    if (id == ID_CLUSTER) {
+      long t = (tam < 0 || tam > n - o) ? n - o : tam;
+      if (!rpuNoContentor(p + o, t, o, faixa, nalTam) && diag.quadros > 0 && tam >= 0 && tam <= n - o)
+        diag.rpu = 0;                     // Cluster inteiro varrido, quadros sem RPU
+      return;
+    }
+    if (tam < 0 || tam > n - o) return;
+    o += tam;
+  }
+}
+
+int mkv_rpu_alem(const char *url, int nalTam, long teto) {
+  long n = 0, quer;
+  char *b;
+  if (!url || !url[0] || diag.rpu != -1 || diag.blocoIni < 0) return diag.rpu;
+  quer = (long)(diag.blocoFim - diag.blocoIni);
+  if (quer < 1 || quer > teto) return diag.rpu;
+  b = rede_baixar_trecho_st(url, 20, diag.blocoIni, diag.blocoFim - 1, &n, NULL, NULL, NULL, 0);
+  if (!b) return diag.rpu;
+  if (n == quer) {
+    int r = mkv_quadro_tem_rpu((const unsigned char *)b, n, nalTam, &diag.rpuTipo, &diag.rpuPerfil);
+    if (r >= 0) { diag.quadros++; diag.rpu = r; }
+  }
+  free(b);
+  return diag.rpu;
+}
+
 int mkv_faixas_e_caps(const char *url, MkvFaixa *saida, int max,
                       MkvCap *caps, int maxCaps, int *nCaps) {
   char *buf;
@@ -536,6 +705,7 @@ int mkv_faixas_e_caps(const char *url, MkvFaixa *saida, int max,
   }
   achou = acharTracks((const unsigned char *)buf, n, saida, max,
                       caps, maxCaps, nCaps);
+  diagTrecho((const unsigned char *)buf, n, saida, achou);
   if (caps && nCaps && !*nCaps && posChapters >= 0)
     *nCaps = capsPorPosicao(url, posChapters, caps, maxCaps, NULL);
   free(buf);
@@ -552,6 +722,7 @@ int mkv_faixas_do_trecho(const unsigned char *buf, long n, MkvFaixa *saida, int 
   if (!buf || n < 64 || !saida || max < 1 || buf[0] != 0x1A || buf[1] != 0x45 ||
       buf[2] != 0xDF || buf[3] != 0xA3) return 0;
   achou = acharTracks(buf, n, saida, max, caps, maxCaps, nCaps);
+  diagTrecho(buf, n, saida, achou);
   if (tracksCortado) return 0;
   return achou;
 }

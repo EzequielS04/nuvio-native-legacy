@@ -32,7 +32,39 @@ typedef struct {
   // Dolby Vision configuration record (BlockAdditionMapping dvcC/dvvC) of a
   // video track: the file's own word on profile and layers. dvPerfil 0 = none.
   int  dvPerfil, dvNivel, dvRpu, dvEl, dvBl, dvCompat;
+  // Diagnostico do DV (203-dvrpu): o que a TrackEntry trouxe, para separar
+  // "arquivo sem dvcC" de "a sonda nao viu". cpN = bytes do CodecPrivate (hvcC),
+  // hvccNal62 = o hvcC traz um array de NAL tipo 62 (RPU), bamN/bamTipo = quantos
+  // BlockAdditionMapping e o BlockAddIDType do ultimo ('dvcC' = 0x64766343),
+  // nalTam = lengthSizeMinusOne+1 do hvcC (0 sem hvcC), entradaInteira = a
+  // TrackEntry foi lida ate o fim (0 = parou num elemento invalido).
+  long cpN;
+  int  hvccNal62, bamN, nalTam, entradaInteira;
+  unsigned long bamTipo;
 } MkvFaixa;
+
+// O que a ultima sonda (mkv_faixas_e_caps / mkv_faixas_do_trecho) viu. Estado
+// estatico, como o resto deste modulo: le-se no mesmo fio, logo depois.
+typedef struct {
+  long lidos;              // bytes do trecho varrido
+  int  tracksAchado;       // o elemento Tracks apareceu no trecho
+  int  tracksInteiro;      // ... e coube inteiro
+  long tracksTam;          // tamanho declarado do Tracks
+  // RPU de Dolby Vision EM BANDA (NAL HEVC tipo 62) nos primeiros quadros do
+  // primeiro Cluster, para arquivos com DV no fluxo mas sem dvcC no cabecalho.
+  int  rpu;                // 1 achou NAL 62; 0 quadro(s) inteiro(s) sem; -1 indeciso
+  int  quadros;            // quadros de video inteiros varridos
+  int  rpuTipo, rpuPerfil; // rpu_type e vdr_rpu_profile do 1o RPU (-1 = nao lido)
+  long long blocoIni, blocoFim; // quadro de video cortado pelo trecho: [ini, fim) absolutos, -1 sem
+} MkvDiag;
+const MkvDiag *mkv_diag(void);
+// Varre so os dados de UM quadro HEVC (com prefixo de tamanho de `nalTam`
+// bytes): 1 = tem NAL 62, 0 = nao tem, -1 = quadro malformado. Puro.
+int mkv_quadro_tem_rpu(const unsigned char *p, long n, int nalTam, int *rpuTipo, int *rpuPerfil);
+// Quando a sonda ficou indecisa porque o 1o quadro de video passa do trecho:
+// UM Range com o quadro inteiro, se ele tiver ate `teto` bytes. Atualiza o
+// mkv_diag(). Devolve o novo diag->rpu. BLOQUEIA.
+int mkv_rpu_alem(const char *url, int nalTam, long teto);
 
 #define MKV_MAX_CAPS 64
 
