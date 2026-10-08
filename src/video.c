@@ -6,6 +6,7 @@
 #include "video_reconexao.h"
 #include "video_seekretry.h"
 #include "video_dvretry.h"
+#include "video_dvaudio.h"
 #include "idioma.h"
 #include "linguas.h"
 #include <SDL2/SDL.h>
@@ -214,7 +215,7 @@ static NvDvSonda mkvRetry;
 static Uint32 mkvRetryEm;
 static unsigned mkvFioSessao;   // sessao em que o fio lerMkv atual nasceu
 static unsigned mkvRetrySessao;
-static char   mkvRetryUrl[1024];
+static char   mkvRetryUrl[4096];   // do tamanho de urlAtual: o strcmp nao pode falhar por corte
 static Uint32 seekRetryEm;   // != 0: reenviar seekAlvo quando o relogio passar disto
 static int    seekEnvAlvo, seekEnvAviso;
 static int    srcSeekable = -1, srcTrickable = -1;
@@ -2612,7 +2613,27 @@ static int dvPronto(void) {
   }
   if (audioAtual >= 0 && audioAtual < dvAudios) {
     const char *c = dvAudioCodec[audioAtual];
-    if (strcmp(c, "A_EAC3") && strcmp(c, "A_AC3") && strncmp(c, "A_DTS", 5)) {
+    if (!nv_dvaudio_alimentavel(c)) {
+      // TrueHD (e afins) nao entra no caminho, mas o remux costuma trazer um
+      // E-AC-3 do mesmo idioma: troca para ele e mantem o DV. A escolha da
+      // pessoa DEPOIS disto vale (video_escolher_audio entrega ao player da TV)
+      // e o dvMem acima ja foi aplicado, entao nao e sobrescrito.
+      int n = nAudio < dvAudios ? nAudio : dvAudios, k, i;
+      char cod[16][16], idi[16][8], rot[16][48];
+      if (n > 16) n = 16;
+      for (i = 0; i < n; i++) {
+        snprintf(cod[i], sizeof cod[i], "%s", dvAudioCodec[i]);
+        snprintf(idi[i], sizeof idi[i], "%s", faixaAudio[i].idioma);
+        snprintf(rot[i], sizeof rot[i], "%s", faixaAudio[i].rotulo);
+      }
+      k = nv_dvaudio_escolher(n, audioAtual, (const char (*)[16])cod, (const char (*)[8])idi,
+                              (const char (*)[48])rot, ling_casa);
+      if (k >= 0) {
+        printf("[dv] audio %s -> faixa %d (%s %s) para manter Dolby Vision\n", c, k + 1, cod[k], rot[k]);
+        fflush(stdout);
+        video_escolher_audio(k);
+        return 1;
+      }
       printf("[dv] audio %s cannot be fed: stays on the TV player\n", c); fflush(stdout);
       dvHabilitado = 0; return 0;
     }
