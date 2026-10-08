@@ -80,6 +80,7 @@
 #include "amigostitulo.h"
 #include "amigostitulo_ui.h"
 #include "temporadas_grafico.h"
+#include "detrotulo.h"
 static void ponteiroDetalhe(int r, int c);   // ponteiro do Magic Remote (#99)
 static int moverFileira(int dy);
 static void heroReiniciar(void);
@@ -4202,8 +4203,8 @@ static void heroWeb(float a, float desloc) {
       // em ingles a abreviacao e S/E.
       snprintf(rot, sizeof rot, i18n("%s T%dE%d"),
                i18n(de == 2 ? "Retomar" : "Próximo"), t, e);
-    else if (ci && ci->progresso > 0) snprintf(rot, sizeof rot, "Retomar");
-    else snprintf(rot, sizeof rot, "Reproduzir"); }
+    else snprintf(rot, sizeof rot, "%s",
+                  det_rotulo_primario(ci ? ci->progresso : 0, ajustes_cw_concluido())); }
 
   float larguraAcoes = 0;
   { float cyBtn = yAcoes + NV_DETW2_BTN_H * 0.5f;
