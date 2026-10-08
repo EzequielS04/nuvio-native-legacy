@@ -66,6 +66,21 @@
 // NOGO_REDE nao e o fim: faixas.c tenta de novo com recuo, sem limite, enquanto
 // a faixa estiver escolhida (ver mkvass_recuo_ms).
 #define MKVASS_FALHAS_MAX  5
+// Pausa apos o CDN pedir calma (#308) e recuo entre falhas: so os testes
+// encurtam (-D); na TV valem 10 s (dobra ate 60 s) e 0,5 s (ate 8 s).
+#ifndef MKVASS_PAUSA_CDN_INI_MS
+#define MKVASS_PAUSA_CDN_INI_MS 10000L
+#endif
+#ifndef MKVASS_PAUSA_CDN_MAX_MS
+#define MKVASS_PAUSA_CDN_MAX_MS 60000L
+#endif
+#ifndef MKVASS_RECUO_INI_MS
+#define MKVASS_RECUO_INI_MS 500L
+#endif
+#ifndef MKVASS_RECUO_MAX_MS
+#define MKVASS_RECUO_MAX_MS 8000L
+#endif
+static long pausasCdn;   // quantas pausas de CDN o modulo ja fez (testes)
 // Janela menor da varredura, depois de estouros de prazo: cada estouro corta a
 // janela pela metade ate aqui. 64 KB ainda cobre o cabecalho de um Cluster e
 // dezenas de blocos de legenda.
@@ -717,10 +732,10 @@ static void conferirCorte(Fio *f) {
 // so para parar ou trocar de faixa — o playhead andando nao encurta o recuo.
 static void esperarMs(Fio *f, long ms);
 static void recuar(Fio *f) {
-  long ms = 500L;
+  long ms = MKVASS_RECUO_INI_MS;
   int k;
-  for (k = 1; k < f->falhas && ms < 8000L; k++) ms *= 2;
-  if (ms > 8000L) ms = 8000L;
+  for (k = 1; k < f->falhas && ms < MKVASS_RECUO_MAX_MS; k++) ms *= 2;
+  if (ms > MKVASS_RECUO_MAX_MS) ms = MKVASS_RECUO_MAX_MS;
   esperarMs(f, ms);
 }
 
@@ -3084,9 +3099,10 @@ static void *trabalhar(void *arg) {
         // a faixa nao vai para a TV, e o video fica com a conexao so para ele.
         if (f->falhas >= MKVASS_FALHAS_MAX && !f->definitivo &&
             (f->ultErro == 28 || f->ultSt == 429 || f->ultSt >= 500)) {
-          f->pausaMs = f->pausaMs ? (f->pausaMs * 2 > 60000L ? 60000L : f->pausaMs * 2) : 10000L;
-          printf("[mkvass] CDN pediu calma (HTTP %d, curl %d): leitura da legenda em pausa %ld s\n",
-                 f->ultSt, f->ultErro, f->pausaMs / 1000);
+          f->pausaMs = f->pausaMs ? (f->pausaMs * 2 > MKVASS_PAUSA_CDN_MAX_MS ? MKVASS_PAUSA_CDN_MAX_MS : f->pausaMs * 2) : MKVASS_PAUSA_CDN_INI_MS;
+          __atomic_add_fetch(&pausasCdn, 1, __ATOMIC_RELAXED);
+          printf("[mkvass] CDN pediu calma (HTTP %d, curl %d): leitura da legenda em pausa %ld ms\n",
+                 f->ultSt, f->ultErro, f->pausaMs);
           fflush(stdout);
           f->falhas = 1;
           esperarMs(f, f->pausaMs);
@@ -3330,6 +3346,8 @@ void mkvass_retomar_segurando(void) { retomar(1); }
 // um minuto volta, e a legenda do app volta com ela. O resto e do arquivo
 // (nao e MKV, faixa nao e ASS, sem indice) ou do servidor (recusa HTTP
 // definitiva, Range recusado de novo) e nao muda tentando.
+long mkvass_pausas_cdn(void) { return __atomic_load_n(&pausasCdn, __ATOMIC_RELAXED); }
+
 long mkvass_recuo_ms(int estado, int falhas, int recusasRange) {
   static const long recuo[] = { 2000L, 5000L, 15000L, 30000L, 60000L };
   // Resto recusado: 2 s e 5 s depois o CDN recusava igual (#92, v1.4.7).

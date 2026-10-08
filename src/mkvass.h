@@ -106,6 +106,8 @@ void mkvass_retomar_segurando(void);
 // volta a entregar, a faixa volta ao overlay.
 #define MKVASS_TENTATIVAS_OVERLAY 2
 long mkvass_recuo_ms(int estado, int falhas, int recusasRange);
+// Quantas pausas de "CDN pediu calma" (429/5xx/timeout) o modulo ja fez. Testes.
+long mkvass_pausas_cdn(void);
 
 // PRE-BUSCA ANTES DO VIDEO (#92, v1.4.7, webOS 25 + Real-Debrid). No registro
 // do relato, todo Range do mkvass feito COM O VIDEO TOCANDO era cortado (77465
