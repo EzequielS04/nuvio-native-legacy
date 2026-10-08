@@ -17,13 +17,16 @@
 #define rede_postar_st    teste_rede_postar
 #define rede_baixar_st    teste_rede_st
 #define rede_baixar_com   teste_rede_com
-#define sessao_token      teste_sessao_token
+#define sessao_token_copiar teste_sessao_token_copiar
+#define sessao_logada teste_sessao_logada
 #ifndef REC_C
 #define REC_C "../src/recomenda.c"
 #endif
 #include REC_C
 
-const char *teste_sessao_token(void) { return "tok-teste"; }
+// sessao.c (#203) entrega o token por copia.
+int teste_sessao_token_copiar(char *d, size_t n) { snprintf(d, n, "tok-teste"); return 1; }
+int teste_sessao_logada(void) { return 1; }
 static int nPedidosGet;
 static char *dup(const char *s) { char *r = malloc(strlen(s) + 1); strcpy(r, s); return r; }
 char *teste_rede_etag(const char *u, int seg, const char *const *cab, int *st, char *etag, unsigned te) {

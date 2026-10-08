@@ -326,10 +326,13 @@ void avisos_sinal(const char *evento, float rssMb) {
 
 static int idHead(const char **cab, char *aut, size_t nAut, char *via, size_t nVia, char *chave, size_t nChave) {
   const char *tcab[4];
+  char tok[3000];
   if (trakt_ativo() && trakt_cabecalhos(tcab, aut, nAut, chave, nChave)) {
     snprintf(via, nVia, "X-Nuvio-Auth: trakt");
-  } else if (sessao_token()[0]) {
-    snprintf(aut, nAut, "Authorization: Bearer %s", sessao_token());
+  } else if (sessao_token_copiar(tok, sizeof tok)) {
+    // Pela COPIA (#203): a renovacao reescreve o token em outro fio.
+    snprintf(aut, nAut, "Authorization: Bearer %s", tok);
+    memset(tok, 0, sizeof tok);
     snprintf(via, nVia, "X-Nuvio-Auth: nuvio");
   } else return 0;
   cab[0] = aut; cab[1] = via; cab[2] = "Content-Type: application/json"; cab[3] = NULL;

@@ -47,6 +47,7 @@ int catordem_tem_ocultar_sublinhado(void) { return 0; }
 int catordem_ocultar_sublinhado(void) { return 0; }
 int col_n(void) { return 0; }
 const ColFolder *col_folder(int i) { (void)i; return NULL; }
+unsigned col_hash_estrutura(void) { return 0; }
 int addons_n(void) { return 0; }
 const char *addons_base(int i) { (void)i; return ""; }
 int addons_tem_catalogo(int i) { (void)i; return 0; }

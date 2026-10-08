@@ -572,7 +572,7 @@ int recomenda_identidade_situacao(void) {
   SDL_LockMutex(mtx);
   r = !identRecurso ? REC_IDENT_INDISPONIVEL
     : identTrakt[0] ? REC_IDENT_UNIDA
-    : (trakt_ativo() && sessao_token()[0]) ? REC_IDENT_PODE_UNIR : REC_IDENT_SEM_TRAKT;
+    : (trakt_ativo() && sessao_logada()) ? REC_IDENT_PODE_UNIR : REC_IDENT_SEM_TRAKT;
   SDL_UnlockMutex(mtx);
   return r;
 }
@@ -1368,14 +1368,24 @@ static int perfilCab(char *dst, size_t tam, int viaNuvio) {
 // amigos pronta (users/me/following), entao ela vira contatos sem o dono
 // digitar codigo nenhum. 0 quando nao ha identidade — e "nao ha" e um estado
 // normal, nao um erro: o app pode estar no primeiro segundo do arranque.
+// "Authorization: Bearer <token da conta>" em dst; 0 sem sessao de usuario.
+// Pela COPIA do token (#203): a renovacao reescreve o buffer da sessao em
+// outro fio, e ler direto dele podia mandar um JWT pela metade.
+static int bearerSessao(char *dst, size_t n) {
+  char t[3000];
+  int ok = sessao_token_copiar(t, sizeof t);
+  if (ok) snprintf(dst, n, "Authorization: Bearer %s", t);
+  memset(t, 0, sizeof t);
+  return ok;
+}
+
 static int identidade(const char **cab) {
   const char *tcab[4];
   char chave[160];
   if (trakt_ativo() && trakt_cabecalhos(tcab, fioAut, sizeof fioAut,
                                         chave, sizeof chave)) {
     snprintf(fioVia, sizeof fioVia, "X-Nuvio-Auth: trakt");
-  } else if (sessao_token()[0]) {
-    snprintf(fioAut, sizeof fioAut, "Authorization: Bearer %s", sessao_token());
+  } else if (bearerSessao(fioAut, sizeof fioAut)) {
     snprintf(fioVia, sizeof fioVia, "X-Nuvio-Auth: nuvio");
   } else {
     return 0;
@@ -2419,11 +2429,13 @@ static void tratarIdentidade(const char **cab) {
       // confere no Supabase que o indice e desta conta).
       const ContaPerfil *pf = perfis_item_ativo();
       int indice = (pf && !pf->primario && pf->indice >= 1) ? pf->indice : 0;
-      if (sessao_token()[0]) {
-        jsonEsc(tok, sizeof tok, sessao_token());
+      char st0[3000];
+      if (sessao_token_copiar(st0, sizeof st0)) {
+        jsonEsc(tok, sizeof tok, st0);
         if (indice) snprintf(corpo, sizeof corpo, "{\"provedor\":\"nuvio\",\"token\":\"%s\",\"perfil\":%d}", tok, indice);
         else snprintf(corpo, sizeof corpo, "{\"provedor\":\"nuvio\",\"token\":\"%s\"}", tok);
       }
+      memset(st0, 0, sizeof st0);
     } else {
       // Pela conta Nuvio: a prova e o token do Trakt.
       const char *tcab[4];
@@ -2610,8 +2622,7 @@ static int identidadeEm(const char **cab, char *aut, size_t na, char *via, size_
   char chave[160];
   if (trakt_ativo() && trakt_cabecalhos(tcab, aut, na, chave, sizeof chave)) {
     snprintf(via, nv, "X-Nuvio-Auth: trakt");
-  } else if (sessao_token()[0]) {
-    snprintf(aut, na, "Authorization: Bearer %s", sessao_token());
+  } else if (bearerSessao(aut, na)) {
     snprintf(via, nv, "X-Nuvio-Auth: nuvio");
   } else return 0;
   cab[0] = aut; cab[1] = via; cab[2] = NULL; cab[3] = NULL;
@@ -3094,8 +3105,7 @@ int recomenda_cabecalhos(const char **cab, char *aut, size_t na, char *via, size
   if (!recomenda_ativo() || !cab || !aut || !via || !perfil) return 0;
   if (trakt_ativo() && trakt_cabecalhos(tcab, aut, na, chave, sizeof chave)) {
     snprintf(via, nv, "X-Nuvio-Auth: trakt");
-  } else if (sessao_token()[0]) {
-    snprintf(aut, na, "Authorization: Bearer %s", sessao_token());
+  } else if (bearerSessao(aut, na)) {
     snprintf(via, nv, "X-Nuvio-Auth: nuvio");
   } else return 0;
   cab[0] = aut; cab[1] = via; cab[2] = NULL; cab[3] = NULL;
