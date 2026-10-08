@@ -184,6 +184,30 @@ int main(void) {
     trAberto = 0; trTocando = 0;
     heroTrailerTentado = 1;
   } else puts("--  ajuste do trailer do destaque desligado: caso (6) nao se aplica");
+
+  // (7) HOME ESCONDIDA POR TRAS DA ESCOLHA DE PERFIL (C9, 08/10, 2.0.3): app.c
+  // chama home_atualizar com a tela de escolha na frente, o desenho NUNCA roda e
+  // quem efetiva a troca e o desenho. O carrossel marcava heroDesejado a cada
+  // 7 s e ele ficava preso (log: 38 min, 0 `[hero] espera`, 327 `desejado=322`).
+  // Escondida, a home nao escolhe nada e a diagnostica nao fala; ao voltar, o
+  // carrossel recomeca do relogio rearmado.
+  heroAutoDesligado = 0;
+  heroTrailerTentado = 1;
+  trAberto = 0; trTocando = 0;
+  heroDesejado = -1;
+  heroPendente = heroAtual;
+#ifndef SEM_OCULTA
+  home_oculta(1);
+#endif
+  avanca_s(60);
+  assert(heroDesejado < 0);
+  puts("ok  home escondida (escolha de perfil): o carrossel nao marca troca");
+#ifndef SEM_OCULTA
+  home_oculta(0);
+#endif
+  avanca_s(30);
+  assert(heroDesejado >= 0);
+  puts("ok  home de volta: a rotacao recomeca");
   puts("herorotacao: PASS");
   return 0;
 }

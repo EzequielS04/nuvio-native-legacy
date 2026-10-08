@@ -363,9 +363,10 @@ static unsigned heroTardeEm;
 static int heroPreItem = -1;
 // O item cuja pre-busca ja foi anunciada no log (uma linha por item).
 static int heroPreLogado = -1;
-// Diagnostico de `pre-busca nao saiu`: o ciclo (heroTrocaEm) e o instante da
-// ultima linha, para sair uma por ciclo e nao mais que uma a cada 5 s.
-static Uint32 heroPreDiagCiclo, heroPreDiagEm;
+// Diagnostico de `pre-busca nao saiu`: assinatura do motivo e instante da
+// ultima linha (ver o bloco no passo).
+static Uint32 heroPreDiagEm;
+static unsigned heroPreDiagSig;
 
 // --- EXPANSAO DO CARTAZ FOCADO EM REPOUSO ------------------------------------
 //
@@ -2633,6 +2634,15 @@ void home_ir_topo(void) {
   heroUltTecla = SDL_GetTicks();
 }
 
+// A HOME SE MONTA POR TRAS DA ESCOLHA DE PERFIL (app.c), mas NAO E PINTADA. Sem
+// isto o carrossel girava no vazio: marcava o proximo desejo a cada 7 s, o
+// desenho (quem efetiva a troca) nunca rodava e o desejo ficava preso — medido
+// na C9 (08/10, 2.0.3): 38 min na escolha de perfil, 0 linhas `[hero] espera` e
+// 327 de `pre-busca nao saiu: desejado=322`. Escondida, vale o mesmo que o
+// detalhe/player na frente: o hero nao muda e o relogio e rearmado na volta.
+static int homeOculta;
+void home_oculta(int oculta) { homeOculta = oculta ? 1 : 0; }
+
 void home_atualizar(float dt, Uint32 agora) {
   sincronizarFileiras();
   // A FILEIRA DE AMIGOS tem tantas colunas quantos rostos (+ "Adicionar"), e
@@ -2671,7 +2681,7 @@ void home_atualizar(float dt, Uint32 agora) {
   // troca vencer nesse intervalo, a volta exibiria uma arte que nunca foi
   // observada e a seleção de logo poderia divergir do detalhe que acabou de
   // sair. O relógio é rearmado na volta, preservando a escolha visível.
-  const int heroOculto = detail_aberto() || player_aberto();
+  const int heroOculto = detail_aberto() || player_aberto() || homeOculta;
   static int heroOcultoAntes;
   if (heroOculto) {
     if (!heroOcultoAntes) {
@@ -2839,16 +2849,22 @@ void home_atualizar(float dt, Uint32 agora) {
         if (proximo < 0) proximo = 0;
         if (proximo != heroAtual) heroPreItem = proximo;
       }
-      // DIAGNOSTICO, uma linha por ciclo do carrossel e no maximo uma a cada
-      // 5 s: a janela abriu e a pre-busca nao saiu — diz quem a impediu.
-      if (janela && heroPreItem < 0 && heroPreDiagCiclo != heroTrocaEm &&
-          agora - heroPreDiagEm >= 5000) {
-        heroPreDiagCiclo = heroTrocaEm; heroPreDiagEm = agora;
-        printf("[hero] pre-busca nao saiu: alvo=%d desejado=%d autoDesligado=%d "
-               "segurando=%d tocando=%d focoHero=%d ocio=%d lista=%d\n",
-               alvo, heroDesejado, heroAutoDesligado, seg, tocando, focoHero,
-               (int)(agora - heroUltTecla), heroNLista());
-        fflush(stdout);
+      // DIAGNOSTICO: a janela abriu e a pre-busca nao saiu — diz quem a
+      // impediu. Sai quando o MOTIVO muda (e no maximo a cada 5 s) ou, com o
+      // mesmo motivo, uma vez por minuto: na C9 eram 327 linhas em 38 min.
+      if (janela && heroPreItem < 0) {
+        const unsigned sig = (unsigned)(alvo >= 0) | (unsigned)(heroDesejado >= 0) << 1 |
+                             (unsigned)heroAutoDesligado << 2 | (unsigned)seg << 3 |
+                             (unsigned)tocando << 4 | (unsigned)focoHero << 5;
+        const Uint32 desde = agora - heroPreDiagEm;
+        if (heroPreDiagEm == 0 || (sig != heroPreDiagSig && desde >= 5000) || desde >= 60000) {
+          heroPreDiagSig = sig; heroPreDiagEm = agora ? agora : 1;
+          printf("[hero] pre-busca nao saiu: alvo=%d desejado=%d autoDesligado=%d "
+                 "segurando=%d tocando=%d focoHero=%d ocio=%d lista=%d\n",
+                 alvo, heroDesejado, heroAutoDesligado, seg, tocando, focoHero,
+                 (int)(agora - heroUltTecla), heroNLista());
+          fflush(stdout);
+        }
       }
     }
   }

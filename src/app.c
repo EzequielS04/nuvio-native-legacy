@@ -2841,7 +2841,9 @@ void app_atualizar(float dt, Uint32 agora) {
     // segundos que o cache de 844 ms existe para economizar. Custa uma
     // atualizacao sem desenho: a tela de escolha e opaca e a home nao e pintada
     // aqui (ver desenharTelas).
+    home_oculta(1);          // montada, nao pintada: o destaque nao gira
     home_atualizar(dt, agora);
+    home_oculta(0);
     perfilsel_atualizar(dt, agora);
     if (perfilsel_pediu_repetir()) { sync_iniciar(); return; }
     if (perfilsel_quer_sair()) {
