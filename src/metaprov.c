@@ -185,6 +185,18 @@ char *metaprov_meta_com(const char *tipo, const char *id, int seg_cine,
   return c;
 }
 
+char *metaprov_meta_cinemeta_com(const char *tipo, const char *id, int seg,
+                                 MetaprovGet get, void *ctx) {
+  char url[400], *c;
+  int st = 0;
+  if (!get) get = metaprov_get_rede;
+  if (!tipo || !id || !id[0]) return NULL;
+  metaprov_url_meta(url, sizeof url, METAPROV_CINEMETA, tipo, id, NULL);
+  c = get(url, seg, &st, ctx);
+  if (c && !metaprov_meta_valido(c)) { free(c); c = NULL; }
+  return c;
+}
+
 char *metaprov_meta(const char *tipo, const char *id, int seg_cine, int *prov) {
   return metaprov_meta_com(tipo, id, seg_cine, metaprov_get_rede, NULL, prov);
 }

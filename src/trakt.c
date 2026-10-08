@@ -477,11 +477,23 @@ static void fichaGuardar(const char *tipo, const char *id, const char *corpo) {
   pthread_mutex_unlock(&fichaTrava);
 }
 
+// Ficha do Cinemeta (so ele) em cache proprio, para conferir episodios que a
+// ficha do Nuvio nao lista. Devolve copia (free) ou NULL.
+static char *cinemetaDaSerie(const char *tipo, const char *serie) {
+  char *c = fichaBuscar("cinemeta-series", serie);
+  if (c) return c;
+  c = metaprov_meta_cinemeta_com(tipo, serie, 8, NULL, NULL);
+  if (c) fichaGuardar("cinemeta-series", serie, c);
+  return c;
+}
+
 static int enfeitar(CatItem *d, const char *tipo) {
   char url[300], *corpo;
   char serie[24];
   const char *dp;
-  int precisaCinemeta, proximo, daConta, virou = 0;
+  int precisaCinemeta, proximo, daConta, virou = 0, provFicha = -1;
+  const char *epc;   // de onde saem o nome e a data do episodio "a seguir"
+  char *corpoCine = NULL;
   // Arte PRIMEIRO, sem rede: mesma URL que trakt_lista ja monta. Antes cada
   // item do historico/local fazia GET ao Cinemeta so para ler poster/logo —
   // medido 2,1 s no Mac com paralelismo, e pior: se o Cinemeta falhava o
@@ -527,7 +539,7 @@ static int enfeitar(CatItem *d, const char *tipo) {
       free(corpo); corpo = NULL; deCache = 0;
     }
     if (!corpo) {
-      corpo = metaprov_meta(tipo, serie, 8, NULL);
+      corpo = metaprov_meta(tipo, serie, 8, &provFicha);
       if (corpo) {
         fichaGuardar(tipo, serie, corpo);
         fichaChave(dk, sizeof dk, tipo, serie);
@@ -544,9 +556,34 @@ static int enfeitar(CatItem *d, const char *tipo) {
   // "A SEGUIR" SO ENTRA SE O EPISODIO EXISTE. Depois do ultimo da temporada o
   // proximo e o primeiro da seguinte; depois do ultimo da serie nao ha
   // proximo, e a serie nao entra — nao e "continuar", e "acabou".
+  epc = corpo;
+  if (proximo && !episodioExiste(corpo, serie, d->temporada, d->episodio) &&
+      !episodioExiste(corpo, serie, d->temporada + 1, 1) &&
+      provFicha != METAPROV_CINEMETA && !strcmp(tipo, "series")) {
+    // A ficha do Nuvio pode estar atras do Cinemeta (The Rookie: 1 futuro
+    // contra 18). Antes de largar o item, confere la; a ficha do Nuvio segue
+    // valendo para todo o resto.
+    corpoCine = cinemetaDaSerie(tipo, serie);
+    if (corpoCine) {
+      int t = -1, e = -1;
+      if (episodioExiste(corpoCine, serie, d->temporada, d->episodio)) {
+        t = d->temporada; e = d->episodio;
+      } else if (episodioExiste(corpoCine, serie, d->temporada + 1, 1)) {
+        t = d->temporada + 1; e = 1;
+      }
+      if (t >= 0) {
+        printf("[trakt] episodio ausente na ficha Nuvio; Cinemeta tem: %s S%dE%d\n",
+               serie, t, e);
+        epc = corpoCine;
+      }
+    }
+    if (epc == corpo)
+      printf("[trakt] episodio ausente na ficha Nuvio; Cinemeta tambem nao tem: %s S%dE%d\n",
+             serie, d->temporada, d->episodio);
+  }
   if (proximo) {
-    if (!episodioExiste(corpo, serie, d->temporada, d->episodio)) {
-      if (episodioExiste(corpo, serie, d->temporada + 1, 1)) {
+    if (!episodioExiste(epc, serie, d->temporada, d->episodio)) {
+      if (episodioExiste(epc, serie, d->temporada + 1, 1)) {
         char velho[sizeof d->imdb];
         snprintf(velho, sizeof velho, "%s", d->imdb);
         d->temporada++; d->episodio = 1;
@@ -555,13 +592,13 @@ static int enfeitar(CatItem *d, const char *tipo) {
         // (ehProximo do id novo da 0); mexer nele nao e deste conserto.
         if (daConta) cwo_conta_trocar(velho, d->imdb);
         virou = 1;
-      } else { free(corpo); return 0; }
+      } else { free(corpo); free(corpoCine); return 0; }
     }
     // O nome do episodio, para a legenda do card.
     { char chave[48]; const char *v;
       snprintf(chave, sizeof chave, "\"id\":\"%s:%d:%d\"", serie, d->temporada, d->episodio);
-      v = strstr(corpo, chave);
-      if (v) { const char *ini = v; while (ini > corpo && *ini != '{') ini--;
+      v = strstr(epc, chave);
+      if (v) { const char *ini = v; while (ini > epc && *ini != '{') ini--;
                js_texto(ini, js_fim(ini), "name", d->nomeEpisodio, sizeof d->nomeEpisodio); } }
   }
   // A DATA DE ESTREIA DO EPISODIO "A SEGUIR" (issue #127), do mesmo videos[]
@@ -574,11 +611,11 @@ static int enfeitar(CatItem *d, const char *tipo) {
     char chave[48], quando[40] = "";
     const char *v;
     snprintf(chave, sizeof chave, "\"id\":\"%s:%d:%d\"", serie, d->temporada, d->episodio);
-    v = strstr(corpo, chave);
+    v = strstr(epc, chave);
     if (v) {
       const char *ini = v;
       long long ms;
-      while (ini > corpo && *ini != '{') ini--;
+      while (ini > epc && *ini != '{') ini--;
       if (!js_texto(ini, js_fim(ini), "released", quando, sizeof quando))
         js_texto(ini, js_fim(ini), "firstAired", quando, sizeof quando);
       ms = js_ms_iso(quando);
@@ -593,12 +630,12 @@ static int enfeitar(CatItem *d, const char *tipo) {
           !cwo_virada_aceita(ms > 0 ? ms : CWO_SEM_DATA, (long long)time(NULL) * 1000LL)) {
         printf("[trakt] a seguir da conta %s: temporada nova sem data ou a mais de 7 dias; fora\n",
                d->imdb);
-        free(corpo);
+        free(corpo); free(corpoCine);
         return 0;
       }
     } else {
       printf("[trakt] estreia: %s fora do videos[] do Cinemeta; sem data\n", d->imdb);
-      if (daConta && virou) { free(corpo); return 0; }
+      if (daConta && virou) { free(corpo); free(corpoCine); return 0; }
     }
   }
   // So completa buracos: nao trocar metahub por vazio se o Cinemeta omitir.
@@ -690,6 +727,7 @@ static int enfeitar(CatItem *d, const char *tipo) {
     }
   }
   free(corpo);
+  free(corpoCine);
   return d->poster[0] != 0;
 }
 
