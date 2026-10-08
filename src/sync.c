@@ -45,6 +45,7 @@ void servidores_esquecer_todos(void);   // servidores.c: wipe every profile's to
 #include "jsw.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <pthread.h>
 #include <dirent.h>
@@ -89,19 +90,55 @@ static unsigned addonsRev, addonsRevCiclo;
 static int addonsPerfilCiclo, addonsLocalCiclo, nAddonsEnv;
 static char addonsEdicaoCiclo[37];
 static AddonRemoto addonsEnv[SY_ADD_MAX];
+// #360: base da edicao deste ciclo (copiada em sync_iniciar) e o aviso do fio
+// para sync_passo de que a edicao saiu (confirmada ou descartada) e a lista
+// em addonsRem pode ser aplicada ja neste ciclo.
+static uint64_t addonsBaseCiclo[SY_ADD_MAX];
+static int nAddonsBaseCiclo = -1;
+static volatile int addonsAplicarCiclo;
 static pthread_mutex_t addonsTrava = PTHREAD_MUTEX_INITIALIZER;
 // Cada identidade guarda sua edicao, inclusive quando o disco falha e a pessoa
 // troca de perfil. URLs ficam apenas na pasta de dados; conta-*.txt tambem sai
 // dos pacotes caso essa pasta tenha caido no ultimo recurso (art/).
 #define SY_ADD_PREFIXO "conta-addons-pend-"
+// #360 ("add-ons get out of sync"). A edicao guarda tambem a BASE: as URLs
+// (hash) da lista da conta que esta TV tinha aplicado quando a pessoa mexeu.
+// Sem ela o push, que SUBSTITUI a lista do perfil na conta, apagava o addon
+// instalado no celular entre a edicao daqui e o ciclo seguinte (que pode ser
+// horas depois: o ciclo nao roda com o player aberto). Com a base, o push e
+// uma mescla de tres vias com a leitura da conta DESTE ciclo — ver
+// addonsMesclar. nBase = -1: base desconhecida (edicao gravada por versao
+// antiga, ou feita antes do primeiro pull desta abertura): nada que esta na
+// conta e falta aqui e tirado.
+// `recusas`: pushes recusados com 4xx com a leitura da conta funcionando no
+// mesmo ciclo. Vai para o disco, para o reinicio nao zerar a conta.
+#define SY_ADD_RECUSAS 3
 typedef struct AddonsPendencia {
   struct AddonsPendencia *prox;
   char dono[80], edicao[37];
-  int perfil, n, pendente, gravada;
+  int perfil, n, pendente, gravada, nBase, recusas;
   unsigned rev;
+  uint64_t base[SY_ADD_MAX];
   AddonRemoto lista[SY_ADD_MAX];
 } AddonsPendencia;
 static AddonsPendencia *addonsFila;
+// A ultima lista da conta APLICADA nesta TV (sync_passo), de quem e de qual
+// perfil de addons. Sob addonsTrava. nAddonsBase = -1: nenhuma nesta abertura.
+static uint64_t addonsBase[SY_ADD_MAX];
+static int nAddonsBase = -1, addonsBasePerfil;
+static char addonsBaseDono[80];
+static uint64_t addonsUrlHash(const char *u) {
+  uint64_t h = 1469598103934665603ULL;
+  const char *b = nv_longa_bruto(u) ? nv_longa_bruto(u) : u;
+  for (; b && *b; b++) { h ^= (unsigned char)*b; h *= 1099511628211ULL; }
+  return h;
+}
+static int addonsNaBase(const uint64_t *base, int n, const char *u) {
+  uint64_t h = addonsUrlHash(u);
+  int i;
+  for (i = 0; i < n; i++) if (base[i] == h) return 1;
+  return 0;
+}
 static char addonsContexto[80];
 static int addonsContextoPerfil;
 static char addonsLeituraDono[80];
@@ -157,6 +194,17 @@ static int addonsGuardar(AddonsPendencia *p) {
   jsw_iniciar(&w); jsw_obj_ini(&w);
   jsw_ci(&w, "version", 1); jsw_cs(&w, "owner", p->dono);
   jsw_ci(&w, "profile", p->perfil); jsw_cs(&w, "edit", p->edicao);
+  if (p->recusas > 0) jsw_ci(&w, "refused", p->recusas);
+  if (p->nBase >= 0) {
+    // "v" + 16 hex por URL: nunca vazio, entao ausente = base desconhecida.
+    char b[1 + SY_ADD_MAX * 16 + 1];
+    size_t k = 0;
+    b[k++] = 'v';
+    for (i = 0; i < p->nBase; i++)
+      k += (size_t)snprintf(b + k, sizeof b - k, "%016llx", (unsigned long long)p->base[i]);
+    b[k] = 0;
+    jsw_cs(&w, "base", b);
+  }
   jsw_chave(&w, "addons"); jsw_arr_ini(&w);
   for (i = 0; i < p->n; i++) {
     jsw_obj_ini(&w); jsw_cs(&w, "url", nv_longa_bruto(p->lista[i].url) ? nv_longa_bruto(p->lista[i].url) : p->lista[i].url);
@@ -218,6 +266,21 @@ static int addonsLer(AddonsPendencia *p, const char *texto) {
     p->lista[n++].ativo = !strcmp(habilitado, "true");
   }
   if (!n) return 0; // nunca interpretar arquivo incompleto como remocao total
+  p->recusas = (int)js_num(texto, fim, "refused", 0);
+  if (p->recusas < 0) p->recusas = 0;
+  p->nBase = -1;
+  { static char b[1 + SY_ADD_MAX * 16 + 2];   // sob addonsTrava
+    size_t len;
+    if (js_texto_raiz(texto, "base", b, sizeof b) && b[0] == 'v' &&
+        (len = strlen(b + 1)) % 16 == 0 && len / 16 <= SY_ADD_MAX) {
+      size_t i;
+      p->nBase = (int)(len / 16);
+      for (i = 0; i < len / 16; i++) {
+        char h[17];
+        memcpy(h, b + 1 + i * 16, 16); h[16] = 0;
+        p->base[i] = (uint64_t)strtoull(h, NULL, 16);
+      }
+    } }
   p->n = n; p->pendente = p->gravada = 1; p->rev = ++addonsRev;
   return 1;
 }
@@ -406,17 +469,34 @@ static int perfilDoCicloAtual(void) {
   return contaDoCicloAtual() && perfilDoCiclo == perfis_ativo();
 }
 
-static void addonsConfirmar(void) {
+// Encerra a edicao DESTE ciclo. `st` = 0: a conta confirmou (2xx). `st` 4xx:
+// a conta recusou o push com a leitura funcionando no mesmo ciclo (#360) —
+// conta uma recusa e, na SY_ADD_RECUSAS-esima, descarta a edicao: uma recusa
+// definitiva (corpo que o servidor nunca vai aceitar) prendia a TV para
+// sempre, porque com edicao pendente o ciclo nao aplica a lista da conta, e o
+// arquivo devolvia a pendencia a cada abertura. 1 quando a edicao saiu.
+static int addonsEncerrar(int st) {
   AddonsPendencia *p;
   char nome[220], edicao[37], dono[80], *texto;
-  int confere;
+  int confere, saiu = 0;
   pthread_mutex_lock(&addonsTrava);
   p = addonsEdicao(usuarioDoCiclo, addonsPerfilCiclo);
   if (!perfilDoCicloAtual() || addonsPerfilCiclo != perfis_ativo_addons() ||
       !p || !p->pendente || !p->gravada || p->rev != addonsRevCiclo ||
       strcmp(p->edicao, addonsEdicaoCiclo) ||
       !addonsNome(nome, sizeof nome, p->dono, p->perfil)) {
-    pthread_mutex_unlock(&addonsTrava); return;
+    pthread_mutex_unlock(&addonsTrava); return 0;
+  }
+  if (st > 0) {
+    p->recusas++;
+    if (p->recusas < SY_ADD_RECUSAS) {
+      printf("[sync] push de addons recusado pela conta (HTTP %d), %d de %d: edicao local mantida\n",
+             st, p->recusas, SY_ADD_RECUSAS);
+      fflush(stdout);
+      addonsGuardar(p);
+      pthread_mutex_unlock(&addonsTrava);
+      return 0;
+    }
   }
   // Nao apagar sequer uma edicao diferente que apareca no disco entre ciclos.
   // O mesmo mutex serializa a leitura/remocao com a gravacao de uma edicao nova.
@@ -428,16 +508,20 @@ static void addonsConfirmar(void) {
   if (confere && dados_apagar(nome)) {
     char tmp[224];
     p->pendente = 0;
+    saiu = 1;
     snprintf(tmp, sizeof tmp, "%s.tmp", nome); dados_apagar(tmp);
+    if (st > 0) printf("[sync] edicao de addons recusada %d vezes pela conta (HTTP %d): descartada, a TV volta a seguir a conta\n",
+                   p->recusas, st);
   } else {
     // NULL tambem pode ser falha de leitura/alocacao: nao e prova de que o
     // arquivo sumiu. Regravar antes da retentativa recupera ambos os casos.
     if (!texto) p->gravada = 0;
     printf("[sync] ACK de addons sem remover edicao local: retentativa preservada\n");
-    fflush(stdout);
   }
+  fflush(stdout);
   free(texto);
   pthread_mutex_unlock(&addonsTrava);
+  return saiu;
 }
 
 static void addonsEsquecer(void) {
@@ -446,6 +530,7 @@ static void addonsEsquecer(void) {
   struct dirent *e;
   const char *pasta = dados_dir();
   pthread_mutex_lock(&addonsTrava);
+  nAddonsBase = -1; addonsBaseDono[0] = 0;
   // Inclui arquivos de outras identidades e os temporarios interrompidos; o
   // logout deste aparelho limpa todas as pendencias, nao so o perfil aberto.
   if (pasta && *pasta && (d = opendir(pasta)) != NULL) {
@@ -614,17 +699,82 @@ static int puxarAddons(void) {
   return 1;
 }
 
-static void empurrarAddons(void) {
-  const AddonRemoto *atuais = addonsEnv;
+// #360: a lista que sobe = a edicao desta TV MESCLADA com a leitura da conta
+// deste ciclo (addonsRem), em tres vias contra a base da edicao:
+//   - addon daqui que a conta tambem tem: vale o daqui (ligado/desligado, nome);
+//   - addon daqui que falta na conta: se estava na base, outro aparelho o
+//     TIROU e ele nao volta; se nao estava (instalado aqui, ou base
+//     desconhecida), sobe;
+//   - addon da conta que falta aqui: outro aparelho o instalou depois da base,
+//     entra no fim (esta TV nao tem como remover addon, entao "falta aqui" nunca
+//     e remocao feita aqui).
+// O web faz o mesmo no pull antes de empurrar (librarySyncService.js,
+// prepareRemoteAddonSnapshot: uniao, ordem da conta primeiro) — so que la a
+// janela entre a edicao e o push e o debounce de segundos; aqui e o ciclo
+// seguinte, que pode ser horas depois.
+static AddonRemoto addonsMescla[SY_ADD_MAX];
+static int addonsUrlIgual(const AddonRemoto *a, const AddonRemoto *b) {
+  const char *x = nv_longa_bruto(a->url) ? nv_longa_bruto(a->url) : a->url;
+  const char *y = nv_longa_bruto(b->url) ? nv_longa_bruto(b->url) : b->url;
+  return !strcmp(x, y);
+}
+static int addonsMesclar(void) {
+  int i, j, n = 0, tirados = 0, novos = 0;
+  // Leitura VAZIA nao prova remocao (o 200 com [] de perfil errado, caso do
+  // Mane155; o web tambem nao confia num snapshot vazio): sem base, nada sai.
+  int usarBase = nAddonsBaseCiclo >= 0 && nAddonsRem > 0;
+  for (i = 0; i < nAddonsEnv; i++) {
+    int naConta = 0;
+    for (j = 0; j < nAddonsRem && !naConta; j++) naConta = addonsUrlIgual(&addonsEnv[i], &addonsRem[j]);
+    if (!naConta && usarBase &&
+        addonsNaBase(addonsBaseCiclo, nAddonsBaseCiclo, addonsEnv[i].url)) { tirados++; continue; }
+    addonsMescla[n++] = addonsEnv[i];
+  }
+  for (j = 0; j < nAddonsRem && n < SY_ADD_MAX; j++) {
+    int aqui = 0;
+    for (i = 0; i < nAddonsEnv && !aqui; i++) aqui = addonsUrlIgual(&addonsEnv[i], &addonsRem[j]);
+    if (!aqui) { addonsMescla[n++] = addonsRem[j]; novos++; }
+  }
+  if (tirados || novos)
+    printf("[sync] edicao de addons mesclada com a conta: %d de outro aparelho mantido(s), %d tirado(s) la nao volta(m)%s\n",
+           novos, tirados, usarBase ? "" : " (base desconhecida)");
+  return n;
+}
+
+// `puxou`: a leitura da conta deste ciclo respondeu (puxarAddons == 1).
+static void empurrarAddons(int puxou) {
+  const AddonRemoto *atuais = addonsMescla;
   Jsw w;
   char *r;
   int st = 0, n, i;
 
-  n = nAddonsEnv;
   // Lista local vazia NAO vira push. Um push vazio apaga os addons da pessoa em
   // todos os aparelhos dela, e "ainda nao carreguei nada" e indistinguivel de
   // "o usuario removeu tudo" deste lado.
-  if (n <= 0) return;
+  if (nAddonsEnv <= 0) return;
+  // SEM A LEITURA DA CONTA DESTE CICLO NAO HA COM O QUE MESCLAR (#360): o
+  // push substitui a lista inteira, e subir a daqui as cegas apagaria o que
+  // outro aparelho instalou. A edicao espera o proximo ciclo.
+  if (puxou != 1) {
+    printf("[sync] edicao de addons aguarda: sem leitura da conta neste ciclo\n");
+    fflush(stdout);
+    return;
+  }
+  // A CONTA TEM ADDON QUE NAO CABE NESTA TV (#201/#203): a lista mesclada
+  // sairia sem ele, e o push o apagaria da conta. Nunca vai dar para subir com
+  // seguranca: a edicao cai e a TV volta a seguir a conta.
+  if (addonsDeFora > 0) {
+    printf("[sync] edicao de addons descartada: %d addon(s) da conta nao cabem nesta TV\n",
+           addonsDeFora);
+    if (addonsEncerrar(-1)) addonsAplicarCiclo = 1;
+    return;
+  }
+  n = addonsMesclar();
+  if (n <= 0) {
+    // Tudo o que havia aqui foi tirado em outro aparelho: a conta ja esta certa.
+    if (addonsEncerrar(0)) addonsAplicarCiclo = 1;
+    return;
+  }
 
   jsw_iniciar(&w);
   jsw_obj_ini(&w);
@@ -647,9 +797,20 @@ static void empurrarAddons(void) {
   r = sessao_rpc("sync_push_addons", jsw_texto_final(&w), &st);
   jsw_livre(&w);
   if (!ok2xx(r, st)) {
-    printf("[sync] push de addons falhou (HTTP %d): edicao local mantida\n", st);
-    if (contacache_falha_transitoria(st)) falhaServidor(st);
-  } else addonsConfirmar();
+    if (contacache_falha_transitoria(st)) {
+      printf("[sync] push de addons falhou (HTTP %d): edicao local mantida\n", st);
+      falhaServidor(st);
+    } else if (addonsEncerrar(st)) {
+      // Recusada de vez: a leitura deste ciclo (addonsRem) e a lista certa.
+      addonsAplicarCiclo = 1;
+    }
+  } else if (addonsEncerrar(0)) {
+    // A lista mesclada E a da conta agora: aplicar ja, sem esperar 5 minutos
+    // para ver na TV o addon que veio do celular.
+    memcpy(addonsRem, addonsMescla, (size_t)n * sizeof *addonsRem);
+    nAddonsRem = n;
+    addonsAplicarCiclo = 1;
+  }
   free(r);
 }
 
@@ -1243,6 +1404,7 @@ static void soLeituraDaCopia(int st) {
 static long long cicloInicioMs;
 
 static void *rodar(void *u) {
+  int puxouAddons;
   (void)u;
   cicloInicioMs = contapend_agora_ms();
   foraCiclo = 0;
@@ -1288,7 +1450,8 @@ static void *rodar(void *u) {
   // Lido DEPOIS da porteira: quando a pessoa responde enquanto perfis_puxar
   // ainda esta no ar, este ciclo ja segue com o perfil escolhido.
   perfilDoCiclo = perfis_ativo();
-  if (puxarAddons() < 0) {
+  puxouAddons = puxarAddons();
+  if (puxouAddons < 0) {
     char d[32];
     if (temAddonsRem && !addonsPendentes()) PRONTO_PUBLICAR(addonsCedo, 1);
     soLeituraDaCopia(foraCiclo > 0 ? foraCiclo : 0);
@@ -1343,7 +1506,7 @@ static void *rodar(void *u) {
     PRONTO_PUBLICAR(fioPronto, 1);
     return NULL;
   }
-  if (addonsLocalCiclo) empurrarAddons();
+  if (addonsLocalCiclo) empurrarAddons(puxouAddons);
   // DEPOIS de puxarSoLeitura, pelo mesmo motivo dos addons e com um agravante:
   // a base da costura e o blob que acabou de chegar. Ver empurrarAjustes.
   empurrarAjustes();
@@ -1422,8 +1585,11 @@ void sync_iniciar(void) {
   AddonsPendencia *p = addonsEdicao(sessao_usuario(), addonsPerfilCiclo);
   addonsLocalCiclo = p && p->pendente;
   nAddonsEnv = 0; addonsEdicaoCiclo[0] = 0;
+  addonsAplicarCiclo = 0; nAddonsBaseCiclo = -1;
   if (addonsLocalCiclo && (p->gravada || addonsGuardar(p))) {
     addonsRevCiclo = p->rev; nAddonsEnv = p->n;
+    nAddonsBaseCiclo = p->nBase;
+    if (p->nBase > 0) memcpy(addonsBaseCiclo, p->base, (size_t)p->nBase * sizeof *addonsBaseCiclo);
     snprintf(addonsEdicaoCiclo, sizeof addonsEdicaoCiclo, "%s", p->edicao);
     memcpy(addonsEnv, p->lista, (size_t)p->n * sizeof *addonsEnv);
   }
@@ -1485,6 +1651,17 @@ static void spRelatar(void) {
   }
 }
 
+// #360: a lista da conta que acabou de ser aplicada vira a base da proxima
+// edicao feita aqui. Fio principal, em sync_passo.
+static void addonsBaseDefinir(void) {
+  int i;
+  pthread_mutex_lock(&addonsTrava);
+  nAddonsBase = nAddonsRem < SY_ADD_MAX ? nAddonsRem : SY_ADD_MAX;
+  for (i = 0; i < nAddonsBase; i++) addonsBase[i] = addonsUrlHash(addonsRem[i].url);
+  snprintf(addonsBaseDono, sizeof addonsBaseDono, "%s", usuarioDoCiclo);
+  addonsBasePerfil = addonsPerfilCiclo;
+  pthread_mutex_unlock(&addonsTrava);
+}
 void sync_passo(unsigned agoraMs) {
   // ANTES DA PORTEIRA de `fioPronto`: ver o comentario em rodar(). O resto do
   // ciclo continua sendo aplicado de uma vez, no fim — so os addons saem na
@@ -1498,6 +1675,7 @@ void sync_passo(unsigned agoraMs) {
       // perfil — e antes de desc_repetir_addons, para a volta que ela dispara
       // ja poder podar. Ver addons_marcar_da_conta.
       { int mudou = addons_definir_lista(addonsRem, nAddonsRem);
+        addonsBaseDefinir();
         if (nAddonsRem > 0) addons_marcar_da_conta(perfilDoCiclo);
         if (mudou) desc_repetir_addons(); }
       temAddonsRem = 0;
@@ -1560,8 +1738,9 @@ void sync_passo(unsigned agoraMs) {
   // SO REMONTA QUANDO A LISTA MUDOU DE VERDADE. Ligar `remontar` porque a
   // resposta chegou fazia um ciclo de descoberta completo a cada cinco minutos
   // com a lista identica — ver listaIgual em addons.c.
-  if (temAddonsRem && !addonsPendentes() && !addonsLocalCiclo) {
+  if (temAddonsRem && !addonsPendentes() && (!addonsLocalCiclo || addonsAplicarCiclo)) {
     if (addons_definir_lista(addonsRem, nAddonsRem)) soAddons = 1;
+    addonsBaseDefinir();
     // O ciclo de outro perfil ja foi descartado acima: esta lista e do ativo.
     if (nAddonsRem > 0) addons_marcar_da_conta(perfilDoCiclo);
   }
@@ -1789,6 +1968,14 @@ void        sync_sujar_addons(void) {
   p = addonsEdicao(dono, perfil);
   if (!p) p = addonsNova(dono, perfil);
   if (p) {
+    // Edicao NOVA (nada pendente): a base e a ultima lista da conta aplicada
+    // aqui. Edicao em cima de edicao: a base continua a da primeira.
+    if (!p->pendente) {
+      int ok = nAddonsBase >= 0 && addonsBasePerfil == perfil && !strcmp(addonsBaseDono, dono);
+      p->nBase = ok ? nAddonsBase : -1;
+      if (ok && nAddonsBase > 0) memcpy(p->base, addonsBase, (size_t)nAddonsBase * sizeof *p->base);
+    }
+    p->recusas = 0;
     p->n = addons_exportar(p->lista, SY_ADD_MAX);
     p->pendente = 1; p->gravada = 0; p->rev = ++addonsRev;
     dados_uuid(p->edicao, sizeof p->edicao);
