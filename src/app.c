@@ -3314,7 +3314,15 @@ void app_atualizar(float dt, Uint32 agora) {
         } else desc_pedir_titulo(tc);
       }
     }
-    if (!alvo && abrirTeste[0]) { alvo = abrirTeste; abrirTeste[0] = 0; }
+    // COPIA antes de esvaziar: `alvo = abrirTeste; abrirTeste[0] = 0` deixava
+    // `alvo` apontando para a string que acabara de virar "" — a porta de
+    // teste "abrir:<tt>" (main.c) nao abria nada.
+    { static char abrirAgora[sizeof abrirTeste];
+      if (!alvo && abrirTeste[0]) {
+        snprintf(abrirAgora, sizeof abrirAgora, "%s", abrirTeste);
+        abrirTeste[0] = 0;
+        alvo = abrirAgora;
+      } }
     if (alvo && alvo[0]) {
       int k = cat_indice_por_imdb(alvo);
       if (k >= 0) abrirPorIndice(k); else desc_pedir_titulo(alvo);

@@ -981,6 +981,16 @@ static int playlistVazia(const char *url, const char *cabecalhos) {
 // sem ela, a url resolvida de um episodio ia parar na linha de mesmo numero
 // do episodio seguinte.
 typedef struct { unsigned geracao; _Atomic int abortou; unsigned rodada; int antecipada; } Conferencia;
+// A CONFERENCIA DA CORRIDA PARALELA mora no heap, com contagem: os fios de
+// fonteparalela que ainda conferem quando ela volta continuam lendo e
+// escrevendo nela (c->abortou, c->rodada). Na pilha de stream_primeira_boa, o
+// quadro ja estava desfeito — o ASAN pegou SEGV em verificarOuParar no Mac.
+// Duas referencias: a de quem pediu e a da corrida (solta pelo ultimo fio).
+typedef struct { Conferencia c; _Atomic int refs; } ConfDona;
+static void soltarConf(void *u) {
+  ConfDona *d = u;   // `c` e o primeiro campo: o ponteiro e o mesmo
+  if (atomic_fetch_sub(&d->refs, 1) == 1) free(d);
+}
 
 static int resolverUrl(const char *url, const char *cabecalhos, int segundos,
                         char *fim, unsigned tam, char *mime, unsigned mimeTam, long *corpo) {
@@ -1373,12 +1383,22 @@ int stream_primeira_boa(int tentativas) {
     int t1 = 0, t2 = 0;
     printf("[fonte] conferencia paralela %d\n", kk);
     fflush(stdout);
-    escolhida = fonteparalela(fila, nf, kk, verificarOuParar, falhouUma, &c, &t1, 20000);
-    tocadas = t1;
-    if (escolhida < 0 && !c.abortou && nf > kk) {
-      escolhida = fonteauto_primeira(fila + kk, nf - kk, verificarOuParar, falhouUma, &c, &t2);
-      tocadas += t2;
-    }
+    ConfDona *d = malloc(sizeof *d);
+    if (d) {
+      d->c.geracao = c.geracao; d->c.rodada = c.rodada; d->c.antecipada = c.antecipada;
+      atomic_init(&d->c.abortou, (int)c.abortou);
+      atomic_init(&d->refs, 2);
+      escolhida = fonteparalela_soltando(fila, nf, kk, verificarOuParar, falhouUma, &d->c, &t1,
+                                         20000, soltarConf);
+      tocadas = t1;
+      if (escolhida < 0 && !d->c.abortou && nf > kk) {
+        escolhida = fonteauto_primeira(fila + kk, nf - kk, verificarOuParar, falhouUma, &d->c, &t2);
+        tocadas += t2;
+      }
+      if (d->c.abortou) c.abortou = 1;
+      soltarConf(d);
+    } else
+      escolhida = fonteauto_primeira(fila, nf, verificarOuParar, falhouUma, &c, &tocadas);
   } else
   escolhida = fonteauto_primeira(fila, nf, verificarOuParar, falhouUma, &c, &tocadas);
   if (c.abortou) escolhida = -1;

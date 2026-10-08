@@ -6,7 +6,9 @@
 set -eu
 cd "$(dirname "$0")/.."
 bin="${TMPDIR:-/tmp}/nuvio-fonteparalela-tests"
-cc -O1 -g -Wall -Wextra -Isrc src/fonteparalela.c src/fonteauto.c tests/fonteparalela.c -o "$bin" -lpthread
+flags=()
+if [ "${SANITIZE:-0}" = 1 ]; then flags+=(-fsanitize=address,undefined -fno-omit-frame-pointer); fi
+cc ${flags[@]+"${flags[@]}"} -O1 -g -Wall -Wextra -Isrc src/fonteparalela.c src/fonteauto.c tests/fonteparalela.c -o "$bin" -lpthread
 "$bin"
 
 # CONTRATO: o paralelismo so existe atras do ajuste (ligado de fabrica), so nas
@@ -15,8 +17,13 @@ cc -O1 -g -Wall -Wextra -Isrc src/fonteparalela.c src/fonteauto.c tests/fontepar
 # do cache segue uma por vez (issue #130): conferi-la baixaria de verdade.
 corpo=$(awk '/^int stream_primeira_boa\(/,/^}/' src/streams.c)
 if ! printf '%s' "$corpo" | grep -q 'ajustes_fonte_conferir_varias()' ||
-   ! printf '%s' "$corpo" | grep -q 'fonteparalela('; then
+   ! printf '%s' "$corpo" | grep -q 'fonteparalela_soltando('; then
   echo "fonteparalela: stream_primeira_boa nao usa fonteparalela atras do ajuste"; exit 1
+fi
+# A Conferencia da corrida nao pode ser a da pilha: os fios que seguem
+# conferindo depois que fonteparalela volta ainda a usam (ver ConfDona).
+if printf '%s' "$corpo" | grep -q 'fonteparalela[_a-z]*(.*&c[,)]'; then
+  echo "fonteparalela: stream_primeira_boa passa a Conferencia da pilha para a corrida"; exit 1
 fi
 if printf '%s' "$corpo" | grep -v 'ajustes_fonte_conferir_varias' | grep -q 'pthread_create'; then
   echo "fonteparalela: stream_primeira_boa abre fios por fora do ajuste"; exit 1
