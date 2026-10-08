@@ -3889,8 +3889,10 @@ static void desenharLegendaPrincipal(float *topoPilha){
 // controles) e o OK dos controles escondidos: Play/Pause.
 static float barraPtrX, barraPtrW = NV_TELA_W;
 static int ponteiroNoPlayer(void) {
+  // "O que achou?" com os controles escondidos e dono das teclas
+  // (reacao_evento): o alvo de tela inteira do player cobriria as pilulas dele.
   return ponteiro_ativo() && aberto && !saindo &&
-         !posplay_visivel() && !pausao_visivel();
+         !posplay_visivel() && !pausao_visivel() && !(reacao_visivel() && !visivel);
 }
 // DEDO (#216): tocar no video com os controles escondidos so os mostra (o
 // gesto de todo player de celular); com eles na tela, tocar no video os

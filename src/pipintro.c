@@ -24,6 +24,7 @@
 #include "player.h"
 #define NV_ESCALA_TELA_ATIVA   // mede pela tela do fator ativo (escala.h)
 #include "escala.h"
+#include "ponteiro.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -154,6 +155,11 @@ static void desenhaBotao(GfxRect r, const char *txt, int foco, int prim, float a
                        r.y + (r.h - t.h) * 0.5f, a); }
 }
 
+// PONTEIRO (#99): foco pela mesma variavel das setas; o OK do clique grava a
+// escolha por pipintro_evento.
+static void ponteiroFoco(int i, int b) { (void)b; if (aberto && (i == 0 || i == 1)) focoBtn = i; }
+int pipintro_teste_foco(void) { return focoBtn; }
+
 static void pipintro_desenharCorpo_(Uint32 agora);
 // Cartao de tela quase cheia: ampliado so se ainda couber (escala.h).
 void pipintro_desenhar(Uint32 agora) {
@@ -211,6 +217,10 @@ static void pipintro_desenharCorpo_(Uint32 agora) {
   // --- os dois botoes: a pergunta de verdade ------------------------------
   { float bw = (PI_TXT_W - 24.0f) * 0.5f;
     float by = PI_Y + dy + PI_H - PI_PAD - PI_BTN_H;
+    if (aberto && entrada > 0.99f) {   // so assentado (sem o deslize da entrada)
+      ponteiro_alvo(PI_TXT_X, by, bw, PI_BTN_H, ponteiroFoco, NULL, 0, 0);
+      ponteiro_alvo(PI_TXT_X + bw + 24.0f, by, bw, PI_BTN_H, ponteiroFoco, NULL, 1, 0);
+    }
     desenhaBotao((GfxRect){ PI_TXT_X, by, bw, PI_BTN_H },
                  "Continuar no canto", focoBtn == 0, 1, a);
     desenhaBotao((GfxRect){ PI_TXT_X + bw + 24.0f, by, bw, PI_BTN_H },

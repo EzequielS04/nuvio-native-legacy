@@ -140,6 +140,20 @@ static float rgBotao(const char *rot, const char *icone, float x, float y, int f
   txt_desenhar_alpha(t, x + 28 + (icone ? 30 : 0), y + (56 - t.h) * 0.5f, (foco ? 1.0f : 0.88f) * a);
   return w;
 }
+// PONTEIRO (#99): no erro com "Tentar de novo" possivel, foco pela mesma
+// variavel das setas (0 = Tentar de novo, 1 = Fechar); o OK do clique segue
+// por registro_envio_evento. Os outros estados tem um botao so (camada sem
+// alvos: o clique e o OK).
+static void ponteiroEnvio(int i, int b) {
+  AvisosEnvio env;
+  (void)b;
+  if (!envAberto || (i != 0 && i != 1) || envFoco == i) return;
+  if (avisos_envio_info(&env) != 3 || env.motivo == AVISOS_ENVIO_OFFLINE ||
+      env.motivo == AVISOS_ENVIO_INDISPONIVEL) return;
+  envFoco = i;
+}
+int registro_envio_teste_foco(void) { return envFoco; }
+
 static void rgTamTexto(char *d, size_t tam, long bytes) {
   long kb = (bytes + 512) / 1024;
   snprintf(d, tam, "%ld KB", kb);
@@ -170,6 +184,8 @@ static void registro_envio_desenharCorpo_(void) {
   char kb[32], v[200], a[96], s[160];
   int st;
   if (!envAberto) return;
+  // Modal sobre os Ajustes (ajustes_ux_ilha.inc): os alvos de tras deixam de valer.
+  ponteiro_camada();
   st = avisos_envio_info(&env);
   ajustes_ui_ilha((GfxRect){ RE_X, RE_Y, RE_W, RE_H }, 36, 1);
   rgTamTexto(kb, sizeof kb, env.bytes ? env.bytes : envTam);
@@ -291,7 +307,13 @@ static void registro_envio_desenharCorpo_(void) {
     rgStat(i18n("Envio automático"), v, x, y, w);
     { float bx = x;
       int pode = env.motivo != AVISOS_ENVIO_INDISPONIVEL;
-      if (pode) bx += rgBotao("Tentar de novo", "aj_rotate-cw", bx, base - 56, envFoco == 0, 1) + 12;
+      if (pode) {
+        float w0 = rgBotao("Tentar de novo", "aj_rotate-cw", bx, base - 56, envFoco == 0, 1);
+        TxtLinha lf = rgT(TXT_ILHA_ITEM, "Fechar");
+        ponteiro_alvo(bx, base - 56, w0, 56, ponteiroEnvio, NULL, 0, 0);
+        ponteiro_alvo(bx + w0 + 12, base - 56, 28 + lf.w + 28, 56, ponteiroEnvio, NULL, 1, 0);
+        bx += w0 + 12;
+      }
       rgBotao("Fechar", NULL, bx, base - 56, !pode || envFoco == 1, 1); }
     return;
   }

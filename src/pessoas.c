@@ -34,6 +34,7 @@
 #include "plrui.h"
 #define NV_ESCALA_TELA_ATIVA   // mede pela tela do fator ativo (escala.h)
 #include "escala.h"
+#include "ponteiro.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -471,6 +472,22 @@ static int acaoDaPessoa(const RecPessoa *p) {
 static int temColunaAcao(int i) {
   return i >= 0 && i < nL && linhas[i].tipo == T_PESSOA && acaoDaPessoa(&linhas[i].p) != A_NADA;
 }
+
+// PONTEIRO (#99): foco pelas MESMAS variaveis das setas — `foco` (a linha) e,
+// numa pessoa com acao, `coluna` (b: 1 = a pilula, 0 = a pessoa). O OK do
+// clique segue por pessoas_evento (aplicar). Idempotente; com o teclado
+// aberto nao mexe em nada (ele e camada propria).
+static int   pnRegistrar;          // a ilha assentada: vale registrar alvos
+static float pnTopo, pnBase;       // a janela da lista (recorte vertical)
+static void ponteiroLinha(int i, int col) {
+  int temCol;
+  if (!aberto || teclado_aberto() || !focavel(i)) return;
+  temCol = temColunaAcao(i);
+  if (foco == i && (!temCol || coluna == col)) return;
+  foco = i; confirmando = -1;
+  if (temCol) coluna = col;
+}
+int pessoas_teste_foco(int *col) { if (col) *col = coluna; return foco; }
 
 // --- acao ---------------------------------------------------------------------------
 
@@ -986,7 +1003,11 @@ static void desenhaPessoa(float x, float y, int i, Uint32 agora, float a) {
   rec_avatar_estilo((GfxRect){ x, yc - PE_AV * 0.5f, PE_AV, PE_AV }, p->avatar, l1, p->pub, a, TXT_ILHA_INICIAL);
   tx = x + PE_AV + 20.0f;
   xd = x + PE_INTERNO;
-  xd -= pilulaPessoa(xd, yc, p, colAnim[i], agora, a) + 24.0f;
+  { float pw = pilulaPessoa(xd, yc, p, colAnim[i], agora, a);
+    // A pilula por cima da linha (registrada depois): ali o foco e a coluna 1.
+    if (pnRegistrar && temColunaAcao(i))
+      ponteiro_alvo_faixa(xd - pw, yc - 30.0f, pw, 60.0f, pnTopo, pnBase, ponteiroLinha, NULL, i, 1);
+    xd -= pw + 24.0f; }
   // O FOCO NA PESSOA (coluna 0, ← na pilula): o chevron antes da pilula diz
   // "OK abre o perfil" sem precisar ler o rodape.
   if (naPessoa) {
@@ -1326,9 +1347,16 @@ static void pessoas_desenharCorpo_(Uint32 agora) {
   // A LISTA, recortada na janela e rolada pela mola.
   ly = y + PE_PAD + cab;
   gfx_recorte(x, ly - 8.0f, PE_W, jh + 16.0f);
+  // So assentada (a mola da entrada passa de 1) e sem o teclado por cima.
+  pnRegistrar = aberto && anim > 0.99f && anim < 1.01f && !teclado_aberto();
+  pnTopo = ly - 8.0f; pnBase = ly + jh + 8.0f;
   for (i = 0; i < nL; i++) {
     float ry = ly + linhaY[i] - rolagem, h = alturaLinha(&linhas[i]);
     if (ry + h < ly - 8.0f || ry > ly + jh + 8.0f) continue;
+    if (pnRegistrar && focavel(i)) {
+      GfxRect r = retLinha(hx, ry, h);
+      ponteiro_alvo_faixa(r.x, r.y, r.w, r.h, pnTopo, pnBase, ponteiroLinha, NULL, i, 0);
+    }
     switch (linhas[i].tipo) {
       case T_PESSOA: desenhaPessoa(hx, ry, i, agora, a); break;
       case T_BUSCA:  desenhaBusca(hx, ry, i, a); break;
@@ -1345,6 +1373,7 @@ static void pessoas_desenharCorpo_(Uint32 agora) {
   if (rolagem + jh < conteudoH - 1.0f)
     gfx_cor((GfxRect){ hx, ly + jh + 8.0f, PE_INTERNO, 1.0f }, 0.0f, 1, 1, 1, 0.12f * a);
 
+  pnRegistrar = 0;
   desenhaRodape(hx, y + alt - PE_PAD - PE_RODAPE + 18.0f, a);
   teclado_desenhar(agora);
 }

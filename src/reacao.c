@@ -19,6 +19,7 @@
 #include "teclado.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
 #include "escala.h"
+#include "ponteiro.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -398,6 +399,16 @@ static void linhaOrigem(char *dst, size_t n) {
 // pergunta 36/700, as tres respostas em pilulas (a focada cheia no acento) e
 // a contagem de 8 s como trilho DENTRO da ilha, ao lado de "Ana vai ver sua
 // resposta" — nao mais um fio colado na borda.
+// PONTEIRO (#99): foco pelas MESMAS variaveis das setas (c.foco, e a contagem
+// recomeca como no ← →); o OK do clique segue por reacao_evento. Idempotente;
+// com o teclado do passo 2 aberto nao mexe (ele e camada propria).
+static void ponteiroResposta(int i, int b) {
+  (void)b;
+  if (!c.aberto || c.escrevendo || i < 0 || i > 2 || c.foco == i) return;
+  c.foco = i; c.desde = ultimoAgora;
+}
+int reacao_teste_foco(void) { return c.foco; }
+
 static void reacao_desenharCorpo_(Uint32 agora, float baseY);
 // Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void reacao_desenhar(Uint32 agora, float baseY) {
@@ -437,6 +448,10 @@ static void reacao_desenharCorpo_(Uint32 agora, float baseY) {
     if (x < 24.0f) x = 24.0f;
     y = (NV_TELA_H - h) * 0.5f + (1.0f - a) * 24.0f;
   }
+  // Na pagina do titulo e no painel de Salvos o cartao e modal (as teclas nao
+  // vazam): camada, os alvos de tras deixam de valer. No player ele nao e
+  // camada — com os controles no ar as teclas sao do player.
+  if (c.aberto && (c.modoDetalhe || c.modoPainel)) ponteiro_camada();
   plrui_material((GfxRect){ x, y, w, h }, 36.0f, 0, a);
   { float ty = y + 34.0f, tx = x + 36.0f;
     if (orig[0]) {
@@ -448,7 +463,13 @@ static void reacao_desenharCorpo_(Uint32 agora, float baseY) {
     txt_bloco_corta(TXT_ILHA_PERGUNTA, perg, 243, 242, 239, tx, ty, w - 72.0f, lead, a, 2);
     ty += hp + 26.0f;
     { float bx = tx;
-      for (i = 0; i < 3; i++) bx += plrui_botao(bx, ty, rot[i], ico[i], c.focoA[i], a) + 12.0f; }
+      // So assentado (a mola da entrada parada) e sem o teclado por cima.
+      int reg = c.aberto && !c.escrevendo && a > 0.99f && a < 1.01f;
+      for (i = 0; i < 3; i++) {
+        float bw = plrui_botao(bx, ty, rot[i], ico[i], c.focoA[i], a);
+        if (reg) ponteiro_alvo(bx, ty, bw, 60.0f, ponteiroResposta, NULL, i, 0);
+        bx += bw + 12.0f;
+      } }
     ty += 60.0f + 24.0f;
     { float yc = ty + 11.0f, tw = 0.0f;
       if (ver[0]) {

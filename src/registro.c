@@ -12,6 +12,7 @@
 #include "tex_cache.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
 #include "escala.h"
+#include "ponteiro.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -605,6 +606,10 @@ static void registro_desenharCorpo_(void) {
   // RECORTE DESLIGADO ANTES DE DESENHAR: se uma tela esquecer o recorte ligado,
   // o unico sintoma seria o painel de DIAGNOSTICO nao aparecer.
   gfx_sem_recorte();
+  // PONTEIRO (#99): o aviso e um cartao que qualquer tecla dispensa — camada
+  // sem alvos, o clique e o OK (registro_evento o fecha) e nao vaza para a
+  // tela de tras. O painel aberto ja e camada em app.c.
+  if (!aberto && aviso) ponteiro_camada();
   if (aberto) { passoAoVivo(); desenhaPainel(); }
   else desenhaAviso();
 }
