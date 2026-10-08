@@ -41,6 +41,7 @@
 // nunca tocam no staging — mesma disciplina do epg.c.
 #include "horafmt.h"
 #include "guia.h"
+#include "guiaaddons.h"
 #include "plrui.h"
 #include "badges.h"   /* marcas de resolucao no heroi */
 #include "aovivo.h"
@@ -369,6 +370,34 @@ static int baseLigada(const char *base) {
     if (b && b[0] && !strcmp(b, base)) return addons_ativo(i);
   }
   return 1;
+}
+
+// --- add-ons escondidos SO NO GUIA (#283) ---------------------------------------
+// Por perfil, padrao: todos aparecem. Esconder tira os canais daquele add-on
+// desta tela; ele segue ligado na home, na busca e nas fontes. Lido sob
+// demanda e relido quando o perfil muda.
+static GuiaAddonsOcultos ocultos;
+static int ocultosPerfil = -1;
+
+static void ocultosGarantir(void) {
+  int p = perfis_ativo();
+  char nome[48], *t;
+  if (p == ocultosPerfil) return;
+  ocultosPerfil = p;
+  t = dados_ler(guiaaddons_arquivo(p, nome, sizeof nome));
+  guiaaddons_ler(&ocultos, t);
+  free(t);
+}
+
+static int baseOculta(const char *base) {
+  ocultosGarantir();
+  return guiaaddons_oculto(&ocultos, base);
+}
+
+static void ocultosGravar(void) {
+  char nome[48], buf[GUIAADDONS_MAX * 2049 + 1];
+  guiaaddons_texto(&ocultos, buf, sizeof buf);
+  dados_gravar(guiaaddons_arquivo(ocultosPerfil, nome, sizeof nome), buf);
 }
 
 // --- addons recomendados ---------------------------------------------------------
@@ -902,7 +931,8 @@ static void empacotar(void) {
   // ele ligado e chegaria inteira; a recarga seguinte (recarregarPend) e que
   // corrige a lista de fontes, mas a tela nao precisa esperar por ela.
   for (i = 0, w = 0; i < nCanais; i++)
-    if (!canais[i].base[0] || baseLigada(canais[i].base)) canais[w++] = canais[i];
+    if (!canais[i].base[0] || (baseLigada(canais[i].base) && !baseOculta(canais[i].base)))
+      canais[w++] = canais[i];
   nCanais = w;
   // Categoria que ficou sem canal sai da lista — senao vira uma fileira so
   // de cabecalho, com o foco caindo nela.
@@ -1854,6 +1884,25 @@ static void painelOk(void) {
   }
 }
 
+// ESCONDER/MOSTRAR SO NO GUIA (#283). Esconder tira os canais do add-on agora,
+// sem rede. Mostrar de novo so tem como trazer baixando: a lista que esta em
+// memoria nao os guarda. O add-on em si nao muda de estado.
+static void painelGuia(int i) {
+  const char *b = addons_base(i);
+  if (!b || !b[0]) return;
+  ocultosGarantir();
+  if (guiaaddons_alternar(&ocultos, b)) {
+    int antes = nCanais;
+    empacotar();
+    if (nCanais != antes) focoValido();
+  } else {
+    assinaturaPublicada = 0;   // a lista da rede e igual: sem isto nao seria republicada
+    if (fioVivo) recarregarPend = 1;
+    else { estado = G_PARADO; ultTentativa = 0; iniciarCarga(); }
+  }
+  ocultosGravar();
+}
+
 // OK segurado NAO e varios OK: o firmware repete o KEYDOWN a cada ~130 ms, e
 // sem este repouso segurar a tecla ligava e desligava o addon em sequencia
 // (addonsui.c herda esse comportamento; aqui nao).
@@ -1862,6 +1911,10 @@ static void painelEvento(SDL_Keycode k, Uint32 agora) {
   int n = painelN();
   if (k == SDLK_UP)   { if (paFoco > 0) paFoco--; return; }
   if (k == SDLK_DOWN) { if (paFoco + 1 < n) paFoco++; return; }
+  if ((k == SDLK_LEFT || k == SDLK_RIGHT) && paFoco < paN) {
+    if (agora - paOkTick >= G_REP_MS) { paOkTick = agora; painelGuia(paIdx[paFoco]); }
+    return;
+  }
   if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
     if (n > 0 && agora - paOkTick >= G_REP_MS) { paOkTick = agora; painelOk(); }
     return;
@@ -3537,10 +3590,20 @@ static void desenharPainelAddons(float a) {
       int ai = paIdx[i];
       int sc = sabeCanal(addons_base(ai));
       int ligado = addons_ativo(ai);
-      const char *sub = sc == 1 ? i18n("Fornece canais")
+      // MANIFESTO QUE NAO RESPONDEU (sonda ja rodou, add-on ligado): o guia
+      // diz isso em vez de "ainda nao conferido" (#283).
+      int semResposta = sc == -1 && ligado && nSabe > 0 && !fioVivo && !recarregarPend;
+      const char *sub0 = sc == 1 ? i18n("Fornece canais")
                       : sc == 0 ? i18n("Sem catálogo de canais")
                       : (fioVivo || recarregarPend) ? i18n("Carregando canais…")
+                      : semResposta ? i18n("Addon demorou ou não respondeu")
                                 : i18n("Ainda não conferido pelo guia");
+      char subBuf[200];
+      const char *sub = sub0;
+      if (baseOculta(addons_base(ai))) {
+        snprintf(subBuf, sizeof subBuf, "%s  ·  %s", sub0, i18n("Oculto no guia"));
+        sub = subBuf;
+      }
       GfxRect pill = { x + w - 24.0f - 136.0f, yi + (row.h - 40.0f) * 0.5f, 136.0f, 40.0f };
       float txtW = pill.x - 24.0f - (x + 24.0f);
       {
@@ -3630,7 +3693,7 @@ static void desenharPainelAddons(float a) {
   gfx_sem_recorte();
 
   { TxtLinha t = txt_linha_corta(TXT_CAPTION,
-        i18n("OK liga, desliga ou instala  ·  Voltar volta ao guia"),
+        i18n("OK liga ou desliga no app todo  ·  ← → mostra ou esconde só no guia  ·  Voltar volta ao guia"),
         140, 142, 150, 255, w);
     txt_desenhar_alpha(t, x, NV_TELA_H - 54.0f, a); }
 }
