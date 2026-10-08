@@ -54,10 +54,42 @@ static inline int nv_dvaudio_escolher(int n, int atual, const char (*codec)[16],
   return melhor;
 }
 
+// Localiza a faixa ATUAL da TV na lista do MKV. O indice da TV nao e indice do
+// MKV: a TV pode filtrar ou reordenar (C9: uma faixa so; com o MKV [TrueHD eng,
+// E-AC-3 eng, E-AC-3 por] e a TV expondo so a portuguesa, o indice 0 da TV
+// apontava o TrueHD ingles, e a troca entregava ingles). Mesmo criterio do motor
+// (dts_playback.c prepare()): listas do mesmo tamanho valem pela ordem se a
+// faixa daquele indice nao contradiz a da TV; fora disso, so uma correspondencia
+// UNICA por idioma, familia de codec (`familia`: audioinfo_codec no app, que le
+// tanto "A_EAC3" quanto o "eac3" da TV) e canais. Campo vazio ou 0 de um dos
+// lados nao contradiz. Lista da TV ainda vazia (sourceInfo nao chegou): a TV
+// toca a faixa padrao, e vale o indice como sempre. Devolve o ordinal no MKV, ou
+// -1 sem correspondencia segura (quem chama nao troca).
+static inline int nv_dvaudio_localizar(int nTv, int nMkv, int atualTv, const char *tvIdioma,
+                                       const char *tvCodec, int tvCanais,
+                                       const char (*codec)[16], const char (*idioma)[8],
+                                       const int *canais,
+                                       int (*casa)(const char *, const char *),
+                                       const char *(*familia)(const char *)) {
+  int i, achou = -1, n = 0;
+  const char *ft = familia(tvCodec ? tvCodec : "");
+#define NV_DVAUDIO_CASA(i) \
+  ((!tvIdioma || !tvIdioma[0] || !idioma[i][0] || !strcmp(idioma[i], "und") || casa(idioma[i], tvIdioma)) && \
+   (!ft[0] || !familia(codec[i])[0] || !strcmp(ft, familia(codec[i]))) && \
+   (tvCanais <= 0 || !canais || canais[i] <= 0 || canais[i] == tvCanais))
+  if (atualTv < 0) return -1;
+  if (nTv <= 0) return atualTv < nMkv ? atualTv : -1;
+  if (nTv == nMkv && atualTv < nMkv && NV_DVAUDIO_CASA(atualTv)) return atualTv;
+  for (i = 0; i < nMkv; i++) if (NV_DVAUDIO_CASA(i)) { achou = i; n++; }
+#undef NV_DVAUDIO_CASA
+  return n == 1 ? achou : -1;
+}
+
 // Decisao como o dvPronto a usa. A escolha vem SO da lista do MKV (nMkv faixas):
 // o player da TV costuma listar UMA faixa de audio num remux com TrueHD+E-AC-3
 // (C9: "faixas: audio=1"), entao a lista dele nao pode limitar os candidatos.
 // nTv fica na assinatura so para o teste deixar essa regra explicita.
+// `atual` ja e o ordinal NO MKV (nv_dvaudio_localizar), nunca o indice da TV.
 // Devolve o indice da faixa NO MKV (ordinal entre as faixas de audio), ou -1.
 static inline int nv_dvaudio_decidir(int nTv, int nMkv, int atual, const char (*codec)[16],
                                      const char (*idioma)[8], const char (*rotulo)[48],

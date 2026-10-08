@@ -49,6 +49,7 @@ static volatile int dvSondado, dvMkvPerfil, dvMkvEl, dvMkvBl, dvMkvRpu;
 static char dvAudioCodec[16][16];   // Matroska CodecID of each audio track, file order
 static char dvAudioIdioma[16][8];   // idioma/nome de cada faixa DO MKV (a lista da TV pode trazer so uma)
 static char dvAudioNome[16][48];
+static int  dvAudioCanais[16];       // Audio > Channels de cada faixa DO MKV (0 = nao informado)
 static volatile int dvAudios;
 // Faixa do MKV (ordinal entre as de audio) escolhida pelo dvPronto no lugar de uma
 // que o caminho nao alimenta; -1 = nenhuma. O iniciarDts a entrega ao motor.
@@ -1939,6 +1940,7 @@ static void *lerMkv(void *arg) {
       } else if (fx[j].tipo == 2 && na < 16) {
         snprintf(dvAudioIdioma[na], sizeof dvAudioIdioma[0], "%s", fx[j].idioma);
         snprintf(dvAudioNome[na], sizeof dvAudioNome[0], "%s", fx[j].nome);
+        dvAudioCanais[na] = fx[j].canais;
         snprintf(dvAudioCodec[na++], sizeof dvAudioCodec[0], "%s", fx[j].codec);
       }
     }
@@ -2700,8 +2702,21 @@ static int dvPronto(void) {
     video_escolher_audio(dvMemOrd);
   }
   if (dvAudioMkvOrd >= 0) return 1;   // ja decidido; iniciarDts pode ter adiado (bind ativo)
-  if (audioAtual >= 0 && audioAtual < dvAudios) {
-    const char *c = dvAudioCodec[audioAtual];
+  // audioAtual e o indice da lista da TV; dvAudio* sao as faixas do MKV. A TV
+  // pode filtrar a lista: localiza a faixa dela no MKV antes de olhar o codec.
+  const VideoFaixa *tv = audioAtual >= 0 && audioAtual < nAudio ? &faixaAudio[audioAtual] : NULL;
+  int m = nv_dvaudio_localizar(nAudio, dvAudios, audioAtual, tv ? tv->idioma : "", tv ? tv->codec : "",
+                               tv ? tv->canais : 0, (const char (*)[16])dvAudioCodec,
+                               (const char (*)[8])dvAudioIdioma, dvAudioCanais, ling_casa, audioinfo_codec);
+  if (m < 0 && audioAtual >= 0 && dvAudios > 0) {
+    // Sem par seguro: nao troca. O motor confere idioma e codec por conta
+    // propria (dts_playback.c) e, sem faixa que alimente, volta ao HDR10.
+    printf("[dv] audio da TV %d (%s %s) sem par seguro nas %d faixas do MKV: nao troca\n", audioAtual + 1,
+           tv ? tv->idioma : "-", tv ? tv->codec : "-", dvAudios);
+    fflush(stdout);
+  }
+  if (m >= 0) {
+    const char *c = dvAudioCodec[m];
     if (!nv_dvaudio_alimentavel(c)) {
       // TrueHD (e afins) nao entra no caminho, mas o remux costuma trazer um
       // E-AC-3 do mesmo idioma. A escolha sai da lista do PROPRIO MKV (a da TV
@@ -2710,7 +2725,7 @@ static int dvPronto(void) {
       // O dvMem acima ja foi aplicado, entao uma escolha lembrada nao e
       // sobrescrita; a escolha da pessoa DEPOIS (video_escolher_audio com a
       // sessao DV ativa) continua entregando o resto ao player da TV.
-      int k = nv_dvaudio_decidir(nAudio, dvAudios, audioAtual, (const char (*)[16])dvAudioCodec,
+      int k = nv_dvaudio_decidir(nAudio, dvAudios, m, (const char (*)[16])dvAudioCodec,
                                  (const char (*)[8])dvAudioIdioma, (const char (*)[48])dvAudioNome,
                                  ling_casa);
       if (k >= 0) {
