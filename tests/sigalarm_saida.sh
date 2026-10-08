@@ -53,5 +53,40 @@ fi
 wait "$P" 2>/dev/null || true
 # o alarm pendente tem de ser cancelado quando a saida normal termina
 grep -q 'alarm(0)' src/main.c || { echo "FALHOU: main.c nao cancela o alarm (alarm(0)) ao fim da saida normal"; fail=1; }
-[ $fail = 0 ] && echo "OK: SIGALRM sai sem reentrar na limpeza; alarm cancelado"
+# 2o SIGTERM durante a saida normal (deploy que repete o kill, SAM insistindo):
+# o handler rearmava alarm(4) a cada sinal e derrubava a folga de
+# NV_SAIDA_FOLGA_S no meio de p2pmotor_saida/ajustes_log_vazar_tudo/
+# corviva_gravar. Saida lenta de ~6 s tem de terminar (marca gravada) sem SIGALRM.
+cat >"$W/t2.c" <<'C'
+#include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <unistd.h>
+#include <fcntl.h>
+void trailer_fechar(void) {}
+void video_encerrar(void) {}
+void ajustes_log_vazar_tudo(void) {}
+#define NV_SINAL_TERMINAR 1
+#include "bloco.h"
+int main(int argc, char **argv) {
+  (void)argc;
+  signal(SIGTERM, aoSinalTerminar);
+  signal(SIGALRM, aoAlarmeTerminar);
+  raise(SIGTERM);                              // 1o: o laco sai
+  if (sinalTerminou) alarm(NV_SAIDA_FOLGA_S);  // como o main.c no fim do laco
+  raise(SIGTERM);                              // 2o: chega durante a saida normal
+  for (int i = 0; i < 6; i++) sleep(1);        // saida lenta (p2pmotor_saida etc.)
+  int fd = open(argv[1], O_CREAT | O_WRONLY | O_TRUNC, 0644);
+  if (fd >= 0) { (void)!write(fd, "ok\n", 3); close(fd); }
+  alarm(0);
+  return 0;
+}
+C
+cc -O1 -g -I"$W" "$W/t2.c" -o "$W/t2" -Wno-deprecated-declarations
+rm -f "$W/marca"
+"$W/t2" "$W/marca" 2>"$W/t2.err" || true
+if [ ! -s "$W/marca" ]; then
+  echo "FALHOU: 2o SIGTERM rearmou o alarm(4) e cortou a saida normal ($(cat "$W/t2.err"))"; fail=1
+fi
+[ $fail = 0 ] && echo "OK: SIGALRM sai sem reentrar na limpeza; alarm cancelado; 2o SIGTERM nao corta a saida"
 exit $fail
