@@ -143,8 +143,12 @@ static void aoAlarmeTerminar(int sig) {
   (void)!write(2, msg, sizeof msg - 1);
   _exit(0);
 }
+// So o PRIMEIRO sinal arma o alarm(4). Um 2o SIGTERM (deploy repetindo o kill,
+// SAM insistindo) chegava durante a saida normal, ja com alarm(NV_SAIDA_FOLGA_S),
+// e o rearmava em 4 s: cortava p2pmotor_saida/ajustes_log_vazar_tudo/corviva.
 static void aoSinalTerminar(int sig) {
   (void)sig;
+  if (sinalTerminou) return;
   sinalTerminou = 1;
   alarm(4);
 }
