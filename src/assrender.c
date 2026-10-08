@@ -71,9 +71,9 @@ int assrender_ler_pasta_fontes(const char *dir,
 /* Pasta das fontes do app que o libass le (Noto Naskh incluso). `wasm` e o
  * __EMSCRIPTEN__: la SDL_GetBasePath devolve "/" e as fontes vivem em /app/fonts. */
 void assrender_pasta_fontes_app(const char *base, int wasm, char *out, size_t n) {
-  (void)wasm;
   if (n == 0) return;
   out[0] = 0;
+  if (wasm) { snprintf(out, n, "%s", "/app/fonts"); return; }
   if (base) snprintf(out, n, "%sfonts", base);
   if (access(out, R_OK)) snprintf(out, n, "%s", "deploy/app/fonts");
 }
