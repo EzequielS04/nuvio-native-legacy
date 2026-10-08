@@ -80,6 +80,16 @@ void pluginsui_evento(const SDL_Event *e) {
   }
 }
 
+// PONTEIRO (#99): a linha sob o cursor ganha o foco (a mesma variavel das
+// setas, desarmando o "OK de novo remove" como a seta faz). Com o teclado da
+// URL aberto ele tem a tela.
+void pluginsui_ponteiro(int i, int b) {
+  (void)b;
+  if (sair || teclado_aberto() || i < 0 || i >= linhas() || i == foco) return;
+  foco = i; armado = 0;
+}
+int pluginsui_foco(void) { return foco; }
+
 void pluginsui_atualizar(float dt, Uint32 agora) {
   int n;
   if (teclado_aberto()) teclado_atualizar(dt, agora);

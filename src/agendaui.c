@@ -173,6 +173,7 @@
 #include "textogate.h"
 #include "layout.h"
 #include "escala.h"
+#include "ponteiro.h"
 #include <stdlib.h>
 #include <time.h>
 #include <stdio.h>
@@ -579,6 +580,40 @@ static int eventosDoDia(int *indices, int max) {
   return n;
 }
 
+// PONTEIRO (#99). Poe o foco pelas MESMAS variaveis que as setas mexem em
+// agendaui_evento; o OK do clique chega depois pelo caminho de sempre (linha
+// abre o modal, Lista/Mes troca a vista, dia abre o painel do dia, acao do
+// modal age). Todas validam o estado e nao mexem em nada se ja e o foco.
+static int calIniFixo = -1;   // janela do painel do dia parada sob o ponteiro
+static void ponteiroCab(int id, int b) {
+  (void)b;
+  if (ctxAberto || focoCabecalho == id) return;
+  if (!vistaMes && id != AG_CAB_LISTA && id != AG_CAB_MES) return;
+  if (id < AG_CAB_LISTA || id > AG_CAB_PROXIMO) return;
+  focoCabecalho = id;
+}
+static void ponteiroLinha(int i, int b) {
+  (void)b;
+  if (ctxAberto || vistaMes || i < 0 || i >= agenda_n() || i >= AG_MAX) return;
+  if (foco == i && !focoCabecalho) return;
+  focoCabecalho = 0; foco = i;
+}
+static void ponteiroDia(int c, int b) {
+  (void)b;
+  if (ctxAberto || !vistaMes || c < 0 || c > 41) return;
+  if (c == calCelula && !calPainel && !focoCabecalho) return;
+  focoCabecalho = 0; calPainel = 0;
+  if (c != calCelula) selecionaCelula(c);
+}
+// `ini` = a primeira linha que o painel desenhou: a janela fica parada ali
+// enquanto o ponteiro anda dentro dela (centrar no foco a cada passo poria
+// outra linha debaixo do cursor).
+static void ponteiroEvento(int linha, int ini) {
+  if (ctxAberto || !vistaMes || linha < 0 || linha >= eventosDoDia(NULL, 0)) return;
+  if (calPainel && calEvento == linha && !focoCabecalho) return;
+  focoCabecalho = 0; calPainel = 1; calEvento = linha; calIniFixo = ini;
+}
+
 // --- C1: A GEOMETRIA DA TELA (dono aprovou a variacao C1 de agenda-v2.html) --
 //
 // A mesma divisao dos Ajustes A3: a ESQUERDA mostra o episodio em foco grande
@@ -814,6 +849,32 @@ static void acaoModal(int ac) {
   }
 }
 
+static void ponteiroAcao(int i, int b) {
+  AgModal m;
+  (void)b;
+  if (ctxAberto != 1 || i == ctxFoco || i < 0) return;
+  montaModal(agenda_lista(ctxItem), &m);
+  if (i < m.nAc) ctxFoco = i;
+}
+static void ponteiroManchete(int i, int b) {
+  const AgItem *it = agenda_lista(ctxItem);
+  (void)b;
+  if (ctxAberto != 2 || !it || i == notFoco || i < 0 || i >= noticias_n(it->imdb)) return;
+  notFoco = i;
+  notDesde = SDL_GetTicks();
+  textogate_reiniciar(&notTrechoGate); notTrechoA = 0.0f;
+}
+
+void agendaui_teste_foco(int *linha, int *cabecalho, int *modal, int *modalFoco,
+                         int *celula, int *evento) {
+  if (linha) *linha = foco;
+  if (cabecalho) *cabecalho = focoCabecalho;
+  if (modal) *modal = ctxAberto;
+  if (modalFoco) *modalFoco = ctxAberto == 2 ? notFoco : ctxFoco;
+  if (celula) *celula = calPainel ? -1 : calCelula;
+  if (evento) *evento = calPainel ? calEvento : -1;
+}
+
 void agendaui_evento(const SDL_Event *e) {
   SDL_Keycode k;
   int n = agenda_n();
@@ -822,6 +883,7 @@ void agendaui_evento(const SDL_Event *e) {
   volta = (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE || k == SDLK_DELETE);
   ok = (k == SDLK_RETURN || k == SDLK_KP_ENTER);
   if (e->type != SDL_KEYDOWN) return;
+  if (!ok) calIniFixo = -1;   // seta: a janela do dia volta a seguir o foco
   if (ctxAberto == 3) {           // a noticia aberta
     if (volta || k == SDLK_LEFT) { ctxAberto = 2; return; }
     if (k == SDLK_DOWN) notRolAlvo += 132.0f;
@@ -1469,6 +1531,7 @@ static float segC1(float xDir, float yc, int desenhar) {
     int foc = focoCabecalho == id[k];
     int branco = focoCabecalho ? foc : ativo;
     GfxRect ir = { x, yc - h * 0.5f, w[k], h };
+    if (!ctxAberto) ponteiro_alvo(ir.x, ir.y, ir.w, ir.h, ponteiroCab, NULL, id[k], 0);
     if (branco) gfx_cor(ir, 0.5f, 1, 1, 1, 1.0f);
     else if (ativo) gfx_cor(ir, 0.5f, 1, 1, 1, 0.12f);
     if (branco)
@@ -1643,6 +1706,9 @@ static void desenhaLista(const AgC1 *L) {
         grupoC1(L, grupo(i), semData, gy);
     }
     if (y > L->lsY + L->lsH || y + P(AG_ROW_H) < L->lsY) continue;
+    if (!ctxAberto)
+      ponteiro_alvo_faixa(L->lsX + P(46), y, L->lsW - P(46), P(AG_ROW_H), L->lsY, L->lsY + L->lsH,
+                          ponteiroLinha, NULL, i, 0);
     linhaC1(L, it, y, animFoco[i]);
     pontoC1(L->lsX + P(18), y + P(AG_ROW_H) * 0.5f, animFoco[i]);
   }
@@ -1948,6 +2014,7 @@ static void desenhaModalSerie(const AgItem *it, float a) {
     GfxRect lr = { x - 20.0f, yCorpo + (float)i * AGC_LINHA, AGC_ACAO_W, AGC_LINHA - 12.0f };
     const char *rot = rotuloAcao(it, &m, m.ac[i], buf, sizeof buf);
     TxtLinha t;
+    if (a > 0.99f && ctxAberto == 1) ponteiro_alvo(lr.x, lr.y, lr.w, lr.h, ponteiroAcao, NULL, i, 0);
     if (f) pilulaFoco(lr, ar, ag, ab, a);
     t = txt_linha_corta(TXT_CALLOUT, rot, f ? tf : 238, f ? tf : 240, f ? tf : 244, 255,
                         lr.w - 48.0f);
@@ -2018,6 +2085,7 @@ static void desenhaManchetes(const AgItem *it, float a) {
       char sub[160], quando[48];
       float tx = lr.x + 24.0f, tw = lr.w - 48.0f, ty;
       if (!nt) { y += lh; continue; }
+      if (a > 0.99f && ctxAberto == 2) ponteiro_alvo(lr.x, lr.y, lr.w, lr.h, ponteiroManchete, NULL, i, 0);
       noticias_quando(nt, agora, quando, sizeof quando);
       if (quando[0] && nt->fonte[0]) snprintf(sub, sizeof sub, "%s \xc2\xb7 %s", nt->fonte, quando);
       else snprintf(sub, sizeof sub, "%s%s", nt->fonte, quando);
@@ -2290,6 +2358,10 @@ static void desenhaContexto(float a) {
   const AgItem *it = agenda_lista(ctxItem);
   GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
   if (!it) return;
+  // PONTEIRO (#99): o modal e uma camada — a lista de tras deixa de valer.
+  // A noticia aberta (3) nao registra nada: o clique e o OK, que ali nao faz
+  // nada, e a rodinha rola o texto.
+  if (ctxAberto) ponteiro_camada();
   // O veu subiu de 0,62 para 0,74: com o modal aberto, o "Agenda" e as linhas
   // atras ainda liam como texto concorrente nas bordas do painel (critica de
   // 29/09/2026). Com vidro, mais ainda: o painel deixa passar o fundo.
@@ -2334,6 +2406,11 @@ static void desenhaBarraCalendario(float x, float xDir) {
     GfxRect prox = { x + 300.0f, y, 46.0f, h };
     snprintf(mesBruto, sizeof mesBruto, "%s %d", i18n(agenda_mes_nome(calMes)), calAno);
     maiusc(mes, sizeof mes, mesBruto);
+    if (!ctxAberto) {
+      ponteiro_alvo(ant.x, ant.y, ant.w, ant.h, ponteiroCab, NULL, AG_CAB_ANTERIOR, 0);
+      ponteiro_alvo(centro.x, centro.y, centro.w, centro.h, ponteiroCab, NULL, AG_CAB_HOJE, 0);
+      ponteiro_alvo(prox.x, prox.y, prox.w, prox.h, ponteiroCab, NULL, AG_CAB_PROXIMO, 0);
+    }
     botaoAgenda(ant, "‹", focoCabecalho == AG_CAB_ANTERIOR, focoCabecalho == AG_CAB_ANTERIOR, 0);
     botaoAgenda(centro, mes, 1, focandoMes, 0);
     botaoAgenda(prox, "›", focoCabecalho == AG_CAB_PROXIMO, focoCabecalho == AG_CAB_PROXIMO, 0);
@@ -2341,6 +2418,10 @@ static void desenhaBarraCalendario(float x, float xDir) {
   { float w = 94.0f, gap = 8.0f;
     GfxRect lista = { xDir - w * 2.0f - gap, y, w, h };
     GfxRect mes = { xDir - w, y, w, h };
+    if (!ctxAberto) {
+      ponteiro_alvo(lista.x, lista.y, lista.w, lista.h, ponteiroCab, NULL, AG_CAB_LISTA, 0);
+      ponteiro_alvo(mes.x, mes.y, mes.w, mes.h, ponteiroCab, NULL, AG_CAB_MES, 0);
+    }
     botaoAgenda(lista, i18n("Lista"), !vistaMes, focoCabecalho == AG_CAB_LISTA,
                 !vistaMes && focoCabecalho != AG_CAB_LISTA);
     botaoAgenda(mes, i18n("Mês"), vistaMes, focoCabecalho == AG_CAB_MES,
@@ -2472,6 +2553,8 @@ static void desenhaCalendarioMensal(void) {
     int hoje = !strcmp(datas[c], h);
     GfxRect cel = { x + coluna * (celW + espacX),
                     gradeY + linha * (celH + espacY), celW, celH };
+    // So os dias DO MES: um dia vizinho trocaria o mes debaixo do cursor.
+    if (mesmoMes && !ctxAberto) ponteiro_alvo(cel.x, cel.y, cel.w, cel.h, ponteiroDia, NULL, c, 0);
     desenhaDiaCalendario(cel, dia, mesmoMes, hoje, cont[c], c == calCelula && !calPainel);
   }
 
@@ -2498,6 +2581,9 @@ static void desenhaCalendarioMensal(void) {
     int maxLinhas = (int)((painel.y + painel.h - y - 10.0f) / passo);
     int inicio = calEvento - maxLinhas / 2;
     if (maxLinhas < 1) maxLinhas = 1;
+    if (calIniFixo >= 0 && calPainel && calEvento >= calIniFixo && calEvento < calIniFixo + maxLinhas)
+      inicio = calIniFixo;
+    else calIniFixo = -1;
     if (inicio < 0) inicio = 0;
     if (inicio > nTotal - maxLinhas) inicio = nTotal - maxLinhas;
     if (inicio < 0) inicio = 0;
@@ -2505,6 +2591,7 @@ static void desenhaCalendarioMensal(void) {
       GfxRect r = { painel.x + 12.0f, y, painel.w - 24.0f, 70.0f };
       int emFoco = calPainel && linha == calEvento;
       if (r.y + r.h > painel.y + painel.h - 4.0f) break;
+      if (!ctxAberto) ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroEvento, NULL, linha, inicio);
       desenhaEventoCalendario(r, agenda_lista(total[linha]), emFoco);
     }
   }

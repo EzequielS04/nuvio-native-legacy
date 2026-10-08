@@ -118,6 +118,8 @@ void ponteiro_teste_toque(int ligado) { toqueDisponivel = ligado != 0; cancelarT
 void ponteiro_teste_cursor_sistema(SDL_bool (*fn)(SDL_bool)) { cursorSistema = fn; }
 #endif
 
+int ponteiro_teste_lista(const PonteiroAlvo **v) { if (v) *v = lista[pronto]; return nLista[pronto]; }
+
 float ponteiro_x(void) { return px; }
 float ponteiro_y(void) { return py; }
 int ponteiro_ativo(void) { return visivel || toqueDisponivel; }
@@ -710,6 +712,14 @@ void ponteiro_alvo(float x, float y, float w, float h,
   al->x = x; al->y = y; al->w = w; al->h = h;
   al->focar = focar; al->ativar = ativar; al->a = a; al->b = b;
   al->arrasta = 0;
+}
+
+void ponteiro_alvo_faixa(float x, float y, float w, float h, float y0, float y1,
+                         PonteiroFn focar, PonteiroFn ativar, int a, int b) {
+  if (!ponteiro_ativo()) return;
+  if (y < y0) { h -= y0 - y; y = y0; }
+  if (y + h > y1) h = y1 - y;
+  ponteiro_alvo(x, y, w, h, focar, ativar, a, b);
 }
 
 void ponteiro_alvo_arrastavel(void) {

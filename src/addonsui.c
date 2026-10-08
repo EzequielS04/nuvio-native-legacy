@@ -74,6 +74,15 @@ void addonsui_evento(const SDL_Event *e) {
   }
 }
 
+// PONTEIRO (#99): a linha sob o cursor ganha o foco (a mesma variavel das
+// setas). O desenho mora em ajustes_ux_ilha.inc (ajSubLista).
+void addonsui_ponteiro(int i, int b) {
+  (void)b;
+  if (sair || i < 0 || i >= addons_n() || i == foco) return;
+  foco = i;
+}
+int addonsui_foco(void) { return foco; }
+
 void addonsui_atualizar(float dt, Uint32 agora) {
   int i, n = addons_n();
   float alvo;

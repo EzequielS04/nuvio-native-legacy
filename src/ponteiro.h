@@ -84,6 +84,12 @@ int  ponteiro_ativo(void);
 void ponteiro_alvo(float x, float y, float w, float h,
                    PonteiroFn focar, PonteiroFn ativar, int a, int b);
 void ponteiro_camada(void);
+// O mesmo alvo, recortado a faixa vertical [y0, y1) — a janela de uma grade
+// que rola por baixo de um cabecalho fixo. O pedaco do cartao que a rolagem
+// escondeu nao recebe o ponteiro (por cima dele mora o cabecalho). E o caminho
+// unico das grades: cada tela so diz a sua faixa.
+void ponteiro_alvo_faixa(float x, float y, float w, float h, float y0, float y1,
+                         PonteiroFn focar, PonteiroFn ativar, int a, int b);
 // Marca o ULTIMO alvo registrado como arrastavel por dedo (#216): arrastar
 // sobre ele chama o `ativar` a cada movimento, em vez de rolar a tela. E a
 // barra de tempo do player.
@@ -108,6 +114,9 @@ void ponteiro_teste_relogio(Uint32 (*fn)(void));
 void ponteiro_teste_janela(int w, int h);
 // Disponibilidade de toque injetavel, sem precisar de hardware no teste.
 void ponteiro_teste_toque(int ligado);
+// A lista que o hit-test le agora (a do ultimo quadro fechado): os testes de
+// tela conferem o que cada tela registrou, sem saber a geometria dela.
+int  ponteiro_teste_lista(const PonteiroAlvo **v);
 // SDL_webOSCursorVisibility de mentira (so com -DNV_PONT_WEBOS_TESTE).
 void ponteiro_teste_cursor_sistema(SDL_bool (*fn)(SDL_bool));
 

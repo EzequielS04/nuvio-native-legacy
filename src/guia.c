@@ -47,6 +47,7 @@
 #include "aovivo.h"
 #include "fontecache.h"
 #include "ajustes.h"   /* ajustes_acento: cor do anel de foco */
+#include "ponteiro.h"
 #include "epg.h"
 #include "rede.h"
 #include "addons.h"
@@ -1527,6 +1528,8 @@ int guia_aberta(void)         { return aberta; }
 int guia_overlay_aberta(void) { return overlay; }
 int guia_visivel(void)        { return aberta || overlay; }
 int guia_quer_sair(void)      { int q = querSair; querSair = 0; return q; }
+// Testes do ponteiro (#99): o chip da barra de cima em foco, ou -1.
+int guia_foco_topo(void) { return focoTopo ? topoCol : -1; }
 
 // O foco pedido com a lista ainda baixando fica pendente em focoPend;
 // publicar() aplica assim que os canais chegam — o overlay aberto pelo
@@ -3092,6 +3095,7 @@ static void materialPainelGuia(GfxRect p, float raioPx, float a) {
   else gfx_cor(p, raio, 0.071f, 0.075f, 0.086f, 0.98f * a);
 }
 
+static void ponteiroCategoria(int i, int b);
 static void desenharPainelCategorias(float a) {
   float e = catAnim, ar, ag, ab;
   float x0 = -G_CAT_W * 0.18f * (1.0f - e);   // desliza ~80 px enquanto aparece
@@ -3099,6 +3103,7 @@ static void desenharPainelCategorias(float a) {
   float areaH = G_CAT_BASE - G_CAT_TOPO, maxY, acima, abaixo;
   int nl = nLinhas(), i, tf = 243;
   if (e < 0.01f || nl < 1) return;
+  if (catAberto) ponteiro_camada();
   ajustes_acento(&ar, &ag, &ab);
   maxY = (float)nl * G_CAT_ROW - areaH;
   if (maxY < 0.0f) maxY = 0.0f;
@@ -3134,6 +3139,8 @@ static void desenharPainelCategorias(float a) {
     fb = anim_suave(((G_CAT_BASE + G_CAT_FADE * 0.5f) - (r.y + r.h)) / G_CAT_FADE);
     la = (1.0f - (1.0f - ft) * acima) * (1.0f - (1.0f - fb) * abaixo) * ea;
     if (la < 0.01f) continue;
+    if (catAberto && e > 0.99f)
+      ponteiro_alvo_faixa(r.x, r.y, r.w, r.h, G_CAT_TOPO, G_CAT_BASE, ponteiroCategoria, NULL, i, 0);
     snprintf(n, sizeof n, "%d", linhaN(i));
     if (foc) plrui_linha_foco(r, 20.0f, la);
     else if (atual) gfx_cor(r, 12.0f / r.h, 1, 1, 1, 0.06f * la);
@@ -3247,6 +3254,33 @@ static void desenharDuasPortas(float x, float y, float a) {
 // escolhido destacado dentro dele. Addons e Preview sao chips soltos.
 //
 // Devolve o x onde os chips comecam, para o subtitulo nao passar dali.
+// PONTEIRO (#99) NO GUIA. Pelas mesmas variaveis das setas: o chip da barra de
+// cima, o canal da grade (lista ou cartoes), a linha da gaveta de categorias,
+// o resultado da busca e a linha do painel de addons. O OK do clique segue o
+// caminho de sempre. Gaveta, busca e painel sao camadas (so elas valem
+// enquanto abertas), e so com a animacao assentada.
+static int buscaEstado;   // declarada de novo com a busca, mais abaixo
+static int guiaCamadaAberta(void) { return catAberto || buscaEstado || painel; }
+static void ponteiroTopo(int i, int b) {
+  (void)b;
+  if (guiaCamadaAberta() || i < 0 || i >= G_TOPO_N) return;
+  focoTopo = 1; topoCol = i;
+}
+static void ponteiroCanal(int l, int i) {
+  if (guiaCamadaAberta() || l < 0 || l >= nLinhas() || i < 0 || i >= linhaN(l)) return;
+  focoTopo = 0; focoLin = l; focoCol = i;
+}
+static void ponteiroCategoria(int i, int b) {
+  (void)b;
+  if (!catAberto || i < 0 || i >= nLinhas()) return;
+  catFoco = i;
+}
+static void ponteiroAddon(int i, int b) {
+  (void)b;
+  if (!painel || i < 0 || i >= painelN()) return;
+  paFoco = i;
+}
+
 static float desenharTopo(float a) {
   const char *rot[G_TOPO_N];
   float w[G_TOPO_N], xs[G_TOPO_N], x, ar, ag, ab, seg0;
@@ -3295,6 +3329,7 @@ static float desenharTopo(float a) {
             : seg ? ((i == G_TOPO_LISTA) == modoLista) : 0;
     GfxRect r = { xs[i], G_TOPO_Y, w[i], G_TOPO_H };
     int ct;
+    if (!overlay && a > 0.99f) ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroTopo, NULL, i, 0);
     if (seg) {
       // Segmento: so o escolhido tem superficie, 3 px para dentro do trilho.
       GfxRect ir = { r.x + 3.0f, r.y + 3.0f, r.w - 6.0f, r.h - 6.0f };
@@ -3571,6 +3606,7 @@ static void desenharPainelAddons(float a) {
   int tf = 243;
   ajustes_acento(&ar, &ag, &ab);
 
+  ponteiro_camada();
   { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
     gfx_cor(tela, 0.0f, 0, 0, 0, (vidro ? 0.30f : 0.42f) * a); }
   // PAINEL FLUTUANTE como o de Salvos e a barra lateral (21/09/2026): solto
@@ -3607,6 +3643,7 @@ static void desenharPainelAddons(float a) {
     GfxRect row = { x, yi, w, (i < n ? G_PA_ROW : G_PA_ROW_REC) - 8.0f };
     int f = i == paFoco;
     if (yi + row.h < y0 - 8.0f || yi > NV_TELA_H - 80.0f) continue;
+    if (a > 0.99f) ponteiro_alvo_faixa(row.x, row.y, row.w, row.h, y0 - 8.0f, NV_TELA_H - 80.0f, ponteiroAddon, NULL, i, 0);
     // A linha em repouso faz parte da folha; apenas o foco recebe
     // a superficie clara comum das listas, sem brilho ou bloco de accent.
     if (f) plrui_linha_foco(row, 20.0f, a);
@@ -3895,6 +3932,11 @@ static void buscaAbrir(void) {
                     TECLADO_MAX, "abcdefghijklmnopqrstuvwxyz0123456789 ", buscaTexto);
 }
 static int buscaN(void) { return buscaNC + buscaNP; }
+static void ponteiroBuscaItem(int i, int b) {
+  (void)b;
+  if (buscaEstado != 2 || i < -1 || i >= buscaN()) return;
+  buscaFoco = i;
+}
 
 static void buscaFazer(const char *q) {
   char agulha[TECLADO_MAX + 1];
@@ -4012,6 +4054,7 @@ static void buscaDesenhar(Uint32 agora) {
   (void)tf;
   if (buscaEstado == 1) teclado_desenhar(agora);
   if (ea < 0.01f) return;
+  if (buscaEstado == 2) ponteiro_camada();
   ajustes_acento(&ar, &ag, &ab);
   gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, 0.80f * ea);
   { GfxRect p = { x0 - 40.0f, 40.0f, G_BUSCA_W + 80.0f, NV_TELA_H - 80.0f };
@@ -4027,6 +4070,8 @@ static void buscaDesenhar(Uint32 agora) {
   // "Nova busca": foco -1.
   { GfxRect r = { x0, y, G_BUSCA_W, G_BUSCA_ROW - 10.0f };
     int foc = buscaFoco == -1;
+    if (buscaEstado == 2 && ea > 0.99f)
+      ponteiro_alvo_faixa(r.x, r.y, r.w, r.h, 130.0f, NV_TELA_H - 100.0f, ponteiroBuscaItem, NULL, -1, 0);
     if (foc) gfx_cor(r, 14.0f / r.h, ar, ag, ab, ea);
     gfx_icone((GfxRect){ r.x + 20.0f, r.y + (r.h - 26.0f) * 0.5f, 26.0f, 26.0f }, "menu_search",
               foc ? 0.06f : 0.9f, foc ? 0.07f : 0.9f, foc ? 0.08f : 0.92f, ea);
@@ -4048,6 +4093,8 @@ static void buscaDesenhar(Uint32 agora) {
     }
     r = (GfxRect){ x0, y, G_BUSCA_W, G_BUSCA_ROW - 10.0f };
     if (r.y > NV_TELA_H || r.y + r.h < 120.0f) { y += G_BUSCA_ROW; continue; }
+    if (buscaEstado == 2 && ea > 0.99f)
+      ponteiro_alvo_faixa(r.x, r.y, r.w, r.h, 130.0f, NV_TELA_H - 100.0f, ponteiroBuscaItem, NULL, i, 0);
     if (foc) gfx_cor(r, 14.0f / r.h, ar, ag, ab, ea);
     else gfx_cor(r, 14.0f / r.h, 1, 1, 1, 0.04f * ea);
     if (i < buscaNC) {
@@ -4213,6 +4260,9 @@ void guia_desenhar(Uint32 agora) {
           int foc = l == focoLin && i == focoCol && !focoTopo;
           GfxRect alvo;
           if (y + G_L_ROW < G_L_TOPO - 8.0f || y > G_L_BASE) continue;
+          if (passo == 0 && a > 0.99f)
+            ponteiro_alvo_faixa(G_AREA_X - 14.0f, y - 4.0f, G_AREA_W + 28.0f, G_L_CEL + 8.0f,
+                                G_L_TOPO - 8.0f, G_L_BASE, ponteiroCanal, NULL, l, i);
           if (foc && passo == 0)
             plrui_linha_foco((GfxRect){ G_AREA_X - 14.0f, y - 4.0f, G_AREA_W + 28.0f, G_L_CEL + 8.0f },
                              22.0f, a * dim);
@@ -4285,6 +4335,9 @@ void guia_desenhar(Uint32 agora) {
       { float x = G_AREA_X - rolX[l];
         for (i = 0; i < n; i++, x += G_CARD_W + G_GAP_X) {
           if (x + G_CARD_W < 0.0f || x > NV_TELA_W) continue;
+          if (a > 0.99f)
+            ponteiro_alvo_faixa(x, y + G_HEAD_H, G_CARD_W, G_CARD_H, G_TOPO - 8.0f, G_L_BASE,
+                              ponteiroCanal, NULL, l, i);
           desenharCard(linhaItem(l, i), x, y + G_HEAD_H,
                        l == focoLin && i == focoCol ? 1.0f : 0.0f,
                        a * dim, agoraT);

@@ -35,6 +35,7 @@
 #include "movimento.h"
 #include "layout.h"
 #include "ajustes.h"
+#include "ponteiro.h"
 #include "idioma.h"
 #include "botoes.h"
 #include "socialvis.h"
@@ -3260,6 +3261,37 @@ static float abasLargura(int todasContagens) {
   return w;
 }
 
+// PONTEIRO (#99) NA FAIXA DE ABAS, NA BARRA DE CHIPS E NAS LINHAS DAS OUTRAS
+// ABAS. Tudo pelas variaveis das setas: passar por cima da faixa poe o foco
+// nela (SP_FOCO_ABAS; o lapis com editLapis), um chip poe SP_FOCO_BARRA e
+// barraFoco, uma linha de Atividade/Agenda/Avisos/Amigos poe `foco`. O clique
+// numa aba TROCA para ela (a seta tambem troca na hora, sem OK); no lapis, num
+// chip ou numa linha, o clique e o OK de sempre. So com o painel assentado
+// (spPont, em desenharPainel) e sem escolha, teclado ou edicao por cima.
+static int spPont;
+static int spPontVale(void) { return aberto && !pop && !tecladoPara && !editando && !ctx_aberto(); }
+static void ponteiroAbasFoco(int i, int lapis) {
+  (void)i;
+  if (!spPontVale() || !temAbas() || (foco == SP_FOCO_ABAS && editLapis == lapis)) return;
+  foco = SP_FOCO_ABAS; editLapis = lapis;
+}
+static void ponteiroAbaAbrir(int i, int b) {
+  (void)b;
+  if (!spPontVale() || !temAbas() || i < 0 || i >= SP_ABA_N || !abaNaFaixa(i)) return;
+  if (i != aba) trocarAba(i);
+  foco = SP_FOCO_ABAS; editLapis = 0;
+}
+static void ponteiroChip(int k, int b) {
+  (void)b;
+  if (!spPontVale() || !temBarra() || k < 0 || k >= nChips() || (foco == SP_FOCO_BARRA && barraFoco == k)) return;
+  foco = SP_FOCO_BARRA; barraFoco = k; editLapis = 0;
+}
+static void ponteiroLinhaAba(int i, int b) {
+  (void)b;
+  if (!spPontVale() || aba == SP_ABA_SALVOS || i < 0 || i >= nVisiveis() || i == foco) return;
+  foco = i; editLapis = 0;
+}
+
 // A FAIXA DE ABAS na linha do titulo, a direita dele: um seletor segmentado
 // compacto (icone + contagem), a aba aberta num segmento um degrau mais claro
 // e, com o D-pad na faixa, esse segmento vira a pilula cheia no acento (foco
@@ -3318,6 +3350,8 @@ static void desenhaAbas(float dx, float a, float larguraDisp) {
     w = lapis ? SP_SEG_LAPIS : segLargura(i, &num, cor, todas || ativa);
     if (lapis) num.w = 0;
     p = (GfxRect){ x, SP_ABAS_Y + SP_SEG_PAD, w, SP_ABAS_H - SP_SEG_PAD * 2.0f };
+    if (spPont) ponteiro_alvo(p.x, SP_ABAS_Y, p.w, SP_ABAS_H, ponteiroAbasFoco,
+                              lapis ? NULL : ponteiroAbaAbrir, i, lapis);
     if (focada && lapis) {
       if (ajustes_vidro()) gfx_vidro_pilula_cheia(p, 0.5f, 1.0f, a);
       else { botao_luz(p, .55f, a); gfx_cor(p, 0.5f, ar, ag, ab, a); }
@@ -3390,6 +3424,7 @@ static void desenhaBarra(float dx, float a) {
     if (cap) { cw = caixaAltaIlha(cap, 255, 255, 255, -1.0f, 0.0f, 1.0f); if (cw > w) w = cw; }
     w += 44.0f + (icone ? 30.0f : 0.0f);
     r = (GfxRect){ x, SP_OPC_Y, w, SP_OPC_H };
+    if (spPont) ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroChip, NULL, k, 0);
     botaoSup(r, 0.5f, f, a);
     ix = x + 22.0f;
     if (icone) {
@@ -3422,6 +3457,7 @@ static void desenhaPop(float a) {
   float e, h, w, x, y, topoL, janela;
   int i, vis, algumIcone;
   if (!pop) return;
+  ponteiro_camada();   // a escolha aberta tem o teclado: a lista de tras nao vale
   e = anim_suave(popEntrada) * a;
   vis = popN < POP_VISIVEIS ? popN : POP_VISIVEIS;
   janela = (float)vis * (POP_LINHA_H + POP_LINHA_VAO) - POP_LINHA_VAO;
@@ -4513,6 +4549,15 @@ static void spainel_desenharCorpo_(Uint32 agora) {
   if (tecladoPara) teclado_desenhar(agora);
 }
 
+// PONTEIRO (#99) NA LISTA DE TITULOS. O titulo sob o cursor ganha o foco
+// pela mesma variavel das setas; o OK do clique segue o caminho de sempre
+// (abrir; segurado, o menu do cartaz).
+static void ponteiroTitulo(int i, int b) {
+  (void)b;
+  if (!aberto || pop || tecladoPara || aba == SP_ABA_SOCIAL || editando || i < 0 || i >= nLinhas) return;
+  foco = i;
+}
+
 static void desenharPainel(Uint32 agora) {
   float a = entrada, x, y, xp, xl, al;
   int i;
@@ -4520,7 +4565,9 @@ static void desenharPainel(Uint32 agora) {
   GfxRect forma = { SP_X, SP_Y, SP_W, SP_H };
   float raioForma = SP_RAIO / SP_W;
   morfOn = 0;
+  spPont = 0;
   if (entrada < 0.002f) return;
+  spPont = entrada > 0.999f && trocaT >= 0.999f && spPontVale();
 
   // Entra deslizando da BORDA DIREITA. `x` e o deslocamento: em a=0 o painel
   // esta inteiro fora da tela.
@@ -4660,8 +4707,11 @@ static void desenharPainel(Uint32 agora) {
           desenhaSecao(SP_X + x, y, atvRot[i], a, i == 0);
         y += cab;
       }
-      if (y + SPA_H >= listaTopo() && y <= SP_LISTA_BASE)
+      if (y + SPA_H >= listaTopo() && y <= SP_LISTA_BASE) {
+        if (spPont) ponteiro_alvo_faixa(SP_X + x + SP_LINHA_X, y, SP_LINHA_W, SPA_H, listaTopo(), SP_LISTA_BASE,
+                                        ponteiroLinhaAba, NULL, i, 0);
         desenhaAtvLinha(i, x, y, a, agora);
+      }
       y += SPA_H + SPS_GAP;
     }
     gfx_sem_recorte();
@@ -4685,6 +4735,8 @@ static void desenharPainel(Uint32 agora) {
             agendaui_painel_grupo(lsX, SP_LINHA_W, agendaui_painel_grupo_de(agenda_lista(agIdx[i])), y);
           y += cab;
         }
+        if (spPont && y + SPAG_H >= listaTopo() && y <= SP_LISTA_BASE)
+          ponteiro_alvo_faixa(lsX, y, SP_LINHA_W, SPAG_H, listaTopo(), SP_LISTA_BASE, ponteiroLinhaAba, NULL, i, 0);
         if (y + SPAG_H >= listaTopo() && y <= SP_LISTA_BASE)
           agendaui_painel_linha(lsX, SP_LINHA_W, agenda_lista(agIdx[i]), y,
                                 (i < SP_MAX) ? focoVisual(animFoco[i]) : 0.0f);
@@ -4692,14 +4744,18 @@ static void desenharPainel(Uint32 agora) {
       }
     }
     y = listaTopo() + SP_FOCO_AR - scrollY + topoDe(nAg);
-    if (y + SPS_H_ACAO >= listaTopo() && y <= SP_LISTA_BASE)
+    if (y + SPS_H_ACAO >= listaTopo() && y <= SP_LISTA_BASE) {
+      if (spPont) ponteiro_alvo_faixa(SP_X + x + SP_LINHA_X, y, SP_LINHA_W, SPS_H_ACAO, listaTopo(), SP_LISTA_BASE,
+                                      ponteiroLinhaAba, NULL, nAg, 0);
       desenhaBotaoLinha(nAg, x, y, SPS_H_ACAO, a, i18n("Abrir a agenda completa"), NULL, "aj_calendar", 1);
+    }
     gfx_sem_recorte();
     return;
   }
   if (aba == SP_ABA_AVISOS) {
     gfx_recorte(SP_X + xp, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
-    avisos_lista_desenhar(SP_X + x + SP_LINHA_X, listaTopo() + SP_FOCO_AR - scrollY, SP_LINHA_W, a, foco);
+    avisos_lista_desenhar_ptr(SP_X + x + SP_LINHA_X, listaTopo() + SP_FOCO_AR - scrollY, SP_LINHA_W, a, foco,
+                              spPont ? ponteiroLinhaAba : NULL, listaTopo(), SP_LISTA_BASE);
     gfx_sem_recorte();
     return;
   }
@@ -4743,6 +4799,11 @@ static void desenharPainel(Uint32 agora) {
       { float yv = y, av = alt;
         if (spsConta(social[i].tipo)) { av = SPS_H_CONTAS; if (i > 0 && spsConta(social[i - 1].tipo)) yv -= SPS_H_CONTAS; }
       if (yv + av >= listaTopo() && yv <= SP_LISTA_BASE) {
+        // As contas ligadas dividem uma fileira (ladrilhos lado a lado): sem
+        // alvo proprio por ora; o resto e uma linha de largura cheia.
+        if (spPont && !spsConta(social[i].tipo))
+          ponteiro_alvo_faixa(SP_X + x + SP_LINHA_X, y, SP_LINHA_W, alt, listaTopo(), SP_LISTA_BASE,
+                              ponteiroLinhaAba, NULL, i, 0);
         switch (social[i].tipo) {
           case SPS_REC: desenhaRecLinha(i, social[i].idx, x, y, a, agora); break;
           case SPS_SUG: desenhaSugLinha(i, social[i].idx, x, y, a, agora); break;
@@ -4828,6 +4889,9 @@ static void desenharPainel(Uint32 agora) {
       // rasterizar as 195 invisiveis estouraria o orcamento de linhas por
       // quadro de text.c e as visiveis sairiam EM BRANCO (ver ctxmenu.c).
       if (cy + linhas[i].lh < listaTopo() || cy > SP_LISTA_BASE) continue;
+      { GfxRect ra = lista ? linhaIlhaRet(x, cy, linhas[i].lh)
+                           : (GfxRect){ SP_X + x + SP_PAD + linhas[i].lx, cy, linhas[i].lw, linhas[i].lh };
+        ponteiro_alvo_faixa(ra.x, ra.y, ra.w, ra.h, listaTopo(), SP_LISTA_BASE, ponteiroTitulo, NULL, i, 0); }
       if (estilo == SORG_ESTILO_GRADE) desenhaCelulaGrade(i, x, cy, a);
       else if (estilo == SORG_ESTILO_PAISAGEM) desenhaCelulaPaisagem(i, x, cy, a);
       else desenhaLinha(i, x, cy, a);

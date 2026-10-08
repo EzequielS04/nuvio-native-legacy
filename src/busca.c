@@ -758,6 +758,18 @@ static void campoOk(void) {
 }
 static void focarCampoPonteiro(int a, int b) { (void)b; painel = 0; campoFoco = a; }
 
+// PONTEIRO (#99) NO TECLADO E NOS RESULTADOS: a tecla ou o titulo sob o cursor
+// ganha o foco pelas mesmas variaveis das setas; o OK do clique digita a tecla
+// ou abre o titulo, pelo caminho de sempre.
+static void ponteiroTecla(int f, int c) {
+  if (f < 0 || f > kbFil || c < 0 || c >= KB_COLUNAS[f]) return;
+  painel = 0; campoFoco = 0; focoKb.fileira = f; focoKb.coluna = c; focoKb.colunaLembrada[f] = c;
+}
+static void ponteiroResultado(int r, int c) {
+  if (r < 0 || r >= nFil || c < 0 || c >= fil[r].n) return;
+  painel = 1; focoRes.fileira = r; focoRes.coluna = c; focoRes.colunaLembrada[r] = c;
+}
+
 static void aplicarTecla(void) {
   if (focoKb.fileira < kbFil) {
     int k = focoKb.fileira * BU_KB_COLS + focoKb.coluna;
@@ -1319,6 +1331,7 @@ static void desenhaTeclado(void) {
     for (int c = 0; c < KB_COLUNAS[f]; c++) {
       float k = animTecla[f][c];
       GfxRect t = retanguloTecla(f, c);
+      ponteiro_alvo(t.x, t.y, t.w, t.h, ponteiroTecla, NULL, f, c);
       buNeutro(t, BU_TECLA_RAIO, 0.07f, 1.0f - k);
       buPilulaAcento(t, BU_TECLA_RAIO, k);
       const char *s;
@@ -1463,6 +1476,8 @@ static void desenhaResultados(Uint32 agora) {
         pessX[c] = x; pessW[c] = w;
         x += w + BU_PESS_GAP;
         if (px > BU_DIR + 30.0f || px + w < BU_RES_X - 30.0f) continue;
+        ponteiro_alvo_faixa(av.x - 12.0f, cy - 8.0f, w + 30.0f, BU_PESS_AV + 16.0f,
+                            BU_RES_Y - 20.0f, BU_RES_Y + BU_RES_AREA_H + 20.0f, ponteiroResultado, NULL, r, c);
         gfx_opacidade_grupo = grupo * entra;
         if (f > 0.01f) {
           GfxRect pil = { av.x - 12.0f, av.y - 8.0f, w + 30.0f, BU_PESS_AV + 16.0f };
@@ -1491,6 +1506,8 @@ static void desenhaResultados(Uint32 agora) {
       float entra = filEntraEm[r] ? revela_entra(filEntraEm[r], 0.0f, agora) : 1.0f;
       if (!ci) continue;
       GfxRect t = { BU_RES_X, cy + (1.0f - entra) * NV_ENTRA_DY, larg, BU_MELHOR_H };
+      ponteiro_alvo_faixa(BU_RES_X, cy, larg, BU_MELHOR_H, BU_RES_Y - 20.0f,
+                          BU_RES_Y + BU_RES_AREA_H + 20.0f, ponteiroResultado, NULL, r, 0);
       gfx_opacidade_grupo = grupo * entra;
       ajustes_ui_ilha(t, 26.0f, 0);
       if (f > 0.01f) {
@@ -1541,6 +1558,12 @@ static void desenhaResultados(Uint32 agora) {
           if (!ci) continue;
           float px = BU_RES_X + c * passo - scrollX[r];
           if (px > BU_DIR + 30.0f || px + cw < BU_RES_X - passo) continue;
+          if (passe == 0 || f > 0.01f) {
+            float ax = px < BU_RES_X - 30.0f ? BU_RES_X - 30.0f : px;
+            float aw = (px + cw > BU_DIR + 30.0f ? BU_DIR + 30.0f : px + cw) - ax;
+            if (aw > 0.0f) ponteiro_alvo_faixa(ax, cy - 6.0f, aw, ch + 40.0f, BU_RES_Y - 20.0f,
+                                               BU_RES_Y + BU_RES_AREA_H + 20.0f, ponteiroResultado, NULL, r, c);
+          }
           float entra = filEntraEm[r]
                       ? revela_entra(filEntraEm[r], revela_onda_atraso(c - c0, 0), agora) : 1.0f;
           float esc = 1.0f + 0.05f * f;

@@ -57,6 +57,7 @@
 #include "text.h"
 #include "tex_cache.h"
 #include "ajustes.h"
+#include "ponteiro.h"
 #include "socialvis.h"
 #include "svdesenho.h"
 #include "recomenda.h"
@@ -824,6 +825,25 @@ static void desenharNumeros(float a) {
 // O RITMO DO MES: um quadrado de 34 por dia, sete por linha, em TRES
 // intensidades do acento (25/50/90% do mockup) pela fracao do dia mais cheio;
 // dia sem nada no branco a 6%. O dia em foco fica BRANCO CHEIO e cresce 6%.
+// PONTEIRO (#99). As tres paradas do resumo pelas mesmas variaveis das setas:
+// o dia do calendario, a linha de "Mais vistos" e o rosto do amigo. O OK do
+// clique segue o caminho de sempre (abrir o titulo, abrir o duelo).
+static void ponteiroDia(int i, int b) {
+  (void)b;
+  if (modo != PF_RESUMO || !temDados || i < 0 || i >= dados.nDias) return;
+  secao = 0; dia = i;
+}
+static void ponteiroDestaque(int i, int b) {
+  (void)b;
+  if (modo != PF_RESUMO || !temDados || i < 0 || i >= nCards()) return;
+  secao = 1; item = i;
+}
+static void ponteiroAmigo(int k, int b) {
+  (void)b;
+  if (modo != PF_RESUMO || !temDados || k < 0 || k >= rostosCabem()) return;
+  secao = 2; amigo = k;
+}
+
 static void desenharAtividade(float a) {
   GfxRect r = rCartao(0);
   float y0, x0 = r.x + PF_PAD_X, ar, ag, ab, yLeg;
@@ -841,6 +861,7 @@ static void desenharAtividade(float a) {
                    c.w * esc, c.h * esc };
     float raio = 9.0f / dc.h;
     if (lin >= PF_CAL_LINHAS) break;
+    ponteiro_alvo(c.x, c.y, c.w, c.h, ponteiroDia, NULL, i, 0);
     if (f < 0.99f) {
       unsigned v = dados.atividade[i];
       float k = 1.0f - f;
@@ -897,6 +918,7 @@ static void desenharDestaques(float a) {
     GLuint tex = art[0] ? tex_obter_larg(art, mini.w) : 0;
     char linha[200];
     TxtLinha t;
+    ponteiro_alvo(lr.x, lr.y, lr.w, lr.h, ponteiroDestaque, NULL, i, 0);
     linhaFoco(lr, 14.0f / lr.h, f, a);
     if (tex) { gfx_tex_aspect_atual = tex_aspecto(art);
                gfx_rect(mini, tex, GFX_CARD, 0, 0, 0, 8.0f / mini.h, 1, 1, 1, a);
@@ -951,9 +973,10 @@ static void desenharAmigos(Uint32 agora, float a) {
   }
   { int k, m = rostosCabem();
     // O anel de foco (no acento) so no rosto escolhido, e so com o cartao em foco.
-    for (k = 0; k < m; k++)
+    for (k = 0; k < m; k++) {
+      ponteiro_alvo(x + 4.0f + k * (PF_ROSTO + 16.0f), y + 4.0f, PF_ROSTO, PF_ROSTO, ponteiroAmigo, NULL, k, 0);
       svd_rosto((GfxRect){ x + 4.0f + k * (PF_ROSTO + 16.0f), y + 4.0f, PF_ROSTO, PF_ROSTO },
-                socialvis_amigo(k), k == amigo ? focoAmigos : 0.0f, a, agora); }
+                socialvis_amigo(k), k == amigo ? focoAmigos : 0.0f, a, agora); } }
   y += PF_ROSTO + 8.0f + 16.0f;
   // QUEM ESTA VENDO AGORA: o primeiro amigo ao vivo e o titulo dele, "Marina
   // esta vendo O Urso · T3E4". Sem ninguem ao vivo, a linha nao existe.

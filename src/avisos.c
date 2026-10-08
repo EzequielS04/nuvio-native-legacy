@@ -32,6 +32,7 @@
 #include "avisodisp.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
 #include "escala.h"
+#include "ponteiro.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -884,11 +885,22 @@ static float botao(float x, float y, const char *rot, int foco, float a, float a
   return r.w;
 }
 
+// PONTEIRO (#99). O cartao e uma camada; os botoes poem o foco pela MESMA
+// variavel das setas (cartaoFoco) e o OK do clique faz o resto. Depois do
+// envio so ha "Fechar", que qualquer OK aciona: o focar nao tem o que mexer.
+static void ponteiroCartao(int i, int b) {
+  (void)b;
+  if (!cartao || envioEstado != 0 || i < 0 || i > 1 || cartaoFoco == i) return;
+  cartaoFoco = i;
+}
+
 static void cartaoDesenhar(void) {
   const float W = 980.0f, H = 336.0f;
   float a = cartaoA, x = (NV_TELA_W - W) * 0.5f, y = (NV_TELA_H - H) * 0.5f + (1.0f - a) * 30.0f;
   float ar, ag, ab, bx;
+  int alvos = cartao && a > 0.99f;
   char txt[300];
+  if (cartao) ponteiro_camada();
   if (a < 0.01f) return;
   ajustes_acento(&ar, &ag, &ab);
   gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, 0.70f * a);
@@ -910,10 +922,19 @@ static void cartaoDesenhar(void) {
     TxtLinha t = txt_linha(TXT_BODY, envioEstado == 2 ? i18n("Registro enviado. Obrigado.") : i18n("Não foi possível enviar agora."),
                            envioEstado == 2 ? 120 : 237, envioEstado == 2 ? 200 : 77, envioEstado == 2 ? 140 : 77, 255);
     txt_desenhar_alpha(t, bx, y + H - 56.0f - BOTAO_H_PRIMARIO + 22.0f, a);
-    botao(x + W - 56.0f - botao_largura(i18n("Fechar"), NULL, 1), y + H - 56.0f - BOTAO_H_PRIMARIO, i18n("Fechar"), 1, a, ar, ag, ab, 1);
+    { float bw = botao_largura(i18n("Fechar"), NULL, 1), by = y + H - 56.0f - BOTAO_H_PRIMARIO;
+      if (alvos) ponteiro_alvo(x + W - 56.0f - bw, by, bw, BOTAO_H_PRIMARIO, ponteiroCartao, NULL, 0, 0);
+      botao(x + W - 56.0f - bw, by, i18n("Fechar"), 1, a, ar, ag, ab, 1); }
   } else {
-    bx += botao(bx, y + H - 56.0f - BOTAO_H_PRIMARIO, i18n("Enviar registro"), cartaoFoco == 0, a, ar, ag, ab, 1) + BOTAO_GAP;
-    botao(bx, y + H - 56.0f - BOTAO_H_PRIMARIO, i18n("Agora não"), cartaoFoco == 1, a, ar, ag, ab, 0);
+    float by = y + H - 56.0f - BOTAO_H_PRIMARIO, bw;
+    if (alvos) ponteiro_alvo(bx, by, botao_largura(i18n("Enviar registro"), NULL, 1), BOTAO_H_PRIMARIO,
+                             ponteiroCartao, NULL, 0, 0);
+    bx += botao(bx, by, i18n("Enviar registro"), cartaoFoco == 0, a, ar, ag, ab, 1) + BOTAO_GAP;
+    bw = botao_largura(i18n("Agora não"), NULL, 0);
+    // O secundario e mais baixo e alinha pela base (ver botao).
+    if (alvos) ponteiro_alvo(bx, by + BOTAO_H_PRIMARIO - BOTAO_H_SECUNDARIO, bw, BOTAO_H_SECUNDARIO,
+                             ponteiroCartao, NULL, 1, 0);
+    botao(bx, by, i18n("Agora não"), cartaoFoco == 1, a, ar, ag, ab, 0);
   }
 }
 
@@ -1024,6 +1045,15 @@ const char *avisos_pediu_abrir(void) {
   return saida;
 }
 int avisos_pediu(void) { int c = pediuCodigo; pediuCodigo = 0; return c; }
+
+// PONTEIRO (#99): a linha sob o cursor vira o foco, pela MESMA variavel das
+// setas. Trocar de linha solta um OK afundado, como a seta faz.
+static void ponteiroLinha(int i, int b) {
+  (void)b;
+  if (!aberto || cartao || i == foco || i < 0 || i >= avisos_lista_linhas()) return;
+  foco = i; okDesde = 0;
+}
+int avisos_teste_foco(void) { return aberto ? foco : -1; }
 
 static void fechar(void) {
   avisos_marcar_lidos();
@@ -1383,6 +1413,13 @@ float avisos_lista_altura(void) {
 int avisos_lista_n(void) { int k; pthread_mutex_lock(&trava); k = n; pthread_mutex_unlock(&trava); return k; }
 
 void avisos_lista_desenhar(float x, float y0, float w, float a, int focoLinha) {
+  avisos_lista_desenhar_ptr(x, y0, w, a, focoLinha, NULL, 0.0f, 0.0f);
+}
+// PONTEIRO (#99): com `focar`, cada linha (e "Dispensar todos", indice n)
+// vira alvo recortado a [clipY0, clipY1). O focar e de QUEM HOSPEDA a lista:
+// o foco e dele (a central ou a aba Avisos de Salvos).
+void avisos_lista_desenhar_ptr(float x, float y0, float w, float a, int focoLinha,
+                               void (*focar)(int, int), float clipY0, float clipY1) {
   float ar, ag, ab;
   int i;
   const float fr = 243.0f / 255.0f, fg = 242.0f / 255.0f, fb = 239.0f / 255.0f;
@@ -1403,6 +1440,7 @@ void avisos_lista_desenhar(float x, float y0, float w, float a, int focoLinha) {
     rowH = expande ? alturaCanalFoco : alturaAvisoF(i, f);
     GfxRect row = { x, y, w, rowH };
     const char *acao = NULL;
+    if (focar) ponteiro_alvo_faixa(x, y, w, rowH, clipY0, clipY1, focar, NULL, i, 0);
     if (f) {
       if (ajustes_vidro()) gfx_cor(row, 22.0f / row.h, 1, 1, 1, .12f * a);
       else {
@@ -1457,6 +1495,7 @@ void avisos_lista_desenhar(float x, float y0, float w, float a, int focoLinha) {
   if (n > 0) {
     int f = focoLinha == n;
     GfxRect row = { x, y, w, AVL_TODOS_H };
+    if (focar) ponteiro_alvo_faixa(x, y, w, AVL_TODOS_H, clipY0, clipY1, focar, NULL, n, 0);
     if (f) {
       if (ajustes_vidro()) gfx_cor(row, 22.0f / row.h, 1, 1, 1, .12f * a);
       else gfx_cor(row, 22.0f / row.h, .169f, .176f, .204f, a);
@@ -1624,6 +1663,9 @@ static void avisos_desenharCorpo_(Uint32 agora) {
     toastPendente = 0;
     anunciarNaIlha();
   }
+  // A CENTRAL ABERTA E UMA CAMADA (app.c nao chama camada para ela): o que
+  // esta atras nao recebe o ponteiro, nem durante a entrada.
+  if (aberto) ponteiro_camada();
   if (a < 0.01f) { cartaoDesenhar(); return; }
   dx = (1.0f - a) * 80.0f;
   gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, 0.45f * a);
@@ -1644,7 +1686,11 @@ static void avisos_desenharCorpo_(Uint32 agora) {
     rol += (alvo - rol) * 0.25f; }
   // A linha da ilha tem 22 de recuo proprio: a caixa dela sai 22 para fora,
   // e o texto continua na prumada do titulo do painel.
-  avisos_lista_desenhar(AVP_X + dx + AVP_MARG - 22.0f, AVP_TOPO - rol, AVP_W - 2 * AVP_MARG + 44.0f, a, foco);
+  // PONTEIRO (#99): as linhas so com o painel assentado, recortadas a janela
+  // da lista, com o focar DA CENTRAL.
+  avisos_lista_desenhar_ptr(AVP_X + dx + AVP_MARG - 22.0f, AVP_TOPO - rol, AVP_W - 2 * AVP_MARG + 44.0f, a, foco,
+                            aberto && !cartao && a > 0.99f ? ponteiroLinha : NULL,
+                            AVP_TOPO - 8.0f, NV_TELA_H - 80.0f);
   gfx_sem_recorte();
   { TxtLinha t = txt_linha_corta(TXT_CAPTION2, i18n("↑ ↓ escolher · OK agir · Voltar fecha e marca tudo como lido"),
                                  140, 144, 154, 255, AVP_W - 2 * AVP_MARG);

@@ -148,6 +148,7 @@ static void dgObjetivo(void) {
     float cw = (w - 16) * 0.5f;
     GfxRect c = { x + i * (cw + 16), y, cw, 126 };
     int sel = focoModo == i;
+    ponteiro_alvo(c.x, c.y, c.w, c.h, ponteiroModo, ponteiroModo, i, 0);
     if (sel && !focoLinha) ajustes_ui_foco_linha(c, 26);
     else ajustes_ui_neutro(c, 26, sel ? 0.14f : 0.05f);
     { TxtLinha t = dgT(TXT_AJ_NOME, i ? "Desempenho" : "Qualidade");
@@ -170,8 +171,11 @@ static void dgObjetivo(void) {
     txt_desenhar(t, x, y + 8);
   }
   { float by = e.y + e.h - 42 - 18 - 16 - 60, bx = x;
-    bx += ajustes_ui_botao(i18n("Iniciar diagnóstico"), "aj_activity", bx, by, !focoLinha) + 12;
-    ajustes_ui_botao(i18n("Teste de velocidade"), "aj_gauge", bx, by, focoLinha);
+    { float bw = ajustes_ui_botao(i18n("Iniciar diagnóstico"), "aj_activity", bx, by, !focoLinha);
+      ponteiro_alvo(bx, by, bw, 60, ponteiroLinhaObj, NULL, 0, 0);
+      bx += bw + 12; }
+    { float bw = ajustes_ui_botao(i18n("Teste de velocidade"), "aj_gauge", bx, by, focoLinha);
+      ponteiro_alvo(bx, by, bw, 60, ponteiroLinhaObj, NULL, 1, 0); }
     { TxtLinha t = dgTC(TXT_ILHA_APOIO, i18n("Até 3 títulos, 6 fontes e 12 imagens; limite de 8 minutos"), w);
       txt_desenhar_alpha(t, x, by + 60 + 16, 0.45f); } }
   // Como funciona
@@ -484,7 +488,11 @@ static void dgResultado(void) {
   { int lista[B_N], n = botoesVisiveis(lista);
     float bx = X, by = NV_TELA_H - 40 - 60;
     if (d.botao >= n) d.botao = n > 0 ? n - 1 : 0;
-    for (i = 0; i < n; i++) bx += ajustes_ui_botao(i18n(BOTAO_ROTULO[lista[i]]), NULL, bx, by, i == d.botao) + 12;
+    for (i = 0; i < n; i++) {
+      float bw = ajustes_ui_botao(i18n(BOTAO_ROTULO[lista[i]]), NULL, bx, by, i == d.botao);
+      if (d.sugEstado != DS_TESTANDO) ponteiro_alvo(bx, by, bw, 60, ponteiroBotaoRes, NULL, i, 0);
+      bx += bw + 12;
+    }
     { const char *k[3] = { "← →", "OK", "Voltar" }, *l[3] = { "Escolher", "Confirmar", "Sair" };
       float dw = ajustes_ui_dicas(k, l, 3, 0, 0, 0);
       ajustes_ui_dicas(k, l, 3, NV_TELA_W - 40 - dw, by + 15, 1); } }
@@ -568,8 +576,11 @@ static void dgVazaoResultado(Uint32 agora) {
   { int lista[VB_N], n = vazBotoes(lista);
     float bx = x, by = e.y + e.h - 40 - 60;
     if (vz.botao >= n) vz.botao = n - 1;
-    for (i = 0; i < n; i++)
-      bx += ajustes_ui_botao(i18n(VB_ROTULO[lista[i]]), i == 0 ? "aj_rotate-cw" : NULL, bx, by, i == vz.botao) + 12;
+    for (i = 0; i < n; i++) {
+      float bw = ajustes_ui_botao(i18n(VB_ROTULO[lista[i]]), i == 0 ? "aj_rotate-cw" : NULL, bx, by, i == vz.botao);
+      ponteiro_alvo(bx, by, bw, 60, ponteiroBotaoVaz, NULL, i, 0);
+      bx += bw + 12;
+    }
     snprintf(a, sizeof a, i18n("%d de %d tentadas · %d segundos"), nf, vz.tentadas, vz.nAmostra);
     { TxtLinha t = dgTC(TXT_ILHA_APOIO, a, x + w - bx - 10); txt_desenhar_alpha(t, x + w - t.w, by + (60 - t.h) * 0.5f, 0.45f); } }
   // VAZAO POR FONTE
@@ -687,7 +698,11 @@ static void dgVazaoGenerico(Uint32 agora) {
     int lista[VB_N], n = vazBotoes(lista), i;
     float bx = e.x, by = NV_TELA_H - 40 - 60;
     if (vz.botao >= n) vz.botao = n - 1;
-    for (i = 0; i < n; i++) bx += ajustes_ui_botao(i18n(VB_ROTULO[lista[i]]), NULL, bx, by, i == vz.botao) + 12;
+    for (i = 0; i < n; i++) {
+      float bw = ajustes_ui_botao(i18n(VB_ROTULO[lista[i]]), NULL, bx, by, i == vz.botao);
+      ponteiro_alvo(bx, by, bw, 60, ponteiroBotaoVaz, NULL, i, 0);
+      bx += bw + 12;
+    }
   } else {
     const char *k[1] = { "Voltar" }, *l[1] = { "Cancelar" };
     ajustes_ui_dicas(k, l, 1, e.x, NV_TELA_H - 40 - 45, 1);

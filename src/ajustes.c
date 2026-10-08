@@ -44,6 +44,10 @@
 #include "registro.h"
 #include "seguro.h"
 #include "botoes.h"
+#include "ponteiro.h"
+#include "addonsui.h"
+#include "pluginsui.h"
+#include <math.h>
 #include <time.h>
 #include "js.h"
 #include "artehero.h"
@@ -1833,6 +1837,13 @@ void ajustes_voltar_de_lista(int plugins) { uxVoltarOp = plugins ? AJ_PLUGINS : 
 static int uxDifs[AJ_N], uxNDifs, uxDifFoco;
 static int uxEditor, uxOp, uxPendente, uxOriginal, uxRodape;
 static int uxRestaurar, uxConfirmar, uxAvisoRisco;
+int  ajustes_teste_editor(int *pendente, int *rodape, int *restaurar, int *confirmar) {
+  if (pendente) *pendente = uxPendente;
+  if (rodape) *rodape = uxRodape;
+  if (restaurar) *restaurar = uxRestaurar;
+  if (confirmar) *confirmar = uxConfirmar;
+  return uxEditor;
+}
 static char uxAviso[160];
 static Uint32 uxAvisoAte;
 static const char *textoValor(int op);
@@ -7375,7 +7386,7 @@ static void ajDesenharTudo(Uint32 agora) {
   if (ajQuadroPlugins) { AjPluginsVista v = { 0, ajQuadroPlugins - 1, 0, 0, "" }; ajustes_desenhar_plugins(&v); return; }
 #endif
   montarTela();
-  if (guiaAberto) { guiaDesenhar(); return; }
+  if (guiaAberto) { ponteiro_camada(); guiaDesenhar(); return; }
   ajDesenharTela();
 
   // A folha de fileiras cobre a lista; o vinculo cobre as duas, porque ele e a
@@ -7384,7 +7395,9 @@ static void ajDesenharTudo(Uint32 agora) {
   // uma tabela de quatro colunas com o painel de previa ao lado, desenhada
   // para a largura inteira; na tela virtual de 150% (1280) as colunas se
   // atropelam. Ela ja ocupa a tela toda em 100%.
-  if (filAberta) { ESCALA_REAL_INI(); desenhaFileiras(); ESCALA_REAL_FIM(); }
+  // Ponteiro (#99): a folha de fileiras tem o teclado; sem alvo proprio, o
+  // clique e o OK (ponteiro.h, CAMADAS) — a rail de tras nao pode engoli-lo.
+  if (filAberta) { ponteiro_camada(); ESCALA_REAL_INI(); desenhaFileiras(); ESCALA_REAL_FIM(); }
   if (riscoFolha) desenhaRiscoFolha();
   if (frAberta == 3) desenhaFolhaOrdem();
   else if (frAberta) desenhaFolhaPermitidos();

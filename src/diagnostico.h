@@ -30,5 +30,8 @@ void diagnostico_intro_atualizar(float dt, Uint32 agora);
 void diagnostico_intro_desenhar(Uint32 agora);
 int  diagnostico_quer_sair(void);
 void diagnostico_encerrar(void);
+// Testes do ponteiro (#99): o foco das setas (modo/linha do objetivo, botao
+// do resultado, botao do teste de velocidade); devolve o estado (0/1/2).
+int  diagnostico_teste_foco(int *modo, int *linha, int *botao, int *vzBotao);
 
 #endif

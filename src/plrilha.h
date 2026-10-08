@@ -43,6 +43,10 @@ typedef struct {
   int baixa;                // 1 = prioridade baixa: cede a qualquer outro pedido do quadro (a guia parental)
   int respira;              // 1 = o ponto que respira antes da frase (atividade: o canal sintonizando)
   int voltaRelogio;         // 1 = ao acabar, o corpo vira a pilula da HORA, segura um instante e so entao sai (guia parental). Relogio desligado: encolhe e some no lugar
+  // PONTEIRO (#99): a pilula SEM corpo e clicavel. Vira o `focar` de um alvo do
+  // tamanho da pilula assentada; o clique entrega OK a quem trata a tecla dela
+  // (a de falha da legenda: faixas_pilula_tecla). NULL = so informativa.
+  void (*ponteiroOk)(int a, int b);
 } PlrIlhaPedido;
 
 void plrilha_pedir(const PlrIlhaPedido *p);

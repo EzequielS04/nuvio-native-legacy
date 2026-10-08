@@ -11,6 +11,7 @@
 #include "idioma.h"
 #include "recomenda.h"
 #include "badges.h"
+#include "ponteiro.h"
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -77,6 +78,15 @@ static const char *imdbDe(int f, int c) {
   if (f == AP_MANDOU && c < perf.nMandou) return perf.mandou[c].imdb;
   return "";
 }
+
+// PONTEIRO (#99). O cartaz sob o cursor vira o foco pelas MESMAS variaveis
+// das setas (fila, col); o OK do clique abre o titulo pelo caminho de sempre.
+static void ponteiroCartaz(int f, int c) {
+  if (!temPerfil || f < 0 || f >= AP_NFILAS || c < 0 || c >= nFila(f) || c >= SV_FILA_MAX) return;
+  if (f == fila && c == col) return;
+  fila = f; col = c;
+}
+int amigoperfil_teste_foco(int *coluna) { if (coluna) *coluna = col; return fila; }
 
 void amigoperfil_evento(const SDL_Event *e) {
   SDL_Keycode k;
@@ -401,6 +411,7 @@ void amigoperfil_desenhar(Uint32 agora) {
       GfxRect r = { x, y, AP_PW, AP_PH };
       float fc = fFoco[f][c];
       if (x + AP_PW > NV_TELA_W - 40.0f) break;
+      if (a > 0.99f) ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroCartaz, NULL, f, c);
       if (f == AP_MANDOU) {
         const SvEnviada *m = &perf.mandou[c];
         cartaz(r, m->poster, fc, a);

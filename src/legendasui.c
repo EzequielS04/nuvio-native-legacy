@@ -15,6 +15,7 @@
 #include "catalogo.h"
 #include "legauto.h"
 #include "video.h"
+#include "ponteiro.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -538,6 +539,49 @@ int legendasui_evento(const SDL_Event *e) {
 #define LU_LN_H    88.0f
 #define LU_LN_VAO   4.0f
 #define LU_PE_H    47.0f
+// PONTEIRO (#99). A linha sob o cursor ganha o foco pela mesma focar() das
+// setas (idempotente: a linha ja focada nao zera a acao da sincronia); o OK do
+// clique segue por legendasui_evento. O que o OK nao faz e ESQUERDA/DIREITA
+// faz vira clique proprio: os segmentos Principal/Secundaria do "Usar como",
+// os discos < > da acao da sincronia, a regua do Atraso (metade esquerda
+// adianta, direita atrasa: o passo de 0,1 s da seta) e a aba "Estilo".
+// `pont` = a ilha esta assentada neste quadro (alvos so entao).
+static int pont;
+static int ponteiroAqui(int i) {
+  return aberto && !faixas_estilo_topo() && i >= 0 && i < nLinhasV;
+}
+static void ponteiroLinha(int i, int b) {
+  (void)b;
+  if (!ponteiroAqui(i) || i == foco) return;
+  focar(i);
+}
+static void ponteiroAlvoSeg(int i, int seg) {
+  if (!ponteiroAqui(i) || linhas[i].tipo != LR_ALVO) return;
+  ponteiroLinha(i, 0);
+  alvo = seg ? 1 : 0;
+}
+static void ponteiroSyncPasso(int i, int d) {
+  const char *rot[4];
+  int n;
+  if (!ponteiroAqui(i) || linhas[i].tipo != LR_SYNC) return;
+  ponteiroLinha(i, 0);
+  n = nAcoes(linhas[i].slot, rot, 4);
+  if (syncAcao + d >= 0 && syncAcao + d < n) syncAcao += d;
+}
+// `cx` = o meio da regua na tela real (a do ponteiro).
+static void ponteiroAtraso(int i, int cx) {
+  if (!ponteiroAqui(i) || linhas[i].tipo != LR_ATRASO) return;
+  ponteiroLinha(i, 0);
+  mudarAtraso(ponteiro_x() < (float)cx ? -100 : 100);
+}
+static void ponteiroAbaEstilo(int a, int b) { (void)a; (void)b; if (aberto) faixas_aba_estilo(1); }
+
+int legendasui_teste_foco(int *alvoOut, int *syncOut) {
+  if (alvoOut) *alvoOut = alvo;
+  if (syncOut) *syncOut = syncAcao;
+  return aberto ? foco : -1;
+}
+
 static int luVis(void) {
   int n = (int)((NV_VTELA_H - 48.0f - 40.0f - 60.0f - 183.0f + 4.0f) / (LU_LN_H + LU_LN_VAO));
   return n > 7 ? 7 : n < 2 ? 2 : n;
@@ -668,7 +712,7 @@ static void textoLinha(const LuiLinha *l, char *nome, size_t tn, char *sub, size
   }
 }
 
-static void desenharLinha(const LuiLinha *l, int sel, float x, float y, float w, float a) {
+static void desenharLinha(const LuiLinha *l, int idx, int sel, float x, float y, float w, float a) {
   char nome[96], sub[256];
   const char *idioma, *icone;
   int ativo, apagada;
@@ -677,6 +721,7 @@ static void desenharLinha(const LuiLinha *l, int sel, float x, float y, float w,
   textoLinha(l, nome, sizeof nome, sub, sizeof sub, &idioma, &icone, &ativo, &apagada);
   if (apagada) aL = a * 0.55f;
   if (sel) plrui_linha_foco(lr, 22.0f, a);
+  if (pont) ponteiro_alvo(x, y, w, LU_LN_H, ponteiroLinha, NULL, idx, 0);
   rosto((GfxRect){ x + 22.0f, y + (LU_LN_H - 52.0f) * 0.5f, 52.0f, 52.0f }, idioma, icone, sel, aL);
   if (ativo) {
     float ar, ag, ab;
@@ -689,6 +734,11 @@ static void desenharLinha(const LuiLinha *l, int sel, float x, float y, float w,
     int cont[2] = { -1, -1 };
     float sw = plrui_seg(rot, cont, 2, alvo, sel, -1.0f, 0, a);
     plrui_seg(rot, cont, 2, alvo, sel, dir - sw, y + (LU_LN_H - 54.0f) * 0.5f, a);
+    if (pont) {   // o primeiro segmento mede o que mede o segmentado de um so
+      float w0 = plrui_seg(rot, cont, 1, alvo, sel, -1.0f, 0, a);
+      ponteiro_alvo(dir - sw, y + (LU_LN_H - 54.0f) * 0.5f, w0, 54.0f, ponteiroLinha, ponteiroAlvoSeg, idx, 0);
+      ponteiro_alvo(dir - sw + w0, y + (LU_LN_H - 54.0f) * 0.5f, sw - w0, 54.0f, ponteiroLinha, ponteiroAlvoSeg, idx, 1);
+    }
     dir -= sw + 12.0f;
   } else if (!mais && !ver && (l->tipo == LR_CAND || l->tipo == LR_NENHUMA)) {
     // (No pill on the AutoSync row: only the primary syncs, and the title
@@ -720,10 +770,12 @@ static void desenharLinha(const LuiLinha *l, int sel, float x, float y, float w,
       float cy = y + LU_LN_H * 0.5f, dw = 30.0f, ad = k < n - 1 ? 1.0f : 0.3f, ae = k > 0 ? 1.0f : 0.3f;
       dir -= dw; gfx_cor((GfxRect){ dir, cy - 15.0f, dw, 30.0f }, 0.5f, 1, 1, 1, 0.10f * ad * a);
       gfx_icone((GfxRect){ dir + 6.0f, cy - 9.0f, 18.0f, 18.0f }, "pl_chevron-right", 1, 1, 1, ad * a);
+      if (pont) ponteiro_alvo(dir - 6.0f, cy - 21.0f, dw + 12.0f, 42.0f, ponteiroLinha, ponteiroSyncPasso, idx, 1);
       dir -= 10.0f + (float)t.w;
       txt_desenhar_alpha(t, dir, cy - (float)t.h * 0.5f, a);
       dir -= 10.0f + dw; gfx_cor((GfxRect){ dir, cy - 15.0f, dw, 30.0f }, 0.5f, 1, 1, 1, 0.10f * ae * a);
       gfx_icone((GfxRect){ dir + 6.0f, cy - 9.0f, 18.0f, 18.0f }, "pl_chevron-left", 1, 1, 1, ae * a);
+      if (pont) ponteiro_alvo(dir - 6.0f, cy - 21.0f, dw + 12.0f, 42.0f, ponteiroLinha, ponteiroSyncPasso, idx, -1);
       dir -= 12.0f;
     }
   }
@@ -743,6 +795,8 @@ static void desenharLinha(const LuiLinha *l, int sel, float x, float y, float w,
       gfx_cor((GfxRect){ px - 12.0f, cy - 12.0f, 24.0f, 24.0f }, 0.5f, 0.055f, 0.059f, 0.071f, a);
       gfx_cor((GfxRect){ px - 9.0f, cy - 9.0f, 18.0f, 18.0f }, 0.5f, 0.953f, 0.949f, 0.937f, a);
     } else gfx_cor((GfxRect){ px - 6.0f, cy - 6.0f, 12.0f, 12.0f }, 0.5f, 0.953f, 0.949f, 0.937f, al);
+    if (pont) ponteiro_alvo(tx - 12.0f, y, tw + 24.0f, LU_LN_H, ponteiroLinha, ponteiroAtraso, idx,
+                            (int)((tx + tw * 0.5f) * gfx_escala()));
     dir = tx - 18.0f;
   }
   { float tx = x + 22.0f + 52.0f + 18.0f, tw = dir - tx;
@@ -763,6 +817,7 @@ void legendasui_corpo(GfxRect c, float a) {
   float x0 = c.x + LU_PAD_X, w = c.w - LU_PAD_X * 2.0f, y = c.y + LU_PAD_Y;
   int vis = luVis(), fim, i;
   montarLinhas();
+  pont = a > 0.99f && ponteiro_ativo();
   plrui_kicker(tituloSessao(), x0 + 10.0f, y, 115, 115, 113, a);
   { TxtLinha t = txt_linha(TXT_ILHA_PERGUNTA, mais ? "Mais opções" : ver && nLinhasV && linhas[0].cand >= 0 ? nomeIdioma(cand[linhas[0].cand].idioma) : "Legendas", 243, 242, 239, 255);
     float ty = y + 22.0f;
@@ -770,12 +825,16 @@ void legendasui_corpo(GfxRect c, float a) {
     int cont[2] = { nCand, -1 };
     float sw = plrui_seg(rot, cont, 2, 0, 0, -1.0f, 0, a);
     txt_desenhar_alpha(t, x0 + 10.0f, ty, a);
-    plrui_seg(rot, cont, 2, 0, 0, x0 + w - 10.0f - sw, ty + (float)t.h - 54.0f, a); }
+    plrui_seg(rot, cont, 2, 0, 0, x0 + w - 10.0f - sw, ty + (float)t.h - 54.0f, a);
+    if (pont) {   // a aba "Estilo": o que sobra depois do primeiro segmento
+      float w0 = plrui_seg(rot, cont, 1, 0, 0, -1.0f, 0, a);
+      ponteiro_alvo(x0 + w - 10.0f - sw + w0, ty + (float)t.h - 54.0f, sw - w0, 54.0f, NULL, ponteiroAbaEstilo, 0, 0);
+    } }
   y += LU_TIT_H + 14.0f;
   ajustarRolagem(vis);
   fim = rolagem + vis; if (fim > nLinhasV) fim = nLinhasV;
   for (i = rolagem; i < fim; i++)
-    desenharLinha(&linhas[i], i == foco, x0, y + (i - rolagem) * (LU_LN_H + LU_LN_VAO), w, a);
+    desenharLinha(&linhas[i], i, i == foco, x0, y + (i - rolagem) * (LU_LN_H + LU_LN_VAO), w, a);
   y += (fim - rolagem) * LU_LN_H + (fim - rolagem > 0 ? (fim - rolagem - 1) * LU_LN_VAO : 0.0f) + 14.0f;
   gfx_cor((GfxRect){ x0, y, w, 1.0f }, 0.0f, 1, 1, 1, 0.07f * a);
   { float yc = y + 16.0f + 15.0f;

@@ -355,6 +355,19 @@ static void aj2RodapeA3(GfxRect fr, const AjDica *d, int nd, float a) {
   }
   if (dicas) aj2DicasLinha(d, nd, x, yc, TXT_V2_KBD18, 34, 38, 10, TXT_V2_24, 8, 22, 1, a);
 }
+// PONTEIRO (#99) NA LISTA DA CATEGORIA. A linha sob o cursor ganha o foco
+// pelo mesmo focar() das setas (com o foco saindo do indice); o OK do clique
+// segue o caminho de sempre (abrir o editor, alternar, abrir "Mais opcoes").
+// So com a lista assentada: durante a transicao ela esta escalada e deslizada
+// (gfx_transformar) e o retangulo do desenho nao e o da tela.
+static int ajPontLista;
+static void ajPonteiroItem(int i, int b) {
+  (void)b;
+  if (uxEditor || i < 0 || i >= AJ_N_TELA || !focavel(i)) return;
+  if (i == focoItem && !focoIndice && !uxCabLayout) return;
+  focar(i);
+  focoIndice = 0;
+}
 static void ajDesenharFolha(void) {
   GfxRect fr = aj2ListaR();
   int sec = secAtual, i, nd;
@@ -375,9 +388,11 @@ static void ajDesenharFolha(void) {
         ajDesenharGrupo(i, y, ajMascara(y + 20.0f + 15.6f, topo, base) * aPag);
       } else if (TELA[i].tipo == IT_MAIS) {
         float yy = y + 14.0f + AJ2_LN_GAP;
+        if (ajPontLista) ponteiro_alvo_faixa(fr.x + 18.0f, yy, fr.w - 36.0f, AJ2_LN_H, topo, base, ajPonteiroItem, NULL, i, 0);
         ajDesenharMais(i, yy, animItem[i], ajMascara(yy + AJ2_LN_H * 0.5f, topo, base) * anim_suave(paginaA));
       } else if (TELA[i].tipo == IT_OPC) {
         float lh = ajLinhaH(i), yy = y + AJ2_LN_GAP;
+        if (ajPontLista) ponteiro_alvo_faixa(fr.x + 18.0f, yy, fr.w - 36.0f, lh, topo, base, ajPonteiroItem, NULL, i, 0);
         // A superficie de foco nao some com o texto (editor por cima): o
         // alfa da mascara vai inteiro, o do texto em ajDesenharLinha.
         ajDesenharLinha(i, yy, animItem[i], ajMascara(yy + (lh > AJ2_LN_H + 0.5f ? AJ2_LN_LINHA1 * 0.5f : lh * 0.5f), topo, base) * anim_suave(paginaA));
@@ -443,8 +458,14 @@ static void ajCentraModal(GfxRect *m) {
 }
 
 // Confirmacao: kicker com o alerta ambar, pergunta 36/700, texto e "de › para".
+// PONTEIRO (#99) NOS MODAIS DE AJUSTES. Os botoes da confirmacao ganham o foco
+// pelo `focar` de quem abriu o modal (focar(1) = sim, focar(0) = nao, a mesma
+// variavel das setas laterais); o OK do clique segue o caminho de sempre.
+static void ajPontConfirmar(int sim, int b) { (void)b; if (uxEditor && (uxRestaurar || uxAvisoRisco)) uxConfirmar = sim; }
+static void ajPontRisco(int sim, int b) { (void)b; if (riscoFolha) riscoFolhaFoco = sim ? 0 : 1; }
 static void ajConfirmacao(const char *kick, int alerta, const char *pergunta, const char *texto,
-                          const char *de, const char *para, const char *sim, const char *nao, int focoSim) {
+                          const char *de, const char *para, const char *sim, const char *nao, int focoSim,
+                          PonteiroFn focar) {
   GfxRect m = { 560, 300, 800, 0 };
   float x = m.x + 44, y, hTxt;
   hTxt = txt_bloco(TXT_AJ_TEXTO, texto, 0, 0, 0, 0, -4000, m.w - 88, 30, 0, 6);
@@ -469,10 +490,16 @@ static void ajConfirmacao(const char *kick, int alerta, const char *pergunta, co
   }
   y += 34;
   { float bx = x;
-    bx += ajBotao(sim, NULL, bx, y, focoSim, 1) + 12;
-    ajBotao(nao, NULL, bx, y, !focoSim, 1); }
+    float ws = ajBotao(sim, NULL, bx, y, focoSim, 1), wn;
+    ponteiro_alvo(bx, y, ws, 60, focar, NULL, 1, 0);
+    bx += ws + 12;
+    wn = ajBotao(nao, NULL, bx, y, !focoSim, 1);
+    ponteiro_alvo(bx, y, wn, 60, focar, NULL, 0, 0); }
 }
 
+// Alvo cujo foco ja e o unico possivel: o clique e so o OK.
+static void ajPontNada(int a, int b) { (void)a; (void)b; }
+static void ajPontFecharEditor(int a, int b) { (void)a; (void)b; if (uxEditor == 2) uxCancelar(); }
 // Dependencia: a opcao esta apagada por causa de outra.
 static void ajDependencia(void) {
   int req = uxRequisito(uxOp);
@@ -493,9 +520,16 @@ static void ajDependencia(void) {
   y += 30;
   { TxtLinha t = ajTxtC(TXT_ILHA_PERGUNTA, rotuloOpcao(uxOp), m.w - 88); txt_desenhar(t, x, y); y += 44 + 14; }
   y += ajBloco(TXT_AJ_TEXTO, ajudaOpcao(uxOp), x, y, m.w - 88, 30, 0.62f, 6) + 34;
-  { float bx = x;
-    if (req >= 0) bx += ajBotao("Ver o ajuste necessário", NULL, bx, y, 1, 1) + 12;
-    ajBotao("Fechar", NULL, bx, y, req < 0, 1); }
+  { float bx = x, w;
+    // Ponteiro: o botao em foco e o OK; "Fechar" fora do foco fecha como o Voltar.
+    if (req >= 0) {
+      w = ajBotao("Ver o ajuste necessário", NULL, bx, y, 1, 1);
+      ponteiro_alvo(bx, y, w, 60, ajPontNada, NULL, 0, 0);
+      bx += w + 12;
+    }
+    w = ajBotao("Fechar", NULL, bx, y, req < 0, 1);
+    if (req < 0) ponteiro_alvo(bx, y, w, 60, ajPontNada, NULL, 0, 0);
+    else ponteiro_alvo(bx, y, w, 60, NULL, ajPontFecharEditor, 0, 0); }
 }
 
 static void ajDesenharModais(void) {
@@ -503,6 +537,7 @@ static void ajDesenharModais(void) {
   // v2: os editores sao o terceiro degrau da pilha (aj2DesenharEditor); aqui
   // ficam so as perguntas — confirmar, restaurar e a dependencia.
   if (!uxRestaurar && !uxAvisoRisco && uxEditor != 2) return;
+  ponteiro_camada();   // a pergunta tem o teclado: o editor por baixo nao vale
   ajVeuModal();
   if (uxRestaurar || uxAvisoRisco) {
     char padrao[160], de[96], para[96], texto[500];
@@ -519,12 +554,12 @@ static void ajDesenharModais(void) {
       ajConfirmacao(k, 1, fil ? "Mais fileiras na Home" : "Mais itens por fileira",
                     fil ? i18n("Mais fileiras usam mais memória e rede; em TVs com 1 GB a Home pode ficar lenta ou fechar. Se o app fechar, ele volta sozinho ao valor anterior.")
                         : i18n("Mais itens por fileira usam mais memória; em TVs com 1 GB a Home pode ficar lenta ou fechar. Se o app fechar, ele volta sozinho ao valor anterior."),
-                    de, para, "Continuar", "Cancelar", uxConfirmar);
+                    de, para, "Continuar", "Cancelar", uxConfirmar, ajPontConfirmar);
     } else {
       snprintf(texto, sizeof texto, i18n("O valor voltará para “%s”. %s"), padrao,
         !strcmp(uxEscopoValor(uxOp, uxValorPadrao(uxOp)), "Conta/perfil") ? i18n("Esta preferência participa dos ajustes do perfil. Nenhum serviço será desconectado.") : i18n("A mudança vale só nesta TV. Nenhum serviço será desconectado."));
       uxValorTexto(uxOp, uxValorAtual(uxOp), de, sizeof de);
-      ajConfirmacao(rotuloOpcao(uxOp), 0, "Restaurar este ajuste?", texto, de, padrao, "Restaurar", "Cancelar", uxConfirmar);
+      ajConfirmacao(rotuloOpcao(uxOp), 0, "Restaurar este ajuste?", texto, de, padrao, "Restaurar", "Cancelar", uxConfirmar, ajPontConfirmar);
     }
   } else if (uxEditor == 2) ajDependencia();
   if (uxAviso[0]) {
@@ -538,11 +573,12 @@ static void desenhaRiscoFolha(void) {
   char de[64], para[64];
   int fil = riscoFolha == SEG_AVISO_FILEIRAS;
   int v = riscoAtual(riscoFolhaOp), nv = v + riscoFolhaDir * (OPCOES[riscoFolhaOp].tipo == OP_NUMERO ? OPCOES[riscoFolhaOp].passo : 1);
+  ponteiro_camada();
   ajVeuModal();
   if (fil) { snprintf(de, sizeof de, i18n("%d fileiras"), v); snprintf(para, sizeof para, i18n("%d fileiras"), nv); }
   else { uxValorTexto(riscoFolhaOp, v, de, sizeof de); uxValorTexto(riscoFolhaOp, nv, para, sizeof para); }
   ajConfirmacao(fil ? "Tela inicial · Fileiras" : uxCaminho(riscoFolhaOp), 1, riscoFolhaTitulo(), i18n(riscoFolhaTexto()),
-                de, para, "Continuar", "Cancelar", riscoFolhaFoco == 0);
+                de, para, "Continuar", "Cancelar", riscoFolhaFoco == 0, ajPontRisco);
 }
 
 // VINCULO (Trakt/Simkl) como ilha modal: o QR real (src/qr.c) num ladrilho
@@ -649,11 +685,31 @@ static float aj2CabecalhoEditor(GfxRect m) {
     txt_desenhar_alpha(t, x, y + (29.0f - t.h) * 0.5f, 0.55f); }
   return y + 29.0f + 30.0f;
 }
+// PONTEIRO (#99) NO EDITOR (o painel do 3o degrau). So com ele assentado
+// (ajDesenharTela: sem escala nem deslize). Escolha: o valor sob o cursor vira
+// o pendente, como as setas; Numero: o mostrador foca, o "-" e o "+" andam um
+// passo (as setas laterais); o chip "Restaurar padrao" foca o rodape. O OK do
+// clique e o de sempre (aplicar / perguntar se restaura).
+static int ajPontEditor;
+static int ajPontEdVale(void) { return uxEditor == 1 && uxOp >= 0 && !uxRestaurar && !uxAvisoRisco; }
+static void ajPontEdRodape(int a, int b) { (void)a; (void)b; if (ajPontEdVale() && uxTemPadrao(uxOp)) uxRodape = 1; }
+static void ajPontEdValor(int i, int b) {
+  (void)b;
+  if (!ajPontEdVale() || i < 0 || i >= nValores(uxOp) || (!uxRodape && uxPendente == i)) return;
+  uxRodape = 0; uxPendente = i;
+}
+static void ajPontEdNumero(int a, int b) { (void)a; (void)b; if (ajPontEdVale()) uxRodape = 0; }
+static void ajPontEdPasso(int d, int b) {
+  (void)b;
+  if (!ajPontEdVale() || OPCOES[uxOp].tipo != OP_NUMERO) return;
+  uxRodape = 0; uxPendente = limita(uxOp, uxPendente + d * OPCOES[uxOp].passo);
+}
 static void aj2RodapeEditor(GfxRect m, float colW, const AjDica *d, int n) {
   float y = m.y + m.h - 40 - 64;
   if (uxTemPadrao(uxOp)) {
     TxtLinha t = uxRodape ? ajTxtT(TXT_V2_SEG, "Restaurar padrão") : ajTxt(TXT_V2_SEG, "Restaurar padrão");
     float w = 24 + 24 + 10 + t.w + 24;
+    if (ajPontEditor) ponteiro_alvo(m.x + 52, y, w, 64, ajPontEdRodape, NULL, 0, 0);
     if (uxRodape) ajPilulaAcento((GfxRect){ m.x + 52, y, w, 64 }, 32, 1);
     else ajNeutro((GfxRect){ m.x + 52, y, w, 64 }, 32, 0.08f, AJ_CHIP_SOL, 1);
     if (uxRodape) ajIconeT("aj_rotate-ccw-clock", m.x + 52 + 24, y + 20, 24, 1);
@@ -737,6 +793,11 @@ static void aj2EditorNumero(GfxRect m) {
     { float bx = tx - 4 + big.w + 30, bh = 43.6f + 6 + 29;
       txt_desenhar(u, bx, cy - bh * 0.5f + (43.6f - u.h) * 0.5f);
       txt_desenhar_alpha(ls, bx, cy - bh * 0.5f + 43.6f + 6 + (29 - ls.h) * 0.5f, 0.5f); }
+    if (ajPontEditor) {
+      ponteiro_alvo(r.x, r.y, r.w, r.h, ajPontEdNumero, NULL, 0, 0);
+      ponteiro_alvo(r.x + r.w - 40 - 48, cy - 28, 56, 56, NULL, ajPontEdPasso, 1, 0);
+      ponteiro_alvo(r.x + r.w - 40 - 104, cy - 28, 56, 56, NULL, ajPontEdPasso, -1, 0);
+    }
     ajIcone("aj_plus", r.x + r.w - 40 - 40, cy - 20, 40, 0.75f);
     ajIcone("aj_minus", r.x + r.w - 40 - 96, cy - 20, 40, 0.75f);
     gfx_cor((GfxRect){ tx, ty, tw, 10 }, 0.5f, 1, 1, 1, 0.12f);
@@ -799,6 +860,7 @@ static void aj2EditorEscolha(GfxRect m) {
     GfxRect r = { lx, y, lw, 96 };
     int fv;
     uxValorTexto(uxOp, i, t, sizeof t);
+    if (ajPontEditor) ponteiro_alvo(r.x, r.y, r.w, r.h, ajPontEdValor, NULL, i, 0);
     if (foco) ajFocoLinha(r, 28, 1, 1);
     fv = marcaDoValor(uxOp, o->valores ? o->valores[i] : NULL);
     if (fv >= 0) marca_formato((FormatoMarca)fv, r.x + 30, r.y + 26, 44, 1, 1, 1, foco ? 0.9f : 0.6f);
@@ -838,6 +900,13 @@ static void aj2DesenharEditor(void) {
 }
 
 // --- DIFERENTES DO PADRAO (degrau 1) ------------------------------------------------
+// PONTEIRO (#99) NA LISTA "DIFERENTES DO PADRAO": a linha sob o cursor ganha o
+// foco (uxDifFoco, a variavel das setas).
+static void ajPontDif(int i, int b) {
+  (void)b;
+  if (uxEditor || uxIndice != 1 || i < 0 || i >= uxNDifs || (!focoIndice && i == uxDifFoco)) return;
+  focoIndice = 0; uxDifFoco = i;
+}
 static void aj2DesenharDiferencas(void) {
   GfxRect fr = aj2ListaR();
   float topo = AJ_TOPO, base = AJ_BASE + AJ_A3_RODAPE, y = topo + 8.0f;
@@ -858,6 +927,7 @@ static void aj2DesenharDiferencas(void) {
     float xd = x + w - 22, a = ajMascara(y + 38, topo, base), yc = y + 38;
     TxtLinha la, lp, lr, ls;
     if (y > base) break;
+    if (ajPontLista) ponteiro_alvo_faixa(r.x, r.y, r.w, r.h, topo, base, ajPontDif, NULL, i, 0);
     if (foco) {
       float ar, ag, ab;
       ajFocoLinha(r, 18, 1, a);
@@ -965,6 +1035,7 @@ static void ajDesenharTela(void) {
     gfx_sem_transformar();
   }
   // A LISTA nasce da linha da categoria: escala em torno dela.
+  ajPontLista = !modal && !uxEditor && p.lA > 0.997f && fabsf(p.lS - 1.0f) < 0.002f && fabsf(p.lDx) < 0.5f;
   if (p.lA > 0.003f && uxIndice >= 1) {
     GfxRect fr = aj2ListaR();
     float oy = p.lOy > 0 ? p.lOy : aj2GradeOrigemY(uxIndice);
@@ -974,8 +1045,13 @@ static void ajDesenharTela(void) {
     if (uxIndice >= 2) ajDesenharFolha(); else aj2DesenharDiferencas();
     gfx_sem_transformar();
   }
+  // O editor e os modais tem o teclado: os alvos de tras deixam de valer e,
+  // sem alvo proprio, o clique e o OK (ponteiro.h, CAMADAS).
+  if (modal || uxEditor) ponteiro_camada();
   if (aj2EditorPainel()) aj2EdVisto = 1;
   else if (p.eA <= 0.003f) aj2EdVisto = 0;
+  ajPontEditor = aj2EditorPainel() && !(uxRestaurar || uxAvisoRisco) && !riscoFolha && !frAberta &&
+                 p.eA > 0.997f && fabsf(p.eS - 1.0f) < 0.002f && fabsf(p.eDx) < 0.5f;
   if (p.eA > 0.003f && aj2EdVisto && uxOp >= 0) {
     GfxRect m = aj2EditorR(), fr = aj2ListaR();
     float oy = fr.y + fr.h * 0.5f;
@@ -1053,7 +1129,11 @@ static void ajSubCabecalho(const char *ic, const char *kick, const char *titulo,
   { TxtLinha tt = ajTxtC(TXT_V2_TIT, titulo, direita - x); txt_desenhar(tt, x, h.y + h.h * 0.5f - 18.0f); }
 }
 #define AJ_SUB_PASSO 96.0f
-static void ajSubLista(const AjSubLinha *L, int n, int foco, const AjDica *d, int nd, const char *aviso) {
+// PONTEIRO (#99) NAS SUBLISTAS (Addons, Plugins): a linha sob o cursor ganha o
+// foco pelo `focar` da tela dona da lista (addonsui/pluginsui, a mesma variavel
+// das setas); o OK do clique segue o caminho de sempre (ligar, abrir).
+static void ajSubLista(const AjSubLinha *L, int n, int foco, const AjDica *d, int nd, const char *aviso,
+                       PonteiroFn focar) {
   GfxRect fr = aj2ListaR();
   float topo = fr.y + 30.0f, base = fr.y + fr.h - AJ_A3_RODAPE - 8.0f, y, alvo;
   int i;
@@ -1069,6 +1149,7 @@ static void ajSubLista(const AjSubLinha *L, int n, int foco, const AjDica *d, in
     int f = i == foco;
     TxtLinha t, c;
     if (y + r.h < topo || y > base) continue;
+    if (focar) ponteiro_alvo_faixa(r.x, r.y, r.w, r.h, topo, base, focar, NULL, i, 0);
     if (f) { float ar, ag, ab; ajFocoLinha(r, 18.0f, 1, a); ajustes_acento(&ar, &ag, &ab); gfx_cor(r, 18.0f / r.h, ar, ag, ab, 0.14f * a); }
     if (L[i].icone) {
       ajNeutro((GfxRect){ r.x + 22, yc - 26, 52, 52 }, 15, 0.09f, 0.141f, 0.149f, 0.173f, a);
@@ -1123,7 +1204,7 @@ static void ajDesenharAddons(int foco) {
       L[i] = (AjSubLinha){ addons_nome(i), apoio[i], NULL, addons_ativo(i), 0, 0 };
     } }
   { AjDica d[3] = { { "OK", "Mudar" }, { "↑ ↓", "Navegar" }, { "Voltar", "Fontes e addons" } };
-    ajSubLista(L, n, foco, d, 3, NULL); }
+    ajSubLista(L, n, foco, d, 3, NULL, addonsui_ponteiro); }
   snprintf(k, sizeof k, "%s · %s", i18n("Fontes e addons"), i18n("Addons"));
   if (n > 0) {
     const char *base0 = addons_base(foco);
@@ -1145,6 +1226,14 @@ static void ajDesenharAddons(int foco) {
   } else ajSubInspetor(AJ_ADDONS, k, "Addons", i18n("Nenhum addon nesta conta."));
 }
 
+// PONTEIRO (#99) NAS FOLHAS "PERMITIDOS" E "ORDEM": a linha (e, na ordem, o
+// botao subir/descer) sob o cursor ganha o foco por frFoco/frCol, as variaveis
+// das setas; o OK do clique liga/desliga ou move, como o do controle.
+static void ajPontFolha(int i, int col) {
+  if (!frAberta || teclado_aberto() || i < 0 || i > frN) return;
+  if (frAberta == 3 && i > 0) { if (col < 0 || col > 1) return; frCol = col; }
+  frFoco = i;
+}
 // "Add-ons permitidos" / "Plugins permitidos" (#202): o modal com "Todos" no
 // topo e um chip por nome. As linhas sao as da folha de Addons (84 px).
 static void desenhaFolhaPermitidos(void) {
@@ -1154,6 +1243,7 @@ static void desenhaFolhaPermitidos(void) {
   char sub[200];
   frMontar();
   n = frN + 1;
+  ponteiro_camada();
   ajVeuModal();
   ajCentraModal(&m);
   ajIlha(m, 36, 1, 1);
@@ -1175,6 +1265,7 @@ static void desenhaFolhaPermitidos(void) {
     const char *nome, *apoio;
     float cw, tw;
     if (y + 80 < topo || y > base) continue;
+    ponteiro_alvo_faixa(r.x, r.y, r.w, r.h, topo, base, ajPontFolha, NULL, i, -1);
     if (i == 0) {
       nome = plugin ? "Todos os plugins ligados" : "Todos os add-ons";
       apoio = "";
@@ -1216,6 +1307,7 @@ static void desenhaFolhaOrdem(void) {
   char sub[200], k[160];
   frMontar();
   n = frN + 1;
+  ponteiro_camada();
   ajVeuModal();
   ajCentraModal(&m);
   ajIlha(m, 36, 1, 1);
@@ -1232,6 +1324,7 @@ static void desenhaFolhaOrdem(void) {
     GfxRect r = { m.x + 18, y, m.w - 36, 80 };
     int f = i == frFoco;
     if (y + 80 < topo || y > base) continue;
+    ponteiro_alvo_faixa(r.x, r.y, r.w, r.h, topo, base, ajPontFolha, NULL, i, frCol);
     if (f) ajFocoLinha(r, 22, 1, 1);
     if (i == 0) {
       TxtLinha t = ajTxtC(TXT_AJ_ROTULO, i18n("Sem ordem"), r.w - 120);
@@ -1253,6 +1346,7 @@ static void desenhaFolhaOrdem(void) {
       for (c = 0; c < 2; c++) {
         GfxRect b = { bx + c * (bw + 8.0f), y + 12, bw, bw };
         int bf = f && frCol == c, sem = (c == 0 && i == 1) || (c == 1 && i == frN);
+        ponteiro_alvo_faixa(b.x, b.y, b.w, b.h, topo, base, ajPontFolha, NULL, i, c);
         if (bf) ajPilulaAcento(b, 28, 1);
         else ajNeutro(b, 28, 0.08f, AJ_CHIP_SOL, 1);
         if (bf) ajIconeT(c ? "aj_arrow-down" : "aj_arrow-up", b.x + 14, b.y + 14, 28, sem ? 0.3f : 1.0f);
@@ -1347,14 +1441,14 @@ static void ajDesenharPlugins(const AjPluginsVista *v) {
       }
     }
   }
-  if (!disp) { AjDica d[1] = { { "Voltar", "Fontes e addons" } }; ajSubLista(L, n, foco, d, 1, v->aviso); }
+  if (!disp) { AjDica d[1] = { { "Voltar", "Fontes e addons" } }; ajSubLista(L, n, foco, d, 1, v->aviso, pluginsui_ponteiro); }
   else if (v->nivel == 0) {
     AjDica d[3] = { { "OK", foco == 1 ? "Adicionar" : "Mudar" }, { "→", "Scrapers" }, { "Voltar", "Fontes e addons" } };
     if (foco < 2) d[1] = d[2];
-    ajSubLista(L, n, foco, d, foco >= 2 ? 3 : 2, v->aviso);
+    ajSubLista(L, n, foco, d, foco >= 2 ? 3 : 2, v->aviso, pluginsui_ponteiro);
   } else {
     AjDica d[2] = { { "OK", foco == 0 ? "Remover" : "Mudar" }, { "Voltar", "Repositórios" } };
-    ajSubLista(L, n, foco, d, 2, v->aviso);
+    ajSubLista(L, n, foco, d, 2, v->aviso, pluginsui_ponteiro);
   }
   snprintf(k, sizeof k, "%s · %s", i18n("Fontes e addons"), i18n("Plugins"));
   { GfxRect ir = aj2InspR();
