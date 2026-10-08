@@ -879,11 +879,17 @@ int main(int argc, char **argv) {
     snprintf(scLF, sizeof scLF, "%s.fonts", scL); dados_apagar(scLF);
     mkvass_parar(); esperarFio(); legenda_desligar();
     zerarServidor();
+    { long p0 = mkvass_pausas_cdn();
     mkvass_iniciar(urlL, 3);
-    tent = retomarAte(300000, 1, &cedo);
+    tent = retomarAte(60000, 1, &cedo);
+    // O CDN pediu calma de verdade (pausa curta, via -D no .sh) E a leitura
+    // voltou depois dela: sem isso o COMPLETO abaixo nao aconteceria.
+    ok(mkvass_pausas_cdn() > p0, "o 503 prolongado fez pelo menos uma pausa de CDN");
+    }
     e = mkvass_estado();
     printf("    %d tentativa(s), estado final %d\n", tent, e);
-    ok(tent > 3, "precisou de mais de 3 tentativas (a 1.4.5 desistia na 3a)");
+    // Desde #308 o modulo nao devolve mais a faixa: pausa e segue (tent pode
+    // ser 0). Quem prova que nao desistiu na 3a e a pausa + o COMPLETO.
     ok(e == MKVASS_COMPLETO, "e mesmo assim termina COMPLETO");
     ok(conferirCues(esp, nEsp) == nEsp, "todos os cues batem apos as retomadas");
     ok(!cedo, "com a TV desenhando, o overlay so religou com fala nova");

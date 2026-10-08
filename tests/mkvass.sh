@@ -99,9 +99,13 @@ for _ in $(seq 1 50); do grep -q porta "$DIR/porta.txt" 2>/dev/null && break; sl
 PORTA=$(awk '/porta/{print $2}' "$DIR/porta.txt")
 [ -n "$PORTA" ] || { echo "mkvass.sh: servidor nao subiu"; exit 1; }
 
+# Pausas e recuos do CDN encurtados (-D): na TV sao 10-60 s e 0,5-8 s; aqui a
+# pausa e o retorno da leitura ainda acontecem, so que em milissegundos.
 # Janela da VARREDURA em 30 s (padrao 120) para a fixture de 120 s poder
 # provar que os bytes lidos sao proporcionais a janela, nao ao arquivo.
-cc -Isrc -DMKVASS_VARRE_JANELA_SEG=30.0 tests/mkvass.c src/mkvass.c src/assrender.c src/legenda.c src/rede.c src/redeurl.c src/dados.c src/mkv.c \
+cc -Isrc -DMKVASS_VARRE_JANELA_SEG=30.0 \
+  -DMKVASS_PAUSA_CDN_INI_MS=150L -DMKVASS_PAUSA_CDN_MAX_MS=600L \
+  -DMKVASS_RECUO_INI_MS=20L -DMKVASS_RECUO_MAX_MS=160L tests/mkvass.c src/mkvass.c src/assrender.c src/legenda.c src/rede.c src/redeurl.c src/dados.c src/mkv.c \
   -o /tmp/nuvio-mkvass-tests -O1 -g -Wall -I/opt/homebrew/include \
   -Wno-deprecated-declarations
 mkdir -p "$DIR/dados"
