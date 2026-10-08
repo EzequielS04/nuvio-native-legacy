@@ -52,7 +52,7 @@ int main(void) {
   mkv(&fx[3], 2, "A_AAC", "jpn", "Dub", 2);
   tv(&a[0], 0, "por"); tv(&a[1], 1, "ja");
   faixasmkv_aplicar(a, 2, NULL, 0, fx, 4);
-  ok(strstr(a[0].rotulo, "AC3") && strstr(a[1].rotulo, "AAC") && strstr(a[1].rotulo, "Dub"),
+  ok(strstr(a[0].rotulo, "AC3") && strstr(a[1].rotulo, "Dub") && strstr(a[1].rotulo, "2.0"),
      "escondida na frente, 2 de 3: cada uma no seu", a[1].rotulo);
 
   // 2) Ambiguo: duas faixas por no arquivo, a TV lista uma por: nao adivinha.
