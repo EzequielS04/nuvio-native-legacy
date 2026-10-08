@@ -731,6 +731,7 @@ int  video_pronto(void) { return pronto; }
 int  video_ativo(void) { return ativo; }
 int  video_falhou(void) { return falhou; }
 int  video_audio_nao_suportado(void) { return audioNaoSup; }
+int  video_seek_desistiu(void) { return 0; }
 int  video_terminou(void) { return terminou; }
 int  video_conflito_recurso(void) { return conflito; }
 

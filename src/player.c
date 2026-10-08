@@ -2751,6 +2751,15 @@ void player_atualizar(float dt, Uint32 agora) {
     snprintf(toastIcone, sizeof toastIcone, "aj_triangle-alert"); toastCor = 1;
     toastAte = agora + 6000;
   }
+  // SEEK RECUSADO 3x pelo pipeline (webOS "seek Failure"): a fonte segue de
+  // onde esta; um aviso por sessao em vez de pular o link.
+  { static int seekAvisado;
+    if (!comVideo) seekAvisado = 0;
+    else if (!seekAvisado && video_seek_desistiu()) {
+      seekAvisado = 1;
+      player_toast_ex(i18n("Não foi possível pular para esse ponto. Seguindo daqui."), 5000, "aj_triangle-alert", 1);
+    }
+  }
   // F07: the seek cache turned itself off (no free space at open, or the disk
   // filled up mid-session). Playback goes on; one short notice per session.
   if (comVideo) { const char *av = cacheboost_cache_aviso();
@@ -2893,7 +2902,19 @@ void player_atualizar(float dt, Uint32 agora) {
         seekr_pedir(cs->imdb, strcmp(cs->tipo, "series") ? 0 : epT,
                     strcmp(cs->tipo, "series") ? 0 : epE, (long)(d * 1000.0));
     }
-    if (!retomadaAplicada && video_pronto() && d>1.0) {
+    // Retomada so com o pipeline ASSENTADO: pronto + tocando (ou 2,5 s depois
+    // de pronto, para quem abre pausado). Seek logo no loadCompleted e o que o
+    // uMS recusa com "seek Failure" (#246).
+    static Uint32 prontoDesde;
+    if (retomadaAplicada || !video_pronto()) prontoDesde = 0;
+    else if (!prontoDesde) prontoDesde = agora | 1;
+    if (!retomadaAplicada && video_pronto() && d>1.0 &&
+#ifdef NV_ANDROID
+        1
+#else
+        (video_tocando() || (int)(agora - prontoDesde) >= 2500)
+#endif
+        ) {
 #ifdef NV_ANDROID
       // O ack chega antes do prepare. Se a ponte/Media3 recusou a posicao,
       // recua ao seek de sempre; pendente nunca vira um segundo seek.

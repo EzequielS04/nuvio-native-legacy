@@ -183,6 +183,16 @@ namespace NuvioTpk
                 catch (Exception e) { Log("propriedades de audio: " + e.Message); }
             }
             if (soAudio) { NvVid.FaixasFim(selA, -1); return nA; }
+            // #269: SubtitleTrackInfo lanca InvalidOperation fora de Ready/Playing/Paused
+            // (player solto ou ainda em Idle). Sem estado valido nao ha lista: segue sem legenda.
+            PlayerState estL;
+            try { estL = p.State; } catch { estL = PlayerState.Idle; }
+            if (estL != PlayerState.Ready && estL != PlayerState.Playing && estL != PlayerState.Paused)
+            {
+                Log("faixas de legenda: player em " + estL + ", lista pulada");
+                NvVid.FaixasFim(selA, -1);
+                return nA;
+            }
             try
             {
                 var l = p.SubtitleTrackInfo;
@@ -443,8 +453,14 @@ namespace NuvioTpk
                 if (pausa && player.State == PlayerState.Playing) { player.Pause(); NvVid.Evento(EV_PAUSADO, 0, 0); }
                 else if (!pausa && player.State == PlayerState.Paused) { player.Start(); windowMetrics.Invalidate(); NvVid.Evento(EV_TOCANDO, 0, 0); }
             }
+            catch (InvalidOperationException e)
+            {
+                // #269: o estado mudou entre a checagem e o Pause/Start. Estado ja e outro; avisa uma vez.
+                if (!pausarAvisado) { pausarAvisado = true; Log("pausar: estado mudou (" + e.Message + ")"); }
+            }
             catch (Exception e) { Log("pausar: " + e.Message); }
         }
+        bool pausarAvisado;
 
         async void Buscar(int ms)
         {
