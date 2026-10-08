@@ -441,6 +441,11 @@ int perfil_pediu_amigo(char *id, size_t tam) {
   return dId[0] != 0;
 }
 
+// ESQUERDA NA BORDA so PEDE a barra (sair = 1): quem decide e o roteador, que a
+// abre POR CIMA desta pagina (#371). Fechar aqui (aberto = 0) apagava a pagina
+// por baixo da barra e, depois dela, deixava a tela vazia e sem resposta;
+// perfil_desenhar e perfil_evento retornam cedo quando !aberto. Voltar continua
+// fechando (perfil_fechar) e levando para a Home.
 void perfil_evento(const SDL_Event *e) {
   if (!aberto || !e || e->type != SDL_KEYDOWN) return;
   SDL_Keycode k = e->key.keysym.sym;
@@ -462,7 +467,7 @@ void perfil_evento(const SDL_Event *e) {
   // atual acaba; dentro do calendario as setas andam dia a dia, com
   // continuidade entre semanas.
   if (secao == 0 && dados.nDias > 0) {
-    if (k==SDLK_LEFT)  { if (dia>0) { dia--; return; } perfil_fechar(); return; }
+    if (k==SDLK_LEFT)  { if (dia>0) { dia--; return; } sair = 1; return; }
     if (k==SDLK_RIGHT) { if (dia+1<dados.nDias) { dia++; return; }
                          if (nCards()) secao=1; else if (rostosCabem()>0) secao=2;
                          return; }
@@ -471,7 +476,7 @@ void perfil_evento(const SDL_Event *e) {
     return;
   }
   if (secao == 1) {
-    if (k==SDLK_LEFT)  { if (dados.nDias>0) secao=0; else perfil_fechar(); return; }
+    if (k==SDLK_LEFT)  { if (dados.nDias>0) secao=0; else sair = 1; return; }
     if (k==SDLK_RIGHT) { if (rostosCabem()>0) secao=2; return; }
     if (k==SDLK_UP)    { if (item>0) item--; return; }
     if (k==SDLK_DOWN)  { if (item+1<nCards()) item++; return; }
