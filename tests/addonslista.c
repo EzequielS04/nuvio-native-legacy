@@ -22,6 +22,8 @@ void ondever_pedir(const char *id, int series, long tmdb) {
   (void)id; (void)series; (void)tmdb;
 }
 
+int dados_gravar_leve(const char *nome, const char *conteudo) { (void)nome; (void)conteudo; return 1; }
+
 // ---------------------------------------------------------------- duble
 //
 // A BUSCA DE FONTES DE VERDADE (addons_buscar -> fio -> addons_estado), com a
@@ -41,10 +43,13 @@ static const char *respCanalTv, *respCanalChannel;
 static char pedidosCanal[200];
 // lento.test (#182): as primeiras `falhasLento` requisicoes NAO respondem (o
 // timeout do AIOStreams frio); as seguintes respondem com uma fonte.
+static int pedidosDesligado, pedidosLigado;
 static int falhasLento, chamadasLento, prazoLento[2], prazoCanal;
 const char *rede_ultimo_erro(void) { return ""; }
 char *rede_baixar(const char *url, int s) {
   const char *r;
+  if (strstr(url, "desligado.test")) pedidosDesligado++;
+  if (strstr(url, "ligado.test") && !strstr(url, "desligado.test")) pedidosLigado++;
   if (strstr(url, "lento.test")) {
     if (chamadasLento < 2) prazoLento[chamadasLento] = s;
     if (++chamadasLento <= falhasLento) return NULL;
@@ -340,6 +345,32 @@ int main(void) {
     conferir("nao sondado: desconhecido", addons_aceita_id(f, "series", "kitsu:1"), -1);
     conferir("indice invalido", addons_aceita_id(999, "series", "kitsu:1"), 0);
     conferir("id vazio", addons_aceita_id(a, "series", ""), 0); }
+
+  // Desligado na conta = NUNCA consultado (2.0.3, D1 58666): nem fonte, nem
+  // legenda, nem catalogo/busca/guia (addons_base_desligada guarda esses).
+  { AddonRemoto conta[2];
+    memset(conta, 0, sizeof conta);
+    snprintf(conta[0].nome, sizeof conta[0].nome, "Ligado");
+    snprintf(conta[0].url, sizeof conta[0].url, "https://ligado.test/manifest.json");
+    conta[0].ativo = 1;
+    snprintf(conta[1].nome, sizeof conta[1].nome, "Desligado");
+    snprintf(conta[1].url, sizeof conta[1].url, "https://desligado.test/manifest.json");
+    conta[1].ativo = 0;
+    conferir("lista da conta entra", addons_definir_lista(conta, 2), 1);
+    conferir("base desligada reconhecida", addons_base_desligada("https://desligado.test"), 1);
+    conferir("base desligada com manifest.json", addons_base_desligada("https://desligado.test/manifest.json"), 1);
+    conferir("base ligada nao e desligada", addons_base_desligada("https://ligado.test"), 0);
+    conferir("base desconhecida nao e desligada", addons_base_desligada("https://nenhum.test"), 0);
+    pedidosDesligado = pedidosLigado = 0;
+    addons_buscar("tt0000077", "movie");
+    while (addons_estado() == ADD_BUSCANDO) usleep(1000);
+    conferir("fonte: ligado consultado", pedidosLigado > 0, 1);
+    conferir("fonte: desligado NAO consultado", pedidosDesligado, 0);
+    pedidosLigado = 0;
+    addons_buscar("cs:channel:zap", "tv");
+    while (addons_estado() == ADD_BUSCANDO) usleep(1000);
+    conferir("canal: desligado NAO consultado", pedidosDesligado, 0);
+  }
 
   remove(caminho);
   rmdir(dir);

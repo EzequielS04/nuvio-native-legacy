@@ -809,6 +809,7 @@ static int consultarAlvo(const AlvoBusca *a, const char *termo,
                                metaprov_get_rede, NULL, NULL);
   } else {
     urlEscapar(termo, esc, sizeof esc);
+    if (addons_base_desligada(a->base)) return 0;
     if (!descPedidoCoube(a->base, nv_addon_url(url, sizeof url, a->base, "/catalog/%s/%s/search=%s.json",
                                            a->tipo, a->id, esc), sizeof url)) return 0;
     corpo = rede_baixar(url, 6);
@@ -1228,6 +1229,7 @@ static int lerCatalogo(const char *base, const char *tipo, const char *id,
   const char *p;
   int n = 0;
   if (respondeu) *respondeu = 0;
+  if (addons_base_desligada(base)) return 0;   // desligado na conta: nenhuma rede
   if (!descPedidoCoube(base, nv_addon_url(url, sizeof url, base, "/catalog/%s/%s.json", tipo, id),
                        sizeof url)) return 0;
   // 8 s e nao 25: um addon fora do ar segurava um dos tres fios por 25 s, e a
@@ -7229,7 +7231,7 @@ static void *fioVerTudo(void *u) {
   if(genre[0])w=nv_addon_url(url,sizeof url,base,"/catalog/%s/%s/genre=%s&skip=%d.json",type,id,encoded,skip);
   else if(skip)w=nv_addon_url(url,sizeof url,base,"/catalog/%s/%s/skip=%d.json",type,id,skip);
   else w=nv_addon_url(url,sizeof url,base,"/catalog/%s/%s.json",type,id);
-  corpo=descPedidoCoube(base,w,sizeof url)?rede_baixar(url,10):NULL; }
+  corpo=(!addons_base_desligada(base)&&descPedidoCoube(base,w,sizeof url))?rede_baixar(url,10):NULL; }
   cap=strstr(id,"top100")?100:strstr(id,"top250")?250:VT_MAX;
   pthread_mutex_lock(&vtTrava);
   if(generation!=vtGeracao){pthread_mutex_unlock(&vtTrava);free(corpo);continue;}
