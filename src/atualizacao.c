@@ -28,6 +28,7 @@
 #include "layout.h"
 #include "idioma.h"
 #include "ajustes.h"
+#include "ponteiro.h"
 #include "idiomacod.h"
 #include "plrui.h"
 #include "qr.h"
@@ -1281,6 +1282,15 @@ static void dicas(float xDir, float yc, const char *const *t, const char *const 
   for (i = 0; i < n; i++) x += kbd(x, yc, t[i], r[i], a) + 24.0f;
 }
 
+// PONTEIRO (#99): foco pela mesma variavel das setas (so com os dois botoes
+// na tela, como as setas); o OK do clique segue por atualizacao_evento.
+static void ponteiroBotao(int i, int b) {
+  (void)b;
+  if (!aberto || estado == AT_INSTALANDO || !podeAgir() || (i != 0 && i != 1)) return;
+  foco = i;
+}
+int atualizacao_teste_foco(void) { return foco; }
+
 // Botao do cartao: primario 72 (26/600, recuo 34, icone 26) ou secundario 64
 // (24/600, recuo 28). Focado = pilula cheia no acento; senao branco 8%.
 static float botaoAt(float x, float yc, int primario, const char *rotulo, const char *icone,
@@ -1707,6 +1717,13 @@ void atualizacao_desenhar(Uint32 agora) {
         txt_desenhar_alpha(l, x, rodY - 12.0f - (float)l.h, ca * 0.80f);
       }
 #endif
+      // So assentado: forma no lugar (a mola passa de 1) e texto inteiro.
+      if (aberto && ca > 0.99f && cartaoT > 0.99f && cartaoT < 1.01f) {
+        float w0 = botaoAt(-10000.0f, yc, 1, i18n("Atualizar agora"), "aj_download", 26.0f, foco == 0 ? 1.0f : 0.0f, ca);
+        float w1 = botaoAt(-10000.0f, yc, 0, i18n("Depois"), NULL, 0.0f, foco == 1 ? 1.0f : 0.0f, ca);
+        ponteiro_alvo(bx, yc - 36.0f, w0, 72.0f, ponteiroBotao, NULL, 0, 0);
+        ponteiro_alvo(bx + w0 + 14.0f, yc - 32.0f, w1, 64.0f, ponteiroBotao, NULL, 1, 0);
+      }
       bx += botaoAt(bx, yc, 1, i18n("Atualizar agora"), "aj_download", 26.0f, foco == 0 ? 1.0f : 0.0f, ca) + 14.0f;
       botaoAt(bx, yc, 0, i18n("Depois"), NULL, 0.0f, foco == 1 ? 1.0f : 0.0f, ca);
       k2[0] = "\xe2\x86\x91 \xe2\x86\x93"; r2[0] = i18n("Mais notas");

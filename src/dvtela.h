@@ -104,4 +104,6 @@ void dvtela_desenhar(Uint32 agora);
 void dvtela_shot_relogio(Uint32 ms);   // capturas: o brilho do passo parado num instante
 #endif
 
+// Testes do ponteiro (#99): 1 com o anteparo e o botao registrados.
+int dvtela_teste_ponteiro(void);
 #endif

@@ -45,6 +45,7 @@
 #include "ilhaacao.h"
 #define NV_ESCALA_TELA_ATIVA   // mede pela tela do fator ativo (escala.h)
 #include "escala.h"
+#include "ponteiro.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -734,9 +735,23 @@ static void desenhaLinha(int i, float x, float y, float w, float a) {
 
 // A LISTA, com a rolagem em mola e recortada na janela. A barra fina a direita
 // so aparece quando ha mais linhas do que cabem.
+// PONTEIRO (#99): foco pela MESMA variavel das setas (`foco`, com a janela
+// acertada como no ↑ ↓); o OK do clique segue por recenviar_evento (aplicar).
+// Idempotente; com o teclado aberto ou no resultado do envio nao mexe.
+static void ponteiroLinha(int i, int b) {
+  (void)b;
+  if (!aberto || teclado_aberto() || pagina == RE_PAG_ENVIO) return;
+  if (i < 0 || i >= nLinhas() || foco == i) return;
+  foco = i; confirmandoRemover = -1; ajustarJanela();
+}
+int recenviar_teste_foco(int *pag) { if (pag) *pag = pagina; return foco; }
+
 static void desenhaLista(float x, float y, float w, float a) {
   int i, n = nLinhas(), jan = janela();
   float visH = listaAltura(topo, jan);
+  // So assentada: a entrada e a troca de passo paradas e a lista sem rolar.
+  int reg = aberto && anim > 0.99f && anim < 1.01f && troca > 0.99f &&
+            !teclado_aberto() && rolar > (float)topo - 0.01f && rolar < (float)topo + 0.01f;
   float passo = (pagina == RE_PAG_MODELOS ? RE_L_FRASE : RE_L_PESSOA) + RE_L_GAP;
   float desl = (rolar - (float)topo) * passo;
   int rola = n > jan;
@@ -749,8 +764,10 @@ static void desenhaLista(float x, float y, float w, float a) {
           plrui_kicker("Seus amigos", x + 12.0f, yy + 12.0f, 243, 242, 239, .45f * a);
         yy += RE_SECAO;
       }
-      if (yy + h >= y - passo && yy <= y + visH + passo)
+      if (yy + h >= y - passo && yy <= y + visH + passo) {
+        if (reg) ponteiro_alvo_faixa(x, yy, w, h, y - 4.0f, y + visH + 4.0f, ponteiroLinha, NULL, i, 0);
         desenhaLinha(i, x, yy, w, a);
+      }
       yy += h + RE_L_GAP;
     } }
   if (rola) {

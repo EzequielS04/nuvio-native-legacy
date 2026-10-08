@@ -42,6 +42,13 @@
 #include "agendaui.h"
 #include "socialvis.h"
 #include "amigoperfil.h"
+#include "dvtela.h"
+#include "posplay.h"
+#include "pipintro.h"
+#include "salvosintro.h"
+#include "guialembrete.h"
+#include "layout.h"
+#include "escala.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -565,6 +572,112 @@ static void testeAmigo(void) {
   captura("social-hover-cartaz.png");
 }
 
+// --- terceira leva: telas de toque unico e cartoes ------------------------
+// A TELA DO DOLBY VISION: o unico botao e "Assistir agora em HDR10". So um
+// clique NELE pode dispara-lo; no resto da tela o clique nao faz nada.
+static int dvtUltimo;
+static void dvtEvento(const SDL_Event *e) { int r = dvtela_evento(e, relogio); if (r != DVT_EV_NADA) dvtUltimo = r; }
+static void dvtAtualizar(float dt, Uint32 t) { DvtelaSinais s; (void)t; memset(&s, 0, sizeof s); dvtela_atualizar(&s, dt, relogio); }
+static void dvtDesenhar(Uint32 t) { (void)t; dvtela_desenhar(relogio); }
+static void testeDvtela(void) {
+  static const Tela T = { dvtEvento, dvtAtualizar, dvtDesenhar };
+  const PonteiroAlvo *v;
+  int n, b = -1;
+  printf("\n== Tela do Dolby Vision\n");
+  tela = &T;
+  dvtUltimo = DVT_EV_NADA;
+  dvtela_entrar(relogio);
+  mover(5, 5); quadros(90);
+  // Hover pela tela toda (cantos e centro): nada muda, nada dispara.
+  mover(960, 540); quadros(2); mover(1800, 100); quadros(2);
+  CONFERE(dvtela_ativa() && dvtUltimo != DVT_EV_HDR10, "dv: passar o cursor nao escolhe HDR10");
+  clicar(40, 40); quadros(3);
+  CONFERE(dvtela_ativa() && dvtUltimo != DVT_EV_HDR10, "dv: clique fora do botao nao escolhe HDR10");
+  n = alvos(&v);
+  for (int i = 0; i < n; i++) if (v[i].focar && v[i].w < 900.0f) b = i;
+  CONFERE(b >= 0, "dv: o botao HDR10 e alvo");
+  if (b >= 0) {
+    float x = cx(&v[b]), y = cy(&v[b]);
+    mover(x, y); quadros(2);
+    captura("dv-hover-botao.png");
+    clicar(x, y); quadros(3);
+    CONFERE(!dvtela_ativa() && dvtUltimo == DVT_EV_HDR10, "dv: clique no botao escolhe HDR10");
+  }
+  if (dvtela_ativa()) dvtela_sair(DVT_SAIDA_VOLTAR, relogio);
+  quadros(60);
+}
+
+// O POS-REPRODUCAO DA SERIE: o proximo episodio so comeca com um clique no
+// botao "Comecar agora"; hover e clique no vazio nao comecam nada.
+static int ppEv(const SDL_Event *e) { return posplay_evento(e); }
+static void ppEvento(const SDL_Event *e) { (void)ppEv(e); }
+static void ppAtualizar(float dt, Uint32 t) { (void)dt; (void)t; }
+static void ppDesenhar(Uint32 t) { (void)t; posplay_desenhar(relogio, NV_VTELA_H - 60.0f); }
+static void testePosplay(void) {
+  static const Tela T = { ppEvento, ppAtualizar, ppDesenhar };
+  const PonteiroAlvo *v;
+  int n, b = -1, te, ep;
+  printf("\n== Pos-reproducao (serie)\n");
+  povoar();
+  tela = &T;
+  posplay_shot(0, 1, 1, 2, 0);
+  mover(5, 5); quadros(10);
+  for (int i = 0; i < 8; i++) { mover(100 + i * 230, 200 + (i % 4) * 220); quadros(2); }
+  CONFERE(!posplay_pediu_episodio(&te, &ep), "posplay: passar o cursor nao comeca o episodio");
+  clicar(60, 60); quadros(3);
+  CONFERE(!posplay_pediu_episodio(&te, &ep) && posplay_visivel(), "posplay: clique no vazio nao comeca o episodio");
+  n = alvos(&v);
+  for (int i = 0; i < n; i++) if (v[i].focar) b = i;
+  CONFERE(b >= 0, "posplay: o botao Comecar agora e alvo");
+  if (b >= 0) {
+    float x = cx(&v[b]), y = cy(&v[b]);
+    mover(x, y); quadros(2);
+    captura("posplay-hover-botao.png");
+    CONFERE(!posplay_pediu_episodio(&te, &ep), "posplay: hover no botao nao comeca");
+    clicar(x, y); quadros(2);
+    CONFERE(posplay_pediu_episodio(&te, &ep) && te == 1 && ep == 2, "posplay: clique no botao comeca o episodio");
+  }
+  posplay_fechar();
+}
+
+// Cartoes de duas escolhas: o hover troca o foco entre os botoes.
+static void (*cartaoDes)(Uint32);
+static void cartaoDesenhar(Uint32 t) { (void)t; cartaoDes(relogio); }
+static void cartaoAtualizarPip(float dt, Uint32 t) { (void)t; pipintro_atualizar(dt, relogio); }
+static void cartaoAtualizarSi(float dt, Uint32 t) { (void)t; sintro_atualizar(dt, relogio); }
+// O cartao do lembrete conta o prazo pelo SDL_GetTicks (desde), nao pelo relogio do teste.
+static void cartaoAtualizarGl(float dt, Uint32 t) { glem_passo(dt, t); }
+static int glemEv(const SDL_Event *e) { return glem_evento(e); }
+static void glemEvento(const SDL_Event *e) { (void)glemEv(e); }
+static int lerPip(void) { return pipintro_teste_foco(); }
+static int lerSi(void) { return sintro_teste_foco(); }
+static int lerGl(void) { return glem_teste_foco(); }
+static void testeCartoes(void) {
+  static const Tela PIP = { pipintro_evento, cartaoAtualizarPip, cartaoDesenhar };
+  static const Tela SI  = { sintro_evento, cartaoAtualizarSi, cartaoDesenhar };
+  static const Tela GL  = { glemEvento, cartaoAtualizarGl, cartaoDesenhar };
+  int n, d;
+  printf("\n== Cartoes (PiP, Salvos, lembrete do guia)\n");
+  tela = &PIP; cartaoDes = pipintro_desenhar;
+  pipintro_abrir();
+  mover(5, 5); quadros(60);
+  d = distintos(lerPip, &n);
+  CONFERE(pipintro_aberto() && n == 2 && d == 2, "pip: os dois botoes sao alvos e ganham o foco");
+  tela = &SI; cartaoDes = sintro_desenhar;
+  sintro_primeira_vez();
+  mover(5, 5); quadros(60);
+  d = distintos(lerSi, &n);
+  CONFERE(sintro_aberto() && n == 2 && d == 2, "salvos (intro): as duas opcoes sao alvos e ganham o foco");
+  tela = &GL; cartaoDes = glem_desenhar;
+  glem_teste_cartao("Jornal", "Canal 5", 0);
+  mover(5, 5); quadros(60);
+  d = distintos(lerGl, &n);
+  { char id[64], nome[64], base[256];
+    CONFERE(glem_cartao_aberto() && n == 2 && d == 2 &&
+            !glem_pediu_assistir(id, sizeof id, nome, sizeof nome, base, sizeof base),
+            "lembrete do guia: Assistir e Dispensar ganham o foco sem assistir"); }
+}
+
 // --- central de avisos (painel proprio; NUVIO_AVISOS_DEMO tem linhas) -----
 static int lerAviso(void) { return avisos_teste_foco(); }
 static int avisosEv(const SDL_Event *e) { return avisos_evento(e); }
@@ -666,6 +779,9 @@ int main(int argc, char **argv) {
   testeAvisos();
   testeAmigo();
   testePlayer();
+  testeDvtela();
+  testePosplay();
+  testeCartoes();
 
   printf("\n%s: %d falha(s)\n", falhas ? "FALHOU" : "PASSOU", falhas);
   return falhas ? 1 : 0;

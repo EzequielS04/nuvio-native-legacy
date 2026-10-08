@@ -26,6 +26,7 @@
 #include "text.h"
 #define NV_ESCALA_TELA_ATIVA
 #include "escala.h"
+#include "ponteiro.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -243,6 +244,16 @@ static void passos(float x, float y, float w, Uint32 agora, float a) {
   }
 }
 
+// PONTEIRO (#99). A tela tem o teclado (dvtela_evento engole tudo) e o unico
+// foco e o botao, entao o foco nunca muda: o hover nao faz nada. Por isso ela
+// NAO pode ser uma camada sem alvos (ali qualquer clique vira OK = HDR10): um
+// anteparo de tela cheia absorve o clique fora do botao, e so o clique no
+// proprio botao entrega o OK (com a mesma espera de DVT_OK_ESPERA_MS do
+// controle). So com a tela de pe e assentada.
+static void ponteiroBotao(int a, int b) { (void)a; (void)b; }
+static int dvtPont;
+int dvtela_teste_ponteiro(void) { return dvtPont; }
+
 // ------------------------------------------------------------------ o cartao
 void dvtela_desenhar(Uint32 agora) {
   const DvtelaEstado *e = dvtela_estado();
@@ -271,6 +282,14 @@ void dvtela_desenhar(Uint32 agora) {
   }
 
   fundo(a);
+  dvtPont = 0;
+  if (e->ativa) {
+    ponteiro_camada();   // o player por baixo nao recebe o ponteiro
+    if (a >= 0.999f) {
+      ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, NULL, 0, 0);   // anteparo
+      dvtPont = 1;
+    }
+  }
   { ESCALA_SE_COUBER_INI(C_W, C_H);
     float sobe = (1.0f - a) * 18.0f;
     float cx0 = (NV_TELA_W - C_W) * 0.5f, cy0 = (NV_TELA_H - C_H) * 0.5f + sobe;
@@ -308,6 +327,7 @@ void dvtela_desenhar(Uint32 agora) {
       float bw = botao_largura(rot, "aj_tv-minimal-play", 0);
       GfxRect b = { tx, cy0 + C_H - C_PAD - BOTAO_H_SECUNDARIO, bw, BOTAO_H_SECUNDARIO };
       const char *k[1] = { "Voltar" }, *r[1] = { "Sair" };
+      if (dvtPont) ponteiro_alvo(b.x, b.y, b.w, b.h, ponteiroBotao, NULL, 0, 0);
       botao_pilula(b, rot, "aj_tv-minimal-play", dvtela_foco_botao() ? 1.0f : 0.0f, 0, 0, a);
       plrui_dicas(k, r, 1, b.x + b.w + 28.0f, b.y + b.h * 0.5f, 0, a * 0.85f); }
 

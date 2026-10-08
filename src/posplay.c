@@ -21,6 +21,7 @@
 #include "velocidade.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
 #include "escala.h"
+#include "ponteiro.h"
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
@@ -404,6 +405,24 @@ static void anelContagem(float cx, float cy, float frac, float a) {
 // as dicas de Baixo/Voltar vao DENTRO da ilha (caiam em y~1046, overscan).
 // No filme, os relacionados na margem de 96 (era 64), o cartaz focado sobe
 // com escala e sombra (saiu o anel de 4 px) e o nome dele vai ao cabecalho.
+// PONTEIRO (#99). O painel fica por cima dos controles do player (que param de
+// registrar com ele no ar): um ANTEPARO na tela inteira absorve o clique no
+// vazio — sem ele a camada do player ficaria sem alvos e qualquer clique
+// viraria OK, comecando o proximo episodio sem querer. Hover so move foco:
+// na serie o botao "Comecar agora" e o unico item (ja em foco) e o focar nao
+// mexe em nada — o episodio so comeca pelo OK de um clique NESSE botao. A
+// contagem automatica nao e tocada. No filme o foco segue a variavel das
+// setas (o cartaz); o OK abre o titulo, nao toca nada.
+static void ponteiroComecar(int a, int b) { (void)a; (void)b; }
+static void ponteiroCartaz(int i, int b) {
+  int n = extras_n_relacionados();
+  (void)b;
+  if (n > PP_MAX) n = PP_MAX;
+  if (!visivel || serie || i < 0 || i >= n || foco == i) return;
+  foco = i;
+}
+int posplay_teste_foco(void) { return foco; }
+
 static void posplay_desenharCorpo_(Uint32 agora, float baseY);
 // Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void posplay_desenhar(Uint32 agora, float baseY) {
@@ -415,6 +434,7 @@ static void posplay_desenharCorpo_(Uint32 agora, float baseY) {
   float a = anim, x = 96.0f;
   (void)baseY;
   if (a < 0.01f) return;
+  if (visivel) ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, NULL, 0, 0);   // anteparo
   { int i = cat_indice_vivo(idx, idTitulo);
     if (i < 0) return;
     idx = i; }
@@ -480,6 +500,8 @@ static void posplay_desenharCorpo_(Uint32 agora, float baseY) {
         txt_bloco_corta(TXT_ILHA_SUB, px->sinopse, 243, 242, 239, tx, ty, tw, 28.5f, a * 0.68f, 2);
       { float by = ilha.y + ilha.h - 28.0f - 60.0f;
         float bw = plrui_botao(tx, by, "Começar agora", "pl_play-f", 1.0f, a);
+        if (visivel && a > 0.99f && a < 1.01f)   // so assentado (sem a subida)
+          ponteiro_alvo(tx, by, bw, 60.0f, ponteiroComecar, NULL, 0, 0);
         const char *k[2] = { "\xe2\x86\x93", "Voltar" }, *r[2] = { "Voltar ao player", "Ficar nos créditos" };
         plrui_dicas(k, r, 2, tx + bw + 22.0f, by + 30.0f, 0, a); } }
     return;
@@ -515,6 +537,11 @@ static void posplay_desenharCorpo_(Uint32 agora, float baseY) {
       float k = sel ? 1.08f : 1.0f, w = 182.0f * k, h = 273.0f * k;
       GfxRect r = { cx + (182.0f - w) * 0.5f, y + 273.0f - h, w, h };
       if (cx + 182.0f > ilha.x + ilha.w - 20.0f) break;
+      // A faixa do cartaz inteira, vao incluido: as faixas se encostam e o
+      // deslocamento do focado (+8) nao faz o foco oscilar na borda.
+      if (visivel && a > 0.99f && a < 1.01f)
+        ponteiro_alvo(cx, y - 20.0f, 182.0f + 30.0f + (sel ? 8.0f : 0.0f), 273.0f + 40.0f,
+                      ponteiroCartaz, NULL, i, 0);
       if (sel) gfx_rect((GfxRect){ r.x - 20.0f, r.y + 4.0f, r.w + 40.0f, r.h + 40.0f }, 0, GFX_SOMBRA,
                         1.0f, 0, 0, 0.5f, 0, 0, 0, 0.55f * a);
       if (t) {
