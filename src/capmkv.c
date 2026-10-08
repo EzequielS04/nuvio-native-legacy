@@ -17,7 +17,11 @@ static pthread_mutex_t trava = PTHREAD_MUTEX_INITIALIZER;
 static unsigned ger;                       // reproducao corrente
 static double nomeado, ultimo;             // regra da LG: nome > ultimo no ultimo quarto
 
-typedef struct { char url[512]; int n; MkvCap caps[MKV_MAX_CAPS]; } Entrada;
+// URL NO HEAP, do tamanho dela, e nao char[512]: o player guarda ate 4096
+// (video_tpk.c/video_android.c urlAtual) e link assinado de debrid/CDN passa
+// de 512 facil — acima disso o capmkv voltava calado e o video ficava sem
+// capitulos. Sao CAP_CACHE entradas: o custo e o tamanho real de 4 URLs.
+typedef struct { char *url; int n; MkvCap caps[MKV_MAX_CAPS]; } Entrada;
 static Entrada cache[CAP_CACHE];
 static int cacheProx;
 
@@ -32,7 +36,7 @@ static int cacheLer(const char *url, MkvCap *caps, int max) {
   int i, n = -1;
   pthread_mutex_lock(&trava);
   for (i = 0; i < CAP_CACHE; i++)
-    if (cache[i].url[0] && !strcmp(cache[i].url, url)) {
+    if (cache[i].url && !strcmp(cache[i].url, url)) {
       n = cache[i].n < max ? cache[i].n : max;
       if (n > 0) memcpy(caps, cache[i].caps, (size_t)n * sizeof *caps);
       break;
@@ -42,10 +46,16 @@ static int cacheLer(const char *url, MkvCap *caps, int max) {
 }
 static void cacheGuardar(const char *url, const MkvCap *caps, int n) {
   Entrada *e;
-  if (strlen(url) >= sizeof cache[0].url) return;
+  char *copia = strdup(url);
+  if (!copia) {
+    printf("[mkv] sem memoria para guardar no cache a URL de %zu bytes\n", strlen(url));
+    fflush(stdout);
+    return;
+  }
   pthread_mutex_lock(&trava);
   e = &cache[cacheProx++ % CAP_CACHE];
-  snprintf(e->url, sizeof e->url, "%s", url);
+  free(e->url);
+  e->url = copia;
   e->n = n;
   if (n > 0) memcpy(e->caps, caps, (size_t)n * sizeof *caps);
   pthread_mutex_unlock(&trava);
@@ -131,7 +141,7 @@ static int lerUma(const char *url, MkvCap *caps, int max, int *recusa) {
   return n;
 }
 
-typedef struct { char url[512]; unsigned g; } Pedido;
+typedef struct { unsigned g; char url[]; } Pedido;   // url do tamanho dela
 
 static int lerComRecuo(const char *url, MkvCap *caps, int max, unsigned g, int esperaMs) {
   static const int RECUO_MS[CAP_TENTATIVAS] = { 0, 3000, 10000 };
@@ -178,12 +188,17 @@ void capmkv_iniciar(const char *url) {
   MkvCap caps[MKV_MAX_CAPS];
   int n;
   capmkv_zerar();
-  if (!url || !url[0] || !urlMkvPossivel(url) || strlen(url) >= sizeof p->url) return;
+  if (!url || !url[0] || !urlMkvPossivel(url)) return;
   n = cacheLer(url, caps, MKV_MAX_CAPS);
   if (n >= 0) { if (n > 0) capmkv_aplicar(caps, n); return; }
-  p = malloc(sizeof *p);
-  if (!p) return;
-  snprintf(p->url, sizeof p->url, "%s", url);
+  { size_t tam = strlen(url) + 1;
+    p = malloc(sizeof *p + tam);
+    if (!p) {
+      printf("[mkv] sem memoria para o pedido de capitulos (URL de %zu bytes)\n", tam - 1);
+      fflush(stdout);
+      return;
+    }
+    memcpy(p->url, url, tam); }
   pthread_mutex_lock(&trava); p->g = ger; pthread_mutex_unlock(&trava);
   if (pthread_create(&t, NULL, fio, p) == 0) pthread_detach(t); else free(p);
 }
