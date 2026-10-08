@@ -303,6 +303,20 @@ static void *fioTirarRemoto(void *u) {
   free(tr);
   return NULL;
 }
+// SEM FIO, DESISTE — nunca roda no quadro. A chamada direta a fioTirarRemoto de antes
+// fazia o DELETE do Trakt (ate 20 s por pausa) e a RPC do syncprog no fio de
+// desenho. O efeito local ja aconteceu (registro apagado, carimbo de removido,
+// prog_removido_vence), entao a refacao seguinte nao readmite o card mesmo com
+// o remoto velho; so a limpeza la fora fica para quem tirar de novo.
+// tests/ctxmenu_semfio.sh.
+static void tirarRemotoEmFio(TirarRemoto *tr) {
+  pthread_t t;
+  if (!tr) return;
+  if (pthread_create(&t, NULL, fioTirarRemoto, tr) == 0) { pthread_detach(t); return; }
+  printf("[ctx] sem fio para tirar %s do Trakt/conta: so o efeito local vale\n", tr->imdb);
+  fflush(stdout);
+  free(tr);
+}
 
 static int indiceAtual(void) {
   int n = cat_n();
@@ -759,12 +773,10 @@ static void espelharAssistido(int atual, const CatItem *ci, int intencao) {
     // pausa (ate 20 s cada) e o syncprog e RPC; nenhum pode parar o desenho.
     { TirarRemoto *tr = (TirarRemoto *)malloc(sizeof *tr);
       if (tr) {
-        pthread_t t;
         snprintf(tr->imdb, sizeof tr->imdb, "%s", ci->imdb);
         snprintf(tr->chave, sizeof tr->chave, "%s", chave);
         tr->ocultar = 0;   // marcar como visto NAO esconde a serie no Trakt
-        if (pthread_create(&t, NULL, fioTirarRemoto, tr) == 0) pthread_detach(t);
-        else fioTirarRemoto(tr);
+        tirarRemotoEmFio(tr);
       } }
     simkl_playback_remover(ci->imdb);
     // O CARIMBO DE "TIRAR DE CONTINUAR" (#244). Sem ele a proxima passada
@@ -987,7 +999,6 @@ static void aplicar(void) {
       TirarRemoto *tr = (TirarRemoto *)calloc(1, sizeof *tr);
       char imdb[sizeof ci->imdb];
       int temp = ci->temporada, ep = ci->episodio;
-      pthread_t t;
       char tit[sizeof ci->titulo];
       snprintf(imdb, sizeof imdb, "%s", ci->imdb);
       snprintf(tit, sizeof tit, "%s", ci->titulo);
@@ -1019,8 +1030,7 @@ static void aplicar(void) {
         snprintf(tr->imdb, sizeof tr->imdb, "%s", imdb);
         prog_chave(tr->chave, sizeof tr->chave, imdb, temp, ep);
         tr->ocultar = 1;   // so o "Tirar de Continuar assistindo" explicito esconde
-        if (pthread_create(&t, NULL, fioTirarRemoto, tr) == 0) pthread_detach(t);
-        else fioTirarRemoto(tr);   // sem fio: faz aqui, como antes
+        tirarRemotoEmFio(tr);   // sem fio: desiste (log), nunca no quadro
       }
       // O Simkl tambem guarda o pausado (issue #110). Ja sai em fio proprio;
       // sem id conhecido (item que nao veio do Simkl) nao faz nada.

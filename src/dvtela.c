@@ -3,6 +3,7 @@
 #include "video.h"
 #include "anim.h"
 #include "layout.h"
+#include "teclavoltar.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -176,11 +177,6 @@ int dvtela_atualizar(const DvtelaSinais *s, float dt, Uint32 agora) {
   return saiu;
 }
 
-static int ehVoltar(const SDL_Event *e) {
-  SDL_Keycode k = e->key.keysym.sym;
-  return k == SDLK_ESCAPE || k == SDLK_AC_BACK || k == SDLK_BACKSPACE || k == SDLK_DELETE ||
-         e->key.keysym.scancode == NV_SCANCODE_BACK;
-}
 static int ehOk(const SDL_Event *e) {
   SDL_Keycode k = e->key.keysym.sym;
   return k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE;
@@ -189,7 +185,7 @@ static int ehOk(const SDL_Event *e) {
 int dvtela_evento(const SDL_Event *e, Uint32 agora) {
   if (!E.ativa || !e) return DVT_EV_NADA;
   if (e->type != SDL_KEYDOWN) return DVT_EV_ENGOLIU;
-  if (ehVoltar(e)) { dvtela_sair(DVT_SAIDA_VOLTAR, agora); return DVT_EV_VOLTAR; }
+  if (nv_tecla_voltar(e)) { dvtela_sair(DVT_SAIDA_VOLTAR, agora); return DVT_EV_VOLTAR; }
   if (ehOk(e)) {
     // Tecla segurada ou o segundo toque do Play: nao e escolha.
     if (e->key.repeat || (Uint32)(agora - E.entrouEm) < DVT_OK_ESPERA_MS) return DVT_EV_ENGOLIU;

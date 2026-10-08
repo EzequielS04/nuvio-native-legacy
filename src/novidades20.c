@@ -30,6 +30,7 @@
 #include "idiomacod.h"
 #include "ilha.h"
 #include "layout.h"
+#include "teclavoltar.h"
 #include "logoapp.h"
 #include "perfiltv.h"
 #include "ponteiro.h"
@@ -1133,11 +1134,6 @@ static int ehAzul(const SDL_Event *e) {
   int sc = e->key.keysym.scancode;
   return k == SDLK_s || sc == NV_SCANCODE_BLUE || sc == NV_SCANCODE_CH_UP || k == SDLK_PAGEUP;
 }
-static int ehVoltar(const SDL_Event *e) {
-  SDL_Keycode k = e->key.keysym.sym;
-  return k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE || k == SDLK_DELETE ||
-         e->key.keysym.scancode == NV_SCANCODE_BACK;
-}
 void novidades20_evento(const SDL_Event *e) {
   SDL_Keycode k;
   int t, ok;
@@ -1149,10 +1145,10 @@ void novidades20_evento(const SDL_Event *e) {
     if (k == SDLK_LEFT && focoSair > 0) focoSair--;
     else if (k == SDLK_RIGHT && focoSair < 2) focoSair++;
     else if (ok) okSair(focoSair);
-    else if (ehVoltar(e)) saindo = 0;
+    else if (nv_tecla_voltar(e)) saindo = 0;
     return;
   }
-  if (ehVoltar(e)) { saindo = 1; focoSair = 0; sairA = ajustes_animacoes_reduzidas() ? 1.0f : 0.0f; return; }
+  if (nv_tecla_voltar(e)) { saindo = 1; focoSair = 0; sairA = ajustes_animacoes_reduzidas() ? 1.0f : 0.0f; return; }
   if (ehAzul(e)) {
     if (e->key.repeat) return;
     if (idx >= nLista - 2) irPara(0); else irPara(nLista - 2);

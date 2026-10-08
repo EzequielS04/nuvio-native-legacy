@@ -21,6 +21,7 @@
 #include "redesaude.h"
 #include "tex_cache.h"
 #include "text.h"
+#include "teclavoltar.h"
 #include "video.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -123,9 +124,6 @@ static void avisar(const char *s) {
 }
 
 // --- TECLADO -----------------------------------------------------------------
-static int ehVoltar(SDL_Keycode k) {
-  return k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE;
-}
 // O CH+ depois do remapeamento (Salvos na Samsung/Android, scancode no LG) e a
 // AZUL: a mesma tecla que abriu fecha.
 static int ehCh(const SDL_Event *e) {
@@ -169,7 +167,7 @@ void central_evento(const SDL_Event *e) {
   if (ehCh(e)) { central_fechar(); return; }
   if (editando) {
     int it[64], m = ofertas(it);
-    if (ehVoltar(k)) { editando = 0; return; }
+    if (nv_tecla_voltar(e)) { editando = 0; return; }
     if (k == SDLK_UP && focoEd > 0) focoEd--;
     else if (k == SDLK_DOWN && focoEd + 1 < m) focoEd++;
     else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) alternarOferta(focoEd);
@@ -178,7 +176,7 @@ void central_evento(const SDL_Event *e) {
   {
     int n = botoes(NULL, NULL) + 1;   // + "Editar atalhos"
     if (foco >= n) foco = n - 1;
-    if (ehVoltar(k)) { central_fechar(); return; }
+    if (nv_tecla_voltar(e)) { central_fechar(); return; }
     if (k == SDLK_LEFT && foco % CC_COLS > 0) foco--;
     else if (k == SDLK_RIGHT && foco % CC_COLS < CC_COLS - 1 && foco + 1 < n) foco++;
     else if (k == SDLK_UP && foco >= CC_COLS) foco -= CC_COLS;

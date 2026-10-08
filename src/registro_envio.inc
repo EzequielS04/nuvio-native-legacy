@@ -66,7 +66,7 @@ int registro_envio_evento(const SDL_Event *e) {
   if (e->type != SDL_KEYDOWN) return e->type == SDL_KEYUP || e->type == SDL_TEXTINPUT;
   k = e->key.keysym.sym;
   avisos_envio_info(&env);
-  if (ehVoltar(e)) { envAberto = 0; engolirSoltura(e); return 1; }   // o envio continua
+  if (nv_tecla_voltar(e)) { envAberto = 0; engolirSoltura(e); return 1; }   // o envio continua
   if (env.estado == 3) {
     int podeTentar = env.motivo != AVISOS_ENVIO_OFFLINE && env.motivo != AVISOS_ENVIO_INDISPONIVEL;
     // Erro: [Tentar de novo] [Fechar]. Sem internet: [Fechar] [Tentar apagado].

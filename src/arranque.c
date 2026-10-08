@@ -16,6 +16,8 @@
 #define ARQ_QUEDA   "/tmp/nuvio-queda-arranque.txt"
 #define ARQ_PEND    "/tmp/nuvio-arranque-pendente.txt"  // relato ainda nao enviado
 #define ARQ_FIM     "quadro-1"   // passou daqui = nao e falha de arranque
+// Teto do relato anterior que vai junto (o pendente acumula a cada abertura sem rede).
+#define ARRANQUE_ANTIGO_MAX 6144
 
 void arranque_etapa(const char *nome) {
   char b[96];
@@ -68,22 +70,49 @@ void arranque_relatar(void) {
   fflush(stdout);
   if (morreuNoArranque || temQueda) {
     FILE *p;
-    char *novo = malloc(rq ? nrq + 2048 : 2048), antigo[8192] = "";
+    char *novo, *antigo = NULL;
+    size_t nAntigo = 0, cap;
+    long tamPend = 0;
     // Um relato que nao saiu (sem rede) fica em ARQ_PEND e vai junto na proxima.
+    // O relato NOVO (rq) nunca e cortado: o anterior e que cabe num teto, e
+    // dele fica a CAUDA (a queda mais recente, com o [tv] e a pilha), a partir
+    // de um inicio de linha. Cortou, diz no log.
     p = fopen(ARQ_PEND, "r");
-    if (p) { size_t k = fread(antigo, 1, sizeof antigo - 1, p); antigo[k] = 0; fclose(p); }
+    if (p) {
+      if (fseek(p, 0, SEEK_END) == 0) tamPend = ftell(p);
+      if (tamPend > 0) {
+        long ini = tamPend > ARRANQUE_ANTIGO_MAX ? tamPend - ARRANQUE_ANTIGO_MAX : 0;
+        antigo = malloc((size_t)(tamPend - ini) + 1);
+        if (antigo && fseek(p, ini, SEEK_SET) == 0) {
+          nAntigo = fread(antigo, 1, (size_t)(tamPend - ini), p);
+          antigo[nAntigo] = 0;
+          if (ini > 0) {
+            char *nl = memchr(antigo, '\n', nAntigo);
+            if (nl) { nAntigo -= (size_t)(nl + 1 - antigo); memmove(antigo, nl + 1, nAntigo + 1); }
+            printf("[arranque] relato anterior cortado: %ld -> %zu bytes (fica o fim)\n", tamPend, nAntigo);
+          }
+        } else if (antigo) { free(antigo); antigo = NULL; nAntigo = 0; }
+      }
+      fclose(p);
+    }
     avisos_tv_linha(linhaTv, sizeof linhaTv, relatoTv, sizeof relatoTv);
+    // Tudo o que entra, medido: nada de snprintf cortando o relato novo em silencio.
+    cap = nAntigo + (rq ? nrq : 0) + sizeof linhaTv + sizeof kern + sizeof b + 160;
+    novo = malloc(cap);
     if (novo) {
-      snprintf(novo, (rq ? nrq : 0) + 2048, "%s%s\n%s%s%s%s%s",
-               antigo[0] ? "--- relato anterior sem envio ---\n" : "", antigo, linhaTv[0] ? linhaTv : "[tv] ?",
+      int l = snprintf(novo, cap, "%s%s%s\n%s%s%s%s%s\n",
+               nAntigo ? "--- relato anterior sem envio ---\n" : "",
+               tamPend > (long)nAntigo && nAntigo ? "[arranque] (relato anterior aparado, fica o fim)\n" : "",
+               antigo ? antigo : "", linhaTv[0] ? linhaTv : "[tv] ?",
                kern[0] ? "\n" : "", kern,
                b[0] ? "[arranque] ultima etapa: " : "[arranque] sem rastro de etapa", b);
-      { size_t l = strlen(novo);
-        snprintf(novo + l, (rq ? nrq : 0) + 2048 - l, "\n%s", rq ? rq : ""); }
+      if (l > 0 && (size_t)l < cap && rq) memcpy(novo + l, rq, nrq + 1);
       relatoPendente = novo;
       p = fopen(ARQ_PEND, "w");
       if (p) { fputs(novo, p); fclose(p); }
     }
+    free(antigo);
+    fflush(stdout);
   }
   free(rq);
 }
