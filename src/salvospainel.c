@@ -4796,8 +4796,13 @@ static void desenharPainel(Uint32 agora) {
 
   // OS ROTULOS DAS SECOES, onde montarLayout os pos. A categoria vazia leva
   // a dica de como por algo nela, no lugar das celulas que ainda nao tem.
+  // Com um titulo aberto, as secoes ABAIXO dele descem junto com as linhas
+  // (o mesmo `extra` do laco de linhas); sem isso o rotulo ("Nao comecados")
+  // ficava na posicao fechada, por cima do cartao aberto.
+  { int exs = expIdx();
+    float extras = exs >= 0 ? (sorg_estilo() == SORG_ESTILO_LISTA ? expExtra() : expExtraBloco()) : 0.0f;
   for (i = 0; i < nSecoes; i++) {
-    float sy = y + secoes[i].y;
+    float sy = y + secoes[i].y + (exs >= 0 && secoes[i].y > linhas[exs].ly ? extras : 0.0f);
     float sa = secaoAlt(secoes[i].y <= 0.0f);
     float sh = sa + (secoes[i].vazia ? SP_VAZIA_H : 0.0f);
     if (sy + sh < listaTopo() || sy > SP_LISTA_BASE) continue;
@@ -4808,7 +4813,7 @@ static void desenharPainel(Uint32 agora) {
           SP_INTERNO);
       txt_desenhar_alpha(t, SP_X + x + SP_PAD, sy + sa + 6.0f, a * 0.5f);
     }
-  }
+  } }
   { int estilo = sorg_estilo();
     int ex = expIdx();
     int lista = estilo == SORG_ESTILO_LISTA;
