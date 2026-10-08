@@ -6,7 +6,11 @@
 #ifndef NV_DESCDEBOUNCE_H
 #define NV_DESCDEBOUNCE_H
 
+// Testes de montagem anteriores ao debounce compilam com -DNV_DESC_MIN_MS=0ull
+// (comportamento antigo, sem espera); a regra em si e conferida em descdebounce.c.
+#ifndef NV_DESC_MIN_MS
 #define NV_DESC_MIN_MS 10000ull
+#endif
 
 typedef struct {
   unsigned long long inicio;   // quando a ultima volta comecou

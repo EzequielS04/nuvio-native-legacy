@@ -143,9 +143,11 @@ void nuvem_url_escapar(const char *v, char *d, unsigned t) { snprintf(d, t, "%s"
 static int nAplicados, ativosAplicados;
 static char primeiraUrl[600];
 // #201 (sessao "longa"): a conta manda um addon de URL com 1500 caracteres e
-// outro acima de NV_ADDON_URL_MAX. O primeiro tem de chegar INTEIRO ao app; o
-// segundo nao pode chegar, nem cortado.
-static char urlLonga[1501], urlGrande[2601], contaLonga[5000];
+// outro acima do teto de leitura da conta (SY_URL_LEITURA, 16 KB desde o #203:
+// de 2 a 16 KB a URL vira apelido, addonurl.h). O primeiro tem de chegar
+// INTEIRO ao app; o segundo nao pode chegar, nem cortado.
+#define URL_GRANDE 17000
+static char urlLonga[1501], urlGrande[URL_GRANDE + 1], contaLonga[URL_GRANDE + 3000];
 static int longaIntacta, grandeChegou;
 static void montarLonga(void) {
   size_t k, i;
@@ -153,7 +155,7 @@ static void montarLonga(void) {
   for (i = 0; k < 1500 - 14; i++) urlLonga[k++] = (char)('a' + (int)((i * 7) % 26));
   snprintf(urlLonga + k, 15, "/manifest.json");
   k = (size_t)snprintf(urlGrande, sizeof urlGrande, "https://grande.exemplo/SEGREDO");
-  for (i = 0; k < 2600 - 14; i++) urlGrande[k++] = (char)('a' + (int)((i * 5) % 26));
+  for (i = 0; k < URL_GRANDE - 14; i++) urlGrande[k++] = (char)('a' + (int)((i * 5) % 26));
   snprintf(urlGrande + k, 15, "/manifest.json");
   snprintf(contaLonga, sizeof contaLonga,
            "[{\"url\":\"%s\",\"name\":\"Longo\",\"enabled\":true},"

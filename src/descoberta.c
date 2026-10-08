@@ -960,6 +960,12 @@ static volatile int repetirAoFim;
 // DEBOUNCE (descdebounce.h): quando a ultima volta comecou e se ha inicio agendado.
 static NvDescDeb descDeb;
 static void descIniciarAdiado(void);
+// Pedido da PESSOA (desc_repetir: troca de perfil, idioma, addons, ordem) nao
+// passa pelo minimo entre voltas: condena a volta no ar e a seguinte comeca ja.
+// Sem isso a volta do perfil que saiu (recente, nao condenada) publicava as
+// fileiras dele na Home do perfil novo (#294) e o pedido esperava ate 10 s.
+static volatile int descPedidoPessoa;
+static volatile unsigned descVoltas, descVoltasAoAgendar;   // volta comecou depois do agendamento?
 // GERACAO DO PEDIDO DE REMONTAGEM, e a razao dela existir esta medida.
 //
 // `repetirAoFim` sozinho nao distingue duas coisas muito diferentes: um pedido
@@ -4519,7 +4525,11 @@ static void *montar(void *u) {
                                            txt, sizeof txt)); }
       fflush(stdout);
       free(lote); repetirAoFim = 0; buscando = 0;
-      descIniciarAdiado();
+      // Recomeca JA, sem o minimo entre voltas: a fonte (conta/perfil/addons)
+      // mudou ou a pessoa pediu, e a volta so e condenada quando o minimo ja
+      // passou (repetirInterno). Esperar 10 s aqui deixava a Home com o pacote
+      // ou com o perfil que saiu.
+      desc_iniciar();
       return NULL;
     }
     // A tela passa a ter a volta COMPLETA (publicada agora, ou igual a ela).
@@ -4661,7 +4671,7 @@ condenada:
   free(lote);
   repetirAoFim = 0;
   buscando = 0;
-  descIniciarAdiado();
+  desc_iniciar();   // condenada so passa do minimo entre voltas (ver acima)
   return NULL;
 #undef CONDENADA
 #undef LISTAS_SE_PRONTAS
@@ -4674,6 +4684,8 @@ void desc_iniciar(void) {
   listaLidaNaVolta = 0;
   pthread_mutex_unlock(&listaTrava);
   nv_desc_iniciou(&descDeb, descAgoraMs());
+  descVoltas++;
+  descPedidoPessoa = 0;   // esta volta atende o pedido da pessoa
   montagemGeracao++;
   if (pthread_create(&fio, NULL, montar, NULL) != 0) {
     // NAO FALHAR CALADO. No webOS um pthread_create nunca falhou e o caminho de
@@ -4857,6 +4869,7 @@ void desc_remontar_fileiras(void) {
 static void repetirInterno(void);
 void desc_repetir(void) {
   montSilenciosa = 0;
+  descPedidoPessoa = 1;
   repetirInterno();
 }
 // Mesmo pedido, sem acender o alerta da ilha: sync, remontagem que a propria
@@ -4869,6 +4882,7 @@ static void *adiadoFio(void *arg) {
   unsigned ms = (unsigned)(uintptr_t)arg;
   struct timespec t = { ms / 1000u, (long)(ms % 1000u) * 1000000L };
   nanosleep(&t, NULL);
+  if (descVoltas != descVoltasAoAgendar) return NULL;   // uma volta ja comecou depois do pedido: atendido
   if (!buscando) desc_iniciar();
   else { descDeb.adiado = 0; repetirAoFim = 1; }   // a volta no ar repete ao fim
   return NULL;
@@ -4876,8 +4890,10 @@ static void *adiadoFio(void *arg) {
 // Inicia uma volta respeitando o minimo entre voltas; pedidos no intervalo
 // viram UM agendamento. Nunca bloqueia o chamador.
 static void descIniciarAdiado(void) {
-  long w = nv_desc_pedido(&descDeb, descAgoraMs());
+  long w;
   pthread_t th;
+  if (descPedidoPessoa) { descPedidoPessoa = 0; desc_iniciar(); return; }
+  w = nv_desc_pedido(&descDeb, descAgoraMs());
   if (w == 0) { desc_iniciar(); return; }
   if (w < 0) {
     printf("[desc] remontagem coalescida: ja ha uma agendada (minimo %llu s entre voltas)\n",
@@ -4886,6 +4902,7 @@ static void descIniciarAdiado(void) {
   }
   printf("[desc] remontagem adiada %ld ms (minimo %llu s entre voltas)\n", w, NV_DESC_MIN_MS / 1000ull);
   fflush(stdout);
+  descVoltasAoAgendar = descVoltas;
   if (pthread_create(&th, NULL, adiadoFio, (void *)(uintptr_t)w) != 0) {
     descDeb.adiado = 0; desc_iniciar(); return;
   }
@@ -4896,8 +4913,9 @@ static void repetirInterno(void) {
   if (!buscando) { montagemGeracao++; descIniciarAdiado(); return; }
   repetirAoFim = 1;
   // So condena a volta no ar se ela ja rodou o minimo: antes disso o pedido
-  // espera o fim dela (que publica o que ja tem) e vira UMA volta nova.
-  if (!nv_desc_pode_condenar(&descDeb, descAgoraMs())) {
+  // espera o fim dela (que publica o que ja tem) e vira UMA volta nova. O
+  // pedido da pessoa condena sempre (descPedidoPessoa).
+  if (!descPedidoPessoa && !nv_desc_pode_condenar(&descDeb, descAgoraMs())) {
     printf("[desc] remontagem pedida; volta em curso e recente: termina e repete uma vez\n");
     fflush(stdout);
     return;
