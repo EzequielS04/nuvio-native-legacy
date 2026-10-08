@@ -2203,7 +2203,8 @@ static void epgPaisesEscolher(void) {
   const char *manual = ajustes_epg_pais();
   int n = 0;
   #define ADD(c) do { if ((c) && (c)[0] && n < 3 && !strstr(lista, (c)) && epg_pais_existe(c)) { \
-      if (lista[0]) strcat(lista, ","); strncat(lista, (c), 2); n++; } } while (0)
+      size_t ln_ = strlen(lista); \
+      snprintf(lista + ln_, sizeof lista - ln_, "%s%.2s", ln_ ? "," : "", (c)); n++; } } while (0)
   if (manual[0]) { epg_paises_definir(manual); return; }
   { // 1. dicas da lista do Xtream
     char cod[8][3]; int cont[8], nc = 0, nXt = 0, i, j;
