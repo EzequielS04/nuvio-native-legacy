@@ -3741,28 +3741,35 @@ int recomenda_enviar(const CatItem *ci, const char *paraId, int modelo,
 
 // --- CARTAO DE ABERTURA ------------------------------------------------------
 
+// GANCHO DE TODO QUADRO COM A HOME DE PE — E JA NAO ABRE NADA. Antes abria o
+// cartao modal assim que a sondagem trazia "N nova(s)" (e uma vez por
+// recomendacao), por cima da home: toda tecla de quem estava rolando uma
+// fileira era descartada ate a pessoa apertar OK ou Voltar (so os dois
+// saiam). Quem anuncia a recomendacao que chega e a ILHA ("Ana recomendou
+// Fallout", avisos.c anunciarItem), que nao pega tecla nenhuma: a navegacao
+// segue livre e o modal dela (Ver / Salvar / Dispensar) so abre quando a
+// pessoa o aciona. O cartao continua existindo para a abertura de proposito
+// (recomenda_abrir_cartao). Fica a funcao porque app.c e os testes a chamam.
 void recomenda_mostrar_se_houver(void) {
-  char *visto;
-  long long ultimo = 0;
+}
+
+// Abre o cartao AGORA, de proposito (nao a chegada de uma recomendacao): a
+// mais nova nao lida, sem a marca de "uma vez por recomendacao".
+void recomenda_abrir_cartao(void) {
   int i, achou = -1;
-  if (!recomenda_ativo() || !mtx) return;
-  if (cartaoMostrado || cartaoAberto) return;
+  if (!recomenda_ativo() || !mtx || cartaoAberto) return;
   SDL_LockMutex(mtx);
   for (i = 0; i < nItens; i++)
-    if (!itens[i].visto) { achou = i; break; }   // a lista ja vem da mais nova
+    if (!itens[i].visto) { achou = i; break; }
   if (achou >= 0) cartaoItem = itens[achou];
   SDL_UnlockMutex(mtx);
-  if (achou < 0) return;
-  cartaoMostrado = 1;
-  // UMA VEZ POR RECOMENDACAO. A marca guarda o maior id ja anunciado; uma
-  // recomendacao mais velha que ela nunca volta a abrir cartao.
-  visto = dados_ler(REC_ARQ_CARTAO);
-  if (visto) { ultimo = atoll(visto); free(visto); }
-  if (cartaoItem.id <= ultimo) return;
-  { char s[48];
-    snprintf(s, sizeof s, "%lld\n", cartaoItem.id);
-    dados_gravar(REC_ARQ_CARTAO, s); }
-  cartaoAberto = 1;
+  if (achou >= 0) { cartaoMostrado = 1; cartaoAberto = 1; }
+}
+
+int recomenda_tecla(const SDL_Event *e) {
+  if (!cartaoAberto) return 0;
+  recomenda_evento(e);
+  return 1;
 }
 
 void recomenda_evento(const SDL_Event *e) {

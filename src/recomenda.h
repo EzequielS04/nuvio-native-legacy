@@ -483,6 +483,8 @@ unsigned recomenda_geracao(void);
 // recomendacao, so com a home de pe, e NUNCA por cima de quem esta assistindo.
 void recomenda_mostrar_se_houver(void);
 int  recomenda_aberta(void);
+void recomenda_abrir_cartao(void);   // abre agora, de proposito (sem a marca de "uma vez")
+int  recomenda_tecla(const SDL_Event *e);   // 1 = o cartao pegou a tecla
 void recomenda_evento(const SDL_Event *e);
 void recomenda_atualizar(float dt, Uint32 agora);
 void recomenda_desenhar(Uint32 agora);
