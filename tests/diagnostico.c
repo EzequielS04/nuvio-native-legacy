@@ -67,6 +67,14 @@ static void tabela(void) {
   assert(ptv_gpu_fraca("Mali-450 MP"));
   assert(!ptv_gpu_fraca("Mali-G52"));
   assert(!ptv_gpu_fraca("Mali-G71"));
+  // Trailer automatico da home vetado so no Utgard (ajustes_trailer_hero_vetar).
+  assert(ptv_gpu_utgard("Mali-400 MP"));
+  assert(ptv_gpu_utgard("Mali-450 MP"));
+  assert(ptv_gpu_utgard("ARM Mali-470"));
+  assert(!ptv_gpu_utgard("Mali-TDVX"));
+  assert(!ptv_gpu_utgard("Mali-G57"));
+  assert(!ptv_gpu_utgard("Mali-4"));
+  assert(!ptv_gpu_utgard(NULL));
   assert(!ptv_gpu_fraca("Apple M4 Pro"));
   assert(!ptv_gpu_fraca(NULL));
   puts("ok  tabela do .tpk nativo (PTV_TPK) e GPU fraca pelo GL_RENDERER");

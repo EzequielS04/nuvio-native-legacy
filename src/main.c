@@ -78,6 +78,7 @@
 #include "video.h"
 #include "addons.h"
 #include "ajustes.h"
+#include "perfiltv.h"
 #include "corviva.h"
 #include "catalogo.h"
 #include "iconeapp.h"
@@ -1285,6 +1286,8 @@ int main(int argc, char **argv) {
   if (SDL_GL_GetCurrentContext() != ctx) SDL_GL_MakeCurrent(win, ctx);
 #endif
   gpun_iniciar(dw, dh);
+  { const char *gr = (const char *)glGetString(GL_RENDERER);
+    if (ptv_gpu_utgard(gr)) ajustes_trailer_hero_vetar(gr); }
   gputempo_iniciar();   // GPU clock per frame: Android diagnostic, opt-in (gputempo.h)
   int gpuPref = ajustes_gpu_efeitos();
   if (gpuPref) gpun_preferencia(gpuPref);

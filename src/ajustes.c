@@ -2231,7 +2231,18 @@ void ajustes_definir_salvos_destino(int destino) {
 int ajustes_data_completa(void)       { return lig(AJ_DET_DATA_CHEIA); }
 float ajustes_detalhe_veu(void)       { int v = valor[AJ_DET_VEU]; return (v < 0 ? 0 : v > 100 ? 100 : v) / 100.0f; }
 int   ajustes_trailer_auto(void)      { return lig(AJ_DET_TRAILER_AUTO); }
-int   ajustes_trailer_hero(void)      { return lig(AJ_HERO_TRAILER) && !SEGURO; }
+// TRAILER AUTOMATICO DA HOME VETADO PELA GPU. Utgard (Mali-400/450/470) roda
+// a home a 8-24 fps ja no nivel 2 de efeitos (gpunivel.c); o video tocando
+// por baixo do furo do destaque so tira mais quadro. Vale para a sessao e nao
+// grava nada: o ajuste da pessoa fica como esta, e o trailer da pagina de
+// titulo (botao) continua.
+static int trailerHeroVetado;
+void ajustes_trailer_hero_vetar(const char *gpu) {
+  if (trailerHeroVetado) return;
+  trailerHeroVetado = 1;
+  printf("[trailer] desligado no hero: %s (Mali-4xx)\n", gpu ? gpu : "?");
+}
+int   ajustes_trailer_hero(void)      { return lig(AJ_HERO_TRAILER) && !SEGURO && !trailerHeroVetado; }
 int   ajustes_trailer_hero_som(void)  { return lig(AJ_HERO_TRAILER_SOM); }
 int   ajustes_trailer_detalhe_som(void) { return lig(AJ_DET_TRAILER_SOM); }
 int   ajustes_hero_deslizar(void)     { return valor[AJ_HERO_TRANSICAO] == 0; }
@@ -2284,7 +2295,7 @@ int  ajustes_itens_fileira(void) {
 int  ajustes_trailer_cartaz(void) {
   // A MESMA dependencia de inativa(AJ_FOCO_TRAILER), escrita aqui porque
   // inativa() vem bem mais abaixo no arquivo.
-  return lig(AJ_FOCO_TRAILER) && !SEGURO && (lig(AJ_EXPANDIR) || valor[AJ_LANDSCAPE] == 0);
+  return lig(AJ_FOCO_TRAILER) && !SEGURO && !trailerHeroVetado && (lig(AJ_EXPANDIR) || valor[AJ_LANDSCAPE] == 0);
 }
 void ajustes_definir_envio_auto(int ligado) { valor[AJ_ENVIO_AUTO] = ligado ? 0 : 1; AJ_COM_ORIGEM(AJLOG_CENTRAL, gravar()); }
 // ARTE DO DESTAQUE ESCOLHIDA PELO DIAGNOSTICO, e so depois de a pessoa ver a
