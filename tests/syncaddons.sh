@@ -1,0 +1,32 @@
+#!/bin/bash
+# #360 "add-ons get out of sync": os tres suspeitos contra o sync.c real.
+# Ver o cabecalho de tests/syncaddons.c. Sem rede.
+#
+#   bash tests/syncaddons.sh
+set -eu
+cd "$(dirname "$0")/.."
+flags=(-O1 -g -Isrc -pthread -I/opt/homebrew/include -I/opt/homebrew/include/SDL2 \
+       -Wall -Wno-deprecated-declarations -Wno-macro-redefined)
+if [ "${SANITIZE:-0}" = 1 ]; then flags+=(-fsanitize=address,undefined -fno-omit-frame-pointer); fi
+bin="$(mktemp "${TMPDIR:-/tmp}/nuvio-syncaddons.XXXXXXXX")"
+dir="$(mktemp -d "${TMPDIR:-/tmp}/nuvio-syncaddons-dir.XXXXXXXX")"
+trap 'rm -rf "$dir" "$bin"' EXIT
+cc "${flags[@]}" src/sync.c tests/stub_contapend.c src/catordem.c src/catordemcache.c src/contacache.c \
+  src/js.c src/jsw.c tests/syncaddons.c -o "$bin"
+
+falhou=0
+sessao() {
+  local d="$1"; shift
+  mkdir -p "$dir/$d"
+  if ! NV_T_DIR="$dir/$d" "$bin" "$@" > "$dir/saida" 2>&1; then falhou=1; fi
+  grep -E '^(--|  )|\[sync\] (push|edicao|addons:)' "$dir/saida" || true
+}
+sessao s1 periodico
+sessao s2 mescla
+sessao s2b remocao
+for st in 400 503 0; do
+  sessao "s3-$st" recusa1 "$st"
+  sessao "s3-$st" recusa2 "$st"
+done
+if [ "$falhou" = 1 ]; then echo "syncaddons.sh: FALHOU"; exit 1; fi
+echo "syncaddons.sh: ok"
