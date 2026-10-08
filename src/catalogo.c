@@ -1880,6 +1880,37 @@ int cat_completar_sinopse(int i, const char *imdb, const char *sinopse,
   return ok;
 }
 
+// Escrita PARCIAL do texto localizado (fioLocalizar): titulo, sinopse, logo e
+// fundo (backdrop e backdropCatalogo), cada um so se veio e e diferente — campo
+// vazio nao apaga, como aplicarLocItem. Revalida a identidade sob a trava;
+// nenhum outro campo do item e tocado (revisao 2.0.3, como cat_completar_sinopse).
+int cat_aplicar_localizado(int i, const char *imdb, const char *titulo,
+                           const char *sinopse, const char *logo, const char *fundo) {
+  char id[sizeof itens->imdb];
+  int ok = 0;
+  if (!imdb || !imdb[0]) return 0;
+  snprintf(id, sizeof id, "%s", imdb);
+  CAT_TESTE_ANTES_TRAVA();
+  catTravar();
+  if (itens && i >= 0 && i < n && !strcmp(itens[i].imdb, id)) {
+    CatItem *c = &itens[i];
+    if (titulo && titulo[0] && strcmp(titulo, c->titulo)) {
+      snprintf(c->titulo, sizeof c->titulo, "%s", titulo); ok = 1; }
+    if (sinopse && sinopse[0] && strcmp(sinopse, c->sinopse)) {
+      snprintf(c->sinopse, sizeof c->sinopse, "%s", sinopse); ok = 1; }
+    if (logo && logo[0] && strcmp(logo, c->logo)) {
+      snprintf(c->logo, sizeof c->logo, "%s", logo); ok = 1; }
+    if (fundo && fundo[0] && strcmp(fundo, c->backdrop)) {
+      snprintf(c->backdrop, sizeof c->backdrop, "%s", fundo);
+      snprintf(c->backdropCatalogo, sizeof c->backdropCatalogo, "%s", fundo);
+      ok = 1;
+    }
+    if (ok) mudou();
+  }
+  pthread_mutex_unlock(&pubTrava);
+  return ok;
+}
+
 // Acrescenta N de UMA VEZ. cat_acrescentar copia o catalogo inteiro a cada
 // chamada, e a busca a chamava POR RESULTADO: com 300 titulos no acervo sao
 // ~2,3 MB por copia, vezes 40 resultados, no fio de DESENHO, a cada tecla. Era
