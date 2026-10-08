@@ -4070,7 +4070,7 @@ void app_atualizar(float dt, Uint32 agora) {
         snprintf(lsId, sizeof lsId, "%s", player_id_canal());
       }
       ls = nv_ls_passo(&liveStall, SDL_GetTicks(), video_pronto() ? video_pos() : 0.0,
-                       video_pronto(), player_pausado(), video_terminou(),
+                       video_pronto(), player_pausa_pessoa(), video_terminou(),
                        video_bufferando_ms());
       if (morta) {
         nv_ls_zerar(&liveStall);
