@@ -39,6 +39,11 @@ int  ptv_gpu_fraca(const char *renderer);
 int  ptv_gpu_utgard(const char *renderer);
 void ptv_definir_gpu_fraca(int fraca);
 int  ptv_gpu_fraca_atual(void);
+// 2.0.3 (#286, UA40N5300): a GPU e Utgard (Mali-400/450/470). So o .tpk marca
+// (gpunivel.c); quem nao marca recebe 0 e nada muda. Liga a piramide de mipmap
+// na CPU (tex_cache.c) e o heroi de 960 px (ptv_padrao, tex_cache.c).
+void ptv_definir_gpu_utgard(int utgard);
+int  ptv_gpu_utgard_atual(void);
 
 // Orcamento automatico pela RAM (MemTotal na LG, deviceMemory no Tizen). 0 =
 // RAM desconhecida.
