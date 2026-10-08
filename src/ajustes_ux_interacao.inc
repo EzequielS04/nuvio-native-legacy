@@ -1,6 +1,7 @@
 static int aj2GrupoDe(int s);   // ajustes_ux_v2.inc: o grupo (coluna da grade) da categoria
 static void guiaIrCapitulo(const char *icone);   // ajustes_ux_guia.inc
-enum { AJ2_T_BUSCA = 0, AJ2_T_AV, AJ2_T_PERFIL, AJ2_T_TOUR, AJ2_T_RESOLVER, AJ2_T_N };
+// #339: AJ2_T_LAYOUT e o segmentado "Painel | Lista" no fim da fileira das pilulas.
+enum { AJ2_T_BUSCA = 0, AJ2_T_AV, AJ2_T_PERFIL, AJ2_T_LAYOUT, AJ2_T_TOUR, AJ2_T_RESOLVER, AJ2_T_N };
 static int ajEmLinha(int op);
 static int ajReguaMover(int v, int dx, int dy);
 // Interação do seletor: só OK aplica; foco e rascunho nunca persistem.
@@ -140,6 +141,14 @@ static int uxAlternarDireto(int op) {
   uxNotificar("Ajuste salvo nesta TV.");
   return 1;
 }
+// #339: o arranjo dos Ajustes, trocado de onde estiver (pilula do indice,
+// segmentado do cabecalho da categoria ou a linha em Aparencia; mesma chave).
+static int uxAlternarLayout(void) {
+  int novo = ajustes_layout_lista() ? 0 : 1;
+  if (definirValorDireto(AJ_LAYOUT_AJUSTES, novo)) uxNotificar("Ajuste salvo nesta TV.");
+  else uxNotificar("Não foi possível salvar. O valor anterior foi mantido.");
+  return 1;
+}
 static int uxEvento(SDL_Keycode k) {
   if (uxEditor) {
     if (uxVoltar(k)) {
@@ -210,6 +219,17 @@ static int uxEvento(SDL_Keycode k) {
   if (uxVoltar(k) && uxVeioBusca && uxRetornarOp < 0) {
     uxPediuBusca = 2; uxVeioBusca = 0; return 1;
   }
+  // #339: o segmentado "Painel | Lista" do cabecalho da categoria (Cima na
+  // primeira linha). OK troca; a Direita escolhe Lista e a Esquerda Painel (no
+  // Painel, a Esquerda sai para o indice como em qualquer linha); Baixo volta
+  // para a linha de onde veio, que segue a mesma.
+  if (uxCabLayout && !focoIndice) {
+    int lista = ajustes_layout_lista();
+    if (uxOk(k) || (k == SDLK_RIGHT && !lista) || (k == SDLK_LEFT && lista)) return uxAlternarLayout();
+    if (uxVoltar(k) || k == SDLK_LEFT) { uxCabLayout = 0; focoIndice = 1; sairArmado = 0; return 1; }
+    if (k == SDLK_DOWN) uxCabLayout = 0;
+    return 1;
+  }
   if (focoIndice) {
     // 2.0.3: o indice e a GRADE do mockup v3 (ajustes_ux_v2.inc). No alto, as
     // tres pilulas (Buscar, Avancadas, Perfil) e embaixo delas os dois cartoes
@@ -232,6 +252,7 @@ static int uxEvento(SDL_Keycode k) {
           return 1;
         }
         if (t == AJ2_T_PERFIL) { focarOpcao(AJ_PERFIL_ATIVO); return 1; }
+        if (t == AJ2_T_LAYOUT) return uxAlternarLayout();   // o foco fica na pilula
         // Os cartoes de descoberta abrem o Guia de uso (o tour completo, com
         // "Ligar agora" por funcao, e da 2.1): o do problema ja no capitulo
         // "Problemas comuns". Voltar devolve a este cartao.
@@ -241,14 +262,14 @@ static int uxEvento(SDL_Keycode k) {
       }
       if (k == SDLK_LEFT) {
         if (t == AJ2_T_BUSCA || t == AJ2_T_TOUR) { sair = 1; return 1; }
-        uxTopo = t - 1;
+        uxTopo = t == AJ2_T_RESOLVER ? AJ2_T_TOUR : t - 1;
       } else if (k == SDLK_RIGHT) {
-        if (t == AJ2_T_BUSCA || t == AJ2_T_AV || t == AJ2_T_TOUR) uxTopo = t + 1;
+        if (t < AJ2_T_LAYOUT || t == AJ2_T_TOUR) uxTopo = t + 1;
       } else if (k == SDLK_DOWN) {
         if (t <= AJ2_T_AV) uxTopo = AJ2_T_TOUR;
-        else if (t == AJ2_T_PERFIL) uxTopo = AJ2_T_RESOLVER;
+        else if (t == AJ2_T_PERFIL || t == AJ2_T_LAYOUT) uxTopo = AJ2_T_RESOLVER;
         else {
-          int g = t == AJ2_T_TOUR ? 0 : 2, dest = ini[g] < nSecoes ? ini[g] : 0;
+          int g = t == AJ2_T_TOUR || ajustes_layout_lista() ? 0 : 2, dest = ini[g] < nSecoes ? ini[g] : 0;
           uxVeioBusca = 0; focarSecao(dest); uxIndice = dest + 2;
         }
       } else if (k == SDLK_UP) {
@@ -259,7 +280,20 @@ static int uxEvento(SDL_Keycode k) {
     }
     { int sec = uxIndice - 2, g = sec < ini[1] ? 0 : sec < ini[2] ? 1 : 2, lin = sec - ini[g], dest = -1;
       if (uxVoltar(k)) { sair = 1; return 1; }
-      if (uxOk(k)) { focoIndice = 0; return 1; }
+      if (uxOk(k)) { focoIndice = 0; uxCabLayout = 0; return 1; }
+      // #339 "Lista": uma coluna so. Cima/Baixo andam por todas as categorias,
+      // Cima na primeira sobe para "O que o Nuvio faz?", Esquerda sai e a
+      // Direita nao tem para onde ir.
+      if (ajustes_layout_lista()) {
+        if (k == SDLK_UP) {
+          if (sec > 0) dest = sec - 1;
+          else { uxTopo = AJ2_T_TOUR; uxVeioBusca = 0; return 1; }
+        }
+        if (k == SDLK_DOWN && sec + 1 < nSecoes) dest = sec + 1;
+        if (k == SDLK_LEFT) { sair = 1; return 1; }
+        if (dest >= 0 && dest < nSecoes) { focarSecao(dest); uxIndice = dest + 2; uxVeioBusca = 0; }
+        return 1;
+      }
       if (k == SDLK_UP) {
         if (lin > 0) dest = sec - 1;
         else { uxTopo = g == 2 ? AJ2_T_RESOLVER : AJ2_T_TOUR; uxVeioBusca = 0; return 1; }
@@ -295,6 +329,8 @@ static int uxEvento(SDL_Keycode k) {
     int dir = k == SDLK_DOWN ? 1 : -1, i;
     for (i = focoItem + dir; i > secIni[secAtual] && i < secFim(secAtual); i += dir)
       if (focavel(i)) { focar(i); return 1; }
+    // #339: Cima na primeira linha sobe para o "Painel | Lista" do cabecalho.
+    if (dir < 0 && uxIndice >= 2 && !uxVeioBusca) uxCabLayout = 1;
     return 1;
   }
   if (k == SDLK_RIGHT) return 1;

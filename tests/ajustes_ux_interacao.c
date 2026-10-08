@@ -220,7 +220,11 @@ int main(void) {
   { focoIndice = 1; uxTopo = AJ2_T_BUSCA;
     key(SDLK_RIGHT); assert(uxTopo == AJ2_T_AV);
     key(SDLK_RIGHT); assert(uxTopo == AJ2_T_PERFIL);
-    key(SDLK_RIGHT); assert(uxTopo == AJ2_T_PERFIL);                            // last of the row
+    key(SDLK_RIGHT); assert(uxTopo == AJ2_T_LAYOUT);                            // #339 Painel | Lista
+    key(SDLK_RIGHT); assert(uxTopo == AJ2_T_LAYOUT);                            // last of the row
+    key(SDLK_DOWN); assert(uxTopo == AJ2_T_RESOLVER);
+    key(SDLK_LEFT); assert(uxTopo == AJ2_T_TOUR);
+    uxTopo = AJ2_T_LAYOUT; key(SDLK_LEFT); assert(uxTopo == AJ2_T_PERFIL);
     key(SDLK_LEFT); assert(uxTopo == AJ2_T_AV);
     key(SDLK_LEFT); assert(uxTopo == AJ2_T_BUSCA);
     key(SDLK_DOWN); assert(uxTopo == AJ2_T_TOUR);
@@ -243,6 +247,48 @@ int main(void) {
     guiaSair(); assert(!guiaAberto && focoIndice && uxTopo == AJ2_T_RESOLVER);
     uxTopo = AJ2_T_PERFIL; key(SDLK_RETURN); assert(!focoIndice && focoOp == AJ_PERFIL_ATIVO);
     sair = 0; focoIndice = 1; uxTopo = AJ2_T_TOUR; key(SDLK_LEFT); assert(sair); sair = 0;
+    uxIndice = 1; focoIndice = 1; uxTopo = -1; }
+  // #339 "Lista": one column. Down walks every category across the groups, Up on
+  // the first climbs to the tour, Down from either discovery card lands on the
+  // first category, Left leaves, Right stays.
+  { valor[AJ_LAYOUT_AJUSTES] = 1; assert(ajustes_layout_lista());
+    focoIndice = 1; uxTopo = AJ2_T_TOUR;
+    key(SDLK_DOWN); assert(uxTopo < 0 && uxIndice == 2);
+    { int k; for (k = 1; k < nSecoes; k++) { key(SDLK_DOWN); assert(uxIndice == 2 + k && focoIndice); } }
+    key(SDLK_DOWN); assert(uxIndice == 2 + nSecoes - 1);                         // last stays
+    key(SDLK_RIGHT); assert(uxIndice == 2 + nSecoes - 1 && focoIndice && uxTopo < 0);
+    { int k; for (k = nSecoes - 1; k > 0; k--) key(SDLK_UP); } assert(uxIndice == 2);
+    key(SDLK_UP); assert(uxTopo == AJ2_T_TOUR);
+    uxTopo = AJ2_T_RESOLVER; key(SDLK_DOWN); assert(uxTopo < 0 && uxIndice == 2);   // one column: the first
+    key(SDLK_RETURN); assert(!focoIndice && secAtual == 0);
+    key(SDLK_LEFT); assert(focoIndice && uxIndice == 2);
+    sair = 0; key(SDLK_LEFT); assert(sair); sair = 0;
+    valor[AJ_LAYOUT_AJUSTES] = 0;
+    uxIndice = 1; focoIndice = 1; uxTopo = -1; }
+  // #339: the "Painel | Lista" toggle on both screens, same key as Aparencia.
+  // Index: the pill at the end of the top row; OK flips and focus stays on it.
+  { valor[AJ_LAYOUT_AJUSTES] = 0;
+    focoIndice = 1; uxTopo = AJ2_T_PERFIL;
+    key(SDLK_RIGHT); assert(uxTopo == AJ2_T_LAYOUT);
+    key(SDLK_RETURN); assert(ajustes_layout_lista() && focoIndice && uxTopo == AJ2_T_LAYOUT);
+    key(SDLK_RETURN); assert(!ajustes_layout_lista() && focoIndice && uxTopo == AJ2_T_LAYOUT);
+    // Category page: Up on the first row reaches the header toggle; the row
+    // rests (not focused) but stays the same, Down returns to it.
+    { int primeiro;
+      uxTopo = -1; focarSecao(AJS_APARENCIA); uxIndice = 2 + AJS_APARENCIA; focoIndice = 1;
+      key(SDLK_RETURN); assert(!focoIndice && secAtual == AJS_APARENCIA);
+      while (!uxCabLayout) key(SDLK_UP);
+      primeiro = focoItem; assert(!aj2FocoNaLista(primeiro));
+      key(SDLK_RIGHT); assert(ajustes_layout_lista() && uxCabLayout && !focoIndice);   // Right picks Lista
+      key(SDLK_RIGHT); assert(ajustes_layout_lista() && uxCabLayout);                  // already Lista
+      key(SDLK_RETURN); assert(!ajustes_layout_lista() && uxCabLayout);                // OK flips back
+      key(SDLK_RETURN); assert(ajustes_layout_lista());
+      key(SDLK_LEFT); assert(!ajustes_layout_lista() && uxCabLayout && !focoIndice);   // Left picks Painel
+      key(SDLK_DOWN); assert(!uxCabLayout && focoItem == primeiro && aj2FocoNaLista(primeiro));
+      key(SDLK_UP); assert(uxCabLayout);
+      key(SDLK_LEFT); assert(focoIndice && !uxCabLayout && uxIndice == 2 + AJS_APARENCIA);   // on Painel, Left leaves
+      key(SDLK_RETURN); assert(!focoIndice && !uxCabLayout && focoItem == primeiro); }
+    valor[AJ_LAYOUT_AJUSTES] = 0;
     uxIndice = 1; focoIndice = 1; uxTopo = -1; }
   // 2.0.3: as listas de addons/plugins voltam para a linha de onde sairam
   // (Fontes e addons), e nao para o indice; Voltar/ESC/Esquerda saem delas.

@@ -250,3 +250,4 @@
   1, /* prepare the source when a title opens (2.0.2): Desligado */
   0, /* next episode in Continue watching (#203): Ligado */
   0, 0, /* search (#311): Nuvio results First; show the source on result groups: Ligado */
+  0, /* Settings layout (#339): Painel = the card grid and the art beside the list */

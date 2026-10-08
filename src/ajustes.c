@@ -483,6 +483,11 @@ typedef enum {
   // ultimo | Desligado) e se cada grupo diz "de <fonte>". LOCAIS. No fim:
   // valor[]/CHAVE[] posicionais.
   AJ_BUSCA_NUVIO, AJ_BUSCA_ORIGEM,
+  // #339: o arranjo dos Ajustes nesta TV. 0 = Painel (a grade de categorias e,
+  // dentro delas, a arte ao lado da lista; o de sempre), 1 = Lista (categorias e
+  // opcoes uma embaixo da outra, a explicacao logo abaixo da linha em foco).
+  // LOCAL. No fim: valor[]/CHAVE[] posicionais.
+  AJ_LAYOUT_AJUSTES,
   AJ_N
 } OpcaoId;
 
@@ -518,6 +523,7 @@ static const char *V_DESCANSO_ESTILO[] = { "Vitrine", "Relógio", "Só escurecer
 static const char *V_TAMANHO_GB[] = { "Sem limite", "1 GB", "2 GB", "4 GB", "8 GB", "15 GB", "30 GB" };
 static const int   TAMANHO_GB[]   = { 0, 1, 2, 4, 8, 15, 30 };
 static const char *V_RELOGIO_12H[] = { "24 horas", "12 horas (AM/PM)" };
+static const char *V_LAYOUT_AJUSTES[] = { "Painel", "Lista" };   // #339
 static const char *V_DESCANSO_FONTE[]  = { "Catálogo", "Minha lista e Continuar" };
 static const char *V_BRILHO_PLAYER[] = { "100%", "80%", "65%", "50%" };
 // #202: 0 = o ultimo modo usado (comportamento de sempre); 1..8 = PlrAspecto + 1.
@@ -1301,6 +1307,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Próximo episódio no Continuar",   V_LIGA, 2),   // por perfil: cwProximoLocal
   ESC("Resultados do catálogo do Nuvio na busca", V_BUSCA_NUVIO, 3), // local: buscaNuvioLocal
   ESC("Mostrar a fonte nos resultados da busca", V_LIGA, 2),   // local: buscaOrigemLocal
+  ESC("Layout dos Ajustes",              V_LAYOUT_AJUSTES, 2),   // local: ajustesLayoutLocal (#339)
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1522,6 +1529,7 @@ static const char *CHAVE[] = {
   "fontePrepararLocal",
   "cwProximoLocal",
   "buscaNuvioLocal", "buscaOrigemLocal",
+  "ajustesLayoutLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1772,6 +1780,9 @@ static int uxChipAv;   // (menu antigo) foco no chip "Avancadas"; a grade da 2.0
 // 2.0.3: o alvo em foco no ALTO da grade (AJ2_T_*: Buscar, Avancadas, Perfil,
 // O que o Nuvio faz?, Resolver um problema), -1 = uma categoria (uxIndice).
 static int uxTopo = -1;
+// #339: o foco no segmentado "Painel | Lista" do cabecalho da categoria (a
+// linha focoItem segue a mesma, so descansa).
+static int uxCabLayout;
 static int guiaDoIndice;   // o guia foi aberto por um cartao da grade: Voltar volta para ele
 // A fileira de cada pilula do alto (0 Buscar, 1 Diferentes, 2 Avancadas): quem
 // mede e o desenho (aj2ChipsMedir, pelo texto traduzido); a navegacao so le.
@@ -1984,6 +1995,10 @@ void ajustes_teste_escala(int percentual) {
   ajEscalaTestePct = percentual == 80 || percentual == 90 || percentual == 100 ? percentual : 0;
 }
 #endif
+#ifdef AJUSTES_TESTE
+// #339: as capturas e os testes escolhem o arranjo sem gravar arquivo.
+void ajustes_teste_layout(int lista) { valor[AJ_LAYOUT_AJUSTES] = lista ? 1 : 0; }
+#endif
 float ajustes_tamanho_ajustes(void) {
   static const float F[] = { 0.8f, 0.9f, 1.0f };
   int v = valor[AJ_TAMANHO_AJUSTES];
@@ -1992,6 +2007,7 @@ float ajustes_tamanho_ajustes(void) {
 #endif
   return v >= 0 && v < 3 ? F[v] : 0.8f;
 }
+int ajustes_layout_lista(void) { return valor[AJ_LAYOUT_AJUSTES] == 1; }
 int ajustes_esconder_logo_trailer(void) { return lig(AJ_LOGO_TRAILER); }
 int ajustes_trailer_zoom_tpk(void) { return lig(AJ_TRAILER_ZOOM_TPK); }   // 1 = Ligado
 #ifdef NV_ANDROID
@@ -3929,6 +3945,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_MEDIDOR:        /* o medidor e da GPU desta TV; o web nao tem */
     case AJ_TAMANHO_UI:     /* o tamanho e desta tela, e o web nao tem */
     case AJ_TAMANHO_AJUSTES:
+    case AJ_LAYOUT_AJUSTES: /* #339: o arranjo dos Ajustes e desta TV */
     case AJ_LOGO_TRAILER:   /* so a protecao de OLED desta TV */
     case AJ_LEG_SYNC_AUDIO: /* PCM e passthrough sao desta TV; o web nao tem */
     case AJ_LEG_FORCADA:    /* #287: o web nao tem esta escolha */
@@ -4317,7 +4334,7 @@ int ajustes_iniciar(void) {
   if (secAtual < 0 || secAtual >= nSecoes) secAtual = 0;
   focoIndice = 1; uxChipAv = 0;
   focarSecao(secAtual);
-  uxTopo = -1;
+  uxTopo = -1; uxCabLayout = 0;
   // "Experimentar a cor viva" (cartao de novidades): abre em Aparencia com o
   // foco JA na linha da cor, e nao no indice — quem apertou o botao quer
   // trocar a cor, nao achar onde ela mora.
@@ -4963,7 +4980,7 @@ static void focar(int i) {
   focoItem = i;
   focoOp = TELA[i].tipo == IT_OPC ? TELA[i].op : -1;
   secAtual = secDoItem[i];
-  uxIndice = secAtual + 2; uxChipAv = 0; uxTopo = -1;
+  uxIndice = secAtual + 2; uxChipAv = 0; uxTopo = -1; uxCabLayout = 0;
   uxUltimoItem[secAtual] = i;
   emEdicao = 0;
   sairArmado = 0;
@@ -5233,6 +5250,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_FONTE_UI: return "Altera a tipografia dos menus. A fonte das legendas é escolhida separadamente no player.";
     case AJ_TAMANHO_UI: return "Aumenta os controles do player, os painéis e os avisos. Os Ajustes têm um tamanho próprio.";
     case AJ_TAMANHO_AJUSTES: return i18n("Muda só o tamanho dos Ajustes nesta TV. O padrão é 80%.");
+    case AJ_LAYOUT_AJUSTES: return "Painel mostra uma prévia ao lado das opções. Lista põe as categorias e as opções uma embaixo da outra, com a explicação logo abaixo da linha em foco.";
     case AJ_TEMA: return "Cor do botão em foco e das marcas de estado. Os claros levam texto escuro, os profundos texto branco — sempre a 4,5:1 ou mais.";
     case AJ_VIDRO_OPAC: return "Teste: quanto os painéis de vidro deixam a arte aparecer. O valor do meio é o de hoje; menos é mais transparente, mais é mais escuro e fácil de ler.";
     case AJ_VIDRO_FOSCO: return "Teste: põe a arte borrada atrás de cada painel de vidro, como um vidro jateado. Onde não há arte borrada, o vidro fica como sempre.";
@@ -6656,7 +6674,7 @@ void ajustes_atualizar(float dt, Uint32 agora) {
     // Com o foco na coluna de categorias a linha DESCANSA: o preenchimento
     // de realce e o do foco, e o foco esta na categoria — duas superficies
     // claras ao mesmo tempo diriam "voce esta em dois lugares".
-    float alvo = (i == focoItem && !focoIndice && uxIndice >= 2) ? 1.0f : 0.0f;
+    float alvo = (i == focoItem && !focoIndice && !uxCabLayout && uxIndice >= 2) ? 1.0f : 0.0f;
     animItem[i] = ajustes_animacoes_reduzidas() ? alvo : anim_mola(animItem[i], alvo, dt,
                             alvo > animItem[i] ? NV_MOLA_FOCO : NV_MOLA_DESFOCO);
   }
@@ -7222,7 +7240,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_IDIOMA: case AJ_ANIM: case AJ_TEMA:
     case AJ_COR_LOGO: case AJ_FONTE_UI: case AJ_VIDRO: case AJ_VIDRO_CONTORNO:
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER: case AJ_RELOGIO_12H:
-    case AJ_TAMANHO_UI: case AJ_TAMANHO_AJUSTES: case AJ_FUNDO: case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO:
+    case AJ_TAMANHO_UI: case AJ_TAMANHO_AJUSTES: case AJ_LAYOUT_AJUSTES: case AJ_FUNDO: case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO:
     case AJ_AVANCADAS: case AJ_LOGO_APP: case AJ_ABERTURA:
     case AJ_ESMAECER: case AJ_BRILHO_PLAYER: case AJ_MANTER_VIDEO:
     case AJ_DESCANSO_ESTILO: case AJ_DESCANSO_FONTE:
@@ -7500,7 +7518,7 @@ int ajustes_teste_quadro(const char *id) {
       maisAberto[sN] = ab;
       focar(maisItem[sN]); focoIndice = 0;
     }
-    // "v2-topo-T" = o alvo T do alto da grade (0 Buscar ... 4 Resolver).
+    // "v2-topo-T" = o alvo T do alto da grade (0 Buscar ... 3 Painel/Lista, 4 Tour, 5 Resolver).
     else if (!strncmp(id, "v2-topo-", 8)) { focarSecao(0); focoIndice = 1; uxTopo = atoi(id + 8); }
     else if (!strcmp(id, "v2-menu-passando")) { ajArteFundoN = 13; focarSecao(1); uxIndice = 3; focoIndice = 1; }
     else if (!strcmp(id, "v2-aberto") || !strcmp(id, "v2-130")) focarOpcao(AJ_HOME_LAYOUT);
