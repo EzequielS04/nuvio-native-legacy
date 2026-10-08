@@ -1008,9 +1008,12 @@ int trakt_episodios_marcar(const char *imdb, const VistoPar *pares, int qtd,
   r = rede_postar_st(url, 20, cab, jsw_texto_final(&w), &st);
   jsw_livre(&w);
   ok = st >= 200 && st < 300;
+  // O corpo diz quantos o Trakt de fato mexeu (added/deleted/not_found): HTTP
+  // 200 com "not_found" era indistinguivel de sucesso (Silo, 08/10).
+  printf("[trakt] %s %d episodios de %s -> %s (HTTP %d) %.160s\n",
+         visto ? "marcar" : "desmarcar", qtd, id, ok ? "ok" : "falhou", st,
+         r ? r : "");
   free(r);
-  printf("[trakt] %s %d episodios de %s -> %s (HTTP %d)\n",
-         visto ? "marcar" : "desmarcar", qtd, id, ok ? "ok" : "falhou", st);
   fflush(stdout);
   return ok;
 }

@@ -57,6 +57,20 @@ int main(int argc, char **argv) {
     CHECK(extras_ep_visto(2, 7) == 0);
     CHECK(extras_proximo_episodio(&pt, &pe) && pt == 2 && pe == 7);
   }
+  // CHAVES: o id de contexto "tt:S:E" e o id puro sao a MESMA serie; nunca
+  // entradas duplicadas (a suspeita de 60 entradas era vistoep_n global).
+  { const char *outra = "tt2707408:1:1";
+    vistoep_esquecer();
+    for (t = 1; t <= 3; t++) for (e = 1; e <= 10; e++) {
+      vistoep_definir(id, t, e, 1);
+      vistoep_definir("tt14688458:2:7", t, e, 0);
+      vistoep_definir(outra, 1, e, 1);
+    }
+    CHECK(vistoep_total(id) == 30);
+    CHECK(vistoep_total("tt14688458:3:1") == 30);
+    CHECK(vistoep_n() == 40);
+    CHECK(vistoep_contar(id) == 0);
+  }
   printf(falhas ? "FALHAS: %d\n" : "OK\n", falhas);
   return falhas != 0;
 }

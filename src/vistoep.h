@@ -69,6 +69,8 @@ int  vistoep_marcar_lote(const char *imdb, const VistoPar *pares, int n, int vis
 int  vistoep_ajustar_vistos(int baseTrakt, int contarBase, int contarAgora, int exibidos);
 // Primeiro episodio NAO visto (temporada >= 1, ordem temporada/numero). 0 = nenhum.
 int  vistoep_primeiro_nao_visto(const char *imdb, int *temporada, int *episodio);
+// Entradas do mapa DESTA serie (vistoep_n e o total de todas as series).
+int  vistoep_total(const char *imdb);
 int  vistoep_aplicar(const char *imdb, const VistoPar *lote, int n, int visto,
                      VistoPar *envio, int *ja);
 

@@ -121,6 +121,17 @@ int vistoep_contar(const char *imdb) {
   return k;
 }
 
+int vistoep_total(const char *imdb) {
+  char id[16];
+  int i, k = 0;
+  base(imdb, id, sizeof id);
+  if (!id[0]) return 0;
+  pthread_mutex_lock(&trava);
+  for (i = 0; i < n; i++) if (!strcmp(mapa[i].id, id)) k++;
+  pthread_mutex_unlock(&trava);
+  return k;
+}
+
 int vistoep_conhecido(const char *imdb) {
   char id[16];
   int i;
