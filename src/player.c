@@ -1284,6 +1284,9 @@ void player_abrir(int indiceCatalogo, const char *url) {
   int n = cat_n(); if (n < 1) n = 1;
   idx = ((indiceCatalogo % n) + n) % n;
   idxVivo = idx;
+  // Serie aberta pela ilha ou pelo player sem passar pelo detalhe: sem a lista
+  // nao ha cards de episodios nem "Up next". Idempotente com o roteador de app.c.
+  desc_episodios_garantir(idx);
   aberto = 1; saindo = 0; pediuSair = 0; barraFoco = 0;
   // Titulo novo: um avanco em curso do anterior mandaria a posicao velha ao
   // pipeline novo assim que o silencio vencesse.
@@ -1554,7 +1557,8 @@ static double credEfetivo(void) {
   memset(&e, 0, sizeof e);
   e.dur = duracaoSeg;
   e.capitulo = video_creditos();
-  e.introdb = intro_creditos_seg();
+  { double ic = intro_creditos_seg();
+    if (intro_creditos_aniskip()) e.aniskip = ic; else e.introdb = ic; }
   if (c && c->imdb[0] && epT > 0 && epE > 0) {
     cred_viz_ler(c->imdb, epT, &e.vizInicio, &e.vizDur);
     e.aprendidoResto = cred_aprendido_resto(c->imdb);
@@ -1845,6 +1849,7 @@ int player_retomar_retido(const char *imdb, int t, int e) {
     player_descartar_retido(); return 0;
   }
   retido = 0; retidoVoo = 0; aberto = 1; saindo = pediuSair = 0;
+  desc_episodios_garantir(idxAtual());
   entrada = 1.0f; visivel = 0; anim = 0.0f; soBarra = 0;
   scrubbing = barraFoco = 0; encolhe = 1.0f; encolheT = encolheAlvo = 0.0f;
   ultimoInput = agora; retomadaAplicada = 1; tocando = 1;

@@ -245,6 +245,7 @@ void desc_episodios(int indiceItem, int temporada);
 // quadro; sem isto uma troca de temporada feita durante um carregamento fica
 // pendurada e a lista nunca chega na temporada escolhida.
 void desc_episodios_pendente(void);
+void desc_episodios_garantir(int indiceItem);
 int desc_episodios_carregando(int indiceItem);
 // Preenche `nota` (x10) e a `sinopse` no idioma pedido (#150) dos eps da
 // temporada dada a partir do JSON de /tv/<id>/season/<n> do TMDB. Pura;

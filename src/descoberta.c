@@ -7350,6 +7350,18 @@ void desc_episodios(int indiceItem, int temporada) {
   else pthread_detach(fioEp);
 }
 
+// Ponto unico das entradas (detalhe, player, retomada) e do roteador de app.c:
+// pede a lista de episodios do titulo se ela falta. Mesma regra e argumentos do
+// roteador: serie, tipo incerto, ou filme sem elenco (o fio traz o /meta).
+// Sem pedido duplicado: lista ja carregada ou fio ja a caminho do item = nada.
+void desc_episodios_garantir(int indiceItem) {
+  const CatItem *ci = cat_item(indiceItem);
+  if (!ci || !ci->imdb[0]) return;
+  if (!(!strcmp(ci->tipo, "series") || strcmp(ci->tipo, "movie") || ci->nElenco == 0)) return;
+  if (cat_n_episodios(indiceItem) > 0 || desc_episodios_carregando(indiceItem)) return;
+  desc_episodios(indiceItem, 0);
+}
+
 int desc_episodios_carregando(int indiceItem) {
   return (fioEpVivo && epItem == indiceItem) || pendItem == indiceItem;
 }

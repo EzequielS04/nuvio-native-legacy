@@ -1492,6 +1492,9 @@ void detail_abrir(const HomeItem *it) {
     printf("[carrossel] abre %d/%d da fileira\n", pos + 1, n); fflush(stdout);
   }
   abrirInterno(it);
+  // Quem abre o detalhe por fora do roteador de app.c (ilha, player, pos-play)
+  // tambem fica sem a lista de episodios; pedir aqui e idempotente.
+  if (it) desc_episodios_garantir(it->indice);
   if (replacing) t = pg = 1.0f; // Switch titles directly without exposing Home.
 }
 
