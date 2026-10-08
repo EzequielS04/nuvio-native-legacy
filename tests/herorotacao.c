@@ -13,6 +13,9 @@
 #include <assert.h>
 int ctx_aberto(void) { return 0; }   // home.c asks whether the context menu is open
 #include "../src/home.c"
+// O destaque pede a sinopse dos candidatos assim que monta o conjunto.
+static int sinPedidos, sinUltimoN;
+void desc_sinopse_hero(const int *idx, int n) { (void)idx; sinPedidos++; sinUltimoN = n; }
 
 void cachearte_marcar_grupo(int grupo, const char *url, int variante, int essencial, int emUso) {
   (void)grupo; (void)url; (void)variante; (void)essencial; (void)emUso;
@@ -97,6 +100,9 @@ int main(void) {
   quadro(2);
   assert(focoHero && heroNLista() >= 3);
 
+  assert(sinPedidos >= 1 && sinUltimoN == heroNLista());
+  puts("ok  conjunto do destaque montado: a sinopse dos candidatos e pedida");
+
   // (1) Parada, a rotacao gira: 12 s de ocio + o intervalo de 7 s.
   heroDesejado = -1;
   avanca_s(20);
@@ -148,6 +154,36 @@ int main(void) {
   avanca_s(20);
   assert(heroDesejado >= 0);
   puts("ok  trailer terminado: a rotacao segue");
+
+  // (6) PRE-BUSCA COM O TRAILER SENDO PROCURADO (C9, 08/10, 2.0.3). Cada titulo
+  // do carrossel tem a busca do trailer, e durante ela heroTrailerSegurando e
+  // verdadeiro: a pre-busca (3 s antes da troca) nunca saia e o log da TV nao
+  // tinha uma unica linha `pre-busca`. Agora a busca nao a impede; o trailer
+  // TOCANDO continua impedindo (pode durar minutos).
+  if (ajustes_trailer_hero()) {
+    const CatItem *ci;
+    heroAutoDesligado = 0;
+    heroTrailerItem = heroAtual;
+    ci = cat_item_exato(heroAtual);
+    assert(ci);
+    snprintf(heroTrailerImdb, sizeof heroTrailerImdb, "%s", ci->imdb);
+    heroTrailerTentado = 0;
+    heroTrailerDesde = relogio;
+    trAberto = 0; trTocando = 0;            // so procurando, nada no ar
+    heroDesejado = -1;
+    heroTrocaEm = relogio + 2000;           // dentro dos NV_HERO_PRE_MS finais
+    quadro(1);
+    assert(heroTrailerSegurando(relogio));  // o carrossel esta segurado...
+    assert(heroPreItem >= 0 && heroPreItem != heroAtual);   // ...e a pre-busca sai
+    puts("ok  busca do trailer segurando o carrossel: a pre-busca do proximo sai");
+    trAberto = 1; trTocando = 1;            // agora o trailer toca
+    heroTrocaEm = relogio + 2000;
+    quadro(1);
+    assert(heroPreItem < 0);
+    puts("ok  trailer tocando: sem pre-busca (arte ficaria parada)");
+    trAberto = 0; trTocando = 0;
+    heroTrailerTentado = 1;
+  } else puts("--  ajuste do trailer do destaque desligado: caso (6) nao se aplica");
   puts("herorotacao: PASS");
   return 0;
 }

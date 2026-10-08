@@ -20,6 +20,7 @@ void cachearte_estatisticas_pedir(void) {}
 void tex_cache_marcar_larg(int grupo, const char *url, float larg, int essencial, int emUso) {
   (void)grupo; (void)url; (void)larg; (void)essencial; (void)emUso; }
 #include "../src/home.c"
+void desc_sinopse_hero(const int *idx, int n) { (void)idx; (void)n; }
 int  tex_largura_fonte(const char *u) { (void)u; return 0; }
 const char *tex_arquivo(const char *u) { (void)u; return NULL; }
 int  player_aberto(void) { return 0; }

@@ -276,6 +276,10 @@ void desc_mesclar_episodios(CatEp *base, int nb, const CatEp *outro, int no,
 // prefere, ou o TMDB no idioma configurado (#176). Chamada barata e repetivel:
 // o que ja foi resolvido vem do cache.
 void desc_localizar_indices(const int *idx, int n);
+// Sinopse dos candidatos do destaque (indices do catalogo), pedida ao mesmo
+// /meta do detalhe, em fio proprio e um pedido por vez. Quem falha segue sem
+// sinopse, com a falha no log. Ver o bloco em descoberta.c.
+void desc_sinopse_hero(const int *idx, int n);
 // Texto e arte localizados ja conhecidos (memoria + loc-texto.txt) aplicados ao
 // catalogo que veio do cache, sem rede (#213). Devolve quantos mudaram.
 int desc_localizar_catalogo_cache(void);
