@@ -6,6 +6,7 @@
 #include "idioma.h"
 #include "idiomacod.h"
 #include "layout.h"
+#include "teclavoltar.h"
 #include "ajustes.h"
 #include "avisos.h"
 #include "redesaude.h"
@@ -488,11 +489,6 @@ static int ehAlternar(const SDL_Event *e) {
   return 0;
 }
 
-static int ehVoltar(const SDL_Event *e) {
-  SDL_Keycode k = e->key.keysym.sym;
-  return k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE ||
-         e->key.keysym.scancode == NV_SCANCODE_BACK;
-}
 static int ehOk(SDL_Keycode k) { return k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE; }
 
 static int etapasN(void);   // registro_ilha.inc
@@ -539,7 +535,7 @@ int registro_evento(const SDL_Event *e) {
   // Daqui para baixo o painel e MODAL: nenhuma tecla chega a tela de tras.
   if (e->type == SDL_KEYDOWN) {
     SDL_Keycode k = e->key.keysym.sym;
-    if (ehVoltar(e)) { aberto = 0; engolirSoltura(e); return 1; }
+    if (nv_tecla_voltar(e)) { aberto = 0; engolirSoltura(e); return 1; }
     if (semFonte || !nLin) {
       if (ehOk(k)) { recarregar(); engolirSoltura(e); }
       return 1;

@@ -1,6 +1,7 @@
 // A TECLA DE VOLTAR E UMA SO (src/teclavoltar.h). Ver tests/teclavoltar.sh.
 #include "teclavoltar.h"
 #include <stdio.h>
+#include <string.h>
 
 static int falhas;
 static void confere(const char *d, int ok) {
@@ -9,7 +10,7 @@ static void confere(const char *d, int ok) {
 }
 static SDL_Event tecla(SDL_Keycode k, int sc) {
   SDL_Event e;
-  SDL_memset(&e, 0, sizeof e);
+  memset(&e, 0, sizeof e);
   e.type = SDL_KEYDOWN;
   e.key.keysym.sym = k;
   e.key.keysym.scancode = (SDL_Scancode)sc;

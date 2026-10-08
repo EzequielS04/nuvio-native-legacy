@@ -45,6 +45,7 @@
 #include "idioma.h"
 #include "ajustes.h"
 #include "layout.h"
+#include "teclavoltar.h"
 #include "perfiltv.h"
 #include "rede.h"
 #include "redemarca.h"
@@ -2072,11 +2073,6 @@ static void acionarBotao(int b) {
   d.botao = 0;
 }
 
-static int teclaVoltar(const SDL_Event *e) {
-  SDL_Keycode k = e->key.keysym.sym;
-  return k == SDLK_ESCAPE || k == SDLK_AC_BACK || k == SDLK_BACKSPACE ||
-         e->key.keysym.scancode == NV_SCANCODE_BACK;
-}
 
 void diagnostico_evento(const SDL_Event *e) {
   SDL_Keycode k;
@@ -2085,7 +2081,7 @@ void diagnostico_evento(const SDL_Event *e) {
   k = e->key.keysym.sym;
   estado = atomic_load(&d.estado);
   if (d.intro) {
-    if (teclaVoltar(e)) {
+    if (nv_tecla_voltar(e)) {
       sairTela = 1;
     } else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
       marcarApresentacaoVista();
@@ -2097,7 +2093,7 @@ void diagnostico_evento(const SDL_Event *e) {
   // resultado e volta ao que estava (objetivo ou resultado do diagnostico).
   if (vz.aberto) {
     int ve = atomic_load(&vz.estado);
-    if (teclaVoltar(e)) {
+    if (nv_tecla_voltar(e)) {
       if (ve == 1) atomic_store(&vz.cancelado, 1);
       else {
         vz.aberto = 0;
@@ -2116,7 +2112,7 @@ void diagnostico_evento(const SDL_Event *e) {
     }
     return;
   }
-  if (teclaVoltar(e)) {
+  if (nv_tecla_voltar(e)) {
     if (estado == 1 || d.sugEstado == DS_TESTANDO) atomic_store(&d.cancelado, 1);
     else sairTela = 1;
     return;
