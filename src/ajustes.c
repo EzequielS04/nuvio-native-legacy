@@ -2018,7 +2018,8 @@ float ajustes_vidro_opacidade(void) {
 }
 int ajustes_vidro_fosco(void) { return valor[AJ_VIDRO_FOSCO] == 1; }
 // Capturas do teste do vidro: NUVIO_SHOT_VIDRO_OPAC=60|70|78|86|92 e
-// NUVIO_SHOT_VIDRO_FOSCO=1 (sem gravar nada).
+// NUVIO_SHOT_VIDRO_FOSCO=1 (sem gravar nada). INTENCIONAL no release: so os
+// tests/*_shot.c e ajustes_teste_ux_captura a chamam; nenhum caminho de src/ chega aqui na TV.
 void ajustes_teste_vidro_env(void) {
   const char *o = getenv("NUVIO_SHOT_VIDRO_OPAC"), *f = getenv("NUVIO_SHOT_VIDRO_FOSCO");
   if (o && *o) { int n = atoi(o); valor[AJ_VIDRO_OPAC] = n <= 60 ? 0 : n <= 70 ? 1 : n <= 78 ? 2 : n <= 86 ? 3 : 4; }

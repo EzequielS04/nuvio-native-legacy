@@ -118,6 +118,7 @@ void ponteiro_teste_toque(int ligado) { toqueDisponivel = ligado != 0; cancelarT
 void ponteiro_teste_cursor_sistema(SDL_bool (*fn)(SDL_bool)) { cursorSistema = fn; }
 #endif
 
+// Costura de teste, so leitura, INTENCIONAL no release: nenhum codigo de src/ a chama (so tests/menuep.c, ponteiro_telas.c).
 int ponteiro_teste_lista(const PonteiroAlvo **v) { if (v) *v = lista[pronto]; return nLista[pronto]; }
 
 float ponteiro_x(void) { return px; }
