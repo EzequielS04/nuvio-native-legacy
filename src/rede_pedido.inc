@@ -330,7 +330,8 @@ int rede_pedir(const RedePedido *p, RedeResposta *r) {
     if (c.primeiro) r->corpo_ms = pedidoMs(agora - c.primeiro);
     if (pedidoParar(&c)) break;
     if (r->curl_erro && !(p->janela_corpo_ms && (r->fim_janela || r->fim_teto) &&
-        (r->curl_erro == 23 || r->curl_erro == 42))) {
+        (r->curl_erro == 23 || r->curl_erro == 42 || r->curl_erro == 56))) {
+      /* 56: an h2 stream cut by our own window/cap abort reports recv failure. */
       r->erro = r->curl_erro == 28 ? REDE_PRAZO : REDE_TRANSPORTE; break;
     }
     if (!p->seguir || !pedidoEhRedirect(r->status)) {
