@@ -29,6 +29,7 @@
 int ajustes_social(void) { return 1; }
 int ajustes_hist_conta(void) { return 1; }
 int ajustes_busca_cinemeta(void) { return 1; }
+int ajustes_busca_nuvio(void) { return 0; }   // #311: Primeiro (padrao)
 #include "../src/descoberta.c"
 #include "../src/progresso.h"
 #include <assert.h>
