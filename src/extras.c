@@ -552,7 +552,7 @@ static void *buscar(void *arg) {
       // teto estourado. Foi exatamente essa duvida que custou tres deploys no
       // dia em que o mapa nasceu.
       printf("[vistoep] %s: %d episodios no mapa (%d vistos)\n",
-             id, vistoep_conhecido(id) ? vistoep_n() : 0, vistoep_contar(id));
+             id, vistoep_total(id), vistoep_contar(id));
       // A SERIE INTEIRA (#212): o selo do cartaz e o olho do detalhe leem o
       // historico de titulo (cat_visto), e /sync/history nunca diz "serie
       // vista" — so episodios. Os contadores do topo dizem: tudo o que ja foi
