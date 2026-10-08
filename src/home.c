@@ -1033,9 +1033,23 @@ static const CatItem *cat_item_exato(int i) {
 // A pasta art/ e acervo de reserva apenas no modo sem catalogo. Quando a rede
 // publicou itens, nenhum arquivo generico pode ocupar o lugar de outro titulo.
 // `deitado` 2 quer dizer TELA CHEIA (o destaque). 1 e o card deitado.
+// `deitado`: 0 = cartaz em pe, 1 = deitado, 2 = destaque (tela cheia), 3 = card
+// de "Continuar assistindo" (deitado, com o still do episodio quando a
+// "Miniatura do episodio" — useEpisodeThumbnailsInCw — esta ligada). O 3 e o
+// relato da Shield (teste 318.3): o ajuste existia sem nenhum chamador e o
+// card mostrava sempre o fundo da serie. Still que o cache sabe que nao vem
+// (404 do metahub) cai na arte do titulo, como no destaque.
+static const char *arte_card_retomada(const CatItem *item) {
+  if (item && ajustes_cw_thumb_episodio() && !strcmp(item->tipo, "series")) {
+    const char *ep = artehero_url_episodio(item);
+    if (ep && !tex_falhou(ep)) return ep;
+  }
+  return arte_por_formato(item, 1);
+}
 static const char *arte_por_identidade(int indice, int deitado) {
   const CatItem *item = cat_item_exato(indice);
   const char *arte = (deitado == 2) ? arte_hero_do_item(item)
+                   : (deitado == 3) ? arte_card_retomada(item)
                                     : arte_por_formato(item, deitado);
   if (arte) return arte;
   if (cat_n() == 0 && indice >= 0) {
@@ -5054,7 +5068,7 @@ int home_previa_fileira(const char *chave, int filTipo, int refTipo, GfxRect are
         continue;
       }
       { const CatItem *ci = cat_item_exato(idx);
-        const char *cam = arte_por_identidade(idx, deitado);
+        const char *cam = arte_por_identidade(idx, tipo == FILEIRA_CONTINUE ? 3 : deitado);
         GLuint t = cam ? tex_obter_larg(cam, w) : 0;
         if (tipo == FILEIRA_TOP10_NUM)
           desenhaNumeral(c + 1, px, y0, h, passo - w - NV_TOP10_NUM_FOLGA * s, 1.0f);
@@ -5679,9 +5693,9 @@ void home_desenhar(Uint32 agora) {
           // Aberto, o card mostra a arte DEITADA: e para isso que ele abre.
           // A troca acontece na metade do caminho, quando a moldura ja tem
           // largura de 16:9 e o retrato comecaria a ser recortado feio.
-          caminho = arte_por_identidade(idxCat, abre > 0.5f ||
-                                        tipo == FILEIRA_CONTINUE ||
-                                        tipo == FILEIRA_RETORNO || deitado);
+          caminho = arte_por_identidade(idxCat,
+                                        (tipo == FILEIRA_CONTINUE || tipo == FILEIRA_RETORNO) ? 3
+                                        : (abre > 0.5f || deitado));
 
           // `!focoHero` E A CONDICAO QUE FALTAVA AQUI, e e o mesmo defeito que
           // o anel de foco ja tinha resolvido dez linhas acima (linha 1747).
