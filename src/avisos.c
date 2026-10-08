@@ -70,6 +70,8 @@
 #define AV_LOG_ANTERIOR "/tmp/nuvio-anterior.log"
 #endif
 #define AV_REGISTRO_MAX (200 * 1024)
+// Envio AUTOMATICO (sessao anterior): no maximo 64 KB, cabeca + cauda (#203).
+#define AV_REGISTRO_AUTO_MAX (64 * 1024)
 // 20 s, nao 6 (dono, 20/09/2026: "teria que ficar mais tempo"). Quem esta
 // olhando um card do outro lado da tela leva um tempo para notar o canto.
 #define AV_TOAST_MS   20000.0f
@@ -460,7 +462,10 @@ static const char *agoraTextoAuto(const char *marca) {
 #ifdef __EMSCRIPTEN__
 static char *logAtual;
 #endif
+#include "avisos_corte.inc"
+static unsigned ultimoHashAuto;   // so muda depois de um envio que o servidor aceitou
 static void *enviarRegistro(void *u) {
+  unsigned hAuto = 0;
   static char aut[2200], via[40], chave[160];
   const char *cab[5];
   char *texto = NULL, *corpo, *resp;
@@ -483,6 +488,17 @@ static void *enviarRegistro(void *u) {
       fclose(f);
     } }
 #endif
+  if (automatico && texto) nTexto = cortarCabecaCauda(texto, nTexto, AV_REGISTRO_AUTO_MAX);
+  // ENVIO AUTOMATICO SEM NOVIDADE NAO SOBE (#203). Parado no menu o log nao
+  // cresce, e a TV reenviava os mesmos 200 KB a cada 5 min: o D1 recebia
+  // ~2 GB/dia e as escritas atrasavam as outras rotas. Mesmo texto da ultima
+  // vez que subiu com sucesso = nada a fazer.
+  if (automatico && texto) {
+    size_t k;
+    hAuto = 2166136261u;
+    for (k = 0; k < nTexto; k++) hAuto = (hAuto ^ (unsigned char)texto[k]) * 16777619u;
+    if (hAuto == ultimoHashAuto) { free(texto); envioEstado = 0; return NULL; }
+  }
   if (!idHead(cab, aut, sizeof aut, via, sizeof via, chave, sizeof chave)) {
     if (!automatico) { pthread_mutex_lock(&trava); envMotivo = AVISOS_ENVIO_CONTA; envHttp = 0; pthread_mutex_unlock(&trava); }
     free(texto); envioEstado = automatico ? 0 : 3; return NULL;
@@ -520,6 +536,7 @@ static void *enviarRegistro(void *u) {
     Uint32 t0 = SDL_GetTicks();
     snprintf(url, sizeof url, "%s/v1/registro", NV_REC_URL);
     resp = rede_postar_st(url, 30, cab, corpo, &status);
+    if (automatico && status >= 200 && status < 300) ultimoHashAuto = hAuto;
     if (!automatico) {
       char id[32], cod[8] = "";
       int ok = status >= 200 && status < 300;
@@ -1637,32 +1654,12 @@ static void avisos_desenharCorpo_(Uint32 agora) {
 
 // --- envio manual (Ajustes) ---------------------------------------------------
 int avisos_envio_estado(void) { return envioEstado; }
-// Le o nv-log do localStorage para logAtual (fio principal; so no Tizen).
-static void lerLogAtual(void) {
-#ifdef __EMSCRIPTEN__
-  free(logAtual);
-  logAtual = (char *)EM_ASM_PTR({
-    try {
-      var t = localStorage.getItem('nv-log') || '';
-      if (t.length > $0) t = t.slice(t.length - $0);
-      var b = new TextEncoder().encode(t);
-      var p = _malloc(b.length + 1);
-      if (!p) return 0;
-      HEAPU8.set(b, p);
-      HEAPU8[p + b.length] = 0;
-      return p;
-    } catch (e) { return 0; }
-  }, AV_REGISTRO_MAX);
-#endif
-}
-
-// PASSO DO ENVIO AUTOMATICO, do laco principal. Com o ajuste ligado: uma vez,
-// o registro da sessao ANTERIOR (e o da sessao que travou, quando travou);
-// depois o desta sessao a cada minuto. Nunca dois envios ao mesmo tempo, e
-// nunca por cima de um envio manual em curso.
+// PASSO DO ENVIO AUTOMATICO, do laco principal. Com o ajuste ligado: uma vez
+// por sessao, o registro da sessao ANTERIOR (a que acabou, inclusive a que caiu),
+// com no maximo 64 KB. Nunca dois envios ao mesmo tempo, e nunca por cima de um
+// envio manual em curso.
 void avisos_envio_auto_passo(Uint32 agora) {
   static int anteriorFeito;
-  static Uint32 proximo;
   // "O registro fica guardado e sai assim que a rede voltar" (painel de envio,
   // TV sem internet): o envio manual que caiu por falta de rede sai sozinho
   // no primeiro quadro com a rede de volta, com ou sem o envio automatico.
@@ -1674,7 +1671,7 @@ void avisos_envio_auto_passo(Uint32 agora) {
   if (!ajustes_envio_auto() || !NV_REC_URL[0] || envioEstado == 1) return;
   if (!anteriorFeito) {
     anteriorFeito = 1;
-    proximo = agora + 60000;
+    (void)agora;
     { int tem;
 #ifdef __EMSCRIPTEN__
       if (!logAnterior) lerLogAnterior();
@@ -1682,7 +1679,6 @@ void avisos_envio_auto_passo(Uint32 agora) {
 #else
       { FILE *f = fopen(AV_LOG_ANTERIOR, "rb"); tem = f != NULL; if (f) fclose(f); }
 #endif
-    envAutoProximo = proximo;
     if (tem) {
       envioEstado = 1;
       if (pthread_create(&fioEnvio, NULL, enviarRegistro, (void *)&AUTO_ANTERIOR) == 0) pthread_detach(fioEnvio);
@@ -1690,24 +1686,10 @@ void avisos_envio_auto_passo(Uint32 agora) {
     } }
     return;
   }
-  if (agora < proximo) return;
-  // 1 min no Tizen (e la que falta dado); 5 min no LG — o registro do LG com
-  // o player aberto enche os 200 KB em menos de um minuto (haylereader,
-  // 20/09: 200 KB por minuto de eventos [video]).
-#ifdef __EMSCRIPTEN__
-  // Depois dos 5 primeiros minutos, 5 em 5 tambem no Tizen: a cada minuto o
-  // registro inteiro (ate 200 KB) subia de novo — 18 envios em 16 minutos de
-  // uma TV so nos logs de 24/09, quase todos repetindo o que ja tinha ido.
-  proximo = agora + (agora < 300000 ? 60000 : 300000);
-#else
-  proximo = agora + 300000;
-#endif
-  envAutoProximo = proximo;
-  lerLogAtual();
-  fflush(stdout);
-  envioEstado = 1;
-  if (pthread_create(&fioEnvio, NULL, enviarRegistro, (void *)&AUTO_ATUAL) == 0) pthread_detach(fioEnvio);
-  else envioEstado = 0;
+  // UMA VEZ POR SESSAO (#203, dono). O registro desta sessao NAO sobe mais a
+  // cada poucos minutos: o log da sessao que acabou e o que sobe, uma vez, no
+  // proximo arranque (acima) — fim limpo, queda e TV desligada caem todos nesse
+  // caminho. "Enviar registro" (Ajustes) e o recibo de queda continuam.
 }
 
 void avisos_enviar_registro_atual(void) {
