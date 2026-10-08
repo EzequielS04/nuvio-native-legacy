@@ -472,6 +472,13 @@ void cat_definir_episodios(int indiceItem, const CatEp *lista, int n);
 // Substitui UM item, preservando o resto. Usado quando o detalhe abre e traz
 // elenco, direcao e temporadas que o catalogo da fileira nao tinha.
 void cat_atualizar_item(int indice, const CatItem *novo);
+// Copia do item `indice` sob a trava dos publicadores; 0 se o indice nao existe.
+// Para fios fora do desenho (o ponteiro de cat_item() so vale no quadro).
+int  cat_copiar_item(int indice, CatItem *saida);
+// So a sinopse (e o titulo, se vazio) de `indice`, se ele ainda e `imdb` e
+// ainda nao tem sinopse. Nao toca em mais nada. 1 = escreveu.
+int  cat_completar_sinopse(int indice, const char *imdb, const char *sinopse,
+                           const char *titulo);
 
 // Titulos parecidos com o de `indice`: mesmo tipo (filme/serie) e pelo menos um
 // genero em comum, os de nota mais alta primeiro. Devolve quantos escreveu.

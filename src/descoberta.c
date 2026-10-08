@@ -5830,33 +5830,22 @@ static void *fioSinopseHero(void *u) {
     hsDeNovo = 0;
     pthread_mutex_unlock(&hsTrava);
     for (k = 0; k < n; k++) {
-      const CatItem *o = lista[k] < cat_n() ? cat_item(lista[k]) : NULL;
+      // Copia sob a trava do catalogo: este fio nao vira quadro, entao um
+      // ponteiro de cat_item() aqui pode apontar para bloco ja liberado
+      // (revisao 2.0.3, achado 2; tests/herosinopse_corrida.sh).
+      CatItem *e = malloc(sizeof *e);
       char imdb[64];
-      CatItem *e;
       int r;
-      if (!o || o->sinopse[0]) continue;
-      snprintf(imdb, sizeof imdb, "%s", o->imdb);
-      if (hsNegativo(imdb)) continue;
-      e = malloc(sizeof *e);
       if (!e) continue;
-      *e = *o;
+      if (!cat_copiar_item(lista[k], e) || e->sinopse[0]) { free(e); continue; }
+      snprintf(imdb, sizeof imdb, "%s", e->imdb);
+      if (hsNegativo(imdb)) { free(e); continue; }
       r = desc_sinopse_completar_item(e, NULL, NULL);
       if (r == 0) hsNegGuardar(imdb);
-      if (r == 1) {
-        // Reler: o catalogo pode ter sido refeito enquanto a rede respondia.
-        // So a sinopse (e o nome, se faltava) entram no item que esta la agora.
-        const CatItem *a = lista[k] < cat_n() ? cat_item(lista[k]) : NULL;
-        if (a && !strcmp(a->imdb, imdb) && !a->sinopse[0]) {
-          CatItem *f = malloc(sizeof *f);
-          if (f) {
-            *f = *a;
-            snprintf(f->sinopse, sizeof f->sinopse, "%s", e->sinopse);
-            if (!f->titulo[0]) snprintf(f->titulo, sizeof f->titulo, "%s", e->titulo);
-            cat_atualizar_item(lista[k], f);
-            free(f);
-          }
-        }
-      }
+      // O catalogo pode ter sido refeito enquanto a rede respondia: so a
+      // sinopse (e o nome, se faltava) entram, e so se o indice ainda e este
+      // titulo. Nada mais do item e reescrito.
+      if (r == 1) cat_completar_sinopse(lista[k], imdb, e->sinopse, e->titulo);
       free(e);
       SDL_Delay(HSIN_PAUSA_MS);   // um pedido por vez, com folga entre eles
     }
