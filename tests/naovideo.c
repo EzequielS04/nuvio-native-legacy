@@ -35,6 +35,9 @@ int main(void) {
   assert(NOME("Addon", "Doação: apoie o projeto", 0, 0));
   assert(NOME("Addon", "Invalid API key", 0, 0));
   assert(NOME("Addon", "Note: Start...", 0, 0));
+  assert(NOME("Embed69 - {}", "", 0, 0));
+  assert(NOME("Meteor - Not configured", "", 0, 0));
+  assert(NOME("Addon", "Please configure", 0, 0));
   // --- nome: negativos (filmes de verdade) ---
   assert(!NOME("Discord", "Discord.2019.1080p.WEB-DL.x265", 0, 0));       // token de video
   assert(!NOME("Addon", "Donation.2021.4K.HDR.mkv", 0, 0));

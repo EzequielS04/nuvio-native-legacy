@@ -88,10 +88,11 @@ int naovideo_nome(const char *rotulo, const char *descricao, int altura, long ta
     "donacion", "donación", "apoya el proyecto", "faire un don", "soutenez le projet",
     "spenden", "unterstutze das projekt", "unterstütze das projekt",
     "note:", "notice:", "warning:", "aviso:", "nota:", "link expired", "token expired",
-    "subscription expired", "trial expired", "api key", "invalid key", "invalid api"
+    "subscription expired", "trial expired", "api key", "invalid key", "invalid api",
+    "{}", "[object object]", "missing config", "no config"
   };
   static const char *const palavras[] = { "unavailable", "error", "erro", "expired", "expirado",
-    "indisponivel", "fehler" };
+    "indisponivel", "fehler", "configure", "unconfigured" };
   char t[2048];
   size_t k = 0;
   if (altura > 0 || tamanhoMB > 0) return 0;

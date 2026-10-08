@@ -121,6 +121,7 @@ object NvPlayer {
     @JvmStatic external fun nativeFaixasFim(selAudio: Int, selLeg: Int)
     @JvmStatic external fun nativeLegenda(texto: String, durMs: Int)
     @JvmStatic external fun nativePos(ms: Int)
+    @JvmStatic external fun nativeTela(hdr: Int, dv: Int)
     @JvmStatic external fun nativeHdr(hdr: String, dv: Int, atmos: Int)
     @JvmStatic external fun nativeRetomada(geracao: Int, aceita: Int)
     @JvmStatic external fun nativeFitPassiva(rede: Long, geracao: Int, origem: String, kbps: IntArray, fimMs: Long)
@@ -209,6 +210,19 @@ object NvPlayer {
         try { nativeIniciar() } catch (e: UnsatisfiedLinkError) {
             Log.w(TAG, "nativeIniciar sem a lib ainda; o C acha a classe pelo ClassLoader da Activity: $e")
         }
+        informarTela(activity)
+    }
+
+    // Capacidade HDR/Dolby Vision da tela, para o automatico de fontes. Lista
+    // vazia ou erro = -1 (desconhecido); nunca assume que a tela NAO tem HDR.
+    private fun informarTela(activity: Activity) {
+        try {
+            @Suppress("DEPRECATION")
+            val tipos = activity.windowManager.defaultDisplay.hdrCapabilities?.supportedHdrTypes
+            if (tipos == null || tipos.isEmpty()) { nativeTela(-1, -1); return }
+            val dv = if (tipos.contains(android.view.Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION)) 1 else 0
+            nativeTela(1, dv)
+        } catch (e: Throwable) { Log.w(TAG, "informarTela: $e") }
     }
 
     // onPause: pausa (o C fica sabendo pelo evento 3) e guarda a posicao; o

@@ -332,6 +332,18 @@ static int automaticaExcluida(int indice) {
   pthread_mutex_unlock(&autoExclTrava);
   return resultado;
 }
+static int ehInformativa(const Stream *s) {
+  // `naoVideo`: a sonda ja viu a URL responder pagina; o nome (naovideo_nome)
+  // pega a linha de aviso antes de qualquer pedido.
+  return s->naoVideo || naovideo_nome(s->rotulo, s->descricao, s->altura, s->tamanhoMB);
+}
+// Fora do automatico: ja descartada nesta sessao OU linha de aviso/placeholder do
+// addon ("Meteor - Not configured", "Embed69 - {}", "... error"). Esses so ficam
+// na folha manual (#284: 75% Android / 60% Samsung / 41% LG falham quando o
+// automatico os escolhe, contra 6/14/9% das fontes com resolucao).
+static int foraDoAuto(int i) {
+  return automaticaExcluida(i) || (i >= 0 && i < n && ehInformativa(&lista[i]));
+}
 int stream_automatico_disponivel(int indice) { return indice >= 0 && indice < n && !automaticaExcluida(indice); }
 int stream_automatico_excluir(int indice) {
   int resultado = 0;
@@ -672,6 +684,16 @@ static int acha(const char *t, const char *termo) {
   for (; *t; t++) if (!strncasecmp(t, termo, n)) return 1;
   return 0;
 }
+// Perfil 8 declarado (ou camada base HDR10 marcada): a base HDR10 toca em tela
+// sem Dolby Vision. Sem nenhuma das duas o perfil e desconhecido.
+static int perfil8(const Stream *s) {
+  const char *c[3] = { s->rotulo, s->descricao, s->arquivo };
+  if (badges_fonte_hdr_marca(s->badges) >= 0) return 1;
+  for (int i = 0; i < 3; i++)
+    if (acha(c[i], "profile 8") || acha(c[i], "profile8") || acha(c[i], "dvhe.08") ||
+        acha(c[i], "dvh1.08") || acha(c[i], "hdr10")) return 1;
+  return 0;
+}
 static int perfil5(const Stream *s) {
   const char *c[3] = { s->rotulo, s->descricao, s->arquivo };
   for (int i = 0; i < 3; i++)
@@ -695,10 +717,19 @@ static int nivelHdr(const Stream *s) {
   if (s->dolbyVision) {
     int toca = ajustes_dolby_vision() && telaDv != 0;
 #ifndef NV_ANDROID
+#ifdef NV_TPK
     toca = toca && (s->mp4 || strstr(s->url, ".mp4"));
+#else
+    // LG: DV em MKV so com o ajuste "Dolby Vision em MKV" ligado.
+    toca = toca && (s->mp4 || strstr(s->url, ".mp4") || ajustes_dv_mkv());
+#endif
 #endif
     if (perfil5(s)) { if (nivel < 1) nivel = 1; }
     else if (toca) nivel = 4;
+    // Tela SEM Dolby Vision (telaDv == 0 explicito, ex. Samsung): so o perfil 8
+    // com base HDR10 toca como HDR10. DV sem perfil nem base declarada pode ser
+    // perfil 5 e nao ha como saber: fica no nivel 1, abaixo do HDR10.
+    else if (telaDv == 0 && !perfil8(s)) { if (nivel < 1) nivel = 1; }
     else if (nivel < 2) nivel = 2;        // perfil 8: a base HDR10 toca
   }
   return nivel;
@@ -781,6 +812,10 @@ static long pontos(const Stream *s) {
   // ACIMA DO TETO vai para o fim da fila, e nao para fora dela: o teto e
   // preferencia, nao filtro. Uma lista em que so ha 4K e com teto de 1080p tem
   // de continuar tocando — em 4K, com uma linha no log dizendo por que.
+  // SEM RESOLUCAO (0p) vem depois de toda fonte com resolucao no mesmo estado de
+  // cache: a altura desconhecida nao e prova de nada (#284). Maior que a
+  // qualidade (< 50000), menor que cache/origem/teto.
+  if (s->altura <= 0) p -= 60000;
   if (!cabeNoTeto(s)) p -= 1000000;
   // FORA DE CACHE NO DEBRID vai para depois das cacheadas, e tambem nao sai
   // da fila: o automatico prefere o que TOCA AGORA. Registro 1163 (1.3.12,
@@ -1131,7 +1166,7 @@ int stream_urls_para_aquecer(char dst[][256], int max) {
   pthread_mutex_lock(&verTrava);
   for (k = 0; k < n && q < max && vistas < 3; k++) {
     int i = ORD(k);
-    if (automaticaExcluida(i)) continue;
+    if (foraDoAuto(i)) continue;
     if (lista[i].url[0]) {
       snprintf(dst[q++], 256, "%s", lista[i].url);
       vistas++;
@@ -1258,7 +1293,7 @@ static void logarEscolha(int escolhida, int pref, int modoPrimeira) {
   for (k = 0; k < n; k++) {
     long p;
     i = ORD(k);
-    if (i == escolhida || automaticaExcluida(i)) continue;
+    if (i == escolhida || foraDoAuto(i)) continue;
     p = pontos(&lista[i]);
     if (vice < 0 || p > pv) { vice = i; pv = p; }
   }
@@ -1333,7 +1368,7 @@ int stream_primeira_boa(int tentativas) {
       if (i == pref) posPref = q;
       pts[q] = pontos(&lista[i]);
       acima[q] = (unsigned char)!cabeNoTeto(&lista[i]);
-      excl[q] = (unsigned char)automaticaExcluida(i);
+      excl[q] = (unsigned char)foraDoAuto(i);
       grp[q] = (signed char)grupoDe(i);
       rk[q] = fonteregra_ordem_rank(lista[i].provedor);
       if (!excl[q]) livres++;
@@ -1466,7 +1501,7 @@ int stream_auto_pode_decidir(int preferida, int prefPendente, int prazoPassou, i
     if (i == preferida) posPref = q;
     pts[q] = pontos(&lista[i]);
     acima[q] = (unsigned char)!cabeNoTeto(&lista[i]);
-    excl[q] = (unsigned char)automaticaExcluida(i);
+    excl[q] = (unsigned char)foraDoAuto(i);
     boa[q] = (unsigned char)boaParaJa(&lista[i]);
     ad[q] = chave ? (int)(chave[i] >> 16) : 0;
     grp[q] = (signed char)grupoDe(i);
@@ -1490,7 +1525,7 @@ int stream_auto_pode_decidir(int preferida, int prefPendente, int prazoPassou, i
 int stream_n_candidatas(void) {
   int i, k = 0;
   pthread_mutex_lock(&verTrava);
-  for (i = 0; i < n; i++) if (!automaticaExcluida(i)) k++;
+  for (i = 0; i < n; i++) if (!foraDoAuto(i)) k++;
   pthread_mutex_unlock(&verTrava);
   return k;
 }
@@ -1756,11 +1791,6 @@ int stream_canal_prazo_longo(int idx) {
 // de doacao. Fica na folha (a pessoa pode querer abrir), sai do automatico.
 // So sem altura e sem tamanho: um filme de verdade com "support" no nome tem
 // pelo menos um dos dois.
-static int ehInformativa(const Stream *s) {
-  // `naoVideo`: a sonda ja viu a URL responder pagina; o nome (naovideo_nome)
-  // pega a linha de aviso antes de qualquer pedido.
-  return s->naoVideo || naovideo_nome(s->rotulo, s->descricao, s->altura, s->tamanhoMB);
-}
 
 static int canalFolha;
 static int automaticoCom(int regras) {
@@ -1961,7 +1991,8 @@ static int grupoRes(const Stream *s) {
 static void rotuloQualidade(const Stream *s, char *res, size_t nr, char *faixa, size_t nf, int *hdr) {
   static const char *const RES[FOLHA_RES] = { "4K", "1080p", "720p", "SD" };
   uint64_t b = s->badges;
-  snprintf(res, nr, "%s", RES[grupoRes(s) / 2]);
+  if (s->altura <= 0 && !(b & (badges_bit("r-4k") | badges_bit("r-1080") | badges_bit("r-720")))) snprintf(res, nr, "?");
+  else snprintf(res, nr, "%s", RES[grupoRes(s) / 2]);
   *hdr = ehHdr(s);
   if (s->dolbyVision || (b & (badges_bit("v-dv") | badges_bit("a-atmos-dv") | badges_bit("a-truehd-dv") | badges_bit("a-dd-dv")))) snprintf(faixa, nf, "DV");
   else if (b & badges_bit("v-hdr10plus")) snprintf(faixa, nf, "HDR10+");
@@ -3198,6 +3229,14 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
         // real choice but stops calling it the best for this TV.
         mx+=16+caixaAlta(fitPesada(i) ? "Escolha automática" : "Melhor para esta TV",
                          ai,(int)(ag*255),(int)(ab*255),mx+16,cy,anim)+18;
+        // #284: no modo "do addon" a fileira de selos nao existe e a linha
+        // nao dizia a resolucao; ela vai junto da marca ("4K · HDR10").
+        if(ajustes_fonte_texto_addon()){
+          char rs[16], fx[16], rq[40]; int hd;
+          rotuloQualidade(s,rs,sizeof rs,fx,sizeof fx,&hd);
+          snprintf(rq,sizeof rq,"%s · %s",rs,fx);
+          mx+=caixaAlta(rq,ai,(int)(ag*255),(int)(ab*255),mx,cy,anim)+18;
+        }
       }
       // StreamFit (F03): "above the connection" is a condition of this source on
       // this network, not a defect: champagne-grey like the HDR label, after any

@@ -27,6 +27,7 @@
 // video_creditos; passthrough fino de AC3/EAC3 por AudioCapabilities.
 #ifdef NV_ANDROID
 #include "marco.h"
+#include "streams.h"
 #include "video.h"
 #include "audioinfo.h"
 #include "video_reconexao.h"
@@ -429,6 +430,16 @@ static void estadoRetomada(int estado) {
   pthread_mutex_lock(&travaRetomada);
   retomadaInicialEstado = estado;
   pthread_mutex_unlock(&travaRetomada);
+}
+
+// Capacidade da TELA (Display.getHdrCapabilities), lida no onCreate: so o
+// formato preferido entre resolucoes iguais depende dela (streams.c).
+// -1 = o aparelho nao informou (lista vazia): desconhecido nao penaliza.
+JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeTela(JNIEnv *env, jclass cls, jint hdr, jint dv) {
+  (void)env; (void)cls;
+  stream_definir_tela(hdr, dv);
+  printf("[video] android tela hdr=%d dv=%d\n", (int)hdr, (int)dv);
+  fflush(stdout);
 }
 
 JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeHdr(JNIEnv *env, jclass cls, jstring hdr, jint dv, jint atmos) {
