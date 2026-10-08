@@ -1,7 +1,7 @@
 #!/bin/bash
 # #356: episodio "a seguir" ausente na ficha do Nuvio mas presente no Cinemeta.
 #   bash tests/trakt_ep_cinemeta.sh
-set -eu
+set -euo pipefail
 cd "$(dirname "$0")/.."
 dir=$(mktemp -d "${TMPDIR:-/tmp}/nuvio-trakt-ep.XXXXXX")
 trap 'rm -rf "$dir"' EXIT
