@@ -62,6 +62,24 @@ static void tabela(void) {
   ptv_padrao(PTV_TPK, 2048, &p);
   assert(p.heroiLarg == 1280);
   ptv_definir_gpu_fraca(0);
+  // #286: heroi 960 so no .tpk com GPU Utgard marcada; sem a marca, nada muda.
+  assert(!ptv_gpu_utgard_atual());
+  ptv_definir_gpu_utgard(1);
+  ptv_definir_gpu_fraca(1);
+  ptv_padrao(PTV_TPK, 1108, &p);
+  assert(p.heroiLarg == 960 && p.texMb == 64 && p.fiosRede == 2);
+  ptv_padrao(PTV_TPK, 2048, &p);
+  assert(p.heroiLarg == 960);
+  ptv_padrao(PTV_LG, 1024, &p);
+  assert(p.heroiLarg == 1280);   // outras plataformas: intactas
+  ptv_definir_gpu_utgard(0);
+  ptv_definir_gpu_fraca(1);
+  ptv_padrao(PTV_TPK, 1108, &p);
+  assert(p.heroiLarg == 1280);   // GPU fraca que nao e Utgard (Midgard): 1280
+  ptv_definir_gpu_fraca(0);
+  ptv_padrao(PTV_TPK, 2048, &p);
+  assert(p.heroiLarg == 1920);
+  puts("ok  heroi 960 so na Utgard do .tpk");
   assert(ptv_gpu_fraca("Mali-TDVX"));
   assert(ptv_gpu_fraca("Mali-T830"));
   assert(ptv_gpu_fraca("Mali-450 MP"));

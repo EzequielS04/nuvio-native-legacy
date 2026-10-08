@@ -251,6 +251,9 @@ void gpun_iniciar(int w, int h) {
 #endif
 #endif
   ptv_definir_gpu_fraca(ptv_gpu_fraca(renderer));
+#ifdef NV_TPK
+  ptv_definir_gpu_utgard(ptv_gpu_utgard(renderer));   // #286: mip na CPU e heroi de 960
+#endif
   chave = djb2(tizen, djb2(modelo, djb2(versaoGl, djb2(renderer, 5381))));
   // The level learned on a 4K surface says nothing about 1080p (4x the pixels):
   // a separate key, so a 4K session that dropped effects does not carry them

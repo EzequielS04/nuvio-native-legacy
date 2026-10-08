@@ -950,6 +950,9 @@ static int tetoHeroiPerfil = 0;
 static int tetoDoHeroiQualidade(void);
 static int tetoDoHeroi(void) {
   int t = tetoDoHeroiQualidade();
+  // Utgard (.tpk, #286): 960 vale tambem para o perfil gravado/diagnostico, que
+  // ptv_limitar nunca deixa abaixo de 1280, e para a qualidade Alta.
+  if (ptv_gpu_utgard_atual() && t > 960) t = 960;
   return tetoHeroiPerfil >= 640 && tetoHeroiPerfil < t ? tetoHeroiPerfil : t;
 }
 static int tetoDoHeroiQualidade(void) {
@@ -2335,6 +2338,14 @@ static int mipCpuAtivo(void) {
 #else
       mipCpu = 0;
 #endif
+      // Utgard (.tpk, #286, UA40N5300): o glGenerateMipmap custava ~64 ms por
+      // poster no fio principal (gl_ms 55-73 de 0 a 900 KB, contra 20 ms de um
+      // heroi de 3,6 MB sem mip), um quadro inteiro de GPU por upload. A
+      // piramide sai no fio de decode e sobe so como glTexImage2D.
+      if (ptv_gpu_utgard_atual()) {
+        mipCpu = 1;
+        printf("[tex] mip=cpu (Utgard)\n"); fflush(stdout);
+      }
     }
   }
   return mipCpu;
