@@ -192,6 +192,7 @@ int fil_marcar_sem_addon(const char *const *ids, const char *const *bases, const
 }
 int   fil_addon_novo(const char *id, const char *base) { (void)id; (void)base; return 0; }
 int   addons_perfil_da_lista(void)         { return 0; }
+int addons_base_desligada(const char *b) { (void)b; return 0; }   // 203-desligados
 int   fil_limite(void)                     { return 3; }
 const char *fil_hero_fonte(void)           { return "auto"; }
 int   fil_oculta(const char *c)            { (void)c; return 0; }

@@ -49,6 +49,7 @@ int col_n(void) { return 0; }
 const ColFolder *col_folder(int i) { (void)i; return NULL; }
 unsigned col_hash_estrutura(void) { return 0; }
 int addons_n(void) { return 0; }
+int addons_base_desligada(const char *b) { (void)b; return 0; }   // 203-desligados
 const char *addons_base(int i) { (void)i; return ""; }
 int addons_tem_catalogo(int i) { (void)i; return 0; }
 int addons_ativo(int i) { (void)i; return 1; }

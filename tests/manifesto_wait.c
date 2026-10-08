@@ -16,6 +16,7 @@ char *rede_baixar(const char *url, int seconds) {
 }
 unsigned addons_versao(void) { return 1; }
 int addons_n(void) { return fixtureAddons; }
+int addons_base_desligada(const char *b) { (void)b; return 0; }   // 203-desligados
 int addons_ativo(int i) { return i != 0; }
 const char *addons_base(int i) {
   static const char *urls[] = {"https://disabled.invalid", "https://active1.invalid", "https://active2.invalid"};

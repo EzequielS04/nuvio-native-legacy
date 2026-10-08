@@ -30,6 +30,7 @@ char *rede_baixar_com(const char *u, int t, const char *const *c) {
 int trakt_enfeitar_lote(CatItem *s, int n) { (void)s; (void)n; return 0; }
 // Origem do item (CatItem.origem): sem addons neste teste, a origem fica vazia.
 int addons_n(void) { return 0; }
+int addons_base_desligada(const char *b) { (void)b; return 0; }   // 203-desligados
 const char *addons_base(int i) { (void)i; return ""; }
 const char *addons_id_manifesto(int i) { (void)i; return ""; }
 void cat_trocar_continuar(const CatItem *l, int q) { (void)l; (void)q; }
