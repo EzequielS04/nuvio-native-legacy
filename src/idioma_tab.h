@@ -2807,6 +2807,7 @@
   { "Não foi possível instalar", "Could not install" },
   { "Não foi possível medir o espaço livre da TV", "Could not measure the TV's free space" },
   { "Não foi possível medir o stream pelo navegador da TV.", "Couldn't measure the stream from the TV browser." },
+  { "Não foi possível pular para esse ponto. Seguindo daqui.", "Couldn't skip to that point. Continuing from here." },
   { "Não foi possível salvar a chave. A chave anterior foi mantida.", "Could not save the key. The previous key was kept." },
   { "Não foi possível salvar o checkpoint", "Could not save the checkpoint" },
   { "Não foi possível salvar o perfil: configuração anterior restaurada", "Could not save the profile: previous settings restored" },

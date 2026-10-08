@@ -2808,6 +2808,7 @@
   T("Não foi possível instalar", "Impossibile installare"),
   T("Não foi possível medir o espaço livre da TV", "Impossibile misurare lo spazio libero della TV"),
   T("Não foi possível medir o stream pelo navegador da TV.", "Impossibile misurare lo stream dal browser della TV."),
+  T("Não foi possível pular para esse ponto. Seguindo daqui.", "Impossibile saltare a quel punto. Si continua da qui."),
   T("Não foi possível salvar a chave. A chave anterior foi mantida.", "Could not save the key. The previous key was kept."),
   T("Não foi possível salvar o checkpoint", "Impossibile salvare il checkpoint"),
   T("Não foi possível salvar o perfil: configuração anterior restaurada", "Could not save the profile: previous settings restored"),

@@ -2808,6 +2808,7 @@
   T("Não foi possível instalar", "Instalacija nije uspjela"),
   T("Não foi possível medir o espaço livre da TV", "Nije moguće izmjeriti slobodan prostor na TV-u"),
   T("Não foi possível medir o stream pelo navegador da TV.", "Nije moguće izmjeriti stream iz TV preglednika."),
+  T("Não foi possível pular para esse ponto. Seguindo daqui.", "Nije moguće preskočiti na tu tačku. Nastavlja se odavde."),
   T("Não foi possível salvar a chave. A chave anterior foi mantida.", "Could not save the key. The previous key was kept."),
   T("Não foi possível salvar o checkpoint", "Nije moguće sačuvati kontrolnu tačku"),
   T("Não foi possível salvar o perfil: configuração anterior restaurada", "Could not save the profile: previous settings restored"),

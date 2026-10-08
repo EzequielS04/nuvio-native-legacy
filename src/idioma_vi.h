@@ -2808,6 +2808,7 @@
   T("Não foi possível instalar", "Không cài đặt được"),
   T("Não foi possível medir o espaço livre da TV", "Không đo được dung lượng trống của TV"),
   T("Não foi possível medir o stream pelo navegador da TV.", "Không đo được luồng từ trình duyệt của TV."),
+  T("Não foi possível pular para esse ponto. Seguindo daqui.", "Không thể chuyển đến điểm đó. Tiếp tục từ đây."),
   T("Não foi possível salvar a chave. A chave anterior foi mantida.", "Could not save the key. The previous key was kept."),
   T("Não foi possível salvar o checkpoint", "Không lưu được điểm kiểm tra"),
   T("Não foi possível salvar o perfil: configuração anterior restaurada", "Could not save the profile: previous settings restored"),

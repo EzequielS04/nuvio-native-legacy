@@ -2808,6 +2808,7 @@
   T("Não foi possível instalar", "Yüklenemedi"),
   T("Não foi possível medir o espaço livre da TV", "TV'deki boş alan ölçülemedi"),
   T("Não foi possível medir o stream pelo navegador da TV.", "Akış TV tarayıcısından ölçülemedi."),
+  T("Não foi possível pular para esse ponto. Seguindo daqui.", "O noktaya atlanamadı. Buradan devam ediliyor."),
   T("Não foi possível salvar a chave. A chave anterior foi mantida.", "Could not save the key. The previous key was kept."),
   T("Não foi possível salvar o checkpoint", "Kontrol noktası kaydedilemedi"),
   T("Não foi possível salvar o perfil: configuração anterior restaurada", "Could not save the profile: previous settings restored"),

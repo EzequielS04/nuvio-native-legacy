@@ -2808,6 +2808,7 @@
   T("Não foi possível instalar", "無法安裝"),
   T("Não foi possível medir o espaço livre da TV", "無法測量電視的可用空間"),
   T("Não foi possível medir o stream pelo navegador da TV.", "無法透過電視瀏覽器測量該串流。"),
+  T("Não foi possível pular para esse ponto. Seguindo daqui.", "無法跳轉到該位置。將從這裡繼續。"),
   T("Não foi possível salvar a chave. A chave anterior foi mantida.", "Could not save the key. The previous key was kept."),
   T("Não foi possível salvar o checkpoint", "無法儲存檢查點"),
   T("Não foi possível salvar o perfil: configuração anterior restaurada", "Could not save the profile: previous settings restored"),

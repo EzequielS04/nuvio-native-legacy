@@ -2808,6 +2808,7 @@
   T("Não foi possível instalar", "インストールできませんでした"),
   T("Não foi possível medir o espaço livre da TV", "テレビの空き容量を測定できませんでした"),
   T("Não foi possível medir o stream pelo navegador da TV.", "テレビのブラウザからストリームを計測できませんでした。"),
+  T("Não foi possível pular para esse ponto. Seguindo daqui.", "その位置に移動できませんでした。ここから再生を続けます。"),
   T("Não foi possível salvar a chave. A chave anterior foi mantida.", "Could not save the key. The previous key was kept."),
   T("Não foi possível salvar o checkpoint", "チェックポイントを保存できませんでした"),
   T("Não foi possível salvar o perfil: configuração anterior restaurada", "Could not save the profile: previous settings restored"),

@@ -2808,6 +2808,7 @@
   T("Não foi possível instalar", "Tidak dapat memasang"),
   T("Não foi possível medir o espaço livre da TV", "Ruang kosong TV tidak dapat diukur"),
   T("Não foi possível medir o stream pelo navegador da TV.", "Tidak dapat mengukur stream dari browser TV."),
+  T("Não foi possível pular para esse ponto. Seguindo daqui.", "Tidak dapat melompat ke titik itu. Melanjutkan dari sini."),
   T("Não foi possível salvar a chave. A chave anterior foi mantida.", "Could not save the key. The previous key was kept."),
   T("Não foi possível salvar o checkpoint", "Tidak dapat menyimpan titik pemeriksaan"),
   T("Não foi possível salvar o perfil: configuração anterior restaurada", "Could not save the profile: previous settings restored"),

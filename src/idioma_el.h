@@ -2808,6 +2808,7 @@
   T("Não foi possível instalar", "Δεν ήταν δυνατή η εγκατάσταση"),
   T("Não foi possível medir o espaço livre da TV", "Δεν ήταν δυνατή η μέτρηση του ελεύθερου χώρου της τηλεόρασης"),
   T("Não foi possível medir o stream pelo navegador da TV.", "Δεν ήταν δυνατή η μέτρηση της ροής από το πρόγραμμα περιήγησης της τηλεόρασης."),
+  T("Não foi possível pular para esse ponto. Seguindo daqui.", "Δεν ήταν δυνατή η μετάβαση σε αυτό το σημείο. Συνεχίζει από εδώ."),
   T("Não foi possível salvar a chave. A chave anterior foi mantida.", "Could not save the key. The previous key was kept."),
   T("Não foi possível salvar o checkpoint", "Δεν αποθηκεύτηκε το σημείο ελέγχου"),
   T("Não foi possível salvar o perfil: configuração anterior restaurada", "Could not save the profile: previous settings restored"),

@@ -2808,6 +2808,7 @@
   T("Não foi possível instalar", "A telepítés nem sikerült"),
   T("Não foi possível medir o espaço livre da TV", "Nem sikerült megmérni a tévé szabad tárhelyét"),
   T("Não foi possível medir o stream pelo navegador da TV.", "A TV böngészőjéből nem sikerült megmérni a streamet."),
+  T("Não foi possível pular para esse ponto. Seguindo daqui.", "Nem sikerült arra a pontra ugrani. Innen folytatjuk."),
   T("Não foi possível salvar a chave. A chave anterior foi mantida.", "Could not save the key. The previous key was kept."),
   T("Não foi possível salvar o checkpoint", "Nem sikerült menteni az ellenőrzőpontot"),
   T("Não foi possível salvar o perfil: configuração anterior restaurada", "Could not save the profile: previous settings restored"),
