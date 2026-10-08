@@ -2506,6 +2506,8 @@
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "早送りや巻き戻しのとき、バーの上に映画のサムネイルを表示します。画像は Seekr（seekr.tv）から取得し、個人キーが必要です。作品を開くたびに、1日の上限から1回分が使われます。"),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "早送りや巻き戻し中、バーの上に映画のサムネイルを表示します。画像は Seekr（seekr.tv）から取得します。"),
   T("Mostra, em todas as categorias, as opções técnicas marcadas como Avançado. Vale só para esta TV.", "すべてのカテゴリで「詳細」と表示された技術的なオプションを表示します。このテレビにのみ適用されます。"),
+  T("Mostrando %d de %d canais (limite de categorias)", "%d/%d チャンネルを表示中（カテゴリ数の上限）"),
+  T("Mostrando %d de %d canais (o que cabe nesta TV)", "%d / %d チャンネルを表示中 (このテレビに収まる分)"),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "MP4 コンテナのみ表示しています（MP4 の Dolby Vision を探すのに便利です）。OK でフィルターを解除します。"),
   T("Mostrando só fontes com áudio em português. OK tira o filtro.", "ポルトガル語音声のソースのみ表示中。OK で解除。"),
   T("Mostrando só fontes que o debrid já tem: tocam na hora. OK tira o filtro.", "debrid にあるソースのみ表示中：すぐ再生できます。OK で解除。"),

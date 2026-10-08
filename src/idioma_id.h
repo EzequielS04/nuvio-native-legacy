@@ -2506,6 +2506,8 @@
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Menampilkan thumbnail film di atas bilah saat Anda maju atau mundur. Gambar berasal dari Seekr (seekr.tv) dan butuh kunci pribadi Anda; setiap judul yang dibuka menghitung satu permintaan dari kuota harian."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Menampilkan gambar mini film di atas bilah saat Anda maju atau mundur. Gambarnya berasal dari Seekr (seekr.tv)."),
   T("Mostra, em todas as categorias, as opções técnicas marcadas como Avançado. Vale só para esta TV.", "Menampilkan opsi teknis bertanda Lanjutan di semua kategori. Hanya berlaku untuk TV ini."),
+  T("Mostrando %d de %d canais (limite de categorias)", "Menampilkan %d dari %d saluran (batas kategori)"),
+  T("Mostrando %d de %d canais (o que cabe nesta TV)", "Menampilkan %d dari %d saluran (yang muat di TV ini)"),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Hanya menampilkan kontainer MP4 (berguna untuk menemukan Dolby Vision dalam MP4). OK menghapus filter."),
   T("Mostrando só fontes com áudio em português. OK tira o filtro.", "Hanya sumber dengan audio Portugis. OK mematikan filter."),
   T("Mostrando só fontes que o debrid já tem: tocam na hora. OK tira o filtro.", "Hanya sumber yang sudah dimiliki debrid: langsung diputar. OK mematikan filter."),

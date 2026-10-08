@@ -2506,6 +2506,8 @@
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Előre- vagy visszatekeréskor a sáv fölött megmutatja a film miniatűrjét. A képek a Seekr-től (seekr.tv) jönnek, és a személyes kulcsodat kérik; minden megnyitott cím egy lekérdezést használ a napi keretedből."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Előre- vagy visszatekeréskor a sáv fölött megmutatja a film bélyegképét. A képek a Seekrtől (seekr.tv) származnak."),
   T("Mostra, em todas as categorias, as opções técnicas marcadas como Avançado. Vale só para esta TV.", "Minden kategóriában megjeleníti a Speciális jelölésű technikai beállításokat. Csak erre a tévére vonatkozik."),
+  T("Mostrando %d de %d canais (limite de categorias)", "%d csatorna látható %d közül (kategóriakorlát)"),
+  T("Mostrando %d de %d canais (o que cabe nesta TV)", "%d / %d csatorna látható (ami elfér ezen a tévén)"),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Csak az MP4-konténerek látszanak (hasznos a Dolby Vision keresésére MP4-ben). Az OK törli a szűrőt."),
   T("Mostrando só fontes com áudio em português. OK tira o filtro.", "Csak portugál hangú források. Az OK kikapcsolja a szűrőt."),
   T("Mostrando só fontes que o debrid já tem: tocam na hora. OK tira o filtro.", "Csak a debridben már meglévő források: azonnal indulnak. Az OK kikapcsolja a szűrőt."),

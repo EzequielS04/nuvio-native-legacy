@@ -2506,6 +2506,8 @@
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Δείχνει μια μικρογραφία της ταινίας πάνω από τη γραμμή όταν προχωράς ή γυρνάς πίσω. Οι εικόνες έρχονται από το Seekr (seekr.tv) και θέλουν το προσωπικό σου κλειδί· κάθε τίτλος που ανοίγεις μετρά ένα αίτημα της ημερήσιας ποσόστωσής σου."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Δείχνει μια μικρογραφία της ταινίας πάνω από τη γραμμή όσο πας μπροστά ή πίσω. Οι εικόνες έρχονται από το Seekr (seekr.tv)."),
   T("Mostra, em todas as categorias, as opções técnicas marcadas como Avançado. Vale só para esta TV.", "Εμφανίζει σε όλες τις κατηγορίες τις τεχνικές επιλογές με την ένδειξη Σύνθετο. Ισχύει μόνο για αυτή την τηλεόραση."),
+  T("Mostrando %d de %d canais (limite de categorias)", "Εμφάνιση %d από %d κανάλια (όριο κατηγοριών)"),
+  T("Mostrando %d de %d canais (o que cabe nesta TV)", "Εμφανίζονται %d από %d κανάλια (όσα χωρούν σε αυτή την TV)"),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Εμφανίζονται μόνο κοντέινερ MP4 (χρήσιμο για να βρεις Dolby Vision σε MP4). Το OK καθαρίζει το φίλτρο."),
   T("Mostrando só fontes com áudio em português. OK tira o filtro.", "Μόνο πηγές με πορτογαλικό ήχο. Το OK αφαιρεί το φίλτρο."),
   T("Mostrando só fontes que o debrid já tem: tocam na hora. OK tira o filtro.", "Μόνο πηγές που έχει ήδη το debrid: ξεκινούν αμέσως. Το OK αφαιρεί το φίλτρο."),

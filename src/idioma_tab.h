@@ -2505,6 +2505,8 @@
   { "Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Shows a movie thumbnail above the bar as you skip forward or back. Images come from Seekr (seekr.tv) and need your personal key; each title you open counts one request against your daily quota." },
   { "Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Shows a movie thumbnail above the bar while you skip forward or back. The images come from Seekr (seekr.tv)." },
   { "Mostra, em todas as categorias, as opções técnicas marcadas como Avançado. Vale só para esta TV.", "Shows the technical options marked Advanced in every category. Applies to this TV only." },
+  { "Mostrando %d de %d canais (limite de categorias)", "Showing %d of %d channels (category limit)" },
+  { "Mostrando %d de %d canais (o que cabe nesta TV)", "Showing %d of %d channels (what fits on this TV)" },
   { "Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Showing MP4 containers only (handy to find Dolby Vision in MP4). OK clears the filter." },
   { "Mostrando só fontes com áudio em português. OK tira o filtro.", "Showing only sources with Portuguese audio. OK removes the filter." },
   { "Mostrando só fontes que o debrid já tem: tocam na hora. OK tira o filtro.", "Showing only sources your debrid already has: they play right away. OK removes the filter." },

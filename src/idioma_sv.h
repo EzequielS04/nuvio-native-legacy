@@ -2506,6 +2506,8 @@
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Visar en miniatyr av filmen ovanför fältet när du spolar framåt eller bakåt. Bilderna kommer från Seekr (seekr.tv) och kräver din personliga nyckel; varje öppnad titel räknas som en förfrågan i din dagskvot."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Visar en miniatyr av filmen ovanför fältet medan du spolar framåt eller bakåt. Bilderna kommer från Seekr (seekr.tv)."),
   T("Mostra, em todas as categorias, as opções técnicas marcadas como Avançado. Vale só para esta TV.", "Visar de tekniska alternativen markerade som Avancerat i alla kategorier. Gäller bara den här TV:n."),
+  T("Mostrando %d de %d canais (limite de categorias)", "Visar %d av %d kanaler (kategorigräns)"),
+  T("Mostrando %d de %d canais (o que cabe nesta TV)", "Visar %d av %d kanaler (det som ryms på den här tv:n)"),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Visar bara MP4-containrar (praktiskt för att hitta Dolby Vision i MP4). OK tar bort filtret."),
   T("Mostrando só fontes com áudio em português. OK tira o filtro.", "Bara källor med portugisiskt ljud. OK tar bort filtret."),
   T("Mostrando só fontes que o debrid já tem: tocam na hora. OK tira o filtro.", "Bara källor som din debrid redan har: startar direkt. OK tar bort filtret."),

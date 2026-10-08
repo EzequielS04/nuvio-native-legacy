@@ -2506,6 +2506,8 @@
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Prasukdami pirmyn ar atgal, virš juostos matote filmo miniatiūrą. Vaizdai gaunami iš Seekr (seekr.tv), jiems reikia jūsų asmeninio rakto; kiekvienas atidarytas pavadinimas sunaudoja vieną dienos kvotos užklausą."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Sukant pirmyn ar atgal virš juostos rodo filmo miniatiūrą. Vaizdai gaunami iš Seekr (seekr.tv)."),
   T("Mostra, em todas as categorias, as opções técnicas marcadas como Avançado. Vale só para esta TV.", "Rodo visose kategorijose technines parinktis, pažymėtas kaip Išplėstinės. Galioja tik šiam televizoriui."),
+  T("Mostrando %d de %d canais (limite de categorias)", "Rodoma %d iš %d kanalų (kategorijų riba)"),
+  T("Mostrando %d de %d canais (o que cabe nesta TV)", "Rodoma %d iš %d kanalų (kiek telpa šiame TV)"),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Rodomi tik MP4 konteineriai (patogu ieškant Dolby Vision MP4). OK išvalo filtrą."),
   T("Mostrando só fontes com áudio em português. OK tira o filtro.", "Tik šaltiniai su portugališku garsu. OK išjungia filtrą."),
   T("Mostrando só fontes que o debrid já tem: tocam na hora. OK tira o filtro.", "Tik šaltiniai, kuriuos debrid jau turi: paleidžiami iškart. OK išjungia filtrą."),

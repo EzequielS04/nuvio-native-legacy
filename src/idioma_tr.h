@@ -2506,6 +2506,8 @@
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "İleri veya geri sararken çubuğun üstünde filmin küçük resmini gösterir. Görüntüler Seekr'den (seekr.tv) gelir ve kişisel anahtarını ister; açılan her yapım günlük kotandan bir sorgu harcar."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "İleri veya geri sararken çubuğun üstünde filmin küçük resmini gösterir. Görseller Seekr'dan (seekr.tv) gelir."),
   T("Mostra, em todas as categorias, as opções técnicas marcadas como Avançado. Vale só para esta TV.", "Tüm kategorilerde Gelişmiş olarak işaretlenmiş teknik seçenekleri gösterir. Yalnızca bu TV için geçerlidir."),
+  T("Mostrando %d de %d canais (limite de categorias)", "%d / %d kanal gösteriliyor (kategori sınırı)"),
+  T("Mostrando %d de %d canais (o que cabe nesta TV)", "%d / %d kanal gösteriliyor (bu TV'ye sığan)"),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Yalnızca MP4 kapsayıcıları gösteriliyor (MP4'te Dolby Vision bulmak için kullanışlı). OK filtreyi kaldırır."),
   T("Mostrando só fontes com áudio em português. OK tira o filtro.", "Yalnızca Portekizce sesli kaynaklar. OK filtreyi kaldırır."),
   T("Mostrando só fontes que o debrid já tem: tocam na hora. OK tira o filtro.", "Yalnızca debrid'de olan kaynaklar: hemen başlar. OK filtreyi kaldırır."),
