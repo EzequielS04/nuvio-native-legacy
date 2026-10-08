@@ -24,6 +24,7 @@ int apoiador_ativo(void) { return 0; }
 static SeekrUso uso = {.usadas=12, .restantes=38, .limite=50, .persistente=1, .reinicioUtc=2000073600};
 static int estadoSeekr = SEEKR_PRONTO;
 void seekr_uso(SeekrUso *u) { *u = uso; }
+void seekr_chave_propria(int p) { uso.chavePropria = p != 0; }   // #312
 int seekr_estado(void) { return estadoSeekr; }
 const char *seekr_estado_rotulo(int e) {
   return e == SEEKR_ARMAZENAMENTO_INDISPONIVEL ? "Não foi possível guardar o uso do Seekr" :
@@ -61,6 +62,14 @@ int main(void) {
   seekrDefinir("new-personal-test-key");
   assert(!strcmp(skTesteTexto(), "OK testa")); // A previous key's result is never reused.
   seekrDefinir("personal-test-key");
+  // #312: chave pessoal nao tem o teto de 50 desta TV (vale o plano no Seekr).
+  assert(uso.chavePropria);
+  assert(!strstr(textoLeitura(AJ_SEEKR_TESTAR), "/50"));
+  assert(!strstr(seekrAjuda(AJ_SEEKR_LIGADO), "de 50 consultas"));
+  assert(strstr(seekrAjuda(AJ_SEEKR_LIGADO), "limites do seu plano"));
+  // Chave do pacote: o teto de 50 por dia UTC desta TV vale.
+  seekrDefinir(""); assert(!strcmp(efetiva, NV_SEEKR_API_KEY) && !uso.chavePropria);
+  assert(!dados_ler("seekr.txt"));
   assert(strstr(textoLeitura(AJ_SEEKR_TESTAR), "12/50"));
   assert(strstr(seekrAjuda(AJ_SEEKR_LIGADO), "12 de 50 consultas hoje (UTC)"));
   assert(strstr(seekrAjuda(AJ_SEEKR_LIGADO), "19/05 21:00 (hora local)"));
@@ -73,8 +82,6 @@ int main(void) {
   assert(!strstr(textoLeitura(AJ_SEEKR_TESTAR), "12/50"));
   assert(strstr(seekrAjuda(AJ_SEEKR_TESTAR), "Uso do Seekr indisponível"));
   assert(!strstr(seekrAjuda(AJ_SEEKR_TESTAR), "personal-test-key"));
-  seekrDefinir(""); assert(!strcmp(efetiva, NV_SEEKR_API_KEY));
-  assert(!dados_ler("seekr.txt"));
   seekrCarregar(); assert(!strcmp(efetiva, NV_SEEKR_API_KEY));
   puts("seekrquota settings: PASS visible controls, personal priority, mask, persistence, validation and removal");
   puts("seekrquota settings: PASS key write/delete failures, UTC usage, local reset/retry, clock and storage states");
