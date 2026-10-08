@@ -52,7 +52,7 @@ PC
 fi
 cd /w/src/libass-0.17.5
 if [ ! -f $P/lib/libass.a ]; then
-  make distclean >/dev/null 2>&1
+  make distclean >/dev/null 2>&1 || true
   CPPFLAGS="-I$P/include" LDFLAGS="-L$P/lib" ./configure -q --prefix=$P --enable-static --disable-shared --disable-fontconfig --disable-require-system-font-provider --disable-enca --disable-libunibreak --disable-asm --enable-harfbuzz && make -j6 >/dev/null && make install >/dev/null || exit 1
 fi
 ls -la $P/lib/*.a
