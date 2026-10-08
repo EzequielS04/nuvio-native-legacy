@@ -1936,6 +1936,32 @@ static void *lerMkv(void *arg) {
     }
     dvAudios = na; dvSondado = 1; }
 
+  // DIAGNOSTICO DO DV (203-dvrpu). "Sem [dv] file:" tinha tres causas possiveis
+  // e o log nao separava: o arquivo nao tem dvcC; o Tracks nao coube; ou o DV
+  // esta so EM BANDA (NAL 62 nos quadros, sem dvcC). Esta linha decide na TV.
+  for (j = 0; j < n; j++) if (fx[j].tipo == 1) {
+    const MkvDiag *d = mkv_diag();
+    char bt[5] = "-";
+    if (fx[j].bamN) { int k; for (k = 0; k < 4; k++) { char c = (char)(fx[j].bamTipo >> (24 - 8 * k)); bt[k] = c >= 32 && c < 127 ? c : '?'; } bt[4] = 0; }
+    printf("[dv] sonda: trecho=%ld tracks=%s(%ld B) hvcC=%s(%ld B, nal62=%d) bam=%d(%s) dvcC=%d entrada=%s rpu_banda=%s quadros=%d rpu_tipo=%d vdr_rpu_profile=%d\n",
+           d->lidos, !d->tracksAchado ? "ausente" : d->tracksInteiro ? "inteiro" : "cortado", d->tracksTam,
+           fx[j].nalTam ? "sim" : "nao", fx[j].cpN, fx[j].hvccNal62, fx[j].bamN, bt, fx[j].dvPerfil != 0,
+           fx[j].entradaInteira ? "inteira" : "parcial",
+           d->rpu == 1 ? "sim" : d->rpu == 0 ? "nao" : d->blocoIni >= 0 ? "indeciso(quadro-cortado)" : "indeciso(sem-quadro)",
+           d->quadros, d->rpuTipo, d->rpuPerfil);
+    // A fonte AFIRMOU DV, o cabecalho nao tem dvcC e o 1o quadro passou do
+    // trecho: UM Range com esse quadro (teto 4 MB), so neste caso raro — a nota
+    // do topo de mkv.c mede o custo de ler mais com o video tocando.
+    if (dvPedido && !fx[j].dvPerfil && fx[j].nalTam && d->rpu == -1 && d->blocoIni >= 0) {
+      long long q = d->blocoFim - d->blocoIni;
+      int r = mkv_rpu_alem(url, fx[j].nalTam, 4L * 1024 * 1024);
+      printf("[dv] sonda: rpu_banda pelo 1o quadro (%lld bytes em %lld): %s rpu_tipo=%d vdr_rpu_profile=%d\n",
+             q, d->blocoIni, r == 1 ? "sim" : r == 0 ? "nao" : "indeciso", d->rpuTipo, d->rpuPerfil);
+    }
+    fflush(stdout);
+    break;
+  }
+
   // SEM MUTEX, e de proposito: este arquivo nao tem um. faixaLeg ja e escrito
   // pelo fio de resposta do luna e lido pelo desenho sem trava nenhuma, e
   // introduzir uma trava so aqui daria falsa seguranca — protegeria a escrita
