@@ -2470,7 +2470,7 @@ void app_evento(const SDL_Event *e) {
   if (recintro_aberto()) { recintro_evento(e); return; }
   if (atualizacao_aberta()) { atualizacao_evento(e); return; }
   if (agendaviso_aberto()) { agendaviso_evento(e); return; }
-  if (recomenda_aberta()) { recomenda_evento(e); return; }
+  if (recomenda_tecla(e)) return;
   // A MODAL DE RECOMENDAR fica acima do detalhe, do menu do cartaz e do
   // painel da tecla AZUL — as tres portas que a abrem. Abaixo do cartao de
   // aviso, que e uma pergunta sobre outra recomendacao.

@@ -3765,6 +3765,26 @@ void recomenda_mostrar_se_houver(void) {
   cartaoAberto = 1;
 }
 
+// app_evento: o cartao pegou esta tecla? 1 = sim, quem chama NAO a entrega a
+// mais ninguem; 0 = nao ha cartao, a tecla segue para a tela. E o contrato que
+// tests/recomenda_tecla.c cobra.
+void recomenda_abrir_cartao(void) {
+  int i, achou = -1;
+  if (!recomenda_ativo() || !mtx || cartaoAberto) return;
+  SDL_LockMutex(mtx);
+  for (i = 0; i < nItens; i++)
+    if (!itens[i].visto) { achou = i; break; }
+  if (achou >= 0) cartaoItem = itens[achou];
+  SDL_UnlockMutex(mtx);
+  if (achou >= 0) { cartaoMostrado = 1; cartaoAberto = 1; }
+}
+
+int recomenda_tecla(const SDL_Event *e) {
+  if (!cartaoAberto) return 0;
+  recomenda_evento(e);
+  return 1;
+}
+
 void recomenda_evento(const SDL_Event *e) {
   SDL_Keycode k;
   if (!cartaoAberto || e->type != SDL_KEYDOWN) return;
