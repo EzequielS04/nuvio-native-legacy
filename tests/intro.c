@@ -15,15 +15,15 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <pthread.h>
 
-// DUBLE DE REDE. intro.c chama rede_baixar no fio de download; este teste so
-// exercita o LEITOR, entao o duble existe para linkar e nada mais. Devolver
-// NULL e o comportamento certo caso alguem chame intro_pedir aqui por engano:
-// zero marcadores, sem rede.
-char *rede_baixar(const char *url, int segundos) {
-  (void)url; (void)segundos; return NULL;
-}
-
+// DUBLE DE REDE. intro.c pede pela rede_pedir; o teste troca o buscador
+// (intro_definir_buscador) por um que serve as respostas GRAVADAS de
+// tests/fixtures. Os dois simbolos abaixo so existem para linkar.
+#include "../src/rede.h"
+int rede_pedir(const RedePedido *p, RedeResposta *r) { (void)p; memset(r, 0, sizeof *r); return 0; }
+void rede_resposta_limpar(RedeResposta *r) { (void)r; }
 
 // Le uma resposta gravada de tests/fixtures/theintrodb (chamadas reais a
 // api.theintrodb.org/v3/media em 07/10/2026, sem chave). Estatico: cabe.
@@ -41,6 +41,40 @@ static double credFinal(const IntroTrecho *v, int n) {
   double s = 0.0; int i;
   for (i = 0; i < n; i++) if (v[i].tipo == INTRO_CREDITOS && v[i].inicio > s) s = v[i].inicio;
   return s;
+}
+
+// O BUSCADOR FALSO: cada URL vira uma fixture ou um status. Guarda a ultima URL.
+static pthread_mutex_t fakeTrava = PTHREAD_MUTEX_INITIALIZER;
+static char ultimaUrl[400];
+static int fakeStatus500;
+static int fakeBuscar(const char *url, char **corpo, int *status) {
+  const char *arq = NULL;
+  pthread_mutex_lock(&fakeTrava);
+  snprintf(ultimaUrl, sizeof ultimaUrl, "%s", url);
+  pthread_mutex_unlock(&fakeTrava);
+  *corpo = NULL;
+  if (fakeStatus500) { *status = 500; return 500; }
+  if (strstr(url, "tmdb_id=37854&season=4&episode=92")) arq = "theintrodb/onepiece_tmdb_s04e92.json";
+  else if (strstr(url, "imdb_id=tt0388629&season=4&episode=1&") || strstr(url, "imdb_id=tt0388629&season=4&episode=1\0"))
+    arq = "theintrodb/onepiece_imdb_s04e01_remap.json";
+  else if (strstr(url, "imdb_id=tt0903747&season=1&episode=1")) arq = "theintrodb/bb_s01e01.json";
+  else if (strstr(url, "imdb_id=tt1375666")) arq = "theintrodb/inception.json";
+  else if (strstr(url, "kitsu.io/api/edge/anime/12/mappings")) arq = "kitsu12_mappings.json";
+  else if (strstr(url, "aniskip.com/v2/skip-times/21/1?")) arq = "aniskip/onepiece_mal21_ep1_len1500.json";
+  if (!arq) { *status = 404; return 404; }
+  { char c[256]; FILE *f; long n;
+    snprintf(c, sizeof c, "tests/fixtures/%s", arq);
+    f = fopen(c, "rb"); assert(f);
+    fseek(f, 0, SEEK_END); n = ftell(f); fseek(f, 0, SEEK_SET);
+    *corpo = malloc((size_t)n + 1); assert(*corpo);
+    n = (long)fread(*corpo, 1, (size_t)n, f); (*corpo)[n] = 0; fclose(f); }
+  *status = 200; return 200;
+}
+// Espera o fio do pedido terminar (ate 3 s): devolve quantos trechos ha.
+static int esperar(int minimo) {
+  IntroTrecho t[8]; int i, n = 0;
+  for (i = 0; i < 300; i++) { n = intro_trechos(t, 8); if (n >= minimo && minimo > 0) break; usleep(10000); }
+  return n;
 }
 
 static const IntroTrecho *achar(const IntroTrecho *v, int n, int tipo) {
@@ -131,7 +165,9 @@ int main(void) {
     assert(intro_janela_ok(INTRO_CREDITOS, 8300, 0, 8520, 1, &m) == 1);       // Shawshank
     assert(intro_janela_ok(INTRO_CREDITOS, 5400, 0, 8400, 1, &m) == 0);       // 50 min de janela
     assert(intro_janela_ok(INTRO_CREDITOS, 3000, 0, 8400, 1, &m) == 0);       // antes de 50%
-    assert(intro_janela_ok(INTRO_CREDITOS, 7300, 7900, 8400, 1, &m) == 1);    // 10 min, depois de 50%
+    // 2.0.3: 18 min antes do fim ja nao e a parte final do filme (janela 12%, max 15 min)
+    assert(intro_janela_ok(INTRO_CREDITOS, 7300, 7900, 8400, 1, &m) == 0);
+    assert(intro_janela_ok(INTRO_CREDITOS, 7600, 8200, 8400, 1, &m) == 1);    // 13 min antes do fim
     assert(intro_janela_ok(INTRO_CREDITOS, 3503, 0, 3600, 0, &m) == 1);       // serie
     assert(intro_janela_ok(INTRO_ABERTURA, 60, 400, 3600, 0, &m) == 0);       // > 3 min
     assert(intro_janela_ok(INTRO_ABERTURA, 272, 366, 3600, 0, &m) == 1);
@@ -251,6 +287,112 @@ int main(void) {
     puts("ok  creditos recusados nao chegam ao cartao");
   }
 #endif
+
+  // --- 2.0.3: PEDIDOS (como o plugin oficial), FILME, PREVIA, ANISKIP --------
+  { char url[400];
+    intro_montar_url(url, sizeof url, "tt0388629", 37854, 4, 92, 1385.4);
+    assert(!strcmp(url, "https://api.theintrodb.org/v3/media?tmdb_id=37854&season=4&episode=92&duration_ms=1385400"));
+    intro_montar_url(url, sizeof url, "tt1375666", 0, 0, 0, 0.0);
+    assert(!strcmp(url, "https://api.theintrodb.org/v3/media?imdb_id=tt1375666"));
+    intro_montar_url_aniskip(url, sizeof url, 21, 1, 1500.0);
+    assert(strstr(url, "skip-times/21/1?types[]=op&types[]=ed&types[]=recap&episodeLength=1500"));
+    puts("ok  URLs: tmdb_id + par do TMDB + duration_ms; imdb sozinho no filme; AniSkip");
+  }
+  intro_definir_buscador(fakeBuscar);
+  { IntroTrecho t[8]; int nt;
+    // One Piece pelo TMDB (o par confirmado pelo TMDB, T4E92): marcadores proprios.
+    intro_pedir_ids("tt0388629", 37854, 4, 92, 0, 0);
+    nt = esperar(2); nt = intro_trechos(t, 8);
+    assert(nt == 2 && mesmoSeg(credFinal(t, nt), 1315.0));
+    // O mesmo pelo imdb com a numeracao que a API remapeia: nada.
+    intro_pedir_ids("tt0388629", 0, 4, 1, 0, 0);
+    usleep(200000);
+    assert(intro_trechos(t, 8) == 0);
+    puts("ok  One Piece por tmdb_id tem marcadores; pelo imdb remapeado, nenhum");
+    // 5xx NAO vira "nao conhece": o pedido seguinte acha os dados.
+    fakeStatus500 = 1;
+    intro_pedir_ids("tt0903747", 0, 1, 1, 0, 0);
+    usleep(200000);
+    assert(intro_trechos(t, 8) == 0);
+    fakeStatus500 = 0;
+    intro_pedir_ids("tt0903747", 0, 1, 1, 0, 0);
+    assert(esperar(2) == 2);
+    puts("ok  resposta 500 nao e guardada como vazia");
+    // A DURACAO CHEGA: pede de novo com duration_ms (uma vez por mudanca).
+    intro_definir_duracao(3481.0, 0);
+    usleep(200000);
+    pthread_mutex_lock(&fakeTrava);
+    assert(strstr(ultimaUrl, "duration_ms=3481000"));
+    pthread_mutex_unlock(&fakeTrava);
+    assert(esperar(2) == 2);
+    puts("ok  duracao real vai como duration_ms num segundo pedido");
+    // FILME (Inception): abertura 0-38 s vira botao no comeco do filme.
+    intro_pedir_ids("tt1375666", 0, 0, 0, 0, 0);
+    esperar(1);
+    intro_definir_duracao(8880.0, 1);
+    usleep(200000);
+    { double fim; int tipo;
+      assert(intro_botao(10.0, 5000.0, 0, 0, &fim, &tipo) && tipo == INTRO_ABERTURA && mesmoSeg(fim, 38.0)); }
+    puts("ok  filme: abertura do TheIntroDB vira o botao de pular");
+    // ANIME: kitsu:12 -> MAL 21 (mappings do Kitsu) -> AniSkip ep 1.
+    intro_pedir_ids("kitsu:12:1", 0, 1, 1, 0, 0);
+    nt = esperar(2); nt = intro_trechos(t, 8);
+    assert(nt == 2 && mesmoSeg(credFinal(t, nt), 1387.996));
+    puts("ok  anime kitsu:12 -> MAL 21 -> AniSkip: abertura e ED");
+    intro_definir_buscador(NULL);
+    intro_desligar();
+  }
+  { const char *m;
+    // Janela de FILME: 12%, 5-15 min. Creditos de 14 min num filme de 3 h valem.
+    assert(mesmoSeg(intro_creditos_janela_filme(7200.0), 864.0));
+    assert(mesmoSeg(intro_creditos_janela_filme(10800.0), 900.0));
+    assert(mesmoSeg(intro_creditos_janela_filme(1800.0), 300.0));
+    assert( intro_janela_ok(INTRO_CREDITOS, 10000.0, 0, 10800.0, 1, &m));
+    assert(!intro_janela_ok(INTRO_CREDITOS, 6000.0, 0, 7200.0, 1, &m));    // 20 min antes do fim
+    assert(!intro_janela_ok(INTRO_ABERTURA, 2000.0, 2050.0, 8880.0, 1, &m)); // abertura aos 33 min
+    assert( intro_janela_ok(INTRO_ABERTURA, 0.0, 53.0, 10140.0, 1, &m));   // Interstellar
+    assert(mesmoSeg(intro_fim_estimado_filme(7200.0), 180.0));
+    assert(mesmoSeg(intro_fim_estimado_filme(3000.0), 90.0));
+    assert(intro_fim_estimado_filme(500.0) == 0.0);
+    n = intro_extrair(fixture("interstellar.json"), v, 8);
+    assert(n == 1 && v[0].tipo == INTRO_ABERTURA && mesmoSeg(v[0].fim, 53.0));
+    puts("ok  filme: janela de creditos 12% (5-15 min), abertura so no comeco, 3 min/90 s fixos");
+  }
+  // PREVIA: emendada nos creditos, o "Pular creditos" pula as duas; sem
+  // creditos, ela marca o fim para o cartao.
+#ifdef NV_SHOT_HOOKS
+  { double fim; int tipo;
+    n = intro_extrair(fixture("onepiece_s01e01.json"), v, 8);
+    intro_shot_definir(v, n);
+    intro_definir_duracao(1500.0, 0);
+    assert(intro_botao(1400.0, 9000.0, 0, 0, &fim, &tipo) && tipo == INTRO_CREDITOS && mesmoSeg(fim, 1500.0));
+    assert(!intro_botao(1470.0, 9020.0, 0, 0, &fim, &tipo) || tipo != INTRO_PREVIA);
+    n = intro_extrair(fixture("aot_s01e01.json"), v, 8);
+    intro_shot_definir(v, n);
+    intro_definir_duracao(1440.0, 0);
+    assert(mesmoSeg(intro_creditos_seg(), 1432.0));
+    // trecho com inicio e fim nulos e descartado (como o plugin oficial)
+    assert(intro_extrair("{\"intro\":[{\"start_ms\":null,\"end_ms\":null}]}", v, 8) == 0);
+    puts("ok  previa: emendada pula junto com os creditos; sozinha marca o fim");
+  }
+#endif
+  // ANISKIP: leitura e a regra dos 10% (outro corte).
+  n = intro_extrair_aniskip(fixture("../aniskip/onepiece_mal21_ep1_len0.json"), 1500.0, v, 8);
+  assert(n == 3);
+  { const IntroTrecho *a = achar(v, n, INTRO_ABERTURA), *c = achar(v, n, INTRO_CREDITOS);
+    assert(a && mesmoSeg(a->inicio, 28.783) && mesmoSeg(a->fim, 118.783));
+    assert(c && mesmoSeg(c->inicio, 1387.996) && c->fim == 0.0); }   // ED ate o fim
+  // TheIntroDB e AniSkip concordam no ED do One Piece T1E1: 1389 s x 1388 s.
+  assert(credFinal(v, n) > 1385.0 && credFinal(v, n) < 1391.0);
+  // arquivo de 1300 s: todo lancamento conhecido (1444-1500 s) difere > 10%
+  assert(intro_extrair_aniskip(fixture("../aniskip/onepiece_mal21_ep1_len0.json"), 1300.0, v, 8) == 0);
+  // 1440 s: o resumo (lancamento de 1444 s) e a abertura/ED (1500 s) cabem nos 10%
+  assert(intro_extrair_aniskip(fixture("../aniskip/onepiece_mal21_ep1_len0.json"), 1440.0, v, 8) == 3);
+  n = intro_extrair_aniskip(fixture("../aniskip/aot_mal16498_ep1_len1440.json"), 1440.0, v, 8);
+  assert(n == 2 && mesmoSeg(credFinal(v, n), 1342.795));
+  assert(intro_kitsu_mal(fixture("../kitsu12_mappings.json")) == 21);
+  assert(intro_extrair_aniskip("{\"found\":false,\"results\":[],\"statusCode\":404}", 0, v, 8) == 0);
+  puts("ok  AniSkip: op/ed/recap, ED ate o fim, 10% de duracao, mapeamento kitsu -> MAL");
   puts("intro: tudo ok");
   return 0;
 }

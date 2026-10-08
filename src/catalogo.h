@@ -170,6 +170,12 @@ typedef struct {
   // proprio por episodio, e montar "<titulo>:<T>:<E>" na mao so acerta no IMDb.
   // Vazio = o meta nao trouxe; ver cat_id_stream.
   char vid[64];
+  // O MESMO EPISODIO NO TMDB (2.0.3): id da serie e o par temporada/episodio
+  // que casou em /tv/<id>/season/<n> (desc_tmdb_notas_temporada_ex). 0 = o
+  // TMDB nao confirmou. Com ele o TheIntroDB e consultado por tmdb_id, sem o
+  // remapeamento IMDb->TMDB que a API faz (intro.h). Nao vai para o disco.
+  long tmdbSerie;
+  int  tmdbT, tmdbE;
 } CatEp;
 
 // Le <dir>/catalogo.txt. Devolve quantos itens carregou (0 = nenhum, e quem

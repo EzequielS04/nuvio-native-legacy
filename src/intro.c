@@ -14,13 +14,17 @@ static int botaoIdx=-1;static double botaoDesde;
 static int botaoVis;static double botaoFim;static int botaoTipo;
 
 
-// AS TRES CHAVES QUE A API DEVOLVE, e o tipo de cada uma. "preview" existe no
-// servico e fica de fora de proposito: e o trecho do PROXIMO episodio, que este
-// app nao pula nem anuncia.
+// AS QUATRO CHAVES QUE A API DEVOLVE, e o tipo de cada uma (as mesmas do
+// plugin oficial do TheIntroDB para o Stremio: intro, recap, credits, preview).
+// "preview" e a previa do PROXIMO episodio depois dos creditos: nao ganha botao
+// proprio (seria mais uma frase em 30 idiomas numa 2.0.3 so de consertos);
+// emendada nos creditos, o "Pular creditos" pula as duas, e sem creditos ela
+// marca o fim do episodio para o cartao do proximo (intro_creditos_seg).
 static const struct { const char *chave; int tipo; } CHAVES[] = {
   { "intro",   INTRO_ABERTURA },
   { "recap",   INTRO_RESUMO   },
   { "credits", INTRO_CREDITOS },
+  { "preview", INTRO_PREVIA   },
 };
 
 int intro_extrair(const char *j,IntroTrecho *out,int max){
@@ -39,6 +43,9 @@ int intro_extrair(const char *j,IntroTrecho *out,int max){
       // `start_ms: null` quer dizer ZERO (o trecho comeca junto com a midia) e
       // `end_ms: null` quer dizer ATE O FIM. js_num devolve o padrao nos dois
       // casos, entao -1 aqui e "veio nulo", nao "veio errado".
+      // Inicio E fim nulos (ou zero): trecho sem informacao. O plugin oficial
+      // descarta (`start_ms > 0 || end_ms > 0`); aqui viraria "a midia inteira".
+      if(a<=0&&b<=0)continue;
       if(a<0)a=0;
       if(b<0)b=-1000.0;             // marcador de "sem fim", tratado abaixo
       if(b>=0&&b<=a)continue;       // trecho invertido ou vazio: descarta
@@ -51,32 +58,152 @@ int intro_extrair(const char *j,IntroTrecho *out,int max){
   return n;
 }
 
-typedef struct{char id[24];int t,e;double durAnt,durProx;unsigned g;}Pedido;
-
-static void montarUrl(char *url,size_t n,const char *id,int t,int e){
-  if(t>0&&e>0)
-    snprintf(url,n,"https://api.theintrodb.org/v3/media?imdb_id=%s&season=%d&episode=%d",id,t,e);
-  else
-    snprintf(url,n,"https://api.theintrodb.org/v3/media?imdb_id=%s",id);
+static int buscarInterno(const char *url,char **corpo,int *status);
+// --- ANISKIP (anime, 2.0.3) ----------------------------------------------
+//
+// api.aniskip.com/v2/skip-times/<malId>/<episodio>?types[]=op&types[]=ed&
+// types[]=recap&episodeLength=<s>, sem chave. Indexado pelo MyAnimeList: o id
+// do MAL vem do proprio item ("mal:21") ou do Kitsu ("kitsu:12" -> mappings do
+// Kitsu, um GET sem chave, guardado). Numero do episodio = o do item, so na
+// temporada 1 (addon de anime manda episodio sem temporada; temporada > 1 nao
+// e numeracao do MAL e nao se arrisca). Anime vindo do Cinemeta (tt...) fica
+// com o TheIntroDB: mapear IMDb/TVDB -> MAL e trabalho da 2.0.4.
+//
+// CADA RESULTADO TRAZ `episodeLength`, a duracao do lancamento em que foi
+// marcado. Como o AIOMetadata: fica o mais perto da nossa duracao, e se ele
+// difere mais que INTRO_ANISKIP_TOLERA (10%) e outro corte e nao vale.
+int intro_extrair_aniskip(const char *j,double dur,IntroTrecho *out,int max){
+  static const struct{const char *nome;int tipo;}T[]={
+    {"\"op\"",INTRO_ABERTURA},{"\"ed\"",INTRO_CREDITOS},{"\"recap\"",INTRO_RESUMO}};
+  const char *p;int n=0;size_t k;
+  double melhorDif[3]={-1,-1,-1};int melhorIdx[3]={-1,-1,-1};
+  IntroTrecho cand[3];
+  if(!j||!out||max<1)return 0;
+  p=js_array(j,NULL,"results");
+  for(;p;p=js_prox(js_fim(p))){
+    const char *f=js_fim(p),*tp;
+    double a=js_num(p,f,"startTime",-1),b=js_num(p,f,"endTime",-1),len=js_num(p,f,"episodeLength",0);
+    double dif;
+    tp=strstr(p,"\"skipType\"");
+    if(!tp||tp>f||b<=a||a<0)continue;
+    for(k=0;k<3;k++){
+      const char *v=strstr(tp,T[k].nome);
+      if(!v||v>f||v-tp>16)continue;
+      // DURACAO: sem a nossa ou sem a do lancamento nao ha como comparar.
+      dif=(dur>1.0&&len>1.0)?(len>dur?len-dur:dur-len)/dur:0.0;
+      if(dur>1.0&&len>1.0&&dif>INTRO_ANISKIP_TOLERA)break;
+      if(melhorIdx[k]<0||dif<melhorDif[k]){
+        melhorIdx[k]=1;melhorDif[k]=dif;
+        cand[k].inicio=a;
+        // fim no fim da midia (ED ate o ultimo segundo): "ate o fim".
+        cand[k].fim=(len>1.0&&b>=len-0.5)?0.0:b;
+        cand[k].tipo=T[k].tipo;
+      }
+      break;
+    }
+  }
+  for(k=0;k<3&&n<max;k++)if(melhorIdx[k]>=0)out[n++]=cand[k];
+  return n;
 }
 
-// UM EPISODIO NO SERVIDOR, com o cache de "nao conheco": 404 e dado que falta
-// (medido: a API esta no ar, so nao tem todo episodio), e repetir o pedido a
-// cada abertura so gasta rede. Devolve o JSON (free) ou NULL.
-static char *pedirEp(const char *id,int t,int e){
-  char url[256],*j;long agora=(long)time(NULL);
-  if(t>0&&e>0&&cred_404_visto(id,t,e,agora))return NULL;
-  montarUrl(url,sizeof url,id,t,e);
-  j=rede_baixar(url,12);
-  if(!j&&t>0&&e>0)cred_404_marcar(id,t,e,agora);
-  // OUTRO EPISODIO NA RESPOSTA (intro_resposta_confere): descarta como 404.
-  if(j&&!intro_resposta_confere(j,t,e)){
-    printf("[intro] %s S%02dE%02d: a API devolveu outro episodio, marcador descartado\n",id,t,e);
-    fflush(stdout);
-    free(j);j=NULL;
-    cred_404_marcar(id,t,e,agora);
+void intro_montar_url_aniskip(char *url,size_t n,long mal,int ep,double dur){
+  snprintf(url,n,"https://api.aniskip.com/v2/skip-times/%ld/%d?types[]=op&types[]=ed&types[]=recap&episodeLength=%.0f",
+           mal,ep,dur>1.0?dur:0.0);
+}
+
+long intro_kitsu_mal(const char *j){
+  const char *p=j?js_array(j,NULL,"data"):NULL;
+  for(;p;p=js_prox(js_fim(p))){
+    const char *f=js_fim(p);char site[48]="",ext[24]="";
+    js_texto(p,f,"externalSite",site,sizeof site);
+    js_texto(p,f,"externalId",ext,sizeof ext);
+    if(!strcmp(site,"myanimelist/anime")&&ext[0])return atol(ext);
   }
-  return j;
+  return 0;
+}
+
+static struct{long kitsu,mal;}kmCache[16];static int kmProx;
+static long malDe(const char *id){
+  long k,m=0;int i,st=0;char url[200],*j=NULL;
+  if(!strncmp(id,"mal:",4))return atol(id+4);
+  if(strncmp(id,"kitsu:",6))return 0;
+  k=atol(id+6);if(k<=0)return 0;
+  pthread_mutex_lock(&trava);
+  for(i=0;i<16;i++)if(kmCache[i].kitsu==k){m=kmCache[i].mal;break;}
+  pthread_mutex_unlock(&trava);
+  if(i<16)return m;
+  snprintf(url,sizeof url,"https://kitsu.io/api/edge/anime/%ld/mappings?filter[externalSite]=myanimelist/anime",k);
+  buscarInterno(url,&j,&st);
+  if(st>=200&&st<=299&&j)m=intro_kitsu_mal(j);
+  free(j);
+  if(st==200||st==404){       // so guarda resposta de verdade (sem MAL = 0)
+    pthread_mutex_lock(&trava);
+    kmCache[kmProx].kitsu=k;kmCache[kmProx].mal=m;kmProx=(kmProx+1)%16;
+    pthread_mutex_unlock(&trava);
+  }
+  return m;
+}
+
+// O PEDIDO, no molde do plugin oficial (tidb.plugin.js, fetchData):
+//   - tmdb_id quando o app sabe o id do TMDB E o par temporada/episodio do
+//     TMDB deste episodio (o TMDB confirmou o par, catalogo.h CatEp.tmdbE): sem
+//     remapeamento nenhum. So sem isso vai imdb_id + numeracao do Cinemeta, e
+//     ai vale a regra de descartar a resposta que ecoa outro episodio;
+//   - duration_ms = a duracao REAL do video quando o player ja sabe, e um
+//     pedido de novo quando ela chega ou muda (intro_definir_duracao);
+//   - 200 = trechos; 204 (sem dados) e 404 (desconhecido) = zero trechos,
+//     guardados como "nao conhece"; qualquer outra resposta (5xx, rede) NAO e
+//     guardada como vazia e tenta de novo mais tarde.
+typedef struct{char id[24];long tmdb;int t,e;double durAnt,durProx,dur;unsigned g;}Pedido;
+
+void intro_montar_url(char *url,size_t n,const char *imdb,long tmdb,int t,int e,double durSeg){
+  size_t k;
+  if(tmdb>0)k=(size_t)snprintf(url,n,"https://api.theintrodb.org/v3/media?tmdb_id=%ld",tmdb);
+  else k=(size_t)snprintf(url,n,"https://api.theintrodb.org/v3/media?imdb_id=%s",imdb?imdb:"");
+  if(k<n&&t>0&&e>0)k+=(size_t)snprintf(url+k,n-k,"&season=%d&episode=%d",t,e);
+  if(k<n&&durSeg>1.0)snprintf(url+k,n-k,"&duration_ms=%.0f",durSeg*1000.0);
+}
+
+static int buscarPadrao(const char *url,char **corpo,int *status){
+  RedePedido q;RedeResposta r;int ok;
+  memset(&q,0,sizeof q);memset(&r,0,sizeof r);
+  q.url=url;q.seguir=1;q.prazo_ms=12000;
+  ok=rede_pedir(&q,&r);
+  *status=ok?r.status:0;*corpo=NULL;
+  if(ok&&r.status>=200&&r.status<=299&&r.corpo){*corpo=r.corpo;r.corpo=NULL;}
+  rede_resposta_limpar(&r);
+  return *status;
+}
+static int (*buscar)(const char *,char **,int *)=buscarPadrao;
+void intro_definir_buscador(int (*f)(const char *,char **,int *)){buscar=f?f:buscarPadrao;}
+static int buscarInterno(const char *url,char **corpo,int *status){return buscar(url,corpo,status);}
+
+enum{R_OK,R_VAZIO,R_FALHA};
+// Chave do cache de "nao conhece": o id que foi perguntado.
+static void chave404(char *k,size_t n,const Pedido *p){
+  if(p->tmdb>0)snprintf(k,n,"tmdb:%ld",p->tmdb);else snprintf(k,n,"%s",p->id);
+}
+static int pedirEp(const Pedido *p,int t,int e,double dur,char **json){
+  char url[320],k[32],*j=NULL;int st=0;long agora=(long)time(NULL);
+  *json=NULL;chave404(k,sizeof k,p);
+  if(t>0&&e>0&&cred_404_visto(k,t,e,agora))return R_VAZIO;
+  intro_montar_url(url,sizeof url,p->id,p->tmdb,t,e,dur);
+  buscar(url,&j,&st);
+  if(st==204||st==404){free(j);if(t>0&&e>0)cred_404_marcar(k,t,e,agora);return R_VAZIO;}
+  if(st<200||st>299||!j){
+    free(j);
+    printf("[intro] %s S%02dE%02d: resposta %d, tenta de novo depois\n",k,t,e,st);fflush(stdout);
+    return R_FALHA;
+  }
+  // OUTRO EPISODIO NA RESPOSTA (intro_resposta_confere): descarta como 404.
+  if(!intro_resposta_confere(j,t,e)){
+    printf("[intro] %s S%02dE%02d: a API devolveu outro episodio, marcador descartado\n",k,t,e);
+    fflush(stdout);
+    free(j);
+    cred_404_marcar(k,t,e,agora);
+    return R_VAZIO;
+  }
+  *json=j;return R_OK;
 }
 
 static int geracaoVale(unsigned g){int v;pthread_mutex_lock(&trava);v=(g==geracao);pthread_mutex_unlock(&trava);return v;}
@@ -94,7 +221,7 @@ static void tentarVizinhos(const Pedido *p){
   for(k=0;k<nc;k++){
     char*j;IntroTrecho v[8];int n,i;double melhor=0.0;
     if(!geracaoVale(p->g))return;
-    j=pedirEp(p->id,p->t,cand[k]);
+    pedirEp(p,p->t,cand[k],0.0,&j);
     n=j?intro_extrair(j,v,8):0;free(j);
     for(i=0;i<n;i++)if(v[i].tipo==INTRO_CREDITOS&&v[i].inicio>melhor)melhor=v[i].inicio;
     if(melhor>1.0){
@@ -106,43 +233,116 @@ static void tentarVizinhos(const Pedido *p){
   }
 }
 
+// O ULTIMO PEDIDO, para pedir de novo com a duracao e para tentar de novo
+// depois de uma falha. Tudo sob `trava`.
+static Pedido ultimo;static int temUltimo;
+static double enviadoDur;static int refeitos;
+static int falhou,tentativas;static long falhouEm;
+#define INTRO_REFAZ_DUR_S   30.0   // duracao mudou mais que isto: pede de novo
+#define INTRO_REFAZ_MAX     2      // no maximo dois pedidos a mais por duracao
+#define INTRO_RETENTA_S     30L    // falha (5xx/rede): nova tentativa depois
+#define INTRO_RETENTA_MAX   3
+
+// ANIME PRIMEIRO NO ANISKIP. Sem MAL, sem resposta ou sem trecho: segue para o
+// TheIntroDB quando ha imdb/tmdb para perguntar (item kitsu/mal costuma nao ter).
+static int pedirAniskip(const Pedido *p,IntroTrecho *v,int max,int *falha){
+  long mal;char url[256],*j=NULL;int st=0,n=0;
+  *falha=0;
+  if(strncmp(p->id,"kitsu:",6)&&strncmp(p->id,"mal:",4))return 0;
+  if(p->t>1||p->e<1)return 0;          // temporada > 1 nao e numeracao do MAL
+  mal=malDe(p->id);
+  if(mal<=0){printf("[intro] %s: sem id do MAL, AniSkip fora\n",p->id);fflush(stdout);return 0;}
+  intro_montar_url_aniskip(url,sizeof url,mal,p->e,p->dur);
+  buscar(url,&j,&st);
+  if(st>=200&&st<=299&&j)n=intro_extrair_aniskip(j,p->dur,v,max);
+  else if(st!=404&&st!=204)*falha=1;
+  free(j);
+  printf("[intro] aniskip mal %ld ep %d: http %d, %d trechos\n",mal,p->e,st,n);fflush(stdout);
+  return n;
+}
+
 static void *baixar(void *u){
-  Pedido*p=u;char*j=pedirEp(p->id,p->t,p->e);IntroTrecho v[8];
-  int n=j?intro_extrair(j,v,8):0,temCred=0;
+  Pedido*p=u;char*j=NULL;IntroTrecho v[8];
+  int falhaAni=0,n=pedirAniskip(p,v,8,&falhaAni),r=R_VAZIO,temCred=0,vale,deAni=n>0;
+  int temIdOutro=p->tmdb>0||!strncmp(p->id,"tt",2);
+  if(n<=0&&temIdOutro){r=pedirEp(p,p->t,p->e,p->dur,&j);n=j?intro_extrair(j,v,8):0;}
+  else if(n<=0&&falhaAni)r=R_FALHA;
+  else if(n>0)r=R_OK;
+  if(n<0)n=0;
   free(j);
   for(int i=0;i<n;i++)if(v[i].tipo==INTRO_CREDITOS)temCred=1;
   pthread_mutex_lock(&trava);
-  if(p->g==geracao){memcpy(trechos,v,(size_t)n*sizeof *v);nTrechos=n;}
+  vale=p->g==geracao;
+  if(vale){
+    if(r==R_FALHA){falhou=1;falhouEm=(long)time(NULL);}
+    else{falhou=0;memcpy(trechos,v,(size_t)n*sizeof *v);nTrechos=n;}
+  }
   pthread_mutex_unlock(&trava);
-  printf("[intro] %d marcadores\n",n);fflush(stdout);
-  if(!temCred)tentarVizinhos(p);
+  if(vale&&r!=R_FALHA){
+    printf("[intro] %d marcadores (%s, dur %.0fs)\n",n,deAni?"aniskip":p->tmdb>0?"tmdb":"imdb",p->dur);fflush(stdout);
+    if(!temCred&&temIdOutro)tentarVizinhos(p);
+  }
   free(p);return NULL;
 }
 
-void intro_pedir_vizinhos(const char *imdb,int t,int e,double durAnt,double durProx){
-  Pedido*p;pthread_t fio;int nId;
+// Dispara o pedido de `base` com a duracao `dur`. Chamar SEM a trava.
+static void disparar(const Pedido *base,double dur,int novo){
+  Pedido*p;pthread_t fio;
+  p=malloc(sizeof*p);if(!p)return;
+  *p=*base;p->dur=dur;
+  pthread_mutex_lock(&trava);
+  if(novo){nTrechos=0;refeitos=0;tentativas=0;}
+  falhou=0;
+  p->g=++geracao;ultimo=*p;temUltimo=1;enviadoDur=dur;
+  pthread_mutex_unlock(&trava);
+  if(pthread_create(&fio,NULL,baixar,p)==0)pthread_detach(fio);else free(p);
+}
+
+void intro_pedir_ids(const char *imdb,long tmdb,int t,int e,double durAnt,double durProx){
+  Pedido b;int nId;
   // FILME PASSA. A guarda antiga exigia temporada e episodio, porque o servico
   // antigo exigia — era ela que deixava todo filme sem marcador.
-  if(!imdb||strncmp(imdb,"tt",2)){intro_desligar();return;}
-  p=calloc(1,sizeof*p);if(!p)return;
-  pthread_mutex_lock(&trava);nTrechos=0;p->g=++geracao;pthread_mutex_unlock(&trava);
+  int anime=imdb&&(!strncmp(imdb,"kitsu:",6)||!strncmp(imdb,"mal:",4));
+  if(tmdb<=0&&!anime&&(!imdb||strncmp(imdb,"tt",2))){intro_desligar();return;}
+  memset(&b,0,sizeof b);
   // O id do catalogo pode vir como "tt123:1:2" (serie com episodio embutido);
-  // a API quer so a parte do imdb.
-  nId=(int)strcspn(imdb,":");if(nId>(int)sizeof p->id-1)nId=(int)sizeof p->id-1;
-  memcpy(p->id,imdb,(size_t)nId);
-  p->t=t>0&&e>0?t:0;p->e=t>0&&e>0?e:0;
-  p->durAnt=durAnt;p->durProx=durProx;
-  if(pthread_create(&fio,NULL,baixar,p)==0)pthread_detach(fio);else free(p);
+  // a API quer so a parte do imdb. "kitsu:12:5" fica "kitsu:12".
+  if(imdb){const char *c0=anime?strchr(imdb,':')+1:imdb;
+    nId=(int)(c0-imdb)+(int)strcspn(c0,":");if(nId>(int)sizeof b.id-1)nId=(int)sizeof b.id-1;
+    memcpy(b.id,imdb,(size_t)nId);}
+  b.tmdb=tmdb>0?tmdb:0;
+  b.t=t>0&&e>0?t:0;b.e=t>0&&e>0?e:0;
+  b.durAnt=durAnt;b.durProx=durProx;
+  disparar(&b,0.0,1);
+}
+
+void intro_pedir_vizinhos(const char *imdb,int t,int e,double durAnt,double durProx){
+  intro_pedir_ids(imdb,0,t,e,durAnt,durProx);
 }
 
 void intro_pedir(const char *imdb,int t,int e){intro_pedir_vizinhos(imdb,t,e,0.0,0.0);}
 
-void intro_desligar(void){pthread_mutex_lock(&trava);geracao++;nTrechos=0;botaoVis=0;botaoIdx=-1;pthread_mutex_unlock(&trava);}
+void intro_desligar(void){pthread_mutex_lock(&trava);geracao++;nTrechos=0;botaoVis=0;botaoIdx=-1;temUltimo=0;falhou=0;pthread_mutex_unlock(&trava);}
 
 // DURACAO DA MIDIA E O TIPO (filme/serie), para recusar janelas absurdas.
 static double durMidia;static int ehFilme;
+// E O GATILHO DO PEDIDO DE NOVO (2.0.3, como o plugin oficial): a duracao real
+// chegou ou mudou mais que INTRO_REFAZ_DUR_S desde o ultimo pedido -> pede com
+// `duration_ms`; uma falha (5xx/rede) tenta de novo a cada INTRO_RETENTA_S.
 void intro_definir_duracao(double dur,int filme){
-  pthread_mutex_lock(&trava);durMidia=dur>1.0?dur:0.0;ehFilme=filme;pthread_mutex_unlock(&trava);
+  Pedido b;int refaz=0;double d=0.0;long agora=(long)time(NULL);
+  pthread_mutex_lock(&trava);durMidia=dur>1.0?dur:0.0;ehFilme=filme;
+  if(temUltimo){
+    if(durMidia>0.0&&refeitos<INTRO_REFAZ_MAX&&
+       (enviadoDur<=0.0||durMidia-enviadoDur>INTRO_REFAZ_DUR_S||enviadoDur-durMidia>INTRO_REFAZ_DUR_S)){
+      refeitos++;refaz=1;d=durMidia;
+    }else if(falhou&&tentativas<INTRO_RETENTA_MAX&&agora-falhouEm>=INTRO_RETENTA_S){
+      tentativas++;refaz=1;d=enviadoDur;
+    }
+    b=ultimo;
+  }
+  pthread_mutex_unlock(&trava);
+  if(refaz)disparar(&b,d,0);
 }
 
 // JANELA ACEITA? Um marcador de creditos com inicio errado (ou `end_ms` nulo =
@@ -150,6 +350,8 @@ void intro_definir_duracao(double dur,int filme){
 // filme. Limites: creditos <= 15 min, abertura/resumo <= 3 min, e creditos de
 // FILME nao comecam antes de 50% da duracao. Sem duracao conhecida (dur<=0) so
 // vale o que da para medir (fim explicito); o auto-hide do botao cobre o resto.
+static int fimDeObra(int tipo){return tipo==INTRO_CREDITOS||tipo==INTRO_PREVIA;}
+
 int intro_janela_ok(int tipo,double ini,double fim,double dur,int filme,const char **motivo){
   double fimEf=fim>0.0?fim:dur,jan=fimEf>0.0?fimEf-ini:0.0;
   double max=tipo==INTRO_CREDITOS?900.0:180.0;
@@ -159,13 +361,30 @@ int intro_janela_ok(int tipo,double ini,double fim,double dur,int filme,const ch
   // FIM EXPLICITO DEPOIS DO FIM DA MIDIA: o marcador foi feito sobre um corte
   // mais longo (outro lancamento). 10 s de folga para arredondamento.
   if(dur>0.0&&fim>dur+10.0){if(motivo)*motivo="fim alem da duracao (outro corte)";return 0;}
-  if(tipo==INTRO_CREDITOS&&filme&&dur>0.0&&ini<dur*0.5){if(motivo)*motivo="inicio antes de 50% do filme";return 0;}
-  // 2.0.3: creditos de SERIE no meio do episodio nao sao creditos. Era isso
-  // que punha o botao "Pular creditos" (e o cartao) no meio do episodio.
-  if(tipo==INTRO_CREDITOS&&!filme&&dur>0.0&&dur-ini>intro_creditos_janela(dur)){
-    if(motivo)*motivo="creditos fora da parte final do episodio";return 0;}
-  if(tipo!=INTRO_CREDITOS&&dur>0.0&&ini>dur*0.5){if(motivo)*motivo="abertura/resumo depois da metade";return 0;}
+  if(fimDeObra(tipo)&&filme&&dur>0.0&&ini<dur*0.5){if(motivo)*motivo="inicio antes de 50% do filme";return 0;}
+  // 2.0.3: creditos (e previa) no meio da obra nao sao creditos. Era isso que
+  // punha o botao "Pular creditos" (e o cartao) no meio do episodio. Filme tem
+  // janela propria, mais larga (creditos de filme passam de 10 min).
+  if(fimDeObra(tipo)&&dur>0.0&&
+     dur-ini>(filme?intro_creditos_janela_filme(dur):intro_creditos_janela(dur))){
+    if(motivo)*motivo=filme?"creditos fora da parte final do filme":"creditos fora da parte final do episodio";return 0;}
+  if(!fimDeObra(tipo)&&dur>0.0&&ini>dur*(filme?INTRO_ABERTURA_FILME_FRAC:0.5)){
+    if(motivo)*motivo="abertura/resumo fora da parte inicial";return 0;}
   return 1;
+}
+
+double intro_creditos_janela_filme(double dur){
+  double j=dur*INTRO_CRED_FILME_FRAC;
+  if(dur<=0.0)return 0.0;
+  if(j<INTRO_CRED_FILME_MIN_S)j=INTRO_CRED_FILME_MIN_S;
+  if(j>INTRO_CRED_FILME_MAX_S)j=INTRO_CRED_FILME_MAX_S;
+  if(j>dur*0.5)j=dur*0.5;
+  return j;
+}
+
+double intro_fim_estimado_filme(double dur){
+  if(dur<INTRO_FILME_MIN_S)return 0.0;
+  return dur<INTRO_FILME_CURTO_ATE_S?INTRO_FIM_FILME_CURTO_S:INTRO_FIM_FILME_S;
 }
 
 double intro_creditos_janela(double dur){
@@ -211,6 +430,18 @@ static int valido(int i){
   return ok;
 }
 
+// O FIM DO PULO: creditos emendados numa previa (inicio da previa ate 2 s do
+// fim dos creditos, o caso de anime: One Piece T1E1 creditos 1389-1459, previa
+// 1459-1500) pulam as duas. Chamar com a trava.
+static double fimEmendado(int i){
+  double f=trechos[i].fim;
+  if(trechos[i].tipo!=INTRO_CREDITOS||f<=0.0)return f;
+  for(int k=0;k<nTrechos;k++)
+    if(trechos[k].tipo==INTRO_PREVIA&&trechos[k].inicio>=f-2.0&&trechos[k].inicio<=f+2.0&&valido(k))
+      return trechos[k].fim;            // 0 = ate o fim
+  return f;
+}
+
 int intro_ativo(double pos,double*fim,int*tipo){
   int ok=0;pthread_mutex_lock(&trava);
   for(int i=0;i<nTrechos;i++){
@@ -218,7 +449,8 @@ int intro_ativo(double pos,double*fim,int*tipo){
     int dentro=trechos[i].fim>0.0
                ? (pos>=trechos[i].inicio&&pos<trechos[i].fim)
                : (pos>=trechos[i].inicio);
-    if(dentro&&valido(i)){if(fim)*fim=trechos[i].fim;if(tipo)*tipo=trechos[i].tipo;ok=1;break;}
+    if(trechos[i].tipo==INTRO_PREVIA)continue;   // sem botao proprio (CHAVES)
+    if(dentro&&valido(i)){if(fim)*fim=fimEmendado(i);if(tipo)*tipo=trechos[i].tipo;ok=1;break;}
   }
   pthread_mutex_unlock(&trava);return ok;
 }
@@ -231,6 +463,7 @@ int intro_botao(double pos,double agora,int osd,int focado,double*fim,int*tipo){
   pthread_mutex_lock(&trava);
   for(i=0;i<nTrechos;i++){
     int dentro=trechos[i].fim>0.0?(pos>=trechos[i].inicio&&pos<trechos[i].fim):(pos>=trechos[i].inicio);
+    if(trechos[i].tipo==INTRO_PREVIA)continue;
     if(dentro&&valido(i)){idx=i;break;}
   }
   if(idx<0){botaoIdx=-1;botaoVis=0;pthread_mutex_unlock(&trava);return 0;}
@@ -238,7 +471,7 @@ int intro_botao(double pos,double agora,int osd,int focado,double*fim,int*tipo){
   if(!mostrado[idx]){mostrado[idx]=1;botaoDesde=agora;}
   if(focado)botaoDesde=agora;                 // nao some debaixo do foco
   vis=(agora-botaoDesde<INTRO_BOTAO_SEG)||osd;
-  botaoVis=vis;botaoFim=trechos[idx].fim;botaoTipo=trechos[idx].tipo;
+  botaoVis=vis;botaoFim=fimEmendado(idx);botaoTipo=trechos[idx].tipo;
   if(vis){if(fim)*fim=botaoFim;if(tipo)*tipo=botaoTipo;}
   pthread_mutex_unlock(&trava);return vis;
 }
@@ -261,6 +494,11 @@ double intro_creditos_seg(void){
   double s=0.0;pthread_mutex_lock(&trava);
   for(int i=0;i<nTrechos;i++)
     if(trechos[i].tipo==INTRO_CREDITOS&&trechos[i].inicio>s&&valido(i))s=trechos[i].inicio;
+  // SEM CREDITOS MARCADOS, a PREVIA marca o fim do episodio (AoT T1E1: so
+  // "preview" aos 1432 s). E o inicio dela que vale para o cartao.
+  if(s<=0.0)
+    for(int i=0;i<nTrechos;i++)
+      if(trechos[i].tipo==INTRO_PREVIA&&(s<=0.0||trechos[i].inicio<s)&&valido(i))s=trechos[i].inicio;
   pthread_mutex_unlock(&trava);return s;
 }
 

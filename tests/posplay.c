@@ -205,7 +205,7 @@ int main(void) {
   // O PAINEL DE FILME NAO PODE SUBIR NO COMECO. Relato: "More Like This
   // aparece quando o filme comeca".
   //
-  // A estimativa de creditos tem piso de 150 s (PP_FILME_MIN_S). Sem teto, esse
+  // A estimativa de creditos tinha piso de 150 s. Sem teto, esse
   // piso virava a regra em qualquer coisa mais curta: no segundo ZERO ja sobrava
   // menos que a janela e o painel decidia subir. O mesmo no instante inicial em
   // que o pipeline ainda informa uma duracao pequena.
@@ -222,7 +222,13 @@ int main(void) {
       {  120.0,    0.0, 0, "video de 2 min no zero — mais curto que o piso" },
       {   80.0,    5.0, 0, "video de 80 s logo no comeco" },
       { 3600.0, 3550.0, 1, "filme de 1h faltando 50 s" },
-      {  120.0,  115.0, 1, "video de 2 min faltando 5 s" },
+      // 2.0.3: sem marcador, tempo fixo (intro_fim_estimado_filme): 3 min em
+      // filme de 1 h ou mais, 90 s abaixo de 1 h, nada abaixo de 10 min.
+      {  120.0,  115.0, 0, "video de 2 min faltando 5 s: curto demais" },
+      { 3600.0, 3430.0, 1, "filme de 1h faltando 170 s" },
+      { 3600.0, 3400.0, 0, "filme de 1h faltando 200 s" },
+      { 3000.0, 2915.0, 1, "filme de 50 min faltando 85 s" },
+      { 3000.0, 2880.0, 0, "filme de 50 min faltando 120 s" },
     };
     size_t k2;
     for (k2 = 0; k2 < sizeof casos / sizeof casos[0]; k2++) {
@@ -270,7 +276,11 @@ int main(void) {
       { "creditos de abertura aos 90 s, em 95 s",  95.0, 7200.0,   90.0, 0 },
       { "creditos de abertura aos 90 s, em 1 h", 3600.0, 7200.0,   90.0, 0 },
       // Marcador recusado nao cala o painel: a estimativa vale no fim.
-      { "marcador recusado, estimativa no fim",  7000.0, 7200.0,   90.0, 1 },
+      { "marcador recusado, estimativa no fim",  7050.0, 7200.0,   90.0, 1 },
+      { "marcador recusado, 200 s do fim",       7000.0, 7200.0,   90.0, 0 },
+      // 2.0.3: creditos a 15 min do fim de um filme de 3 h valem (janela de filme).
+      { "3 h, creditos a 14 min do fim",        9960.0, 10800.0, 9960.0, 1 },
+      { "2 h, creditos a 20 min do fim",        6000.0, 7200.0, 6000.0, 0 },
       // Marcador no meio do filme tambem nao e credito final.
       { "marcador no meio do filme",             3700.0, 7200.0, 3600.0, 0 },
       // Marcador bom: manda, e antes dele nada sobe (nem a estimativa).
@@ -279,7 +289,7 @@ int main(void) {
       // Nunca antes da metade, mesmo em video curto onde piso e janela se
       // confundem.
       { "video de 30 s aos 10 s",                  10.0,   30.0,    0.0, 0 },
-      { "video de 30 s aos 16 s",                  16.0,   30.0,    0.0, 1 },
+      { "video de 30 s aos 16 s: curto, sem estimativa", 16.0, 30.0, 0.0, 0 },
       { "sem duracao",                              0.0,    0.0,    0.0, 0 },
     };
     size_t k4;
@@ -303,8 +313,8 @@ int main(void) {
   assert(!quadroFilmeDecide(0.5f, 16.5, 30.0));
   // E a trava nao e para sempre: com a duracao parada, o fim decide.
   posplay_fechar();
-  aquecer(30.0, 0);
-  assert(quadroFilmeDecide(0.5f, 16.0, 30.0));
+  aquecer(1200.0, 0);
+  assert(quadroFilmeDecide(0.5f, 1150.0, 1200.0));   // 2.0.3: video < 10 min nao estima; 20 min, 50 s do fim
   posplay_fechar();
   aquecer(3600.0, 1);
   posplay_atualizar(0.5f, 1000, 16.0, 60.0, 1, 0, 1);   // serie: 60 s provisorios

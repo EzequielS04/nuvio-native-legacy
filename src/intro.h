@@ -23,23 +23,45 @@
 // {"error":"media not found"}, que aqui vira "zero marcadores".
 #ifndef NV_INTRO_H
 #define NV_INTRO_H
+#include <stddef.h>
 // `fim` ZERO QUER DIZER "ATE O FIM DA MIDIA", que e como a API representa o
 // `end_ms: null` dos creditos. Quem consome tem de tratar esse caso — ver
 // intro_ativo.
 typedef struct { double inicio,fim; int tipo; } IntroTrecho;
-enum { INTRO_ABERTURA=1, INTRO_RESUMO=2, INTRO_CREDITOS=3 };
+enum { INTRO_ABERTURA=1, INTRO_RESUMO=2, INTRO_CREDITOS=3, INTRO_PREVIA=4 };
 // `temporada` e `episodio` ZERO = filme: a consulta sai so com o imdb.
 void intro_pedir(const char *imdb,int temporada,int episodio);
 // Igual a intro_pedir, mas diz a duracao (s) dos episodios E-1 e E+1 quando o
 // catalogo sabe (0 = desconhecida): sem marcador deste episodio, o marcador de
 // um vizinho vira "quanto falta para o fim". Ver credfonte.h.
 void intro_pedir_vizinhos(const char *imdb,int temporada,int episodio,double durAnt,double durProx);
+// O pedido completo (2.0.3). `tmdb` > 0: pergunta por tmdb_id, e `temporada`/
+// `episodio` TEM de ser o par do TMDB (CatEp.tmdbT/tmdbE; num filme, 0/0).
+// tmdb 0: imdb_id com a numeracao do Cinemeta. A duracao vai depois, sozinha,
+// quando o player a informar (intro_definir_duracao).
+void intro_pedir_ids(const char *imdb,long tmdb,int temporada,int episodio,double durAnt,double durProx);
+// URL do pedido (exposta para o teste). durSeg 0 = sem duration_ms.
+void intro_montar_url(char *url,size_t n,const char *imdb,long tmdb,int t,int e,double durSeg);
+// Troca quem faz o GET (teste). Devolve o status HTTP (0 = sem resposta) e o
+// corpo em *corpo (malloc) quando 2xx. NULL volta ao padrao (rede_pedir).
+void intro_definir_buscador(int (*f)(const char *url,char **corpo,int *status));
+// ANISKIP (anime com id kitsu:/mal:, intro.c). Le a resposta de
+// /v2/skip-times: op -> abertura, ed -> creditos, recap -> resumo; por tipo, o
+// lancamento de duracao mais proxima de `dur`, recusado se diferir mais que
+// INTRO_ANISKIP_TOLERA (outro corte). dur 0 = nao compara.
+#define INTRO_ANISKIP_TOLERA 0.10
+int  intro_extrair_aniskip(const char *json,double dur,IntroTrecho *out,int max);
+void intro_montar_url_aniskip(char *url,size_t n,long mal,int ep,double dur);
+// O id do MyAnimeList na resposta de kitsu.io/api/edge/anime/<id>/mappings; 0 = nao ha.
+long intro_kitsu_mal(const char *json);
 void intro_desligar(void);
 int  intro_ativo(double posSeg,double *fim,int *tipo);
 // Segundo em que os creditos comecam, ou 0 quando nao ha marcador. Serve ao
 // posplay.c, que precisa do INSTANTE e nao de "estou dentro".
 double intro_creditos_seg(void);
-// Duracao real da midia (0 = desconhecida) e se e filme: base da guarda de janela.
+// Duracao real da midia (0 = desconhecida) e se e filme: base da guarda de
+// janela. Tambem pede de novo com `duration_ms` quando ela chega ou muda (como
+// o plugin oficial) e tenta de novo depois de uma falha de rede/5xx.
 void intro_definir_duracao(double dur,int filme);
 // Janela aceitavel? Creditos <= 900 s, abertura/resumo <= 180 s, creditos de
 // filme so a partir de 50% da duracao, creditos de SERIE so na parte final
@@ -71,6 +93,25 @@ double intro_creditos_janela(double dur);
 #define INTRO_DUR_MIN_S    120.0
 // Segundos antes do fim em que a estimativa vale; 0 = nao estimar.
 double intro_fim_estimado(double dur);
+
+// FILME (2.0.3). Creditos de filme sao longos (10-20 min nos de super-heroi),
+// entao a janela do marcador e mais larga: 12% da duracao, piso de 5 min, teto
+// de 15 min, nunca mais que metade. 2h -> 864 s, 1h30 -> 648 s, 2h30+ -> 900 s.
+// Abertura de filme so nos primeiros 20% (Inception: 0-38 s; Interstellar 0-53 s).
+#define INTRO_CRED_FILME_FRAC   0.12
+#define INTRO_CRED_FILME_MIN_S  300.0
+#define INTRO_CRED_FILME_MAX_S  900.0
+#define INTRO_ABERTURA_FILME_FRAC 0.20
+double intro_creditos_janela_filme(double dur);
+// SEM MARCADOR, o painel do fim do filme ("Mais como este") sobe a um tempo
+// FIXO antes do fim (dono, 07/10: sem porcentagem; era 4,5% com piso de 150 s
+// e teto de 330 s): 3 min; filme de menos de 1 h, 90 s; menos de 10 min (curta,
+// clipe), nada.
+#define INTRO_FIM_FILME_S        180.0
+#define INTRO_FIM_FILME_CURTO_S   90.0
+#define INTRO_FILME_CURTO_ATE_S 3600.0
+#define INTRO_FILME_MIN_S        600.0
+double intro_fim_estimado_filme(double dur);
 
 // A RESPOSTA E DESTE EPISODIO? O TheIntroDB remapeia a numeracao do IMDb para a
 // do TMDB e ecoa `season`/`episode` do que achou. Medido em 07/10/2026: One

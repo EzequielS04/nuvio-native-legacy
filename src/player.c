@@ -539,6 +539,28 @@ static double credAvisadoEm, credAvisadoDur;
 static int duracaoReal, durCurtaAvisado, durPassouAvisado;
 static int concluiuAgora(double cred);
 static int introIdx=-1, introT=-1, introE=-1;
+// Com que id o TheIntroDB foi perguntado (0 = imdb). Muda quando o TMDB do
+// episodio chega depois da abertura (2.0.3): pede de novo por tmdb_id.
+static long introTmdb;
+
+// O EPISODIO TOCANDO NO TMDB, quando o fio de episodios o confirmou
+// (CatEp.tmdbSerie/tmdbT/tmdbE). Filme: o id do item. 0 = nao se sabe.
+static long tmdbDoTocando(int *tt, int *te) {
+  const CatItem *c = item();
+  *tt = *te = 0;
+  if (!c) return 0;
+  if (epT <= 0) return c->tmdb > 0 ? c->tmdb : 0;
+  for (int ix = idxAtual(), i = 0; i < cat_n_episodios(ix); i++) {
+    const CatEp *ep = cat_episodio(ix, i);
+    if (ep && ep->temporada == epT && ep->episodio == epE) {
+      if (ep->tmdbSerie > 0 && ep->tmdbT > 0 && ep->tmdbE > 0) {
+        *tt = ep->tmdbT; *te = ep->tmdbE; return ep->tmdbSerie;
+      }
+      return 0;
+    }
+  }
+  return 0;
+}
 static int retomadaAplicada, retomarPct;
 #ifdef NV_ANDROID
 static double retomarSeg;
@@ -692,8 +714,10 @@ void player_definir_episodio(int t, int e) {
   if (strcmp(c->tipo, "series")) {
     epT = epE = 0;
     if (idx != introIdx || introT || introE) {
+      int tt, te;
       introIdx = idx; introT = introE = 0;
-      intro_pedir(c->imdb, 0, 0);
+      introTmdb = tmdbDoTocando(&tt, &te);
+      intro_pedir_ids(c->imdb, introTmdb, 0, 0, 0.0, 0.0);
       credAvisado = credFimAvisado = semProxAvisado = 0; credAvisadoEm = credAvisadoDur = 0;
     }
     return;
@@ -744,7 +768,9 @@ void player_definir_episodio(int t, int e) {
         if(ep->episodio==epE-1)dA=duracaoTexto(ep->duracao);
         else if(ep->episodio==epE+1)dP=duracaoTexto(ep->duracao);
       }
-      intro_pedir_vizinhos(c->imdb,epT,epE,dA,dP); }
+      { int tt, te; introTmdb = tmdbDoTocando(&tt, &te);
+        if (introTmdb > 0) intro_pedir_ids(c->imdb, introTmdb, tt, te, dA, dP);
+        else intro_pedir_ids(c->imdb, 0, epT, epE, dA, dP); } }
     credAvisado=credFimAvisado=semProxAvisado=0;credAvisadoEm=credAvisadoDur=0;
   }
 }
@@ -2735,6 +2761,33 @@ void player_evento(const SDL_Event *e) {
   acordar();
 }
 
+  // O TMDB DO EPISODIO CHEGOU DEPOIS DO PEDIDO (o fio de episodios enriquece a
+  // lista depois de publica-la): pergunta de novo por tmdb_id, uma vez. 2.0.3.
+static void introTmdbTardio(Uint32 agora) {
+  if (!ehCanal() && introIdx >= 0 && introIdx == idx && introTmdb <= 0) {
+    static Uint32 visto;
+    if ((Uint32)(agora - visto) > 1000u) {
+      int tt, te; long tm;
+      const CatItem *cx = item();
+      visto = agora;
+      tm = tmdbDoTocando(&tt, &te);
+      if (tm > 0 && cx) {
+        double dA = 0, dP = 0;
+        introTmdb = tm;
+        if (epT > 0)
+          for (int ix = idxAtual(), i = 0; i < cat_n_episodios(ix); i++) {
+            const CatEp *ep = cat_episodio(ix, i);
+            if (!ep || ep->temporada != epT) continue;
+            if (ep->episodio == epE - 1) dA = duracaoTexto(ep->duracao);
+            else if (ep->episodio == epE + 1) dP = duracaoTexto(ep->duracao);
+          }
+        printf("[intro] tmdb %ld chegou depois: pedindo de novo por tmdb_id\n", tm); fflush(stdout);
+        intro_pedir_ids(cx->imdb, tm, epT > 0 ? tt : 0, epT > 0 ? te : 0, dA, dP);
+      }
+    }
+  }
+}
+
 void player_atualizar(float dt, Uint32 agora) {
   if (retido) { player_validar_retido(agora); return; }
   // AUDIO QUE A TV NAO TOCA (uMS errorCode 200, registro 1545): o video segue
@@ -3076,6 +3129,7 @@ void player_atualizar(float dt, Uint32 agora) {
   if (visivel && tocando && !player_carregando() && !episodios_aberto() &&
       !stream_folha_aberta() && !faixas_aberta() && agora - ultimoInput > PLR_ESCONDE_MS) visivel = 0;
   if (epT > 0 && !strstr(linhaEp, " · ")) player_definir_episodio(epT, epE);
+  introTmdbTardio(agora);
 
   // PAINEL DE PAUSA. A condicao e a traducao de canShowPauseOverlay
   // (playerScreen.js:7299): pausado, com imagem na tela, sem nenhuma folha

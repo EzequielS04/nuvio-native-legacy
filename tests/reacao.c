@@ -46,11 +46,12 @@ static int naFila(const char *trecho) {
 }
 
 static void regra(void) {
-  // FILME de 100 min, sem marcador: estimativa de 4,5% (270 s), nunca antes da metade.
+  // FILME de 100 min, sem marcador: 3 min fixos (2.0.3; era 4,5%), nunca antes da metade.
   CHECA(!reacao_regra_perguntar(0, 0, 0, 1000, 6000, 0), "filme no comeco nao pergunta");
   CHECA(!reacao_regra_perguntar(0, 0, 0, 5600, 6000, 0), "filme a 400 s do fim nao pergunta");
-  CHECA(reacao_regra_perguntar(0, 0, 0, 5800, 6000, 0), "filme nos 270 s finais pergunta");
-  // Marcador aceito (ultimo quarto) manda, e so ele.
+  CHECA(reacao_regra_perguntar(0, 0, 0, 5850, 6000, 0), "filme nos 180 s finais pergunta");
+  CHECA(!reacao_regra_perguntar(0, 0, 0, 5800, 6000, 0), "filme a 200 s do fim nao pergunta");
+  // Marcador aceito (parte final do filme: 12%, 5-15 min) manda, e so ele.
   CHECA(!reacao_regra_perguntar(0, 0, 0, 5400, 6000, 5500), "filme antes do marcador nao pergunta");
   CHECA(reacao_regra_perguntar(0, 0, 0, 5500, 6000, 5500), "filme no marcador pergunta");
   // Marcador no comeco do filme (#115) e recusado: nao pergunta aos 90 s.
