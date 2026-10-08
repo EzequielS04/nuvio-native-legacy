@@ -5910,6 +5910,23 @@ static int parsearEpisodios(const char *corpo, CatEp *eps, int max) {
       eps[j + 1] = eps[j];
     eps[j + 1] = k;
   }
+  // Um /meta pode trazer o mesmo (temporada, episodio) mais de uma vez (agregador
+  // de anime com varias entradas, #328): cada repeticao virava um cartao
+  // identico. A ordenacao acima e estavel, entao ficar com o primeiro da
+  // vizinhanca e ficar com o primeiro da resposta.
+  if (n > 1) {
+    int w = 1;
+    for (int i = 1; i < n; i++) {
+      // Sem numero de episodio (0) nao e repeticao: todos os videos sem
+      // "episode" cairiam num cartao so.
+      if (eps[i].episodio > 0 &&
+          eps[i].temporada == eps[w - 1].temporada &&
+          eps[i].episodio == eps[w - 1].episodio) continue;
+      if (w != i) eps[w] = eps[i];
+      w++;
+    }
+    n = w;
+  }
   return n;
 }
 
