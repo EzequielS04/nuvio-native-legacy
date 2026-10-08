@@ -12,6 +12,7 @@
 #define CAP_CACHE 4
 
 int capmkv_espera_inicial_ms = 4000;
+void (*capmkv_teste_antes_de_publicar)(void);
 static pthread_mutex_t trava = PTHREAD_MUTEX_INITIALIZER;
 static unsigned ger;                       // reproducao corrente
 static double nomeado, ultimo;             // regra da LG: nome > ultimo no ultimo quarto
@@ -77,23 +78,28 @@ int capmkv_trechos(const MkvCap *caps, int n, IntroTrecho *out, int max) {
   return k;
 }
 
-static void alimentarIntro(const MkvCap *caps, int n) {
+// Publica capitulos. Com `checa`, so se `g` ainda e a reproducao corrente: a
+// checagem, os creditos e a entrega ao modulo de intro ficam na MESMA secao
+// critica que capmkv_zerar usa para invalidar e limpar (revisao 2.0.3, achado
+// 8). Ordem de travas: capmkv -> intro (intro.c nunca chama capmkv).
+static int publicar(const MkvCap *caps, int n, int checa, unsigned g) {
   IntroTrecho v[4];
-  int k = capmkv_trechos(caps, n, v, 4);
-  if (k > 0) intro_definir_capitulos(v, k);
-}
-
-void capmkv_aplicar(const MkvCap *caps, int n) {
+  int k = n > 0 ? capmkv_trechos(caps, n, v, 4) : 0;
+  double a, b;
   pthread_mutex_lock(&trava);
-  nomeado = n > 0 ? mkv_creditos_nomeados(caps, n) : 0.0;
-  ultimo = n > 0 ? mkv_creditos_ultimo(caps, n) : 0.0;
+  if (checa && g != ger) { pthread_mutex_unlock(&trava); return 0; }
+  nomeado = a = n > 0 ? mkv_creditos_nomeados(caps, n) : 0.0;
+  ultimo = b = n > 0 ? mkv_creditos_ultimo(caps, n) : 0.0;
+  if (k > 0) intro_definir_capitulos(v, k);
   pthread_mutex_unlock(&trava);
   if (n > 0) {
-    printf("[mkv] %d capitulos; creditos nomeados em %.0fs, ultimo em %.0fs\n", n, nomeado, ultimo);
+    printf("[mkv] %d capitulos; creditos nomeados em %.0fs, ultimo em %.0fs\n", n, a, b);
     fflush(stdout);
-    alimentarIntro(caps, n);
   }
+  return 1;
 }
+
+void capmkv_aplicar(const MkvCap *caps, int n) { publicar(caps, n, 0, 0); }
 
 double capmkv_creditos(double dur) {
   double a, b;
@@ -144,11 +150,16 @@ static void *fio(void *arg) {
   Pedido *p = arg;
   MkvCap caps[MKV_MAX_CAPS];
   int n = lerComRecuo(p->url, caps, MKV_MAX_CAPS, p->g, capmkv_espera_inicial_ms);
-  if (n >= 0 && vale(p->g)) {
-    cacheGuardar(p->url, caps, n);
-    printf("[mkv] capitulos (android/tpk): %d\n", n);
-    fflush(stdout);
-    if (n > 0) capmkv_aplicar(caps, n);
+  if (n >= 0) {
+    cacheGuardar(p->url, caps, n);      // por URL: vale mesmo se o video ja mudou
+    if (capmkv_teste_antes_de_publicar) capmkv_teste_antes_de_publicar();
+    if (n > 0 && !publicar(caps, n, 1, p->g)) {
+      printf("[mkv] capitulos de um video anterior descartados\n");
+      fflush(stdout);
+    } else {
+      printf("[mkv] capitulos (android/tpk): %d\n", n);
+      fflush(stdout);
+    }
   }
   free(p);
   return NULL;
@@ -157,8 +168,8 @@ static void *fio(void *arg) {
 void capmkv_zerar(void) {
   pthread_mutex_lock(&trava);
   ger++; nomeado = ultimo = 0.0;
+  intro_definir_capitulos(NULL, 0);   // sob a trava: nenhum fio publica no meio
   pthread_mutex_unlock(&trava);
-  intro_definir_capitulos(NULL, 0);
 }
 
 void capmkv_iniciar(const char *url) {

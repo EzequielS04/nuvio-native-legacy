@@ -107,13 +107,23 @@ int mkvass_cabecalho(const char *url, unsigned char **buf, long *n) {
   if (n) *n = prebuscaN;
   return 1;
 }
-static IntroTrecho gravado[8]; static int nGravado, chamadas;
+static IntroTrecho gravado[8]; static _Atomic int nGravado, chamadas;   // escritos pelo fio lateral
 void intro_definir_capitulos(const IntroTrecho *v, int n) {
   chamadas++; nGravado = n;
   if (n > 0) memcpy(gravado, v, (size_t)n * sizeof *v);
 }
 
 static int falhas;
+
+// Barreira do fio lateral: para depois da leitura, antes da publicacao.
+static pthread_mutex_t bt = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t bc = PTHREAD_COND_INITIALIZER;
+static int chegou, solta;
+static void pausa(void) {
+  pthread_mutex_lock(&bt); chegou = 1; pthread_cond_broadcast(&bc);
+  while (!solta) pthread_cond_wait(&bc, &bt);
+  pthread_mutex_unlock(&bt);
+}
 static void ok(int c, const char *o) { printf("  %-62s %s\n", o, c ? "ok" : "FALHOU"); if (!c) falhas++; }
 static int perto(double a, double b) { return a > b - 0.01 && a < b + 0.01; }
 
@@ -198,6 +208,23 @@ int main(void) {
   capmkv_iniciar("https://x.test/filme.mp4");
   usleep(100000);
   ok(pedidos == 0, "MP4 nao tem capitulo Matroska: nem pede");
+
+  // Revisao 2.0.3 (achado 8): o fio de A passa da checagem de geracao, o
+  // usuario troca para B (sem capitulos) e A publica em cima de B.
+  puts("capmkv: fio de A atrasado nao publica capitulos em B");
+  montar(0, 5LL * 1024 * 1024 * 1024, anime, 5, 0, 1);
+  capmkv_teste_antes_de_publicar = pausa;
+  capmkv_iniciar("https://x.test/a-atrasado.mkv");
+  pthread_mutex_lock(&bt);
+  while (!chegou) pthread_cond_wait(&bc, &bt);
+  pthread_mutex_unlock(&bt);
+  capmkv_iniciar("https://x.test/b-sem-capitulos.mp4");   // B: zera, sem fio
+  chamadas = 0; nGravado = 0;
+  pthread_mutex_lock(&bt); solta = 1; pthread_cond_broadcast(&bc); pthread_mutex_unlock(&bt);
+  usleep(300000);
+  capmkv_teste_antes_de_publicar = NULL;
+  ok(capmkv_creditos(1400) == 0.0, "B sem creditos vindos de A");
+  ok(nGravado == 0, "B sem trechos de intro vindos de A");
 
   printf("%s\n", falhas ? "FALHOU" : "capmkv: ok");
   return falhas ? 1 : 0;

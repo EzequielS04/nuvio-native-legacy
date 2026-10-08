@@ -1846,6 +1846,40 @@ void cat_atualizar_item(int i, const CatItem *item) {
   pthread_mutex_unlock(&pubTrava);
 }
 
+// Copia do item `i` sob pubTrava: o bloco nao pode ser trocado nem liberado
+// no meio. Para fios fora do desenho, que nao tem a garantia de cat_item()
+// (o ponteiro so vale ate o fim do quadro).
+int cat_copiar_item(int i, CatItem *saida) {
+  int ok = 0;
+  if (!saida) return 0;
+  catTravar();
+  if (itens && i >= 0 && i < n) { *saida = itens[i]; ok = 1; }
+  pthread_mutex_unlock(&pubTrava);
+  return ok;
+}
+
+// Escrita PARCIAL: so a sinopse (e o titulo, se o item nao tem). Revalida a
+// identidade e o "ainda sem sinopse" sob a trava; qualquer outro campo que
+// outro fio tenha mudado desde a leitura fica como esta (revisao 2.0.3).
+int cat_completar_sinopse(int i, const char *imdb, const char *sinopse,
+                          const char *titulo) {
+  char id[sizeof itens->imdb];
+  int ok = 0;
+  if (!imdb || !imdb[0] || !sinopse || !sinopse[0]) return 0;
+  snprintf(id, sizeof id, "%s", imdb);
+  CAT_TESTE_ANTES_TRAVA();
+  catTravar();
+  if (itens && i >= 0 && i < n && !strcmp(itens[i].imdb, id) && !itens[i].sinopse[0]) {
+    snprintf(itens[i].sinopse, sizeof itens[i].sinopse, "%s", sinopse);
+    if (!itens[i].titulo[0] && titulo && titulo[0])
+      snprintf(itens[i].titulo, sizeof itens[i].titulo, "%s", titulo);
+    mudou();
+    ok = 1;
+  }
+  pthread_mutex_unlock(&pubTrava);
+  return ok;
+}
+
 // Acrescenta N de UMA VEZ. cat_acrescentar copia o catalogo inteiro a cada
 // chamada, e a busca a chamava POR RESULTADO: com 300 titulos no acervo sao
 // ~2,3 MB por copia, vezes 40 resultados, no fio de DESENHO, a cada tecla. Era
