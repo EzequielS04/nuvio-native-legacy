@@ -35,7 +35,11 @@
 // agora sao o mesmo numero, e o corte, se um dia voltar a acontecer, e dito.
 // 32 e nao 16 (30/09): o app oficial passou a 32, e quem tem muitos addons
 // perdia justamente os de legenda, que costumam ser os ultimos da lista.
-#define ADD_MAX 32
+// 64 e nao 32 (#203, 07/10): nos logs 2.0.x, 44 de 464 pessoas leram EXATAMENTE
+// 32 linhas da conta e nenhuma leu 33 ou mais — o monte no teto, nao uma
+// distribuicao. Quem tem mais de 32 perdia o resto sem aviso (o de legenda,
+// tipicamente o ultimo). O teto de lerAddons (sync.c) e o mesmo numero.
+#define ADD_MAX 64
 #define ADD_PREF_MAX 8
 #define ADD_PREF_TAM 24
 
@@ -1283,7 +1287,10 @@ int addons_adicionar(const char *nome, const char *urlManifest) {
   int i;
   if (!urlManifest || !*urlManifest) return 0;
   // Antes de normalizar: o que nao cabe nao entra, nem cortado (addonurl.h).
-  if (!nv_addon_url_cabe(nome, strlen(urlManifest))) return 0;
+  // #203: URL grande vira apelido (addonurl.h) em vez de ser recusada.
+  { static char ap[NV_ADDON_URL_MAX];   // so o fio principal instala
+    if (!nv_addon_url_guardar(nome, urlManifest, ap, sizeof ap)) return 0;
+    urlManifest = ap; }
   if (nAddon >= ADD_MAX) {
     printf("[addons] nao coube: a lista ja tem %d\n", ADD_MAX);
     fflush(stdout);

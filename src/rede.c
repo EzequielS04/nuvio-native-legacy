@@ -3,6 +3,7 @@
 #include "android.h"
 #endif
 #include "negcache.h"
+#include "addonurl.h"
 #include "negcache.inc"
 #include <pthread.h>
 #include <stdint.h>
@@ -798,7 +799,19 @@ static void (*avisoHost)(const char *url, int codigo, int http, unsigned ms);
 void rede_avisar_host(void (*f)(const char *url, int codigo, int http, unsigned ms)) { avisoHost = f; }
 
 static void *(*curl_init)(void);
-static int   (*curl_setopt)(void *, int, ...);
+static int   (*curl_setopt_f)(void *, int, ...);
+// #203: o OPT_URL passa por aqui para um APELIDO de addon com URL grande
+// (addonurl.h) voltar a ser a URL inteira. O curl copia a string no setopt,
+// entao a expandida e liberada logo depois. Macro, e nao funcao variadica:
+// cada ramo recebe o valor com o tipo que ja tinha.
+static int urlSetopt(void *c, const char *url) {
+  char *grande = nv_longa_expandir(url);
+  int r = curl_setopt_f(c, 10002 /* OPT_URL */, grande ? grande : url);
+  free(grande);
+  return r;
+}
+#define curl_setopt(c, op, v) ((op) == 10002 ? urlSetopt((c), (const char *)(uintptr_t)(v)) \
+                                              : curl_setopt_f((c), (op), (v)))
 static int   (*curl_perform)(void *);
 static void  (*curl_cleanup)(void *);
 static int   (*curl_global)(long);
@@ -1415,7 +1428,7 @@ static int abrirReal(void) {
   if (!h) { printf("[rede] sem libcurl: %s\n", dlerror());
             __atomic_store_n(&pronto, -1, __ATOMIC_RELEASE); pthread_mutex_unlock(&abrirTrava); return 0; }
   *(void **)(&curl_init)    = dlsym(h, "curl_easy_init");
-  *(void **)(&curl_setopt)  = dlsym(h, "curl_easy_setopt");
+  *(void **)(&curl_setopt_f)  = dlsym(h, "curl_easy_setopt");
   *(void **)(&curl_perform) = dlsym(h, "curl_easy_perform");
   *(void **)(&curl_cleanup) = dlsym(h, "curl_easy_cleanup");
   *(void **)(&curl_global)  = dlsym(h, "curl_global_init");
@@ -1439,7 +1452,7 @@ static int abrirReal(void) {
     if (!(r && r[0] == '0')) *(void **)(&curl_reset) = dlsym(h, "curl_easy_reset"); }
   { const char *o = getenv("NUVIO_REDE_OCIOSO_MS");
     if (o && *o) ociosoMaxMs = strtoul(o, NULL, 10); }
-  if (!curl_init || !curl_setopt || !curl_perform) {
+  if (!curl_init || !curl_setopt_f || !curl_perform) {
     printf("[rede] libcurl sem os simbolos esperados\n");
     __atomic_store_n(&pronto, -1, __ATOMIC_RELEASE);
     pthread_mutex_unlock(&abrirTrava);
