@@ -725,6 +725,15 @@ static void rP2p(int op) {
       if (ajc_onda(0.8f) > 0.5f) ajc_acento_ret(210 + ajcLargura(b, 22, 1), 123, 3, 32, 1.5f, 1);
       ajc_ret(150, 200, 300, 8, 4, 1, 1, 1, 0.1f);
       return; }
+    case AJ_P2P_LIMITE: {   // #334: a barra do disco e o teto que o P2P nao passa (0 = Automatico)
+      static const float TETO[] = { 0.18f, 0.28f, 0.42f, 0.62f, 0.86f };
+      float t = TETO[rInt(op, 4)], f = ajc_fase(4.0f), enc = t * (f < 0.8f ? f / 0.8f : 1.0f);
+      ajc_icone("aj_database", 320, 110, 44, 0.9f);
+      ajc_ret(90, 190, 460, 26, 13, 1, 1, 1, 0.12f);
+      ajc_acento_ret(90, 190, 460 * enc, 26, 13, 1);
+      ajc_ret(90 + 460 * t - 2, 178, 4, 50, 2, 1, 1, 1, 0.9f);
+      ajcTexto(textoValor(op), 22, 1, 90 + 460 * t - 40, 236, 1);
+      return; }
     default: {   // AJ_P2P_TESTAR: o ping vai e volta e o resultado aparece
       float f = ajc_fase(3.4f), p = f < 0.35f ? f / 0.35f : f < 0.7f ? 1 - (f - 0.35f) / 0.35f : 0, ok = f > 0.72f ? 1.0f : 0.0f;
       ajc_tv(60, 110, 150, 84, 1);
@@ -796,7 +805,7 @@ static int ajcNovaReproducao(int sec, int op) {
     case AJ_SEEKR_LIGADO: case AJ_SEEKR_FITA: case AJ_SEEKR_CHAVE: case AJ_SEEKR_TESTAR: case AJ_SEEKR_AJUSTE:
       rSeekr(op); return 1;
 #ifndef __EMSCRIPTEN__
-    case AJ_P2P_LIGADO: case AJ_P2P_URL: case AJ_P2P_TESTAR: rP2p(op); return 1;
+    case AJ_P2P_LIGADO: case AJ_P2P_URL: case AJ_P2P_TESTAR: case AJ_P2P_LIMITE: rP2p(op); return 1;
 #endif
     default: return 0;
   }
