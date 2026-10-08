@@ -57,6 +57,11 @@ static int dvHabilitado, dtsModoDv, dvRecuoAviso;
 // O player ainda nao pediu o ponto salvo ao player da TV (video_dv_segurar):
 // a troca para o caminho espera, para nascer na posicao certa.
 static int dvSegurar;
+// A TELA DO DV (dvtela.h, video_dv_fase): por que o DV desta fonte nao vai
+// acontecer (VIDEO_DV_NAO_*), a fonte nova, o demux ja abriu o arquivo, a faixa
+// da TV que foi trocada, e o mudo do player da TV enquanto a tela cobre.
+static int dvNao, dvSessaoN, dvFonteAberta, dvSilencio, dvSilenciado;
+static char dvAudioDe[16];
 // The audio track a Dolby Vision session of this URL last played (file
 // ordinal + language). Leaving the film and resuming the same source reopens
 // it natively with the TV's default track; the path starts on this one.
@@ -912,6 +917,8 @@ static void recorteNoPrimeiroQuadro(void) {
   }
 }
 
+// Definida junto da tela do DV (video_dv_tela), chamada no load e no playing.
+static void dvSilenciarTv(void);
 static int eventoPayload(const char *p, unsigned minhaSessao) {
   if (minhaSessao != sessao) return 1;
   if (!p) return 1;
@@ -1209,6 +1216,7 @@ static int eventoPayload(const char *p, unsigned minhaSessao) {
     // O pipeline e novo: o estilo da legenda nao sobrevive ao load anterior.
     aplicarEstilo();
     pronto = 1;
+    dvSilenciarTv();   // a tela do DV cobre este HDR10: sem som (dvtela.h)
     if (cronPediu && !cronLoad) {
       cronLoad = 1;
       printf("[video] load->loadCompleted %lums\n", msDesdePedido());
@@ -1254,6 +1262,7 @@ static int eventoPayload(const char *p, unsigned minhaSessao) {
   if (strstr(p, "playing")) {
     pausaConfirmada = 0;
     tocando = 1;
+    dvSilenciarTv();
     if (acb && midia[0]) {
       long tarefa = 0;
       // COM RECORTE DE FONTE, reaplicar o recorte — e nao a janela lisa. A
@@ -2075,6 +2084,7 @@ int video_tocar(const char *url) {
   dtsHabilitado = dts_playback_enabled() && dtsLiberadoNestaTv();
   printf("[dts] fallback %s\n", dtsHabilitado ? "available" : "unavailable");
   dvSondado = dvMkvPerfil = dvAudios = 0; dtsModoDv = 0; dvAudioMkvOrd = -1; dvSegurar = 0;
+  dvNao = 0; dvSessaoN++; dvFonteAberta = 0; dvAudioDe[0] = 0;
   nv_dvsonda_zerar(&mkvRetry); mkvRetryEm = 0;
   dvHabilitado = dvLiberadoNestaTv();
   fflush(stdout);
@@ -2534,6 +2544,7 @@ static void pararSessao(void) {
   pausaPedida = 0; seekEm = 0; mkvPendente = 0;
   nv_seek_zerar(&seekRetry); seekRetryEm = 0;
   seekEnvEm = 0;   // seek sem seekDone morre com a sessao (iniciarDts le os tres)
+  dvSilenciado = 0;   // o mudo e por mediaId: o pipeline novo nasce com som
   mkvRetryEm = 0;   // sonda reagendada morre com a sessao (o contador zera em video_tocar)
   pausaConfirmada = 0;
   if (ligado && midia[0] && !tinhaDts) {
@@ -2622,7 +2633,7 @@ static int dvLiberadoNestaTv(void) {
 // enhancement layer) and a selected audio track the path can feed (E-AC-3 and
 // AC-3 pass through, DTS is converted). Anything else stays with the TV player.
 static int dvPronto(void) {
-  if (fonteMp4) { dvHabilitado = 0; return 0; }
+  if (fonteMp4) { dvHabilitado = 0; dvNao = VIDEO_DV_NAO_SEM_DV; return 0; }
   if (!dvSondado) {
     if (mkvPendente && !fioMkvVivo) video_sondar_mkv_agora();
     return 0;
@@ -2632,6 +2643,9 @@ static int dvPronto(void) {
       printf("[dv] profile %d (el=%d): stays on the TV player\n", dvMkvPerfil, dvMkvEl);
       fflush(stdout);
     }
+    // Sem perfil: o arquivo nao tem dvcC, ou a sonda desistiu de ler o
+    // cabecalho (tres falhas) — sao notas diferentes para a pessoa.
+    dvNao = dvMkvPerfil ? VIDEO_DV_NAO_PERFIL : mkvRetry.desistiu ? VIDEO_DV_NAO_SONDA : VIDEO_DV_NAO_SEM_DV;
     dvHabilitado = 0; return 0;
   }
   if (dvMemOrd >= 0 && dvMemOrd < nAudio && dvMemOrd != audioAtual && !strcmp(urlAtual, dvMemUrl) &&
@@ -2658,9 +2672,11 @@ static int dvPronto(void) {
                dvAudioCodec[k], dvAudioNome[k]);
         fflush(stdout);
         dvAudioMkvOrd = k;
+        snprintf(dvAudioDe, sizeof dvAudioDe, "%s", c);
         return 1;
       }
       printf("[dv] audio %s cannot be fed: stays on the TV player\n", c); fflush(stdout);
+      dvNao = VIDEO_DV_NAO_AUDIO;
       dvHabilitado = 0; return 0;
     }
   }
@@ -2677,6 +2693,13 @@ static void dtsVoltarNativo(const char *motivo) {
   fflush(stdout);
   snprintf(lu, sizeof lu, "%s", legUrlAtual);
   if (!recarregarMesmaFonte(posSeg, -1, -1, lu)) falhou = 1;
+}
+// O caminho do DV nem chegou a abrir (plano MSE, conversor ausente): a mesma
+// nota do caminho que nao abriu, e a tela sai em vez de esperar para sempre.
+static void dvCaminhoNaoAbriu(void) {
+  if (!dtsModoDv) return;
+  dvRecuoAviso = 2; dvNao = VIDEO_DV_NAO_FALHOU;
+  dtsModoDv = 0; dvHabilitado = 0;
 }
 static int iniciarDts(int stream) {
   /* Retry from the next pump before unloading or spawning a native worker.
@@ -2712,11 +2735,13 @@ static int iniciarDts(int stream) {
   if (video_legenda(legAtual)) dtsLegFaixa = *video_legenda(legAtual);
   snprintf(dtsLegUrlAntes, sizeof dtsLegUrlAntes, "%s", legUrlAtual);
   dtsTentou = 1;
+  dvFonteAberta = 0;
   pararSessao();
   posSeg = alvo; pausaPedida = paused;
   dtsRevisao = 0; dtsFalhaLogada = 0;
   if (acbCriar && !acbConfigurarTipo(1)) {
     marco("DTS startup failed: MSE video plane initialization");
+    dvCaminhoNaoAbriu();
     dtsVoltarNativo("video plane");
     return 0;
   }
@@ -2728,6 +2753,7 @@ static int iniciarDts(int stream) {
   if (!dtsSessao) {
     dtsMarcarAbertas(0);
     marco("DTS startup failed: software playback unavailable");
+    dvCaminhoNaoAbriu();
     dtsVoltarNativo("converter unavailable");
     return 0;
   }
@@ -2751,6 +2777,7 @@ static int logDtsStage(const char *event) {
   for (char *p = detail; *p; p++) if ((unsigned char)*p < 32) *p = ' ';
   printf("[dts] stage=%s %s\n", name, detail);
   fflush(stdout);
+  if (!strcmp(name, "source-opened")) dvFonteAberta = 1;
   return 1;
 }
 /* Native load callbacks can precede publication of the prepared metadata.
@@ -2787,6 +2814,7 @@ static void bombearDts(void) {
     dtsSaida[0] = 0;
     if (dtsModoDv) {
       dvRecuoAviso = !strcmp(st.error, DTS_PLAYBACK_STARVED) ? 1 : 2;
+      dvNao = dvRecuoAviso == 1 ? VIDEO_DV_NAO_LENTO : VIDEO_DV_NAO_FALHOU;
       dtsModoDv = 0; dvHabilitado = 0;
       dtsVoltarNativo("dolby vision");
       dtsEstado = 0;
@@ -3168,6 +3196,69 @@ int    video_iniciando(void) {
   return dtsSessao && pronto && !tocando && !pausaPedida && !falhou && !terminou;
 }
 void   video_dv_segurar(int segurar) { dvSegurar = segurar ? 1 : 0; }
+
+// --- A TELA DO DV (dvtela.h) -------------------------------------------------
+void video_dv_fase(VideoDvFase *f) {
+  int nosso = dtsSessao && dtsModoDv;
+  if (!f) return;
+  memset(f, 0, sizeof *f);
+  f->sessao = dvSessaoN;
+  f->sondado = dvSondado; f->perfil = dvMkvPerfil; f->el = dvMkvEl;
+  if (dvAudioMkvOrd >= 0 && dvAudioMkvOrd < dvAudios && dvAudioDe[0]) {
+    f->audioTrocado = 1;
+    snprintf(f->audioDe, sizeof f->audioDe, "%s", dvAudioDe);
+    snprintf(f->audioPara, sizeof f->audioPara, "%s", dvAudioCodec[dvAudioMkvOrd]);
+  }
+  f->caminho = dtsModoDv && dtsTentou;
+  f->fonteAberta = nosso && (dvFonteAberta || dtsRevisao > 0);
+  f->carregado = nosso && pronto;
+  f->dvConfirmado = nosso && !strcmp(vidHdr, "DolbyVision");
+  f->tocando = nosso && tocando;
+  f->recusa = dvNao;
+  f->falhou = falhou;
+}
+int video_dv_candidato(const char *url) {
+  return dvPedido && !fonteMp4 && url && !nv_url_e_mp4(url) && dvLiberadoNestaTv();
+}
+// O HDR10 do player da TV, coberto pela tela, fica MUDO. setVolume e o mesmo
+// do trailer mudo (uMS, por mediaId); a reproducao normal nunca mexe no volume,
+// entao devolver e voltar a 100. O caminho do DV e outro mediaId, com o volume
+// dele (dts_playback: 100 a cada load).
+static void dvSilenciarTv(void) {
+  char b[128];
+  if (!dvSilencio || dvSilenciado || dtsSessao || !ligado || !midia[0]) return;
+  snprintf(b, sizeof b, "{\"mediaId\":\"%s\",\"volume\":0}", midia);
+  chamar("setVolume", b, soLog);
+  dvSilenciado = 1;
+  printf("[dv] tela cobrindo: player da TV mudo\n"); fflush(stdout);
+}
+void video_dv_tela(int cobrindo) {
+  char b[128];
+  cobrindo = cobrindo ? 1 : 0;
+  dvSilencio = cobrindo;
+  if (cobrindo) { dvSilenciarTv(); return; }
+  if (dvSilenciado && !dtsSessao && ligado && midia[0]) {
+    snprintf(b, sizeof b, "{\"mediaId\":\"%s\",\"volume\":100}", midia);
+    chamar("setVolume", b, soLog);
+    printf("[dv] tela saiu: volume do player da TV de volta\n"); fflush(stdout);
+  }
+  dvSilenciado = 0;
+}
+// "Assistir agora em HDR10": esta fonte nao tenta mais DV. Com o caminho ja
+// aberto, volta ao player da TV na posicao de partida dele (o preroll ainda nao
+// andou); antes disso, so desliga e o player da TV segue.
+void video_dv_recusar(void) {
+  dvNao = VIDEO_DV_NAO_PESSOA;
+  dvHabilitado = 0; mkvRetryEm = 0;
+  if (dtsSessao && dtsModoDv) {
+    char lu[sizeof legUrlAtual];
+    double alvo = posSeg;
+    dtsModoDv = 0;
+    printf("[dv] a pessoa escolheu HDR10: volta ao player da TV em %.1fs\n", alvo); fflush(stdout);
+    snprintf(lu, sizeof lu, "%s", legUrlAtual);
+    if (!recarregarMesmaFonte(alvo, -1, -1, lu)) falhou = 1;
+  } else { printf("[dv] a pessoa escolheu HDR10\n"); fflush(stdout); }
+}
 // Ha midia carregada. O furo na superficie usa ISTO e nao o loadCompleted:
 // abrir o buraco cedo nao custa nada (atras dele so existe o plano de video) e
 // esperar o evento deixaria a tela desenhada por cima do video se o evento

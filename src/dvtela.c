@@ -36,6 +36,7 @@ int dvt_passo(DvtelaEstado *e, const DvtelaSinais *s, Uint32 agora) {
   unsigned a;
   if (!e->ativa || !s) return 0;
   // A fonte morreu: o erro de sempre do player cuida (Abrir fontes / Voltar).
+  if (s->perfil) e->perfil = s->perfil;   // a nota da recusa diz o perfil
   if (s->falhou) { dvt_sair(e, DVT_SAIDA_FONTE, agora); return DVT_SAIDA_FONTE; }
   if (s->recusa) {
     e->recusa = s->recusa;
@@ -117,7 +118,9 @@ static void logSaida(void) {
 }
 
 void dvtela_entrar(Uint32 agora) {
-  if (E.ativa) return;
+  // Fonte nova com a tela de pe (a troca automatica caiu noutra fonte DV): os
+  // passos recomecam, a tela fica.
+  if (E.ativa) printf("[dvtela] fonte nova (%u ms)\n", (unsigned)(agora - E.entrouEm));
   dvt_entrar(&E, agora);
   passoLogado = DVT_PASSO_LER; dicaLogada = 0;
   dicaA = 0.0f;

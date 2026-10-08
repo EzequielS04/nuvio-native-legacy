@@ -117,6 +117,7 @@
 #include "p2p.h"
 #include "p2pmotor.h"
 #include "player.h"
+#include "dvtela.h"
 #include "legsync.h"
 #include "streams.h"
 #include "streamfitdur.h"
@@ -1672,6 +1673,10 @@ static int aberturaVencida(Uint32 desde) {
   InicioAbertura g;
   int at;
   if (!player_carregando() || desde <= INICIO_ABRE_SEM_SINAL_MS || video_fonte_tocou()) return 0;
+  // O CAMINHO DO DV ABRINDO nao e fonte muda: o nosso demux abre o arquivo de
+  // novo (22,8 s numa fonte lenta da C9, 08/10) e tem o recuo proprio (fonte
+  // lenta ou que nao abre volta ao player da TV, video_dv_recuo_consumir).
+  if (video_dv_ativo()) return 0;
   at = stream_atual();
   if (at != chaveAt || stream_n() != chaveN || fonteVODTentativas != chaveT) {
     chaveAt = at; chaveN = stream_n(); chaveT = fonteVODTentativas;
@@ -4798,6 +4803,10 @@ static void desenharTelas(Uint32 agora) {
   // dela (streams.c) e por isso nao a esconde mais.
   if (player_aberto()) { central_desenhar(agora); plrilha_desenhar(agora); }
   gfx_osd_mult = 1.0f;
+  // A TELA DO DOLBY VISION EM MKV (dvtela.h) por cima de TUDO do player, ilha
+  // inclusive: ela cobre a troca do HDR10 pelo caminho do DV e esvai sobre o
+  // filme. Sem o brilho do OSD (e tela, nao controle).
+  if (player_aberto()) dvtela_desenhar(agora);
 }
 
 // ONDE O RELOGIO DA ILHA CABE (ilha.h). Em toda tela de menu (Home, Explorar,

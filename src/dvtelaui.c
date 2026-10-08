@@ -31,12 +31,12 @@
 #include <string.h>
 
 #define C_W        1320.0f
-#define C_H         640.0f
+#define C_H         720.0f
 #define C_RAIO       40.0f
-#define C_PAD        68.0f
+#define C_PAD        64.0f
 #define COL_W       700.0f       // coluna do texto
 #define IL_W        420.0f       // a ilustracao
-#define LIN_H        54.0f       // um passo
+#define LIN_H        50.0f       // um passo
 #define PLACA_W     340.0f
 #define PLACA_H     118.0f
 
@@ -285,16 +285,17 @@ void dvtela_desenhar(Uint32 agora) {
                                      "entrega a imagem à TV. Leva alguns segundos."),
                     243, 242, 239, tx, ty + 104.0f, COL_W - 40.0f, 33.0f, 0.64f * a, 3);
 
-    passos(tx, ty + 214.0f, COL_W, agora, a);
+    passos(tx, ty + 232.0f, COL_W, agora, a);
 
-    // A DICA CALMA (60 s sem mudanca): uma linha em ambar, acima do botao.
+    // A DICA CALMA (60 s sem mudanca): em ambar, embaixo da ilustracao, na
+    // altura do botao que ela menciona. Nao e erro: nada pisca, nada fica
+    // vermelho.
     { float da = dvtela_dica_alfa();
       if (da > 0.01f) {
-        TxtLinha l = txt_linha_corta(TXT_V3_SUB, i18n("A fonte está lenta. Dá para esperar ou assistir em HDR10."),
-                                     255, 196, 90, 235, COL_W - 40.0f);
-        float yd = cy0 + C_H - C_PAD - BOTAO_H_SECUNDARIO - 44.0f + (1.0f - da) * 6.0f;
-        gfx_icone((GfxRect){ tx, yd - 1.0f, 22.0f, 22.0f }, "aj_clock", 1.0f, 0.77f, 0.35f, da * a);
-        txt_desenhar_alpha(l, tx + 34.0f, yd + 11.0f - (float)l.h * 0.5f, da * a);
+        float xd = cx0 + C_W - C_PAD - IL_W, yd = cy0 + C_H - C_PAD - BOTAO_H_SECUNDARIO - 4.0f + (1.0f - da) * 6.0f;
+        gfx_icone((GfxRect){ xd, yd + 4.0f, 22.0f, 22.0f }, "aj_clock", 1.0f, 0.77f, 0.35f, da * a);
+        txt_bloco_corta(TXT_V3_SUB, i18n("A fonte está lenta. Dá para esperar ou assistir em HDR10."),
+                        255, 196, 90, xd + 34.0f, yd, IL_W - 34.0f, 30.0f, 0.92f * da * a, 2);
       } }
 
     // O botao (o unico foco) e a dica do Voltar.
@@ -305,6 +306,6 @@ void dvtela_desenhar(Uint32 agora) {
       botao_pilula(b, rot, "aj_tv-minimal-play", dvtela_foco_botao() ? 1.0f : 0.0f, 0, 0, a);
       plrui_dicas(k, r, 1, b.x + b.w + 28.0f, b.y + b.h * 0.5f, 0, a * 0.85f); }
 
-    ilustracao(cx0 + C_W - C_PAD - IL_W, cy0 + C_PAD, IL_W, C_H - 2.0f * C_PAD, agora, a);
+    ilustracao(cx0 + C_W - C_PAD - IL_W, cy0 + C_PAD, IL_W, C_H - 2.0f * C_PAD - 70.0f, agora, a);
     ESCALA_SE_COUBER_FIM(); }
 }
