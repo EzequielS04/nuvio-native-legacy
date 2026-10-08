@@ -78,6 +78,39 @@ void assrender_pasta_fontes_app(const char *base, int wasm, char *out, size_t n)
   if (access(out, R_OK)) snprintf(out, n, "%s", "deploy/app/fonts");
 }
 
+/* #369: o libass nao cai para "qualquer fonte com o glifo" quando as fontes sao as
+ * da memoria (sem fontconfig: Android, .tpk, wasm): o tailandes de uma trilha
+ * ASS com estilo "Arial"/Inter saia em .notdef mesmo com o NotoSansThai ja
+ * entregue. Cada corrida de tailandes (U+0E00-0E7F, E0 B8/B9 xx) fora de chaves
+ * de override ganha {\fnNoto Sans Thai} ... {\fn}, o mesmo expediente do texto
+ * simples arabe (plainass.c). So corre se a fonte chegou ao libass. */
+static int ass_byte_tailandes(const unsigned char *p) {
+  return p[0] == 0xE0 && (p[1] == 0xB8 || p[1] == 0xB9) && (p[2] & 0xC0) == 0x80;
+}
+char *assrender_marcar_tailandes(const char *txt) {
+  static const char ini[] = "{\\fnNoto Sans Thai}", fim[] = "{\\fn}";
+  size_t n = strlen(txt), cap = n + 1, i, o = 0;
+  int achou = 0, chaves = 0, em = 0;
+  char *out;
+  for (i = 0; i + 2 < n; i++)
+    if (ass_byte_tailandes((const unsigned char *)txt + i)) { achou = 1; cap += sizeof ini + sizeof fim; i += 2; }
+  if (!achou) return NULL;
+  if (!(out = (char *)malloc(cap))) return NULL;
+  for (i = 0; i < n;) {
+    if (txt[i] == '{') chaves = 1;
+    if (txt[i] == '}') chaves = 0;
+    if (!chaves && i + 2 < n && ass_byte_tailandes((const unsigned char *)txt + i)) {
+      if (!em) { memcpy(out + o, ini, sizeof ini - 1); o += sizeof ini - 1; em = 1; }
+      memcpy(out + o, txt + i, 3); o += 3; i += 3; continue;
+    }
+    if (em) { memcpy(out + o, fim, sizeof fim - 1); o += sizeof fim - 1; em = 0; }
+    out[o++] = txt[i++];
+  }
+  if (em) { memcpy(out + o, fim, sizeof fim - 1); o += sizeof fim - 1; }
+  out[o] = 0;
+  return out;
+}
+
 #ifdef NV_ASS_LIBASS
 #include <SDL2/SDL.h>
 #include <ass/ass.h>
@@ -240,11 +273,13 @@ static char assPastaFontes[640], assPastaFontesApp[640];
 static int assUsaSistema;
 static int assVistoNaskh;          /* NotoNaskhArabic-Regular chegou ao libass nesta carga */
 static int assNaskhBold;           /* NotoNaskhArabic-Bold chegou ao libass nesta carga (#335) */
+static int assVistoThai;           /* NotoSansThai-Regular chegou ao libass nesta carga (#369) */
 static char assPastaExtra[640];    /* NV_TPK: pasta de fontes baixadas (dados/fontes) */
 static void ass_fonte_da_pasta(const char *nome, const void *dados, size_t tam, void *u) {
   (void)u;
   if (!strcmp(nome, "NotoNaskhArabic-Regular.ttf")) assVistoNaskh = 1;
   if (!strcmp(nome, "NotoNaskhArabic-Bold.ttf")) assNaskhBold = 1;
+  if (!strcmp(nome, "NotoSansThai-Regular.ttf")) assVistoThai = 1;
   /* The UI subset shares the family name but lacks mixed-script glyphs.
    * Plain subtitles use the verified complete face; leave UI selection intact. */
   if (!strcmp(nome, "NotoNaskhArabic-Subset.ttf")) return;
@@ -274,6 +309,7 @@ static void ass_carregar_pasta_locked(void) {
   int ignorados = 0, lidas;
   if (!assLib || !assPastaFontes[0]) return;
   assNaskhBold = 0;
+  assVistoThai = 0;
   lidas = assUsaSistema ? assrender_ler_pasta_fontes(assPastaFontes, ass_fonte_da_pasta, NULL, &ignorados) : 0;
   assVistoNaskh = 0;
   if (assPastaFontesApp[0] && (!assUsaSistema || strcmp(assPastaFontesApp, assPastaFontes)))
@@ -470,6 +506,17 @@ static void ass_trilha_arabe_sem_negrito(ASS_Track *t) {
   if (!arabe || assNaskhBold) return;
   for (i = 0; i < t->n_styles; i++) t->styles[i].Bold = 0;
   ass_diag("libass: trilha com arabe: negrito sintetico desligado");
+}
+
+
+static void ass_trilha_tailandes(ASS_Track *t) {
+  int i;
+  if (!assVistoThai) return;
+  for (i = 0; i < t->n_events; i++) {
+    char *novo;
+    if (!t->events[i].Text || !(novo = assrender_marcar_tailandes(t->events[i].Text))) continue;
+    free(t->events[i].Text); t->events[i].Text = novo;
+  }
 }
 
 static void ass_plain_style_locked(const PlainAssStyle *p) {
@@ -743,6 +790,7 @@ static int ass_carregar(const char *corpo, size_t tamanho, unsigned geracao, int
   if (assTrack) ass_free_track(assTrack);
   assTrack = track;
   ass_trilha_arabe_sem_negrito(track);
+  ass_trilha_tailandes(track);
   plainTimingValid = 0;
   /* Authored ASS retains its own margins after a converted plain track. */
   ass_set_selective_style_override_enabled(assRenderer, 0);
