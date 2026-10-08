@@ -76,24 +76,29 @@ static void vidro(GfxRect r, float raioPx, float a) {
   gfx_anel(r, raioPx / r.h, 1.0f, 1, 1, 1, 0.09f * a);
 }
 
+// O FUNDO NUMA PASSADA SO, COM RUIDO (dono, C9 OLED, 08/10: "o gradiente do
+// background ta daquele jeito"). Eram tres camadas translucidas escuras —
+// chapado, a arte desfocada pelo GFX_CARD (que nao tem ruido) a 55% e um veu
+// — cada uma quantizada em 8 bits por conta propria: o degrade escuro da arte
+// saia em patamares de ate 166 px (tests/dvtela_shot.c, medirFaixas), que o
+// OLED mostra como contorno. Agora a arte e o escurecimento saem do GFX_SNAP
+// com o nv_dither ligado (uPar.x = 1, o mesmo do Frost): mix(arte, escuro,
+// uFoco) e meio degrau de ruido antes de quantizar, numa passada de tela
+// cheia so — a mesma conta que o chapado + arte*0,8*0,55 + veu de 38% davam
+// no meio da tela. O degrade da base (veu, ja com ruido) fica por cima.
+// A copia desfocada (96x54) ja e 16:9 como a tela; o GFX_SNAP a estica inteira.
 static void fundo(float a) {
   GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
   GLuint tb = 0;
-  // Opaco desde o primeiro quadro: atras pode estar o HDR10 do player da TV.
-  gfx_cor(tela, 0.0f, 0.027f, 0.029f, 0.036f, a);
   if (arteUrl[0]) {
     GLuint t = tex_obter_larg(arteUrl, 480);
     if (t) tb = gfx_desfocado(t, arteUrl);
   }
-  if (tb) {
-    gfx_tex_aspect_atual = tex_aspecto(arteUrl);
-    gfx_card_forcar_cover_atual = 1.0f;
-    gfx_rect(tela, tb, GFX_CARD, 0, 0, 0, 0.0f, 1, 1, 1, 0.55f * a);
-    gfx_card_forcar_cover_atual = 0.0f;
-    gfx_tex_aspect_atual = 0.0f;
-  }
-  // Escurece mais nas bordas que no meio: o cartao fica numa poca de luz.
-  gfx_veu_css_base(tela, 0, 0.0f, 1.0f, 0.35f * a, 0.38f * a);
+  // Opaco desde o primeiro quadro: atras pode estar o HDR10 do player da TV.
+  if (tb) gfx_rect(tela, tb, GFX_SNAP, 0.727f, 1.0f, 0.0f, 0.0f, 0.0104f, 0.0111f, 0.0138f, a);
+  else gfx_cor(tela, 0.0f, 0.016f, 0.017f, 0.021f, a);
+  // Escurece a base: o cartao fica numa poca de luz.
+  gfx_veu_css(tela, 0, 0.0f, 1.0f, 0.35f * a);
 }
 
 // --------------------------------------------------------------- a ilustracao
