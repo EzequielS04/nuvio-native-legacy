@@ -144,6 +144,12 @@ int   addons_aceita_id(int i, const char *t, const char *id) { (void)i; (void)t;
 const char *ajustes_tmdb_idioma(void)      { return "pt-BR"; }
 int   cat_acrescentar(const CatItem *i)    { (void)i; return -1; }
 void  cat_atualizar_item(int i, const CatItem *n) { (void)i; (void)n; }
+// 2.0.3: fios da descoberta copiam e escrevem por partes (2b4234eb, 70acffaf).
+int   cat_copiar_item(int i, CatItem *s) { (void)i; (void)s; return 0; }
+int   cat_completar_sinopse(int i, const char *im, const char *si, const char *ti) { (void)i; (void)im; (void)si; (void)ti; return 0; }
+int   cat_aplicar_localizado(int i, const char *im, const char *ti, const char *si, const char *lo, const char *fu) { (void)i; (void)im; (void)ti; (void)si; (void)lo; (void)fu; return 0; }
+int   ajustes_tmdb_basico(void)            { return 0; }
+int   ajustes_tmdb_arte(void)              { return 0; }
 void  cat_cache_substituido(void)          { }
 void  cat_definir_episodios(int i, const CatEp *l, int n) { (void)i; (void)l; (void)n; }
 int   cat_do_cache(void)                   { return 0; }
