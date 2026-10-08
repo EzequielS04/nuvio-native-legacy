@@ -29,11 +29,11 @@
 // pela MESMA conexao/servidor (ver a nota de 320 KB em mkv.c); 8 pedidos
 // pequenos por segundo e uma fracao do que um segmento de video custa.
 #ifndef MKVASS_RANGES_POR_SEG
-#define MKVASS_RANGES_POR_SEG 8
+#define MKVASS_RANGES_POR_SEG 3
 #endif
 // Dois blocos do MESMO Cluster a menos de isto um do outro saem num Range so:
 // baixar 64 KB de video no meio custa menos que um round-trip a mais na TV.
-#define MKVASS_JUNTAR      (64L * 1024)
+#define MKVASS_JUNTAR      (256L * 1024)
 // Primeira leitura do arquivo: SeekHead, Info e Tracks moram nos primeiros KB
 // em tudo que ffmpeg e mkvmerge produzem. Se o SeekHead apontar para fora, o
 // elemento e buscado onde ele diz.
@@ -356,6 +356,7 @@ typedef struct {
   // indice do VIDEO e pode faltar Cluster entre dois pontos — a varredura
   // segue de um ponto ate o Cluster do seguinte; 0 = a lista veio da propria
   // faixa (sem CueRelativePosition) e cada Cluster listado basta.
+  long     pausaMs;        // pausa atual apos freio do CDN (0 = nenhuma); dobra ate 60 s
   int      varredura, varreEncadeia;
   // Modo SEM Cues nenhum (varreInteira): um trecho so, lido por um cursor
   // dentro da janela; seek longe salta por bitrate (varreDur vem do Info) e
@@ -692,12 +693,17 @@ static void conferirCorte(Fio *f) {
 
 // Recuo entre falhas seguidas DENTRO do fio: 0,5, 1, 2, 4, 8 s. Acorda antes
 // so para parar ou trocar de faixa — o playhead andando nao encurta o recuo.
+static void esperarMs(Fio *f, long ms);
 static void recuar(Fio *f) {
-  long ms = 500L, ate;
+  long ms = 500L;
   int k;
   for (k = 1; k < f->falhas && ms < 8000L; k++) ms *= 2;
   if (ms > 8000L) ms = 8000L;
-  ate = agoraMs() + ms;
+  esperarMs(f, ms);
+}
+
+static void esperarMs(Fio *f, long ms) {
+  long ate = agoraMs() + ms;
   while (minhaVez(f)) {
     long falta = ate - agoraMs();
     struct timespec rt;
@@ -767,7 +773,7 @@ static unsigned char *range(Fio *f, Off ini, long n, long *tam) {
   // deste sair — mas SO ELE (#92, v1.4.7): o passo seguinte e os pedidos de
   // novo ficam adiados (avancarFontes com esperar 1). Antes o Cues esperava o
   // anexo de 5,6 MB inteiro, e as quatro falhas dele contavam como da legenda.
-  if (f->paralelos <= 1 && f->jobFontes && !foraDoTeto(f)) avancarFontes(f, 1);
+  if (f->jobFontes && !foraDoTeto(f)) avancarFontes(f, 1);
   // PRE-BUSCA fora do teto por segundo: o teto existe para nao disputar a
   // conexao com o VIDEO, e ele ainda nao comecou. Quem segura o ritmo ali e
   // MKVASS_PARALELOS (e o freio do CDN, que derruba para uma conexao).
@@ -1399,7 +1405,12 @@ static int lerCabecalho(Fio *f) {
     tam = lerTam(p + o + ui, n - o - ui, &ut);
     if (tam < 0) break;
     o += ui + ut;
-    if (o + tam > n) break;        // elemento passa da janela: o SeekHead resolve
+    if (o + tam > n) {             // elemento passa da janela: o SeekHead resolve
+      // Sem SeekHead que diga onde esta o Tracks, o proprio inicio dele serve
+      // (#308: Tracks de 96 KB num remux sem SeekHead para ele).
+      if (id == ID_TRACKS && f->posTracks < 0) f->posTracks = f->segIni + (o - ui - ut - f->segIni);
+      break;
+    }
     if (id == ID_SEEKHEAD) { f->seekHeadVisto = 1; lerSeekHead(f, p + o, tam); }
     else if (id == ID_INFO) { lerInfo(f, p + o, tam); achouInfo = 1; }
     else if (id == ID_TRACKS) {
@@ -1439,7 +1450,7 @@ static int lerCabecalho(Fio *f) {
   // Na pre-busca com o video ainda fechado sai em paralelo mesmo assim: nao ha
   // video para disputar a conexao, e depois dele e que o CDN do relato cortava.
   if (!achouAttachments && !f->fontesCompletas && f->posAttachments >= 0) {
-    if (f->paralelos > 1 || foraDoTeto(f)) {
+    if (foraDoTeto(f)) {
       f->jobFontes = submeter(f, f->posAttachments, 64);
       f->fontesPasso = f->jobFontes ? 1 : 3;
     } else f->fontesPasso = 4;
@@ -1454,7 +1465,34 @@ static int lerCabecalho(Fio *f) {
     ui = 0;
     if (lerId(p, n, &ui) != ID_TRACKS) { free(p); return MKVASS_NOGO_SEM_RANGE; }
     tam = lerTam(p + ui, n - ui, &ut);
+    // #308: o CodecPrivate de um fansub (estilos e typesetting) leva o Tracks a
+    // 96 KB; com os 64 KB fixos acima o elemento vinha cortado e a faixa ASS
+    // virava "nao e ASS", indo para a TV como texto simples. Agora pede o
+    // elemento inteiro (teto de MKVASS_CORPO_MAX, o mesmo do corpo ASS).
+    if (tam > 0 && tam <= MKVASS_CORPO_MAX && ui + ut + tam > n) {
+      long total = ui + ut + tam;
+      free(p);
+      p = rangeInsistir(f, f->posTracks, total, &n);
+      if (!p) return MKVASS_NOGO_REDE;
+      ui = 0;
+      if (lerId(p, n, &ui) != ID_TRACKS) { free(p); return MKVASS_NOGO_SEM_RANGE; }
+      tam = lerTam(p + ui, n - ui, &ut);
+    }
     if (tam <= 0 || ui + ut + tam > n) { free(p); return MKVASS_NOGO_FAIXA; }
+    // #308: a sonda de rotulos (mkv.c) le o cabecalho guardado em S.cab; com o
+    // Tracks inteiro agora na mao, estende o cabecalho ate o fim dele.
+    if (f->prebusca && f->posTracks > 0) {
+      pthread_mutex_lock(&S.trava);
+      if (f->g == S.geracao && !S.parar && S.cab && S.cabN >= f->posTracks && S.cabN < f->posTracks + n) {
+        long ptr = (long)f->posTracks, nn = ptr + n;
+        unsigned char *nc = malloc((size_t)nn);
+        if (nc) {
+          memcpy(nc, S.cab, (size_t)ptr); memcpy(nc + ptr, p, (size_t)n);
+          free(S.cab); S.cab = nc; S.cabN = nn;
+        }
+      }
+      pthread_mutex_unlock(&S.trava);
+    }
     achouTracks = lerTracks(f, p + ui + ut, tam);
     free(p);
     if (achouTracks <= 0) return MKVASS_NOGO_FAIXA;
@@ -1464,7 +1502,7 @@ static int lerCabecalho(Fio *f) {
 
 // As fontes podem ir ao pool AGORA, ao lado dos Ranges da legenda? Com mais
 // de uma conexao extra, ou na pre-busca com o video fechado.
-static int fontesEmParalelo(const Fio *f) { return f->paralelos > 1 || foraDoTeto(f); }
+static int fontesEmParalelo(const Fio *f) { return foraDoTeto(f); }
 
 // Anda o pedido das fontes. `esperar`: 0 so olha; 1 espera o pedido que esta
 // no ar (uma conexao so: range() nao sai com ele no ar); 2 espera ate o fim,
@@ -2804,7 +2842,7 @@ static void preBuscar(Fio *f, double pos) {
   // pre-busca nenhuma, o fio pede um Range por vez e o servidor ve UMA
   // conexao alem da do video. (Com a pre-busca de 1, o cabecalho de Cluster e
   // o palpite que o fio pede por conta propria ainda saiam em paralelo.)
-  for (k = 0; k < n && f->paralelos > 1 && noAr < f->paralelos; k++) {
+  for (k = 0; k < n && f->paralelos > 1 && foraDoTeto(f) && noAr < f->paralelos; k++) {
     Off ini; long len; int slot;
     rangeDoGrupo(f, ii[k], jj[k], &ini, &len);
     if (temPre(f, ini, len)) continue;
@@ -3019,6 +3057,19 @@ static void *trabalhar(void *arg) {
           }
           goto sair;
         }
+        // #308: curl 28, 429 e 5xx sao o CDN pedindo calma, nao o fim da faixa.
+        // PAUSA a leitura lateral (10 s, dobrando ate 60 s) em vez de falhar:
+        // a faixa nao vai para a TV, e o video fica com a conexao so para ele.
+        if (f->falhas >= MKVASS_FALHAS_MAX && !f->definitivo &&
+            (f->ultErro == 28 || f->ultSt == 429 || f->ultSt >= 500)) {
+          f->pausaMs = f->pausaMs ? (f->pausaMs * 2 > 60000L ? 60000L : f->pausaMs * 2) : 10000L;
+          printf("[mkvass] CDN pediu calma (HTTP %d, curl %d): leitura da legenda em pausa %ld s\n",
+                 f->ultSt, f->ultErro, f->pausaMs / 1000);
+          fflush(stdout);
+          f->falhas = 1;
+          esperarMs(f, f->pausaMs);
+          continue;
+        }
         if (f->falhas >= MKVASS_FALHAS_MAX) {
           if (definirEstadoSeAtual(f, f->definitivo ? MKVASS_NOGO_HTTP : MKVASS_NOGO_REDE)) {
             printf("[mkvass] %d Ranges falhados seguidos: parando esta tentativa (HTTP %d, curl %d)\n",
@@ -3028,7 +3079,7 @@ static void *trabalhar(void *arg) {
           goto sair;
         }
         recuar(f);
-      } else colheuAlgo = 1;
+      } else { colheuAlgo = 1; f->pausaMs = 0; }
       }
       feitos++;
       // Fala da cena de agora: ao overlay ja, sem esperar a passada.
