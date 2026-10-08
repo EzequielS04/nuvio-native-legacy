@@ -63,6 +63,8 @@ int  intro_ativo(double posSeg,double *fim,int *tipo);
 // Segundo em que os creditos comecam, ou 0 quando nao ha marcador. Serve ao
 // posplay.c, que precisa do INSTANTE e nao de "estou dentro".
 double intro_creditos_seg(void);
+// 1 se os trechos (e o marcador acima) vieram do AniSkip; 0 = TheIntroDB.
+int intro_creditos_aniskip(void);
 // Duracao real da midia (0 = desconhecida) e se e filme: base da guarda de
 // janela. Tambem pede de novo com `duration_ms` quando ela chega ou muda (como
 // o plugin oficial) e tenta de novo depois de uma falha de rede/5xx.

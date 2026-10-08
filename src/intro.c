@@ -9,7 +9,7 @@
 #include <string.h>
 
 static pthread_mutex_t trava=PTHREAD_MUTEX_INITIALIZER;
-static IntroTrecho trechos[8];static int nTrechos;static unsigned geracao;
+static IntroTrecho trechos[8];static int nTrechos;static int trechosAni; /* 1 = os trechos vieram do AniSkip */static unsigned geracao;
 static int botaoIdx=-1;static double botaoDesde;
 static int botaoVis;static double botaoFim;static int botaoTipo;
 // Trechos que o PROPRIO ARQUIVO declara (capitulos do MKV, 203-capitulos): valem
@@ -282,7 +282,7 @@ static void *baixar(void *u){
   vale=p->g==geracao;
   if(vale){
     if(r==R_FALHA){falhou=1;falhouEm=(long)time(NULL);}
-    else{falhou=0;memcpy(trechos,v,(size_t)n*sizeof *v);nTrechos=n;}
+    else{falhou=0;memcpy(trechos,v,(size_t)n*sizeof *v);nTrechos=n;trechosAni=deAni;}
     fundirCapitulos();
   }
   pthread_mutex_unlock(&trava);
@@ -299,7 +299,7 @@ static void disparar(const Pedido *base,double dur,int novo){
   p=malloc(sizeof*p);if(!p)return;
   *p=*base;p->dur=dur;
   pthread_mutex_lock(&trava);
-  if(novo){nTrechos=0;nCapTr=0;refeitos=0;tentativas=0;}
+  if(novo){nTrechos=0;trechosAni=0;nCapTr=0;refeitos=0;tentativas=0;}
   falhou=0;
   p->g=++geracao;ultimo=*p;temUltimo=1;enviadoDur=dur;
   pthread_mutex_unlock(&trava);
@@ -351,7 +351,7 @@ void intro_definir_capitulos(const IntroTrecho *v,int n){
   pthread_mutex_unlock(&trava);
   if(n>0){printf("[intro] %d trecho(s) vindos dos capitulos do arquivo\n",n);fflush(stdout);}
 }
-void intro_desligar(void){pthread_mutex_lock(&trava);geracao++;nTrechos=0;nCapTr=0;botaoVis=0;botaoIdx=-1;temUltimo=0;falhou=0;pthread_mutex_unlock(&trava);}
+void intro_desligar(void){pthread_mutex_lock(&trava);geracao++;nTrechos=0;trechosAni=0;nCapTr=0;botaoVis=0;botaoIdx=-1;temUltimo=0;falhou=0;pthread_mutex_unlock(&trava);}
 
 // DURACAO DA MIDIA E O TIPO (filme/serie), para recusar janelas absurdas.
 static double durMidia;static int ehFilme;
@@ -518,6 +518,10 @@ int intro_botao_visivel(double*fim,int*tipo){
 // 2.0.3: so os trechos que a guarda de janela ACEITA (valido). Um marcador de
 // creditos recusado para o botao (meio do episodio, outro corte) tambem nao
 // pode abrir o cartao do proximo episodio.
+// 1 quando os trechos atuais vieram do AniSkip, 0 quando do TheIntroDB.
+int intro_creditos_aniskip(void){
+  int r;pthread_mutex_lock(&trava);r=trechosAni;pthread_mutex_unlock(&trava);return r;
+}
 double intro_creditos_seg(void){
   double s=0.0;pthread_mutex_lock(&trava);
   for(int i=0;i<nTrechos;i++)

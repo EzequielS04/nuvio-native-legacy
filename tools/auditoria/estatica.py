@@ -65,6 +65,10 @@ CONFERE_PERFIL_RE = re.compile(r"perfis_ativo|perfil\w*[Gg]er|[Gg]eracao|\bger\w
 PROVENIENCIA = [
     {"rotulo": "introdb", "arquivo": "intro.c", "loja": "trechos",
      "permitidos": {"intro_extrair"},
+     # 2.0.3: quando a mesma escrita grava tambem esta variavel de procedencia,
+     # o dado de outro leitor (AniSkip) viaja com a fonte real e o rotulo do
+     # consumidor ja nao mente (credfonte.c escolhe "aniskip" por ela).
+     "marca_fonte": "trechosAni",
      "leitor_re": r"\b(\w*extrair\w*|\w*_parse\w*|\w*ler_resposta\w*)\s*\("},
 ]
 ROTULOS_FONTE = ["introdb", "trakt", "simkl", "nuvio", "tmdb", "aniskip", "cinemeta",
@@ -525,6 +529,9 @@ def v3_rotulos(B):
                     for m in re.finditer(c["leitor_re"], l):
                         leitores.setdefault(m.group(1), B.fn[v][1] + k)
             ruins = {n: ln for n, ln in leitores.items() if n not in c["permitidos"]}
+            mf = c.get("marca_fonte")
+            if ruins and mf and any(re.search(r"\b" + mf + r"\s*=[^=]", l) for l in corpo):
+                ruins = {}
             if ruins:
                 emite = [f"{a}:{b}" for a in B.codes for b, l in enumerate(B.codes[a], 1)
                          if f'"{c["rotulo"]}"' in l][:3]
