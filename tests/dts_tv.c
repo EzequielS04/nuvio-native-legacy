@@ -3,7 +3,8 @@
 static int fails;
 #define CHECK(c) do { if (!(c)) { printf("FAIL %s:%d %s\n", __FILE__, __LINE__, #c); fails++; } } while (0)
 int main(void) {
-  /* C9 (webOS 4) was the last LG with DTS; unknown release keeps the old path. */
+  /* C9 and older (webOS < 5) keep the native path; 2020+ always converts, since
+     support (back on some 2023/24 models) can't be detected. Unknown keeps the old path. */
   CHECK(nv_dts_tv_decodifica(4)); CHECK(nv_dts_tv_decodifica(0)); CHECK(nv_dts_tv_decodifica(-1));
   CHECK(!nv_dts_converter_ja(4, 1, 1, 0)); CHECK(!nv_dts_converter_ja(0, 1, 1, 0));
   /* 2020+ LG (5, 6, 10, 11, webOS 26, marketing numbers): no DTS, convert now. */

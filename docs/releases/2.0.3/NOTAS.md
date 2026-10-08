@@ -60,17 +60,18 @@ New Settings, a new episode menu, the Magic Remote pointer on almost every scree
 - **Android:** start hang on Shield and other boxes, sign-in through the system network stack when libcurl fails (#266, #332); MStar flicker fixes and a crash report on Android 11 and older (#318).
 - **Home:** switching profile no longer shows the previous profile's rows (#294); the hero no longer depends on a drawn row, and a catalog added from Not on Home is no longer swallowed by a collection (#327); rebuilds are spaced out so Home settles with many collections (#319, #280).
 - **Add-ons with very long URLs** (2 to 16 KB) are no longer ignored, and add-ons past the limit are logged instead of cut silently.
-- **Auto-play** never picks an add-on placeholder; Samsung never picks Dolby Vision (#284).
+- **Auto-play** never picks an add-on placeholder; Samsung never picks Dolby Vision.
+- **Best for this TV** shows the resolution in the add-on's own order too, and an unknown resolution shows as "?" instead of 0p (#284). On LG, Dolby Vision in MKV only counts toward this ranking when that option is on.
 - **Embedded subtitles:** large MKV track headers, gentler reads, no stale downloads (#308, #330); more add-on subtitles (#268); Arabic subtitles with real bold and sharp ASS in 4K (#335).
 - **Duplicate episodes** in the episode list (#328).
-- **LG:** resume no longer drops the source on a failed seek (#246); DTS on webOS 26 (#285).
-- **Samsung:** Pause and subtitle list errors (#269); aspect/zoom button on Tizen 4/5; Arabic subtitles when an older install left old fonts. When the TV hides an audio track it can't play (DTS, TrueHD), the other tracks keep the names from the file instead of a generic one.
+- **LG:** resume no longer drops the source on a failed seek (#246); DTS audio on LG TVs from 2020 onward is now converted before playback (#285). Some 2023–2024 models could decode it natively; conversion is used for all of them because support can't be detected reliably.
+- **Samsung:** Pause and subtitle list errors (#269); aspect/zoom button on Tizen 4/5 (#341, probable fix, not yet confirmed on a TV); Arabic subtitles when an older install left old fonts. When the TV hides an audio track it can't play (DTS, TrueHD), the other tracks keep the names from the file instead of a generic one.
 - **Player:** UP at the top of the controls hides them (#305); the Seekr time and preview follow the hold.
 - **Live TV:** a channel queued while zapping keeps its add-on (#283).
-- **Trakt:** the watchlist is read page by page.
+- **Trakt:** the watchlist is read page by page, up to 400 items.
 - **Trakt/Simkl sign-in** no longer freezes the screen while sending credentials.
 - Saved: section label follows the open card. Glass outline follows the poster radius. Back from the add-on and plugin lists returns to the row you came from.
-- **Sync** summary is translated on the spot, and the Continue Watching source "Both" is now "All sources" (#312).
+- **Sync** summary is translated on the spot, and the Continue Watching source "Both" is now "All sources" (#312). With your own Seekr key there is no 50-lookup cap and no counter.
 - A username and password inside an add-on URL no longer show up in the log.
 - The log is sent once per session, at most 64 KB, and records the settings you change.
 

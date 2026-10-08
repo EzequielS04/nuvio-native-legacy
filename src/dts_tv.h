@@ -4,9 +4,12 @@
  * (/etc/starfish-release, "release 11.2" -> 11), never from the TV's answer:
  * newer LGs play the DTS track SILENT instead of raising errorCode 200 (#285,
  * webOS 26), so waiting for the error never converts anything.
- * The LG C9 (2019, webOS 4) was the last LG with DTS: release major >= 5
- * (every 2020+ LG, and anything newer or marketing-numbered such as 26) is
- * assumed to have NO DTS. Below 5, or an unknown release (<= 0), keep the
+ * LG dropped DTS in 2020-2022, brought it back on some 2023/2024 models
+ * (OLED, QNED85 and up) and dropped it again in 2025, and gives no reliable
+ * way to detect it (a webOS 23 update has been reported to leave DTS silent).
+ * So every 2020+ LG (release major >= 5, including marketing-numbered ones
+ * such as 26) converts DTS before playing, even 2023/24 models that have DTS.
+ * Only the C9 and older (release < 5), or an unknown release (<= 0), keep the
  * native path and the errorCode 200 fallback. */
 #define NV_DTS_TV_PRIMEIRA_SEM_DTS 5
 static inline int nv_dts_tv_decodifica(int release_major) {
