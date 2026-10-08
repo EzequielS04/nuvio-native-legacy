@@ -128,14 +128,19 @@ static void aoMudarIdiomaAuto(const char *codigo, int fonte, int notificar) {
 // seguro dentro de um handler. Entao ele so ergue uma flag (sig_atomic_t) e o
 // laco principal, que ja checa app_quer_sair, sai e roda o encerramento de
 // sempre. O alarm e a rede de seguranca: se o laco estiver travado e nao
-// reagir em 4 s, o SIGALRM faz o que o handler fazia antes.
+// reagir em 4 s, o SIGALRM encerra o processo. So o que e async-signal-safe: o
+// handler antigo chamava trailer_fechar/video_encerrar/ajustes_log_vazar_tudo
+// (travas, free, join) e, se o laco estava preso DENTRO de uma delas, ou a
+// saida normal ja corria em outro ponto, reentrava na mesma trava e nunca
+// chegava ao _exit (so o SIGKILL tirava). Quando o laco sai de verdade o alarm
+// e rearmado com folga para a saida normal (join do fioFonte, p2pmotor_saida) e
+// cancelado no fim dela: antes o alarm(4) cortava a saida lenta pela metade.
+#define NV_SAIDA_FOLGA_S 25
 static volatile sig_atomic_t sinalTerminou = 0;
 static void aoAlarmeTerminar(int sig) {
+  static const char msg[] = "[main] SIGALRM: saida travada, _exit\n";
   (void)sig;
-  trailer_fechar();
-  video_encerrar();
-  ajustes_log_vazar_tudo();
-  fflush(stdout);
+  (void)!write(2, msg, sizeof msg - 1);
   _exit(0);
 }
 static void aoSinalTerminar(int sig) {
@@ -2165,6 +2170,9 @@ int main(int argc, char **argv) {
     }
   }
 
+#ifdef NV_SINAL_TERMINAR
+  if (sinalTerminou) alarm(NV_SAIDA_FOLGA_S);   // saida normal em curso: mais folga que os 4 s do laco
+#endif
   gfx_borrao_encerrar();
   gfx_snap_encerrar();
   app_encerrar();
@@ -2180,6 +2188,9 @@ int main(int argc, char **argv) {
   SDL_DestroyWindow(win);
   IMG_Quit();
   SDL_Quit();
+#ifdef NV_SINAL_TERMINAR
+  alarm(0);   // a saida normal terminou: nada de SIGALRM depois dela
+#endif
 #ifdef __EMSCRIPTEN__
   // O SDL_Quit apaga TODOS os hints (SDL_ClearHints, SDL.c do port 2.32.10),
   // inclusive o de ASYNCIFY acima — e os fios de trabalho continuam vivos
