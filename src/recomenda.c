@@ -13,6 +13,7 @@
 // O QUE ELE NAO GUARDA: token. A identidade e montada a cada ciclo a partir de
 // trakt.c ou de sessao.c e vai so no cabecalho do pedido.
 #include "recomenda.h"
+#include "atividade.h"
 #include "dados.h"
 #include "rede.h"
 #include "js.h"
@@ -1220,16 +1221,25 @@ int recomenda_bloqueado(int i, char *pub, size_t tp, char *nome, size_t tn) {
 
 // --- atividade (o player avisa; ESTE modulo decide se algo sai) --------------
 
+// UNICO PONTO que prepara um imdb para o servico. O card de Continuar assistindo
+// de serie traz "tt123:S:E" e o servidor so aceita /^tt\d{1,10}$/ (HTTP 400,
+// issues #363 e a atividade). Tudo que sai com imdb passa por aqui: o id da serie.
+static void imdbServidor(char *dst, size_t tam, const char *src) {
+  atividade_id_puro(dst, tam, src);
+}
+
 // Chamar com o mutex TOMADO.
 static void ativEnfileirar(const CatItem *ci, int agora) {
   int i, k = 0;
+  char idPuro[24];
   if (nAtivFila >= ATIV_FILA) return;
+  imdbServidor(idPuro, sizeof idPuro, ci->imdb);
   // Um titulo por vez na fila: o ultimo estado dele e o que vale.
   for (i = 0; i < nAtivFila; i++)
-    if (strcmp(ativFila[i].imdb, ci->imdb)) ativFila[k++] = ativFila[i];
+    if (strcmp(ativFila[i].imdb, idPuro)) ativFila[k++] = ativFila[i];
   nAtivFila = k;
   memset(&ativFila[nAtivFila], 0, sizeof ativFila[0]);
-  snprintf(ativFila[nAtivFila].imdb,   sizeof ativFila[0].imdb,   "%s", ci->imdb);
+  snprintf(ativFila[nAtivFila].imdb,   sizeof ativFila[0].imdb,   "%s", idPuro);
   snprintf(ativFila[nAtivFila].tipo,   sizeof ativFila[0].tipo,   "%s",
            !strcmp(ci->tipo, "series") ? "series" : "movie");
   snprintf(ativFila[nAtivFila].titulo, sizeof ativFila[0].titulo, "%s", ci->titulo);
@@ -2312,7 +2322,7 @@ static int corpoGosto(char *corpo, size_t tam) {
   ProgRegistro *reg = (ProgRegistro *)malloc(sizeof *reg * 120);
   size_t k;
   int i, n = 0, achou;
-  char vistos[40][24];
+  char vistos[40][24], idv[24];
   if (!reg) { snprintf(corpo, tam, "{\"imdbs\":[]}"); return 0; }
   achou = prog_ler(reg, 120);
   k = (size_t)snprintf(corpo, tam, "{\"imdbs\":[");
@@ -2320,9 +2330,10 @@ static int corpoGosto(char *corpo, size_t tam) {
     int j, dup = 0;
     if (reg[i].durSeg < 120.0 || reg[i].posSeg < reg[i].durSeg * 0.8) continue;
     if (strncmp(reg[i].contentId, "tt", 2)) continue;
-    for (j = 0; j < n; j++) if (!strcmp(vistos[j], reg[i].contentId)) dup = 1;
+    imdbServidor(idv, sizeof idv, reg[i].contentId);   // serie: "tt:S:E" -> "tt"
+    for (j = 0; j < n; j++) if (!strcmp(vistos[j], idv)) dup = 1;
     if (dup) continue;
-    snprintf(vistos[n], sizeof vistos[n], "%s", reg[i].contentId);
+    snprintf(vistos[n], sizeof vistos[n], "%s", idv);
     k += (size_t)snprintf(corpo + k, tam - k, "%s\"%s\"", n ? "," : "", vistos[n]);
     n++;
   }
@@ -3172,7 +3183,11 @@ void recomenda_responder_alcance(int nivel) {
 
 int recomenda_atividade(const RecAtiv *a) {
   int i, progresso;
+  RecAtiv pura;
   if (!recomenda_ativo() || !a || strncmp(a->imdb, "tt", 2)) return 0;
+  pura = *a;                    // o id que viaja e o da serie, nao o do episodio
+  imdbServidor(pura.imdb, sizeof pura.imdb, a->imdb);
+  a = &pura;
   if (!(!strcmp(a->ev, "inicio") || !strcmp(a->ev, "progresso") || !strcmp(a->ev, "fim") ||
         !strcmp(a->ev, "abandono") || !strcmp(a->ev, "reacao") || !strcmp(a->ev, "salvo")))
     return 0;
@@ -3693,11 +3708,10 @@ int recomenda_enviar(const CatItem *ci, const char *paraId, int modelo,
   SDL_LockMutex(mtx);
   if (fila.cheia || envioEstado == REC_ENVIO_INDO) { SDL_UnlockMutex(mtx); return 0; }
   memset(&fila, 0, sizeof fila);
-  snprintf(fila.imdb,   sizeof fila.imdb,   "%s", ci->imdb);
   // O CARD DE CONTINUAR ASSISTINDO DE SERIE TRAZ "tt123:S:E" (descoberta.c), e
   // o servidor so aceita /^tt\d+$/ (HTTP 400, issue #363). A recomendacao e do
   // titulo, nao do episodio: corta no primeiro ':'.
-  { char *dp = strchr(fila.imdb, ':'); if (dp) *dp = 0; }
+  imdbServidor(fila.imdb, sizeof fila.imdb, ci->imdb);
   snprintf(fila.tipo,   sizeof fila.tipo,   "%s", ci->tipo[0] ? ci->tipo : "movie");
   snprintf(fila.titulo, sizeof fila.titulo, "%s", ci->titulo);
   snprintf(fila.poster, sizeof fila.poster, "%s", ci->poster);
