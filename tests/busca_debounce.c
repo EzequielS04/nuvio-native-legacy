@@ -148,6 +148,23 @@ int main(void) {
   printf("1a resposta do termo novo: itens=%d (esperado %d)\n", busca_teste_itens(), nPorAlvo);
   assert(busca_teste_itens() == nPorAlvo);
 
+  // 4) RESPOSTA VAZIA (revisao 2.0.3 #5): "matrixs" tem 3 itens; digita "x" e o
+  // termo novo fica SEM resposta (as fileiras antigas ficam; ultimoRemoto passa
+  // a ver 0). Depois TODOS os alvos respondem com 0 itens: a contagem segue 0,
+  // so a chegada muda — os cartoes antigos precisam sair, sem outra edicao.
+  tecla(SDLK_x);
+  espera(380);
+  assert(nBuscar == 3 && !strcmp(ultimoTermo, "matrixsx"));
+  espera(200);   // ultimoRemoto observa n == 0 com as fileiras velhas ainda la
+  printf("termo novo pendente: itens=%d (esperado %d)\n", busca_teste_itens(), nPorAlvo);
+  assert(busca_teste_itens() == nPorAlvo);
+  snprintf(termoResp, sizeof termoResp, "matrixsx");
+  nPorAlvo = 0;
+  for (i = 0; i < NALVOS; i++) respondeu[i] = 1;
+  for (i = 0; i < 90; i++) quadro();   // so quadros: nada mais muda
+  printf("todos responderam 0: itens=%d (esperado 0)\n", busca_teste_itens());
+  assert(busca_teste_itens() == 0);
+
   // Concluir/voz: sem debounce — ST_FIM nao e simulavel aqui; o caminho de
   // "mesmo termo" nao recria pedido.
   tecla(SDLK_BACKSPACE);

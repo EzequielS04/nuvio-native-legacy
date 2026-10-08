@@ -1152,18 +1152,24 @@ void busca_atualizar(float dt, Uint32 agora) {
     if (!sugestao && spotpessoa_geracao() != gerPessoa) refiltrar();
     if (sugestao && cat_n() != ultimoCat) { ultimoCat = cat_n(); refiltrar(); } }
   { char alvo[BU_MAX_CONSULTA * 2];
-    static int ultimoRemoto = -1;
+    static int ultimoRemoto = -1, ultimoChegou = -1;
     normalizar(consulta, alvo, sizeof alvo);
     if (busca_codepoints(alvo) >= 2) {
       int n = desc_busca_n(consulta);
+      // A CONTAGEM SOZINHA NAO BASTA: "matrix" -> "matrixs" fica em 0 itens
+      // enquanto a resposta nao chega (fileiras antigas mantidas de proposito)
+      // e continua 0 quando ela chega VAZIA — n nao muda, o refiltro nao roda e
+      // os cartoes de "matrix" ficariam clicaveis para sempre. Chegada e parte
+      // da chave: a transicao "sem resposta" -> "resposta vazia" tambem refaz.
+      int chegou = desc_busca_chegou(consulta);
       // Respostas de varios alvos no mesmo instante viram UM refiltrar por
       // BU_COALESCE_MS; `ultimoRemoto` so avanca quando ele roda, entao o
       // resto nao se perde (roda no proximo quadro depois da janela).
-      if (n != ultimoRemoto && agora - ultimoRefiltro >= BU_COALESCE_MS) {
-        ultimoRemoto = n; ultimoRefiltro = agora; refiltrar();
+      if ((n != ultimoRemoto || chegou != ultimoChegou) && agora - ultimoRefiltro >= BU_COALESCE_MS) {
+        ultimoRemoto = n; ultimoChegou = chegou; ultimoRefiltro = agora; refiltrar();
       }
     } else {
-      ultimoRemoto = -1;
+      ultimoRemoto = -1; ultimoChegou = -1;
     } }
   for (int f = 0; f <= kbFil; f++)
     for (int c = 0; c < KB_COLUNAS[f]; c++) {
