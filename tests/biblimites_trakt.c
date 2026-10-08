@@ -11,7 +11,7 @@
 #include "../src/trakt.c"
 #ifndef TRAKT_LISTA_MAX   /* codigo antigo (prova de que o teste falha antes) */
 #ifdef NV_ANDROID
-#define TRAKT_LISTA_MAX 3000
+#define TRAKT_LISTA_MAX 2000
 #else
 #define TRAKT_LISTA_MAX 400
 #endif
@@ -100,7 +100,7 @@ int main(void) {
 #else
   esperado = 400;
 #endif
-  verifica(TRAKT_LISTA_MAX == (esperado > 400 ? 3000 : 400), "TRAKT_LISTA_MAX por plataforma");
+  verifica(TRAKT_LISTA_MAX == (esperado > 400 ? 2000 : 400), "TRAKT_LISTA_MAX por plataforma");
 
   captura(1);
   v = malloc(sizeof(CatItem) * (size_t)TRAKT_LISTA_MAX);

@@ -1807,11 +1807,26 @@ int trakt_perfil(PerfilDados *d) {
   return 1;
 }
 
-int trakt_lista(const char *qual, CatItem *saida, int max) {
+// PAGINACAO (#6 Shield: biblioteca mostrava Trakt 213 de 1600+). A watchlist
+// aceita ?page=&limit= e, sem eles, devolve tudo; a colecao NAO pagina (a doc
+// do Trakt so lista page/limit na watchlist). O cabecalho X-Pagination-Page-
+// Count nao chega aqui (rede_baixar_com devolve so o corpo), entao a parada e a
+// do mapa de filmes vistos: pagina VAZIA, corpo igual ao anterior ou o teto da
+// plataforma. O Trakt pode capar a pagina abaixo do limit pedido, por isso
+// pagina curta NAO encerra. A colecao e pedida sem parametros, uma vez.
+#define TRAKT_LISTA_PAGINA 500
+#define TRAKT_LISTA_PAGINAS_MAX 64
+
+// `*pv`/`cap` fixos (cresce=0) ou crescendo por realloc (cresce=1). `max` e o
+// teto de itens; `pag` recebe quantas paginas foram lidas e `total` quantos
+// itens a conta tinha ate onde foi lido (inclui os que passaram do teto).
+static int listaNucleo(const char *qual, CatItem **pv, int *cap, int cresce,
+                       int max, int *pag, int *total) {
   const char *cab[4];
-  char aut[200], chave[140], url[160], *corpo;
+  char aut[200], chave[140], url[200], *corpo, *anterior;
   const char *p;
-  int n = 0, passo;
+  int n = 0, passo, paginas = 0, visto = 0;
+  int paginavel = !strcmp(qual, "watchlist");
   if (!ligado) return 0;
   snprintf(aut, sizeof aut, "Authorization: Bearer %s", token);
   snprintf(chave, sizeof chave, "trakt-api-key: %s", cliente);
@@ -1819,47 +1834,102 @@ int trakt_lista(const char *qual, CatItem *saida, int max) {
 
   // Filmes e series vem em endpoints separados; misturar as duas listas na
   // mesma fileira e o que o dono ve como "Minha Lista".
-  for (passo = 0; passo < 2 && n < max; passo++) {
+  for (passo = 0; passo < 2; passo++) {
     const char *tipo = passo ? "shows" : "movies";
-    snprintf(url, sizeof url, "https://api.trakt.tv/sync/%s/%s", qual, tipo);
-    corpo = rede_baixar_com(url, 25, cab);
-    if (!corpo) continue;
-    p = strchr(corpo, '[');
-    p = p ? p + 1 : NULL;
-    while (p && *p && n < max) {
-      const char *f;
-      while (*p && (unsigned char)*p <= ' ') p++;
-      if (*p != '{') break;
-      f = js_fim(p);
-      {
-        CatItem *d = &saida[n];
-        const char *bloco = strstr(p, passo ? "\"show\"" : "\"movie\"");
-        char imdb[24] = "";
-        memset(d, 0, sizeof *d);
+    int pagina = 1;
+    anterior = NULL;
+    for (;;) {
+      int lidos = 0;
+      if (paginavel)
+        snprintf(url, sizeof url, "https://api.trakt.tv/sync/%s/%s?page=%d&limit=%d",
+                 qual, tipo, pagina, TRAKT_LISTA_PAGINA);
+      else
+        snprintf(url, sizeof url, "https://api.trakt.tv/sync/%s/%s", qual, tipo);
+      corpo = rede_baixar_com(url, 25, cab);
+      if (!corpo) break;
+      if (anterior && !strcmp(anterior, corpo)) { free(corpo); break; }
+      paginas++;
+      p = strchr(corpo, '[');
+      p = p ? p + 1 : NULL;
+      while (p && *p) {
+        const char *f;
+        const char *bloco;
+        char imdb[24] = "", titulo[160] = "";
+        while (*p && (unsigned char)*p <= ' ') p++;
+        if (*p != '{') break;
+        f = js_fim(p);
+        bloco = strstr(p, passo ? "\"show\"" : "\"movie\"");
         if (bloco && bloco < f) {
           const char *fb = js_fim(strchr(bloco, '{'));
-          js_texto(bloco, fb, "title", d->titulo, sizeof d->titulo);
+          js_texto(bloco, fb, "title", titulo, sizeof titulo);
           js_texto(bloco, fb, "imdb", imdb, sizeof imdb);
         }
         if (imdb[0]) {
-          snprintf(d->imdb, sizeof d->imdb, "%s", imdb);
-          snprintf(d->tipo, sizeof d->tipo, "%s", passo ? "series" : "movie");
-          if (!strcmp(qual, "watchlist")) d->naLista = 1;
-          else                            d->naColecao = 1;
-          // Arte SEM consultar: metahub deterministico pelo IMDb (ver
-          // artemetahub.h). Uma consulta por item limitava a lista a dez.
-          arte_metahub_preencher(d);
-          snprintf(d->genero, sizeof d->genero, "%s",
-                   i18n(passo ? "Programa de TV" : "Filme"));
-          n++;
+          lidos++; visto++;
+          if (n < max) {
+            CatItem *d;
+            if (cresce && n >= *cap) {
+              int nc = *cap ? *cap * 2 : 256;
+              CatItem *m;
+              if (nc > max) nc = max;
+              m = realloc(*pv, sizeof(CatItem) * (size_t)nc);
+              if (!m) { max = n; p = js_prox(f); continue; }
+              *pv = m; *cap = nc;
+            }
+            d = &(*pv)[n];
+            memset(d, 0, sizeof *d);
+            snprintf(d->titulo, sizeof d->titulo, "%s", titulo);
+            snprintf(d->imdb, sizeof d->imdb, "%s", imdb);
+            snprintf(d->tipo, sizeof d->tipo, "%s", passo ? "series" : "movie");
+            if (paginavel) d->naLista = 1;
+            else           d->naColecao = 1;
+            // Arte SEM consultar: metahub deterministico pelo IMDb (ver
+            // artemetahub.h). Uma consulta por item limitava a lista a dez.
+            arte_metahub_preencher(d);
+            snprintf(d->genero, sizeof d->genero, "%s",
+                     i18n(passo ? "Programa de TV" : "Filme"));
+            n++;
+          }
         }
+        p = js_prox(f);
       }
-      p = js_prox(f);
+      free(anterior); anterior = corpo;
+      if (!paginavel || !lidos || pagina >= TRAKT_LISTA_PAGINAS_MAX) break;
+      if (n >= max) break;   // teto da plataforma: nao pede o resto
+      pagina++;
     }
-    free(corpo);
+    free(anterior);
   }
-  printf("[trakt] %s: %d\n", qual, n);
+  if (pag) *pag = paginas;
+  if (total) *total = visto;
+  return n;
+}
+
+static void listaLog(const char *qual, int n, int total, int paginas, int max) {
+  printf("[trakt] %s: %d de %d (paginas %d)\n", qual, n, total, paginas);
+  if (total > n)
+    printf("[trakt] %s: teto %d da plataforma; %d ficaram de fora\n", qual, max,
+           total - n);
   fflush(stdout);
+}
+
+int trakt_lista(const char *qual, CatItem *saida, int max) {
+  int pag = 0, total = 0, n, cap = max;
+  CatItem *v = saida;
+  if (max <= 0) return 0;
+  n = listaNucleo(qual, &v, &cap, 0, max, &pag, &total);
+  listaLog(qual, n, total, pag, max);
+  return n;
+}
+
+int trakt_lista_cresc(const char *qual, CatItem **saida, int max) {
+  int pag = 0, total = 0, n, cap = 0;
+  CatItem *v = NULL;
+  *saida = NULL;
+  if (max <= 0) return 0;
+  n = listaNucleo(qual, &v, &cap, 1, max, &pag, &total);
+  listaLog(qual, n, total, pag, max);
+  *saida = v;
   return n;
 }
 

@@ -18,7 +18,13 @@
 // o item em si custa ~3,5 KB de texto.
 //
 // CAT_MAX sobrevive so como teto de seguranca contra resposta absurda.
+// ANDROID: biblioteca da conta de ate 2000 + fileiras dos addons (#6 Shield).
+// Os vetores por CAT_MAX sao ints/floats/chars (<= 100 KB no total).
+#ifdef NV_ANDROID
+#define CAT_MAX 4000
+#else
 #define CAT_MAX 2000
+#endif
 #define CAT_TEMP_MAX 64
 // Elenco guardado por titulo. O Cinemeta traz 3-5 nomes no `cast` do meta e era
 // isso que a tela mostrava (issue #94); quem completa a fileira e o TMDB, que

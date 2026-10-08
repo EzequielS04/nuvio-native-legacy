@@ -20,7 +20,11 @@
 #define SMK_PLAY_MAX 64
 // Plan to Watch conhecido, para a guarda do "-". 400 ids x 24 B = ~10 KB; a
 // lista de "quero ver" de uma pessoa real cabe com sobra.
+#ifdef NV_ANDROID
+#define SMK_PTW_MAX 1000
+#else
 #define SMK_PTW_MAX 400
+#endif
 
 int simkl_ativo(void) { return simklauth_token()[0] != 0; }
 
@@ -576,7 +580,8 @@ int simkl_plantowatch(CatItem *saida, int max) {
     pthread_mutex_unlock(&trava);
   }
   free(cF); free(cS);
-  printf("[simkl] plantowatch: %d\n", n);
+  printf("[simkl] plantowatch: %d%s\n", n, n >= max ? " (teto atingido)" : "");
+  if (n >= max) printf("[simkl] plantowatch: teto %d da plataforma\n", max);
   fflush(stdout);
   return n;
 }
