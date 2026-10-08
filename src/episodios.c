@@ -237,22 +237,32 @@ static int montarLote(int idx, int modo, int t, int e, VistoPar *saida, int max)
 // quando nao ha nada a fazer — e o caso de marcar o que ja esta marcado, que
 // nao deve gastar uma requisicao.
 //
-// QUANDO ALGO MUDOU, O LOTE INTEIRO VAI, e nao so o que mudou localmente: o
-// mapa pode dizer "visto" por um destino (Trakt) e o outro (Simkl) nao saber.
-// Um pedido por destino, com todos os episodios — nunca um por episodio. Se
-// nada mudou no local, nada sai (a regra de antes; o menu diz "ja estava").
+// SO VAI O QUE MUDOU. Antes o lote inteiro ia quando algo mudava, para o caso
+// de o mapa dizer "visto" por um destino (Trakt) e o outro (Simkl) nao saber.
+// Mas o /sync/history do Trakt sem watched_at CRIA UM PLAY NOVO "DE AGORA" por
+// episodio: "Ate aqui" em T2E5 re-postava a T1 inteira (Silo, 08/10, 15 em vez
+// de 1). Agora vistoep_aplicar devolve so os episodios cujo estado mudou; um
+// de estado DESCONHECIDO (mapa vazio, sem Trakt lido) conta como mudou, que e o
+// caso em que o remoto ainda precisa do reparo. Um pedido por destino, nunca um
+// por episodio. Desmarcar idem: so sai quem estava visto. Nada mudou: nada sai.
+static const char *nomeModo(int modo) {
+  return modo == VM_ESTE ? "este" : modo == VM_ATE ? "ate aqui" : "temporada";
+}
 static int aplicarVisto(int modo, int visto) {
   const CatItem *ci = cat_item(vmIdx);
-  VistoPar lote[VM_LOTE];
-  int n, mudou;
+  VistoPar lote[VM_LOTE], envio[VM_LOTE];
+  int n, mudou, ja = 0;
   if (!ci || !ci->imdb[0]) return 0;
   // A TEMPORADA DO EPISODIO (vmT), e nao a da aba selecionada. Sao a mesma
   // coisa dentro da folha, e fora dela nao ha aba nenhuma.
   n = montarLote(vmIdx, modo, vmT, vmE, lote, VM_LOTE);
   if (n < 1) return 0;
-  mudou = vistoep_marcar_lote(ci->imdb, lote, n, visto);
+  mudou = vistoep_aplicar(ci->imdb, lote, n, visto, envio, &ja);
+  printf("[visto] menu: %s %s %s S%dE%d: %d enviados, %d ja estavam\n",
+         nomeModo(modo), visto ? "marcar" : "desmarcar", ci->imdb, vmT, vmE, mudou, ja);
+  fflush(stdout);
   if (!mudou) return 0;
-  visto_episodios(ci->imdb, ci->tipo[0] ? ci->tipo : "series", lote, n, visto,
+  visto_episodios(ci->imdb, ci->tipo[0] ? ci->tipo : "series", envio, mudou, visto,
                   visto_destinos());
   return mudou;
 }

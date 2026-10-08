@@ -58,6 +58,15 @@ typedef struct { short temporada, episodio; } VistoPar;
 // rede leva segundos. Devolve quantos mudaram de estado de fato.
 int  vistoep_marcar_lote(const char *imdb, const VistoPar *pares, int n, int visto);
 
+// APLICA UM GESTO: muda o local e devolve em `envio` SO os episodios cujo estado
+// mudou de fato (o que se manda ao Trakt, Simkl e conta). Mandar o que ja estava
+// visto cria plays duplicados "de agora" no Trakt (/sync/history sem watched_at).
+// Episodio de estado DESCONHECIDO (-1) conta como mudou, para o mapa vazio
+// continuar reparando o remoto. `*ja` = quantos ja estavam assim. Devolve
+// quantos entraram em `envio` (cabe `n`).
+int  vistoep_aplicar(const char *imdb, const VistoPar *lote, int n, int visto,
+                     VistoPar *envio, int *ja);
+
 // Monta o lote "ate aqui": todo episodio do mapa DESTA serie em posicao menor
 // ou igual a (temporada, episodio), em ordem. Devolve quantos couberam em
 // `saida`; `max` limita. Sai do MAPA e nao do catalogo porque e o mapa que sabe
