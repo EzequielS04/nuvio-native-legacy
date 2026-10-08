@@ -119,6 +119,17 @@ typedef struct {
   // com o teto da variante e `fonteW` desconhecido — o w780 de um card nao e
   // "a fonte acabou", e a promocao a heroi precisa continuar possivel.
   int limiteTamanho;
+  // TETO DA VARIANTE A BAIXAR quando o pedido e de ARQUIVO (tex_arquivo, o
+  // aquecimento do destaque), 0 nos outros. O aquecimento pede textura de 128
+  // px — e o fio de rede escolhia a variante pelo `limite` do item NAQUELE
+  // instante: w300 do TMDB, background/small do metahub, w780 do still. O
+  // pedido do destaque, no mesmo quadro, subia o limite para 1920 tarde
+  // demais: os bytes pequenos chegavam (~500 ms), o decode publicava a 128,
+  // a promocao ia a rede DE NOVO pela variante grande (~1 s) e o prazo de
+  // 600 ms estourava — `pedido` duas vezes para o mesmo hash no log da TCL
+  // (07/10). Com isto o arquivo aquecido ja e o do destaque; o decode segue
+  // no teto do pedido (128, ou 1920 se o destaque chegou antes).
+  int limiteArquivo;
   unsigned long uso;  // contador LRU
   // Luminancia media dos pixels OPACOS, 0..255; -1 enquanto nao se sabe.
   // Medida uma vez, na thread de decode. Serve ao logo do titulo: o TMDB nao
@@ -203,6 +214,12 @@ typedef struct {
   // disco (poda). Uma vez por item: e a guarda contra laco de download.
   int rebaixouGif;
 } Item;
+
+// Teto pelo qual o fio de rede (e discoDireto) escolhe a VARIANTE: o maior
+// entre o do decode e o do arquivo pedido. Chamado com o mutex tomado.
+static int limiteDaVariante(const Item *it) {
+  return it->limiteArquivo > it->limite ? it->limiteArquivo : it->limite;
+}
 
 #define NV_TEX_FIOS 2
 // Fios de rede: 4 no LG; 2 no Tizen, onde o fetch de cada um passa pelo fio
@@ -1855,7 +1872,7 @@ static int baixarParaItem(int idx, const char *url, char *dst, size_t tam, int *
   const char *pedido = url;   // o caminho do item; `url` pode virar a variante
   char certo[NV_TEX_URL_MAX];
   int limitePedido;
-  SDL_LockMutex(mtx); limitePedido = itens[idx].limite; SDL_UnlockMutex(mtx);
+  SDL_LockMutex(mtx); limitePedido = limiteDaVariante(&itens[idx]); SDL_UnlockMutex(mtx);
 #ifdef __EMSCRIPTEN__
   if (!strncmp(url, "http://", 7) || !strncmp(url, "https://", 8)) {
     long n = 0;
@@ -3332,6 +3349,9 @@ static int aceitaMenor;
 // Pedido de LOGO DE TITULO em curso (ver tex_obter_logo_larg): sobe o item para
 // o nivel 2 da fila, a frente ate do fundo de tela cheia.
 static int pedidoLogo;
+// Pedido de ARQUIVO em curso (tex_arquivo): o teto da variante a baixar. Ver
+// Item.limiteArquivo.
+static int pedidoArquivo;
 // CAMINHO QUE NAO E TEXTO NAO VIRA PEDIDO. Guarda, nao conserto: o caso que a
 // trouxe (lixo binario como caminho, "[tex] decode falhou (Couldn't open
 // ���̑C)") era um ponteiro para bloco do catalogo ja liberado, consertado em
@@ -3369,10 +3389,11 @@ static int discoDireto(int idx) {
   char certo[NV_TEX_URL_MAX], dst[600];
   int usar;
   if (!dirCache[0] || !itens[idx].caminho[0]) return 0;
-  usar = arte_tamanho_url(itens[idx].caminho, itens[idx].limite, certo, sizeof certo);
-  nomeDeCache(usar ? certo : itens[idx].caminho, dst, sizeof dst);
-  if (!cachearte_nativo_indice_tem(dst)) return 0;
-  itens[idx].limiteTamanho = usar ? itens[idx].limite : 0;
+  { int lim = limiteDaVariante(&itens[idx]);
+    usar = arte_tamanho_url(itens[idx].caminho, lim, certo, sizeof certo);
+    nomeDeCache(usar ? certo : itens[idx].caminho, dst, sizeof dst);
+    if (!cachearte_nativo_indice_tem(dst)) return 0;
+    itens[idx].limiteTamanho = usar ? lim : 0; }
   if (!enfileirarDecodeSemEspera(idx)) return 0;
   tex_disco_direto++;
   return 1;
@@ -3504,15 +3525,26 @@ static GLuint tex_obter_limite(const char *caminho, int limite, int urgente,
     itens[i].ultimoQuadro = quadroAtual;
     itens[i].ultimoPedido = SDL_GetTicks();
     itens[i].uso = ++relogio;
+    if (pedidoArquivo > itens[i].limiteArquivo) itens[i].limiteArquivo = pedidoArquivo;
     if (itens[i].localDireto && itens[i].estado == PENDENTE && !itens[i].naFilaDec)
       (void)enfileirarDecodeSemEspera(i);
     // Marca mesmo quem JA esta na fila: a arte do hero costuma ter sido pedida
     // antes, como poster da fileira, e e exatamente esse item que precisa
     // furar a fila agora.
     if (urgente && itens[i].estado != PRONTO) {
-      if (urgente > itens[i].urgente)
+      if (urgente > itens[i].urgente) {
         printf("[tex-trace] pedido hash=%08lx role=%s limite=%d\n", h,
                urgente > 1 ? "logo" : "hero", limite);
+        // DEDUP: o pedido urgente pegou carona num item que ja estava a
+        // caminho (aquecimento, pre-busca ou o cartaz da fileira) — nao e
+        // download novo. `aquecido`=1: a variante ja e a do destaque.
+        if (itens[i].estado == PENDENTE || itens[i].estado == DECODIFICADO)
+          printf("[tex-trace] dedup hash=%08lx role=%s estado=%s aquecido=%d\n", h,
+                 urgente > 1 ? "logo" : "hero",
+                 itens[i].estado == DECODIFICADO ? "decodificado"
+                   : (itens[i].tex ? "promocao" : "em-voo"),
+                 itens[i].limiteArquivo >= limite);
+      }
       if (urgente > itens[i].urgente) itens[i].urgente = urgente;
     }
     // PROMOCAO: a mesma arte pode ser pedida como poster (960) e depois como
@@ -3596,6 +3628,7 @@ static GLuint tex_obter_limite(const char *caminho, int limite, int urgente,
       itens[novo].hash = h;
       itens[novo].limite = limite;
       itens[novo].limiteTamanho = 0;
+      itens[novo].limiteArquivo = pedidoArquivo;
       itens[novo].estado = PENDENTE;
       itens[novo].uso = ++relogio;
       itens[novo].ultimoQuadro = quadroAtual;
@@ -3779,7 +3812,9 @@ const char *tex_arquivo(const char *url) {
   }
   // 128 e o teto MINIMO que tex_obter_limite aceita pelo caminho normal; o que
   // interessa e o efeito colateral, que e o arquivo no disco.
+  pedidoArquivo = tetoDoHeroi();
   tex_obter_limite(url, 128, 0, 0);
+  pedidoArquivo = 0;
   return NULL;
 }
 
