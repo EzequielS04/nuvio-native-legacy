@@ -32,6 +32,7 @@
 #include "text.h"
 #include "anim.h"
 #include "ajustes.h"
+#include "ponteiro.h"
 #include "idioma.h"
 #include "idiomacod.h"
 #include "layout.h"
@@ -451,6 +452,26 @@ void explorar_evento(const SDL_Event *e) {
   else eventoViz(k);
 }
 
+// PONTEIRO (#99). Mesmas variaveis das setas; o OK do clique segue o caminho
+// de sempre (abrir clima, puxar o fio, descer pela toca). So zera a animacao
+// do foco quando ele de fato troca.
+static void ponteiroClimas(int i, int b) {
+  (void)b;
+  if (modo != MODO_CLIMAS || i < 0 || i >= climas.n || i == clFoco) return;
+  clFoco = i; focoT = 0.0f;
+}
+static void ponteiroClima(int linha, int col) {
+  if (modo != MODO_CLIMA || linha < 0 || linha > 1 || col < 0 || col >= caN[linha]) return;
+  if (linha == caLinha && caCol[linha] == col) return;
+  caLinha = linha; caCol[linha] = col; focoT = 0.0f;
+}
+static void ponteiroViz(int linha, int col) {
+  if (modo != MODO_VIZ || (linha == vzLinha && (linha < 0 || col == vzCol))) return;
+  vzLinha = linha; vzCol = linha < 0 ? 0 : col;
+  if (linha >= 0) vizAjustarFoco();
+  focoT = 0.0f; abrindo = 0;
+}
+
 // --- desenho: comum ----------------------------------------------------------------
 
 // O CEU ASSADO NOS EFEITOS LEVES (gpunivel.h, nivel >= 1). O GFX_CEU e um
@@ -525,6 +546,7 @@ static void desenharClimas(void) {
     float raio = 18.0f / EX_CL_H, ty;
     char s[96];
     if (a <= 0.01f) continue;
+    ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroClimas, NULL, i, 0);
     if (i == clFoco) r = crescer(r, 0.03f * f);
     painelComFoco(r, raio, f, a);
     ty = r.y + 20.0f;
@@ -573,6 +595,7 @@ static void fileiraClima(int linha, float y, float w, float h, float a) {
     float f = sel ? focoT : 0.0f;
     GfxRect r = { x, y, w, h };
     if (x + w < 0.0f || x > NV_TELA_W) continue;
+    ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroClima, NULL, linha, i);
     if (sel) r = crescer(r, 0.06f * f);
     cartaz(o->poster, r, f, a);
     if (sel) {
@@ -697,6 +720,7 @@ static void desenharHero(float a) {
     TxtLinha l = txt_linha(TXT_BODY, rot, 240, 241, 245, 255);
     GfxRect b = { x, 900.0f, l.w + 56.0f, 60.0f };
     int tinta;
+    ponteiro_alvo(b.x, b.y, b.w, b.h, ponteiroViz, NULL, -1, 0);
     if (vzLinha < 0) b = crescer(b, 0.05f * f);
     if (ajustes_vidro()) {
       gfx_vidro_painel(b, 0.5f, 0.55f, a);
@@ -744,6 +768,7 @@ static void desenharGrupos(float a) {
       GfxRect p = { x, y + 54.0f, EX_VZ_PW, EX_VZ_PH };
       char pq[140];
       if (x + EX_VZ_CARD > EX_DIR + 4.0f) break;
+      ponteiro_alvo(x - 10.0f, p.y - 10.0f, EX_VZ_CARD + 14.0f, EX_VZ_PH + 20.0f, ponteiroViz, NULL, li, i);
       if (sel) {
         GfxRect fundo = { x - 10.0f, p.y - 10.0f, EX_VZ_CARD + 14.0f, EX_VZ_PH + 20.0f };
         painel(fundo, 14.0f / fundo.h, ae * f * 0.8f);

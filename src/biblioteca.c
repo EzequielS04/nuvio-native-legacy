@@ -84,6 +84,7 @@
 #include "ajustes.h"
 #include "ctxmenu.h"
 #include "escala.h"
+#include "ponteiro.h"
 
 // Tinta do texto sobre o foco: em vidro o foco e so contorno sobre superficie
 // escura, entao o texto fica CLARO mesmo com realce branco (que pede escuro).
@@ -1336,6 +1337,31 @@ static float larguraSeletor(void) {
   for (int a = 0; a < BIB_N_MODOS; a++) w += larguraModo(a);
   return w;
 }
+// PONTEIRO (#99). Poe o foco pelas MESMAS variaveis que as setas mexem em
+// biblioteca_evento; o OK do clique chega depois, pelo caminho de sempre (aba
+// escolhe, seletor cicla, celula abre ou, segurado, abre o menu do cartaz).
+static void ponteiroModo(int a, int b) {
+  (void)b;
+  if (estado() == EST_ITENS || a < 0 || a >= BIB_N_MODOS) return;
+  foco.fileira = BIB_FIL_MODO; foco.coluna = a;
+}
+static void ponteiroPicker(int p, int b) {
+  (void)b;
+  if (estado() == EST_ITENS || p < 0 || p > 2) return;
+  pickSel = p; foco.fileira = BIB_FIL_PICK; foco.coluna = p;
+}
+static void ponteiroAcao(int a, int b) {
+  (void)b;
+  if (estado() != EST_ITENS || a < 0 || a > 2) return;
+  acaoSel = a; foco.fileira = 0; foco.coluna = a;
+}
+static void ponteiroCelula(int i, int b) {
+  int nc = colunas();
+  (void)b;
+  if (i < 0 || i >= nCelulas || nc < 1) return;
+  foco.fileira = gradeIni() + i / nc; foco.coluna = i % nc;
+}
+
 static void desenhaModos(void) {
   GfxRect c = { hdrX(), BIB_FAIXA_Y, larguraSeletor(), BIB_SEG_H };
   float x = c.x + BIB_SEG_PAD, ar, ag, ab;
@@ -1348,6 +1374,7 @@ static void desenhaModos(void) {
     int sel = a == modo, t, tn;
     char num[16];
     TxtLinha l, ln;
+    ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroModo, NULL, a, 0);
     if (sel) {
       if (ajustes_vidro()) gfx_cor(r, 0.5f, 1, 1, 1, .14f * (1.0f - v));
       else gfx_cor(r, 0.5f, .204f, .212f, .243f, 1.0f - v);  // #34363e
@@ -1411,6 +1438,7 @@ static void desenhaPicker(int p, float f) {
   float w = pickerLargura(p);
   GfxRect r = { pickerX(p), BIB_FAIXA_Y + (BIB_SEG_H - BIB_CHIP_H) * 0.5f, w, BIB_CHIP_H };
   float v = anim_clamp(f, 0.0f, 1.0f);
+  ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroPicker, NULL, p, 0);
   // Repouso: o vidro dos filtros (branco a 6%) ou, no solido, o #15161a do
   // .vid; foco: a pilula cheia no acento, como todo botao do app.
   if (ajustes_vidro()) gfx_cor(r, 0.5f, 1, 1, 1, .06f * (1.0f - v));
@@ -1458,6 +1486,7 @@ static void desenhaAcoes(void) {
     else             { ligada = 0;
                        rot = strcasecmp(abertaMidia, "TV") ? "Filmes" : "Séries"; }
     r.w = larguraAcao(rot);
+    ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroAcao, NULL, a, 0);
     cor = pilula(r, 0.5f, animPick[a], ligada);
     { TxtLinha l = txt_linha(TXT_HERO_SEC, rot, cor, cor, cor, 255);
       txtEsc(l, r.x + (r.w - (float)l.w * BIB_ESC_VAL) * 0.5f,
@@ -2185,6 +2214,16 @@ void biblioteca_desenhar(Uint32 agora) {
         float f, entra, ac, ty;
         if (i >= nCelulas) break;
         f = (c < BIB_COLUNAS_MAX) ? animFoco[r][c] : 0.0f;
+        // O alvo e a celula em REPOUSO (sem a escala do foco nem a onda), uma
+        // vez por celula, recortado a janela da grade.
+        if (passe == 0) {
+          GfxRect ra = exibicao == VIS_LISTA
+            ? (GfxRect){ bibX(), topo, bibW(), estado() == EST_LISTAS ? BIB_LL_H : BIB_LIN_H }
+            : estado() == EST_LISTAS
+              ? (GfxRect){ bibX() + c * passoC, topo, larguraCartaoLista(), BIB_LC_H }
+              : (GfxRect){ bibX() + c * passoC, topo, BIB_CARD_W, BIB_POSTER_H };
+          ponteiro_alvo_faixa(ra.x, ra.y, ra.w, ra.h, gy, BIB_GRADE_BASE, ponteiroCelula, NULL, i, 0);
+        }
         if ((passe == 0) == (f > 0.01f)) continue;
         // ONDA: atraso pela coluna e pela fileira visiveis (revela.h).
         entra = ondaEm ? revela_entra(ondaEm, revela_onda_atraso(c, r - lin0), agora)

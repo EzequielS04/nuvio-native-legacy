@@ -949,6 +949,22 @@ static void aj2DesenharIdxLista(void) {
 // O retangulo da categoria no indice: o cartao da grade ou a linha da lista. A
 // pagina da categoria nasce dele (aj2DesenharPagina) e o indice cresce em torno.
 static GfxRect aj2IdxCartao(int sec) { return aj2Lista() ? aj2LLinhaR(sec) : aj2GradeCartao(sec); }
+static int ajModalAberto(void);
+// PONTEIRO (#99) NO INDICE. A pilula/cartao/linha sob o cursor ganha o foco
+// pelas mesmas variaveis que uxEvento mexe; o OK do clique segue o caminho de
+// sempre (abrir a categoria, a busca, alternar as avancadas...). So com a
+// grade assentada (a < 1 e a transicao, com gfx_transformar).
+static void aj2PonteiroTopo(int t, int b) {
+  (void)b;
+  if (uxEditor || t < 0 || t >= AJ2_T_N || (focoIndice && uxTopo == t)) return;
+  focoIndice = 1; uxCabLayout = 0; uxTopo = t; sairArmado = 0;
+}
+static void aj2PonteiroSec(int s, int b) {
+  (void)b;
+  if (uxEditor || s < 0 || s >= nSecoes || (focoIndice && uxTopo < 0 && uxIndice == s + 2)) return;
+  focoIndice = 1; uxCabLayout = 0; uxTopo = -1; uxVeioBusca = 0;
+  focarSecao(s); uxIndice = s + 2;
+}
 static void aj2DesenharGrade(float a) {
   GfxRect g = aj2GradeR();
   float grupo = gfx_opacidade_grupo, cw = aj2GradeColW(), x = g.x + AJ2_G_PAD;
@@ -962,6 +978,14 @@ static void aj2DesenharGrade(float a) {
     gfx_transformar(c.x + c.w * 0.5f, c.y + c.h * 0.5f, 1.0f + 0.08f * (1.0f - a), 0, 0);
   }
   ajIlha(g, 40.0f, 1, 0);
+  if (a >= 0.999f && !ajModalAberto() && !uxEditor) {
+    for (t = 0; t < AJ2_T_N; t++) { GfxRect r = aj2TopoR(t); ponteiro_alvo(r.x, r.y, r.w, r.h, aj2PonteiroTopo, NULL, t, 0); }
+    if (aj2Lista()) for (s = 0; s < n; s++) {
+      GfxRect r = aj2LLinhaR(s);
+      ponteiro_alvo_faixa(r.x, r.y, r.w, r.h, aj2LTopo(), aj2LBase(), aj2PonteiroSec, NULL, s, 0);
+    }
+    else for (s = 0; s < n; s++) { GfxRect r = aj2GradeCartao(s); ponteiro_alvo(r.x, r.y, r.w, r.h, aj2PonteiroSec, NULL, s, 0); }
+  }
   // As pilulas e os cartoes de descoberta; o em foco por ultimo (halo por cima).
   for (t = 0; t < AJ2_T_N; t++) if (t != uxTopo || !focoIndice) { if (t <= AJ2_T_LAYOUT) aj2GradePilula(t); else aj2GradeDescoberta(t); }
   if (focoIndice && uxTopo >= 0) { if (uxTopo <= AJ2_T_LAYOUT) aj2GradePilula(uxTopo); else aj2GradeDescoberta(uxTopo); }

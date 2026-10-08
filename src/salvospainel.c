@@ -35,6 +35,7 @@
 #include "movimento.h"
 #include "layout.h"
 #include "ajustes.h"
+#include "ponteiro.h"
 #include "idioma.h"
 #include "botoes.h"
 #include "socialvis.h"
@@ -3422,6 +3423,7 @@ static void desenhaPop(float a) {
   float e, h, w, x, y, topoL, janela;
   int i, vis, algumIcone;
   if (!pop) return;
+  ponteiro_camada();   // a escolha aberta tem o teclado: a lista de tras nao vale
   e = anim_suave(popEntrada) * a;
   vis = popN < POP_VISIVEIS ? popN : POP_VISIVEIS;
   janela = (float)vis * (POP_LINHA_H + POP_LINHA_VAO) - POP_LINHA_VAO;
@@ -4513,6 +4515,15 @@ static void spainel_desenharCorpo_(Uint32 agora) {
   if (tecladoPara) teclado_desenhar(agora);
 }
 
+// PONTEIRO (#99) NA LISTA DE TITULOS. O titulo sob o cursor ganha o foco
+// pela mesma variavel das setas; o OK do clique segue o caminho de sempre
+// (abrir; segurado, o menu do cartaz).
+static void ponteiroTitulo(int i, int b) {
+  (void)b;
+  if (!aberto || pop || tecladoPara || aba == SP_ABA_SOCIAL || editando || i < 0 || i >= nLinhas) return;
+  foco = i;
+}
+
 static void desenharPainel(Uint32 agora) {
   float a = entrada, x, y, xp, xl, al;
   int i;
@@ -4828,6 +4839,9 @@ static void desenharPainel(Uint32 agora) {
       // rasterizar as 195 invisiveis estouraria o orcamento de linhas por
       // quadro de text.c e as visiveis sairiam EM BRANCO (ver ctxmenu.c).
       if (cy + linhas[i].lh < listaTopo() || cy > SP_LISTA_BASE) continue;
+      { GfxRect ra = lista ? linhaIlhaRet(x, cy, linhas[i].lh)
+                           : (GfxRect){ SP_X + x + SP_PAD + linhas[i].lx, cy, linhas[i].lw, linhas[i].lh };
+        ponteiro_alvo_faixa(ra.x, ra.y, ra.w, ra.h, listaTopo(), SP_LISTA_BASE, ponteiroTitulo, NULL, i, 0); }
       if (estilo == SORG_ESTILO_GRADE) desenhaCelulaGrade(i, x, cy, a);
       else if (estilo == SORG_ESTILO_PAISAGEM) desenhaCelulaPaisagem(i, x, cy, a);
       else desenhaLinha(i, x, cy, a);

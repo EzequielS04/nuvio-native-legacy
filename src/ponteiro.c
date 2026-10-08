@@ -714,6 +714,14 @@ void ponteiro_alvo(float x, float y, float w, float h,
   al->arrasta = 0;
 }
 
+void ponteiro_alvo_faixa(float x, float y, float w, float h, float y0, float y1,
+                         PonteiroFn focar, PonteiroFn ativar, int a, int b) {
+  if (!ponteiro_ativo()) return;
+  if (y < y0) { h -= y0 - y; y = y0; }
+  if (y + h > y1) h = y1 - y;
+  ponteiro_alvo(x, y, w, h, focar, ativar, a, b);
+}
+
 void ponteiro_alvo_arrastavel(void) {
   if (nLista[escreve] > 0) lista[escreve][nLista[escreve] - 1].arrasta = 1;
 }

@@ -84,6 +84,12 @@ int  ponteiro_ativo(void);
 void ponteiro_alvo(float x, float y, float w, float h,
                    PonteiroFn focar, PonteiroFn ativar, int a, int b);
 void ponteiro_camada(void);
+// O mesmo alvo, recortado a faixa vertical [y0, y1) — a janela de uma grade
+// que rola por baixo de um cabecalho fixo. O pedaco do cartao que a rolagem
+// escondeu nao recebe o ponteiro (por cima dele mora o cabecalho). E o caminho
+// unico das grades: cada tela so diz a sua faixa.
+void ponteiro_alvo_faixa(float x, float y, float w, float h, float y0, float y1,
+                         PonteiroFn focar, PonteiroFn ativar, int a, int b);
 // Marca o ULTIMO alvo registrado como arrastavel por dedo (#216): arrastar
 // sobre ele chama o `ativar` a cada movimento, em vez de rolar a tela. E a
 // barra de tempo do player.

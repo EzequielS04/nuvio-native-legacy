@@ -44,6 +44,8 @@
 #include "registro.h"
 #include "seguro.h"
 #include "botoes.h"
+#include "ponteiro.h"
+#include <math.h>
 #include <time.h>
 #include "js.h"
 #include "artehero.h"

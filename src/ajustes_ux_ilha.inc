@@ -355,6 +355,19 @@ static void aj2RodapeA3(GfxRect fr, const AjDica *d, int nd, float a) {
   }
   if (dicas) aj2DicasLinha(d, nd, x, yc, TXT_V2_KBD18, 34, 38, 10, TXT_V2_24, 8, 22, 1, a);
 }
+// PONTEIRO (#99) NA LISTA DA CATEGORIA. A linha sob o cursor ganha o foco
+// pelo mesmo focar() das setas (com o foco saindo do indice); o OK do clique
+// segue o caminho de sempre (abrir o editor, alternar, abrir "Mais opcoes").
+// So com a lista assentada: durante a transicao ela esta escalada e deslizada
+// (gfx_transformar) e o retangulo do desenho nao e o da tela.
+static int ajPontLista;
+static void ajPonteiroItem(int i, int b) {
+  (void)b;
+  if (uxEditor || i < 0 || i >= AJ_N_TELA || !focavel(i)) return;
+  if (i == focoItem && !focoIndice && !uxCabLayout) return;
+  focar(i);
+  focoIndice = 0;
+}
 static void ajDesenharFolha(void) {
   GfxRect fr = aj2ListaR();
   int sec = secAtual, i, nd;
@@ -375,9 +388,11 @@ static void ajDesenharFolha(void) {
         ajDesenharGrupo(i, y, ajMascara(y + 20.0f + 15.6f, topo, base) * aPag);
       } else if (TELA[i].tipo == IT_MAIS) {
         float yy = y + 14.0f + AJ2_LN_GAP;
+        if (ajPontLista) ponteiro_alvo_faixa(fr.x + 18.0f, yy, fr.w - 36.0f, AJ2_LN_H, topo, base, ajPonteiroItem, NULL, i, 0);
         ajDesenharMais(i, yy, animItem[i], ajMascara(yy + AJ2_LN_H * 0.5f, topo, base) * anim_suave(paginaA));
       } else if (TELA[i].tipo == IT_OPC) {
         float lh = ajLinhaH(i), yy = y + AJ2_LN_GAP;
+        if (ajPontLista) ponteiro_alvo_faixa(fr.x + 18.0f, yy, fr.w - 36.0f, lh, topo, base, ajPonteiroItem, NULL, i, 0);
         // A superficie de foco nao some com o texto (editor por cima): o
         // alfa da mascara vai inteiro, o do texto em ajDesenharLinha.
         ajDesenharLinha(i, yy, animItem[i], ajMascara(yy + (lh > AJ2_LN_H + 0.5f ? AJ2_LN_LINHA1 * 0.5f : lh * 0.5f), topo, base) * anim_suave(paginaA));
@@ -965,6 +980,7 @@ static void ajDesenharTela(void) {
     gfx_sem_transformar();
   }
   // A LISTA nasce da linha da categoria: escala em torno dela.
+  ajPontLista = !modal && !uxEditor && p.lA > 0.997f && fabsf(p.lS - 1.0f) < 0.002f && fabsf(p.lDx) < 0.5f;
   if (p.lA > 0.003f && uxIndice >= 1) {
     GfxRect fr = aj2ListaR();
     float oy = p.lOy > 0 ? p.lOy : aj2GradeOrigemY(uxIndice);
@@ -974,6 +990,9 @@ static void ajDesenharTela(void) {
     if (uxIndice >= 2) ajDesenharFolha(); else aj2DesenharDiferencas();
     gfx_sem_transformar();
   }
+  // O editor e os modais tem o teclado: os alvos de tras deixam de valer e,
+  // sem alvo proprio, o clique e o OK (ponteiro.h, CAMADAS).
+  if (modal || uxEditor) ponteiro_camada();
   if (aj2EditorPainel()) aj2EdVisto = 1;
   else if (p.eA <= 0.003f) aj2EdVisto = 0;
   if (p.eA > 0.003f && aj2EdVisto && uxOp >= 0) {

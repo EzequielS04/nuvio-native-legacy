@@ -1,4 +1,5 @@
 #include "faixas.h"
+#include "ponteiro.h"
 #include "idioma.h"
 #include "player.h"
 #include "video.h"
@@ -1298,6 +1299,14 @@ static float alturaLista(int col) {
   return h + 14.0f + IL_PE_H + IL_PAD_Y;
 }
 
+// PONTEIRO (#99) NA FOLHA DE AUDIO. A faixa sob o cursor ganha o foco pelas
+// mesmas variaveis das setas; o OK do clique aplica e fecha, como o do controle.
+static void ponteiroFaixa(int i, int b) {
+  (void)b;
+  if (!aberta || modo || i < 0 || i >= nLinhas(0)) return;
+  coluna = 0; volFoco = velFoco = 0; foco[0] = i;
+}
+
 static void corpoLista(GfxRect c, float a) {
   int col = modo ? 1 : 0, n = nLinhas(col), r, fim, i;
   float x0 = c.x + IL_PAD_X, w = c.w - IL_PAD_X * 2.0f, y = c.y + IL_PAD_Y;
@@ -1327,7 +1336,10 @@ static void corpoLista(GfxRect c, float a) {
   visiveis = IL_VIS_COL(col);
   ajustarRolagem();
   r = rolagem[col]; fim = r + visiveis; if (fim > n) fim = n;
-  for (i = r; i < fim; i++) linhaLista(col, i, x0, y + (i - r) * (IL_LN_H + IL_LN_VAO), w, a);
+  for (i = r; i < fim; i++) {
+    if (!modo) ponteiro_alvo(x0, y + (i - r) * (IL_LN_H + IL_LN_VAO), w, IL_LN_H, ponteiroFaixa, NULL, i, 0);
+    linhaLista(col, i, x0, y + (i - r) * (IL_LN_H + IL_LN_VAO), w, a);
+  }
   if (!n) txt_bloco(TXT_ILHA_TEXTO, "Nenhuma faixa disponível nesta fonte.", 160, 160, 158, x0 + 10.0f, y + 12.0f, w - 20.0f, 28, a, 2);
   y += (n ? (fim - r) * IL_LN_H + (fim - r - 1) * IL_LN_VAO : 60.0f) + 14.0f;
   // RODAPE: "2 de 4" e as dicas do codigo, sob um fio de 1 px.

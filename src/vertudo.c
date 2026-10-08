@@ -20,11 +20,13 @@
 #include "corviva.h"
 #include "ctxlista.h"
 #include "ctxmenu.h"
+#include "ponteiro.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <math.h>
 
 // MEDIDAS do web (catalogSeeAllScreen, .seeall-card): cartaz de 248 de largura
 // e raio 12. A 1920 cabem 5 colunas com o gutter da tela dos dois lados.
@@ -524,6 +526,22 @@ static void themeBackground(float a) {
   }
 }
 
+// PONTEIRO (#99). As mesmas variaveis das setas: a aba sob o cursor ganha o
+// cursor das abas, o cartaz ganha o foco da grade; o OK do clique segue o
+// caminho de sempre (aba abre a fonte, cartaz abre o titulo ou, segurado, o
+// menu do cartaz).
+static void ponteiroAba(int i, int b) {
+  (void)b;
+  if (!collection || i < 0 || i >= collection->nSources) return;
+  tabFocus = 1; tabCursor = i;
+}
+static void ponteiroCartaz(int i, int b) {
+  (void)b;
+  if (i < 0 || i >= nItens()) return;
+  tabFocus = 0; foco = i;
+  if (foco >= nItens() - VT_COLS * 2) desc_vertudo_mais();
+}
+
 static void themeHeader(float a,float x0) {
   float r,g,b;corColecao(&r,&g,&b);
   TxtLinha eyebrow=txt_linha(TXT_HERO_META,rotuloGrupo(),197,202,211,255);
@@ -606,6 +624,7 @@ static void themeHeader(float a,float x0) {
       int f=tabFocus&&tabCursor==i,selecionada=source==i;
       float fa=tabAnim[i];
       GfxRect pill={x,253,larg[i],H};
+      ponteiro_alvo(fmaxf(pill.x,x0-6),pill.y,fminf(pill.x+pill.w,x0+W+6)-fmaxf(pill.x,x0-6),pill.h,ponteiroAba,NULL,i,0);
       if (selecionada) {
         float sr, sg, sb; corFocoFonte(&sr, &sg, &sb);
         gfx_cor(pill, NV_RAIO_PILL, sr, sg, sb,
@@ -680,6 +699,8 @@ void vertudo_desenhar(Uint32 agora) {
     float ac = a * entra;
     if (ac < 0.005f) continue;
     cy += (1.0f - entra) * NV_ENTRA_DY;
+    if (timeline) ponteiro_alvo_faixa(x0+158,cy,1000,VT_CARD_H,VT_TOPO-12.0f,NV_TELA_H,ponteiroCartaz,NULL,i,0);
+    else ponteiro_alvo_faixa(cx,cy,VT_CARD_W,VT_CARD_H+40.0f,VT_TOPO-12.0f,NV_TELA_H,ponteiroCartaz,NULL,i,0);
     if(timeline){timelineCard(i,cy,ac,x0);continue;}
     if (!viewItem(i, &it)) continue;
     { GfxRect r0 = { cx, cy, VT_CARD_W, VT_CARD_H }, r = r0;
