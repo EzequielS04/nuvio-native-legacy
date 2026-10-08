@@ -1144,7 +1144,10 @@ static const char *sinopseDe(int i) {
 // sao essas. O enriquecimento continua acontecendo e fica no catalogo — a
 // proxima abertura, e a home, ja veem o logo localizado. Sem logo nenhum ao
 // abrir, o que chegar entra (vazio nao e "arte boa").
-static char arteFixa[512], logoFixo[512], logoCatalogoFixo[512];
+// arteFixa no teto da textura (#361): quando o titulo nao tem fundo ela e o
+// PROPRIO poster, que vai a 1024 — com 512 o cartaz de ~600 caracteres virava
+// um 404 so na pagina do titulo. Logo segue o CatItem.logo (512).
+static char arteFixa[NV_TEX_URL_MAX], logoFixo[512], logoCatalogoFixo[512];
 static int  arteFixaPoster;
 
 static const char *logoDe(int i) {

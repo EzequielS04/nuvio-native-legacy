@@ -67,7 +67,7 @@ static float entrada, animFoco[2];
 // republicacao e o bloco antigo e liberado. Guardar o ponteiro aqui derrubou o
 // app na TV poucos segundos depois do arranque — e so na TV, porque no Mac sem
 // conta o catalogo nunca era republicado.
-static char minis[SI_N_MINI][512];
+static char minis[SI_N_MINI][NV_TEX_URL_MAX];   // o poster inteiro (#361)
 static int nMinis;
 
 int sintro_aberto(void) { return aberto; }
