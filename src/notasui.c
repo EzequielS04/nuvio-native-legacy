@@ -233,6 +233,24 @@ float notasui_desenhar_linha(const NotasPlano *p, float x, float yc, float a) {
 }
 
 // ---------------------------------------------------------------------------
+// A MARCA SOZINHA (selo de nota do card de episodio)
+// ---------------------------------------------------------------------------
+// O icone da fonte (o disco do Trakt, o letreiro do TMDB), nao o wordmark da
+// linha do titulo: num selo de 28 de altura o nome por extenso nao cabe.
+float notasui_marca_largura(int f, float h) {
+  Png p = pngDe(f, 0, 0);
+  return p.nome ? larguraPng(p.nome, p.asp, h) : 0.0f;
+}
+float notasui_marca(int f, float x, float yc, float h, float a) {
+  Png p = pngDe(f, 0, 0);
+  float w;
+  if (!p.nome) return 0.0f;
+  w = larguraPng(p.nome, p.asp, h);
+  desenhaPng(p.nome, (GfxRect){ x, yc - h * 0.5f, w, h }, a);
+  return w;
+}
+
+// ---------------------------------------------------------------------------
 // CARTAO DA ABA (uma marca centralizada)
 // ---------------------------------------------------------------------------
 float notasui_marca_cartao(int f, int cru, float xc, float yc, float h, float a) {

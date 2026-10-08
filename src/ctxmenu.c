@@ -1254,21 +1254,103 @@ static void kickerCtx(const char *t, float x, float y, float a) {
 // pilula cheia nem contorno — como o menu e o painel de Salvos. A pilula
 // cheia no acento fica para botao.
 #define CTX_ICONE 24.0f
-static void linhaCtx(GfxRect r, const char *rot, const char *icone, float f, float a) {
+// `tinta` < 0 = a linha da ilha escura (texto claro, foco por superficie). De 0
+// a 1 = a linha SOBRE UMA SUPERFICIE CHEIA (o painel da aba, no realce): texto
+// e icone nessa tinta e o foco e a propria tinta a 12 %, que escurece o
+// realce claro e clareia o escuro.
+static void linhaCtxTinta(GfxRect r, const char *rot, const char *icone, float f, float a,
+                          float tinta) {
   float k = f < 0.0f ? 0.0f : f > 1.0f ? 1.0f : f;
   float lum = .72f + .28f * k;
-  if (k > 0.01f) {
+  int cr = 243, cg = 242, cb = 239;
+  if (tinta >= 0.0f) {
+    cr = cg = cb = (int)(tinta * 255.0f + 0.5f);
+    lum = .80f + .20f * k;
+    if (k > 0.01f) gfx_cor(r, 0.5f, tinta, tinta, tinta, .12f * k * a);
+  } else if (k > 0.01f) {
     if (ajustes_vidro()) gfx_cor(r, 0.5f, 1, 1, 1, .14f * k * a);
     else gfx_cor(r, 0.5f, .19f, .195f, .215f, k * a);
   }
   if (icone && icone[0])
     gfx_icone((GfxRect){ r.x + 20.0f, r.y + (r.h - CTX_ICONE) * 0.5f, CTX_ICONE, CTX_ICONE },
-              icone, .953f, .949f, .937f, lum * a);
-  { TxtLinha t = txt_linha_corta(TXT_PG_ROTULO, rot, 243, 242, 239, 255,
+              icone, cr / 255.0f, cg / 255.0f, cb / 255.0f, lum * a);
+  { TxtLinha t = txt_linha_corta(TXT_PG_ROTULO, rot, cr, cg, cb, 255,
                                  r.w - 20.0f - CTX_ICONE - 18.0f - 20.0f);
     txt_desenhar_alpha(t, r.x + 20.0f + CTX_ICONE + 18.0f, r.y + (r.h - t.h) * 0.5f, lum * a); }
 }
+static void linhaCtx(GfxRect r, const char *rot, const char *icone, float f, float a) {
+  linhaCtxTinta(r, rot, icone, f, a, -1.0f);
+}
 
+// --- A MESMA ILHA, PARA OS MENUS QUE NAO SAO DE CARTAZ ----------------------
+//
+// O menu de visto do episodio (episodios.c) era um cartao proprio — 800 de
+// largura, still no cabecalho, linhas de 62, rodape de teclas — e ao lado do
+// menu do cartaz parecia de outro app (dono, 08/10). Em vez de uma segunda
+// copia das medidas, quem tem um menu entrega o nome, a linha de apoio e os
+// rotulos, e ESTE arquivo desenha: a ilha, o cabecalho e as linhas sao os
+// mesmos de cima, com as mesmas constantes. O estado (foco, molas, teclas,
+// acoes) continua de quem abriu.
+//
+// A LARGURA e a do menu do cartaz (CTX_W) e so cresce quando um rotulo nao
+// cabe — "Temporada inteira (10 episódios)" nao cabe em 420 —, ate CTX_W_MAX;
+// dali em diante o rotulo corta com reticencias, como em todo lugar. O nome
+// nunca alarga: titulo de episodio comprido corta.
+#define CTX_W_MAX 600.0f
+float ctx_menu_largura(const CtxLinha *l, int n) {
+  float w = CTX_W;
+  int i;
+  for (i = 0; i < n; i++) {
+    float p = CTX_ILHA_PAD * 2.0f + 20.0f + CTX_ICONE + 18.0f +
+              (float)txt_largura(TXT_PG_ROTULO, l[i].rot) + 2.0f + 20.0f;
+    if (p > w) w = p;
+  }
+  return w > CTX_W_MAX ? CTX_W_MAX : w;
+}
+float ctx_menu_altura(int n) {
+  return CTX_ILHA_PAD * 2.0f + CTX_CAB + (float)n * (CTX_LINHA + CTX_GAP);
+}
+float ctx_menu_ao_lado(GfxRect cartaz, float w) {
+  float maxX = NV_TELA_W - CTX_BORDA - w;
+  float direita = cartaz.x + cartaz.w + CTX_AO_LADO;
+  float esquerda = cartaz.x - CTX_AO_LADO - w;
+  if (direita <= maxX) return direita;
+  if (esquerda >= CTX_BORDA) return esquerda;
+  return maxX < CTX_BORDA ? CTX_BORDA : maxX;
+}
+void ctx_menu_veu(float a) {
+  gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, 0.94f * a);
+}
+void ctx_menu_ilha(GfxRect p, float raioPx, float a) { ilhaCtx(p, raioPx, a); }
+void ctx_menu_linha(GfxRect r, const char *rot, const char *icone, float f, float a,
+                    float tinta) {
+  linhaCtxTinta(r, rot, icone, f, a, tinta);
+}
+float ctx_menu_passo(void) { return CTX_LINHA + CTX_GAP; }
+// O cabecalho de duas linhas, como o do menu do cartaz sem logo: o nome
+// (24/700) e o apoio embaixo (16), 4 px depois.
+static void cabecalhoCtx(float hx, float hy, float hw, const char *nome,
+                         const char *meta, float metaA, float a) {
+  TxtLinha n = txt_linha_corta(TXT_ILHA_NOME, nome, 243, 242, 239, 255, hw);
+  TxtLinha m = txt_linha_corta(TXT_ILHA_APOIO, meta, 243, 242, 239, 255, hw);
+  txt_desenhar_alpha(n, hx, hy, a);
+  txt_desenhar_alpha(m, hx, hy + n.h + 4.0f, metaA * a);
+}
+void ctx_menu_desenhar(GfxRect m, const char *nome, const char *meta, float metaA,
+                       const CtxLinha *l, int n, const float *focoL, float linhasA,
+                       float a, PonteiroFn focar) {
+  int i;
+  ilhaCtx(m, CTX_ILHA_RAIO, a);
+  cabecalhoCtx(m.x + CTX_ILHA_PAD + 20.0f, m.y + CTX_ILHA_PAD + 12.0f,
+               m.w - 2.0f * (CTX_ILHA_PAD + 20.0f), nome, meta, metaA, a);
+  for (i = 0; i < n; i++) {
+    GfxRect r = { m.x + CTX_ILHA_PAD,
+                  m.y + CTX_ILHA_PAD + CTX_CAB + CTX_GAP + (float)i * (CTX_LINHA + CTX_GAP),
+                  m.w - CTX_ILHA_PAD * 2.0f, CTX_LINHA };
+    if (focar && a > 0.5f) ponteiro_alvo(r.x, r.y, r.w, r.h, focar, NULL, i, 0);
+    linhaCtx(r, l[i].rot, l[i].icone, focoL ? focoL[i] : 0.0f, linhasA * a);
+  }
+}
 
 // --- O MODAL DE ESTILO ------------------------------------------------------
 //
