@@ -24,6 +24,7 @@ sessao() {
 sessao s1 periodico
 sessao s2 mescla
 sessao s2b remocao
+sessao s2c cheio
 for st in 400 503 0; do
   sessao "s3-$st" recusa1 "$st"
   sessao "s3-$st" recusa2 "$st"
