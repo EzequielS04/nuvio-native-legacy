@@ -193,6 +193,11 @@ namespace NuvioTpk
                 janelaVideo.Show();
                 janelaVideo.Lower();
                 video = new Video(() => new Tizen.Multimedia.Display(janelaVideo), a => EcoreMainloop.PostAndWakeUp(a), dados, W, H);
+                video.GeometriaJanela = (gx, gy, gw, gh) =>
+                {
+                    try { janelaVideo.Geometry = new Rect(gx, gy, gw, gh); return null; }
+                    catch (Exception e) { return e.GetType().Name + ": " + e.Message; }
+                };
                 Etapa("ok video-window");
 
                 // OnUpdate SEMPRE devolve true, como o JuvoPlayer.OpenGL: com
