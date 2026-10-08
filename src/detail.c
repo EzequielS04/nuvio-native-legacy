@@ -3034,6 +3034,7 @@ void detail_atualizar(float dt, Uint32 agora) {
   // nota mais abaixo). Fica na assinatura porque ela e a mesma de todas as
   // telas e app.c chama todas do mesmo jeito.
   (void)agora;
+  episodios_menu_atualizar(dt);   // as molas do menu de visto / painel da temporada
   if (!aberto) { blocoAnt[0] = blocoAnt[1] = blocoAnt[2] = -1.0f; return; }
   // SAINDO: interrompe os dois fios antes mesmo de a mola terminar. Chamar todo
   // quadro nao custa nada (e um flag sob mutex) e evita precisar de uma borda:
@@ -4858,32 +4859,33 @@ static void veuEpisodio(GfxRect th, float a) {
   gfx_rect(th, 0, GFX_VEU_CARD, 0, 0, 0, raio, 0, 0, 0, a);
 }
 
-static float desenhaNotaEpisodio(float x, float y, const char *fonte,
-                                 int nota, float a) {
+// O SELO DE NOTA DO EPISODIO: o LOGO da fonte e o numero em NEGRITO (dono,
+// 08/10). Era "• Trakt 8.1": a palavra em 15 px cinza e o numero em Regular —
+// o que se lia primeiro era o nome do servico, e a nota, que e a informacao,
+// vinha depois e mais fraca. O logo diz a fonte sem leitura (o disco vermelho,
+// o letreiro azul) e sobra peso para o numero. `fonte` e EX_TRAKT ou EX_TMDB.
+static float desenhaNotaEpisodio(float x, float y, int fonte, int nota, float a) {
   char valor[12];
   float ar, ag, ab;
-  TxtLinha lf, lv;
+  TxtLinha lv;
   GfxRect selo;
-  float ponto = 6.0f, pad = 10.0f, gap = 7.0f;
+  const float pad = 9.0f, gap = 8.0f, hm = fonte == EX_TMDB ? 19.0f : 20.0f;
+  float wm;
   if (nota <= 0) return 0.0f;
   snprintf(valor, sizeof valor, idioma_ponto_decimal(ajustes_idioma()) ? "%d.%d" : "%d,%d",
            nota / 10, nota % 10);
-  lf = txt_linha(TXT_MINI, fonte, 154, 159, 172, 255);
-  lv = txt_linha(TXT_CAPTION2, valor, 242, 245, 250, 255);
-  selo = (GfxRect){ x, y, pad + ponto + gap + lf.w + gap + lv.w + pad, 28.0f };
+  lv = txt_linha(TXT_G21B, valor, 242, 245, 250, 255);
+  wm = notasui_marca_largura(fonte, hm);
+  selo = (GfxRect){ x, y, pad + wm + gap + lv.w + pad + 2.0f, 30.0f };
   ajustes_acento(&ar, &ag, &ab);
   // Fundo quase-preto com uma lavagem mínima do accent: a marca continua
   // discreta sobre a foto e deixa de parecer um bloco cinza genérico.
-  if (ajustes_vidro()) gfx_vidro_painel(selo, 0.5f, 0.6f, a);   // o ponto segue no realce
+  if (ajustes_vidro()) gfx_vidro_painel(selo, 0.5f, 0.6f, a);
   else
   gfx_cor(selo, 0.5f, .055f + ar * .06f, .062f + ag * .06f,
           .078f + ab * .07f, .94f * a);
-  gfx_cor((GfxRect){x + pad, y + (selo.h - ponto) * .5f, ponto, ponto},
-          0.5f, ar, ag, ab, a);
-  txt_desenhar_alpha(lf, x + pad + ponto + gap,
-                     y + (selo.h - lf.h) * .5f + 1.0f, a);
-  txt_desenhar_alpha(lv, x + pad + ponto + gap + lf.w + gap,
-                     y + (selo.h - lv.h) * .5f, a);
+  notasui_marca(fonte, x + pad, y + selo.h * .5f, hm, a);
+  txt_desenhar_alpha(lv, x + pad + wm + gap, y + (selo.h - lv.h) * .5f, a);
   return selo.w + 12.0f;
 }
 
@@ -5160,12 +5162,12 @@ static void desenhaEpisodio(GfxRect r, int c, float f, float a, Uint32 agora) {
       break;
     }
     if (nota > 0)
-      x += desenhaNotaEpisodio(x, y - 3, "Trakt", nota, a);
+      x += desenhaNotaEpisodio(x, y - 4, EX_TRAKT, nota, a);
     // O voto do TMDB entra AO LADO do do Trakt, no mesmo selo compacto
-    // (issue #87). Sao fontes diferentes — o rotulo diz qual e qual, e um
+    // (issue #87). Sao fontes diferentes — o logo diz qual e qual, e um
     // episodio pode ter uma, a outra ou as duas.
     if (ep && ep->nota > 0)
-      x += desenhaNotaEpisodio(x, y - 3, "TMDB", ep->nota, a);
+      x += desenhaNotaEpisodio(x, y - 4, EX_TMDB, ep->nota, a);
     // A DATA vai para a direita do card, como na referencia: a esquerda fica so
     // a duracao, e as duas deixam de disputar a mesma linha corrida.
     if (epData) {
@@ -6424,6 +6426,30 @@ static int moverFileira(int dy) {
   return 0;
 }
 
+// DE ONDE O MENU DE VISTO SAI (episodios.h): a caixa, neste quadro, do card do
+// episodio ou da aba da temporada em foco. O menu se ancora nela e, depois que
+// ele pinta o veu (episodio) ou a superficie do painel (temporada), a pagina
+// redesenha a peca por cima com a MESMA funcao da fileira — o card ao lado da
+// ilha, a aba de cabecalho do painel. Em pixels reais; o menu mede pela tela
+// virtual (escala.h) e a conversao e uma divisao.
+static GfxRect menuOrigem;
+static int     menuOrigemCol;
+static float   menuOrigemF, menuOrigemA;
+static void desenhaEpisodio(GfxRect r, int c, float f, float a, Uint32 agora);
+static void menuDeVisto(Uint32 agora) {
+  if (!episodios_menu_visivel()) { episodios_menu_desenhar(); return; }
+  if (menuOrigem.w > 8.0f && (foco.fileira == SEC_EPISODIOS || foco.fileira == SEC_TEMPORADAS)) {
+    float e = gfx_escala_ui();
+    episodios_menu_ancora((GfxRect){ menuOrigem.x / e, menuOrigem.y / e, menuOrigem.w / e, menuOrigem.h / e });
+  }
+  episodios_menu_desenhar();
+  if (menuOrigem.w <= 8.0f) return;
+  if (episodios_menu_painel()) desenhaTemporada(menuOrigem, menuOrigemCol, menuOrigemF, menuOrigemA);
+  else if (foco.fileira == SEC_EPISODIOS)
+    desenhaEpisodio(menuOrigem, menuOrigemCol, menuOrigemF, menuOrigemA * anim_clamp(episodios_menu_anim(), 0.0f, 1.0f), agora);
+  menuOrigem.w = 0.0f;   // so vale a caixa do quadro em que a peca foi desenhada
+}
+
 static void desenhaSecao(int r, float a, Uint32 agora) {
   int n = secaoN(r);
   // Aba de informacao que nao seja "Criador e elenco": o web TROCA o conteudo
@@ -6540,10 +6566,12 @@ static void desenhaSecao(int r, float a, Uint32 agora) {
     switch (r) {
       case SEC_TEMPORADAS: {
         GfxRect b = { x, y, w, NV_DETP_TEMP_H };
+        if (foco.fileira == r && c == foco.coluna) { menuOrigem = b; menuOrigemCol = c; menuOrigemF = f; menuOrigemA = a; }
         desenhaTemporada(b, c, f, a); break;
       }
       case SEC_EPISODIOS: {
         GfxRect b = { x, y, epCardW(), epCardH() };
+        if (foco.fileira == r && c == foco.coluna) { menuOrigem = b; menuOrigemCol = c; menuOrigemF = f; menuOrigemA = a; }
         desenhaEpisodio(b, c, f, a, agora); break;
       }
       case SEC_ABAS_INFO: {
@@ -7055,7 +7083,7 @@ void detail_desenhar(Uint32 agora) {
   // E o menu de visto por cima da ficha tambem: ele e o ultimo a abrir.
   if (episodios_menu_aberto()) ponteiro_camada();
   reacaoPendente(s);
-  episodios_menu_desenhar();
+  menuDeVisto(agora);
   maisDesenhar();
   if (amtui_aberta()) { ponteiro_camada(); amtui_desenhar(agora); }
 }

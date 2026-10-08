@@ -69,6 +69,13 @@ void  notasui_painel(GfxRect r, float raio, float a);
 // Volta o portao do texto (nova pagina de titulo).
 void  notasui_reiniciar(void);
 
+// O LOGO DA FONTE, sozinho (PNG de art/marcas): a esquerda em `x`, centrado em
+// `yc`, com `h` de altura. Devolve a largura; 0 quando a fonte nao tem PNG.
+// notasui_marca_largura mede sem desenhar — a mesma largura antes e depois de
+// a textura carregar, para o selo nao mudar de tamanho no segundo quadro.
+float notasui_marca_largura(int fonte, float h);
+float notasui_marca(int fonte, float x, float yc, float h, float a);
+
 // Uma marca sozinha (para os cartoes da aba de notas): centralizada em (xc, yc)
 // dentro de uma caixa `h` de altura. Devolve a largura usada.
 float notasui_marca_cartao(int fonte, int cru, float xc, float yc, float h, float a);

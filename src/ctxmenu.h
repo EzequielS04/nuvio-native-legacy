@@ -111,6 +111,32 @@ int  ctx_pediu_lista(void);
 // 1 UMA vez quando o menu fixou/desafixou ou ligou/desligou a Home, para a
 // grade de listas se refazer (a aba Fixadas perde a lista que saiu).
 int  ctx_lista_alterou(void);
+// A ILHA DO MENU PARA QUEM NAO E CARTAZ (o menu de visto do episodio, o painel
+// da temporada). Quem abre guarda o proprio estado — foco, molas, teclas — e
+// entrega o que escrever; o desenho, as medidas e o material sao os deste
+// arquivo, entao os menus nao tem como divergir.
+// `rot` ja traduzido (ou chave de i18n); `icone` e um nome de gfx_icone.
+typedef struct { const char *rot, *icone; } CtxLinha;
+// Largura: a do menu do cartaz, ou a que o rotulo mais comprido pede (com teto).
+// Medida sem rasterizar: serve para chamar uma vez, na abertura.
+float ctx_menu_largura(const CtxLinha *l, int n);
+float ctx_menu_altura(int n);
+// O x da ilha de largura `w` AO LADO de `cartaz` (direita; sem lugar, esquerda).
+float ctx_menu_ao_lado(GfxRect cartaz, float w);
+// O veu de tela cheia do menu do cartaz.
+void  ctx_menu_veu(float a);
+// A ilha em `m` com o cabecalho (nome e, embaixo, `meta` com o alfa `metaA`) e
+// as `n` linhas; `focoL[i]` e a mola de foco 0..1 de cada uma e `linhasA` o
+// alfa delas (apagadas enquanto a confirmacao esta na tela). `focar` (pode ser
+// NULL) vira o alvo de ponteiro de cada linha: focar(i, 0).
+void  ctx_menu_desenhar(GfxRect m, const char *nome, const char *meta, float metaA,
+                        const CtxLinha *l, int n, const float *focoL, float linhasA,
+                        float a, void (*focar)(int, int));
+// As duas pecas soltas, para a forma que nao e um menu retangular (o painel em
+// que a aba da temporada se abre): a superficie da ilha e uma linha de opcao.
+void  ctx_menu_ilha(GfxRect p, float raioPx, float a);
+void  ctx_menu_linha(GfxRect r, const char *rot, const char *icone, float f, float a);
+float ctx_menu_passo(void);   // altura de uma linha + o vao
 // Centro horizontal da barra "Segure OK para opções"; negativo = centro da tela.
 void ctx_centro_dica(float cx);
 #endif
