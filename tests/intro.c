@@ -399,6 +399,24 @@ int main(void) {
     puts("ok  previa: emendada pula junto com os creditos; sozinha marca o fim");
   }
 #endif
+#ifdef NV_SHOT_HOOKS
+  // CAPITULOS DO ARQUIVO (203-capitulos): substituem, por tipo, o da rede, e
+  // sobrevivem a quem chegou antes.
+  { double fim; int tipo; IntroTrecho cap[2], got[8]; int k;
+    n = intro_extrair(fixture("onepiece_s01e01.json"), v, 8);
+    intro_shot_definir(v, n);
+    intro_definir_duracao(1500.0, 0);
+    cap[0].inicio = 1380.0; cap[0].fim = 0.0; cap[0].tipo = INTRO_CREDITOS;
+    cap[1].inicio = 60.0; cap[1].fim = 150.0; cap[1].tipo = INTRO_ABERTURA;
+    intro_definir_capitulos(cap, 2);
+    k = intro_trechos(got, 8);
+    assert(achar(got, k, INTRO_CREDITOS) && mesmoSeg(achar(got, k, INTRO_CREDITOS)->inicio, 1380.0));
+    assert(achar(got, k, INTRO_ABERTURA) && mesmoSeg(achar(got, k, INTRO_ABERTURA)->inicio, 60.0));
+    assert(intro_botao(1400.0, 9100.0, 0, 0, &fim, &tipo) && tipo == INTRO_CREDITOS);
+    intro_definir_capitulos(NULL, 0);
+    puts("ok  capitulos do arquivo substituem o marcador da rede por tipo");
+  }
+#endif
   // ANISKIP: leitura e a regra dos 10% (outro corte).
   n = intro_extrair_aniskip(fixture("../aniskip/onepiece_mal21_ep1_len0.json"), 1500.0, v, 8);
   assert(n == 3);

@@ -12,6 +12,13 @@ static pthread_mutex_t trava=PTHREAD_MUTEX_INITIALIZER;
 static IntroTrecho trechos[8];static int nTrechos;static unsigned geracao;
 static int botaoIdx=-1;static double botaoDesde;
 static int botaoVis;static double botaoFim;static int botaoTipo;
+// Trechos que o PROPRIO ARQUIVO declara (capitulos do MKV, 203-capitulos): valem
+// mais que TheIntroDB/AniSkip, porque descrevem ESTE corte. Ficam a parte para
+// sobreviver a uma resposta da rede que chegue depois (baixar) e sao fundidos
+// por tipo: um tipo que o arquivo declara substitui o da rede.
+static IntroTrecho capTr[4];static int nCapTr;
+static void fundirCapitulos(void);   // chamar COM a trava
+static unsigned verGer;
 
 
 // AS QUATRO CHAVES QUE A API DEVOLVE, e o tipo de cada uma (as mesmas do
@@ -276,6 +283,7 @@ static void *baixar(void *u){
   if(vale){
     if(r==R_FALHA){falhou=1;falhouEm=(long)time(NULL);}
     else{falhou=0;memcpy(trechos,v,(size_t)n*sizeof *v);nTrechos=n;}
+    fundirCapitulos();
   }
   pthread_mutex_unlock(&trava);
   if(vale&&r!=R_FALHA){
@@ -291,7 +299,7 @@ static void disparar(const Pedido *base,double dur,int novo){
   p=malloc(sizeof*p);if(!p)return;
   *p=*base;p->dur=dur;
   pthread_mutex_lock(&trava);
-  if(novo){nTrechos=0;refeitos=0;tentativas=0;}
+  if(novo){nTrechos=0;nCapTr=0;refeitos=0;tentativas=0;}
   falhou=0;
   p->g=++geracao;ultimo=*p;temUltimo=1;enviadoDur=dur;
   pthread_mutex_unlock(&trava);
@@ -322,7 +330,28 @@ void intro_pedir_vizinhos(const char *imdb,int t,int e,double durAnt,double durP
 
 void intro_pedir(const char *imdb,int t,int e){intro_pedir_vizinhos(imdb,t,e,0.0,0.0);}
 
-void intro_desligar(void){pthread_mutex_lock(&trava);geracao++;nTrechos=0;botaoVis=0;botaoIdx=-1;temUltimo=0;falhou=0;pthread_mutex_unlock(&trava);}
+static int tipoDeCap(int t){return t==INTRO_ABERTURA?1:t==INTRO_RESUMO?2:3;}   // creditos e previa andam juntos
+static void fundirCapitulos(void){
+  int i,k,j=0;
+  if(nCapTr<=0)return;
+  for(i=0;i<nTrechos;i++){
+    int sub=0;
+    for(k=0;k<nCapTr;k++)if(tipoDeCap(capTr[k].tipo)==tipoDeCap(trechos[i].tipo))sub=1;
+    if(!sub)trechos[j++]=trechos[i];
+  }
+  nTrechos=j;
+  for(k=0;k<nCapTr&&nTrechos<8;k++)trechos[nTrechos++]=capTr[k];
+  verGer=geracao+1;   // forca valido() a reavaliar os vereditos por indice
+}
+void intro_definir_capitulos(const IntroTrecho *v,int n){
+  pthread_mutex_lock(&trava);
+  nCapTr=0;
+  for(int i=0;v&&i<n&&nCapTr<4;i++)capTr[nCapTr++]=v[i];
+  fundirCapitulos();
+  pthread_mutex_unlock(&trava);
+  if(n>0){printf("[intro] %d trecho(s) vindos dos capitulos do arquivo\n",n);fflush(stdout);}
+}
+void intro_desligar(void){pthread_mutex_lock(&trava);geracao++;nTrechos=0;nCapTr=0;botaoVis=0;botaoIdx=-1;temUltimo=0;falhou=0;pthread_mutex_unlock(&trava);}
 
 // DURACAO DA MIDIA E O TIPO (filme/serie), para recusar janelas absurdas.
 static double durMidia;static int ehFilme;
@@ -413,7 +442,6 @@ int intro_resposta_confere(const char *j,int t,int e){
 }
 
 static signed char veredito[8];   // 0 nao avaliado, 1 aceito, -1 recusado (por geracao)
-static unsigned verGer;
 static char mostrado[8];          // o botao deste trecho ja apareceu sozinho
 
 static int valido(int i){

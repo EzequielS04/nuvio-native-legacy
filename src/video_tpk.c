@@ -24,6 +24,7 @@
 #include "idioma.h"
 #include "linguas.h"
 #include "mkv.h"
+#include "capmkv.h"
 #include "mkvass.h"
 #include "faixasmkv.h"
 #include "velocidade.h"
@@ -367,6 +368,7 @@ static int abrirSessao(void) {
 
 int video_tocar(const char *u) {
   snprintf(urlAtual, sizeof urlAtual, "%s", u ? u : "");
+  capmkv_iniciar(urlAtual);
   mkvGeracao++; mkvN = 0; faixasNovas = 0; mkvOlhou = 0; mkvSondarJa = 0; mkvNaoMkv = 0;
   // Um fio da fonte anterior ainda na rede ve a geracao mudada e descarta.
   mkvEstado = urlAtual[0] ? 1 : 0;
@@ -588,6 +590,7 @@ void video_bombear(void) {
 }
 void video_parar(void) {
   emTrailer = 0;
+  capmkv_zerar();   // fio de capitulos em voo nao alimenta o proximo titulo
   audioPend = legPend = -1; comecou = 0; comecouEm = 0; audioComecou = 0;
   legendaLimpar(1);
   nv_recon_zerar(&recon);
@@ -726,7 +729,8 @@ void video_recorte_reaplicar(void) { if (temRoi) video_janela(ultRoiX, ultRoiY, 
 const char *video_url_atual(void) { return urlAtual; }
 double video_pos(void) { return (hPos && pronto) ? hPos() / 1000.0 : 0; }
 double video_duracao(void) { return durMs / 1000.0; }
-double video_creditos(void) { return 0.0; }
+// Capitulos do MKV lidos por um fio lateral (capmkv.c, 203-capitulos).
+double video_creditos(void) { return capmkv_creditos(video_duracao()); }
 double video_buffer_fim(void) { return 0; }
 unsigned video_bufferando_ms(void) {
   // Esperando para reconectar: o watchdog (app.c) nao troca de fonte.

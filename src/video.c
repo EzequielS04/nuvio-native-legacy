@@ -10,6 +10,7 @@
 #include <SDL2/SDL.h>
 #include "marco.h"
 #include "mkv.h"
+#include "capmkv.h"
 #include "mkvass.h"
 #include "js.h"
 #include "lsregistro.h"
@@ -1835,6 +1836,8 @@ static void *lerMkv(void *arg) {
       printf("[mkv] sonda pelo trecho da pre-busca (%ld bytes, sem rede): %d faixa(s)%s\n", cabN, n,
              n > 0 ? "" : " — Tracks nao coube, vai a rede");
       fflush(stdout);
+      // Faixas na janela mas Chapters fora dela: UM Range pelo SeekHead.
+      if (n > 0 && nCaps == 0) nCaps = mkv_capitulos_alem(url, cab, cabN, caps, MKV_MAX_CAPS, NULL);
       free(cab);
     } }
   if (n < 1) n = mkv_faixas_e_caps(url, fx, MKV_MAX_FAIXAS, caps, MKV_MAX_CAPS, &nCaps);
@@ -1844,6 +1847,7 @@ static void *lerMkv(void *arg) {
     printf("[mkv] %d capitulos; creditos nomeados em %.0fs, ultimo \"%s\" em %.0fs\n",
            nCaps, creditosNomeado, caps[nCaps - 1].nome, creditosUltimo);
     fflush(stdout);
+    capmkv_aplicar(caps, nCaps);   // abertura/creditos/previa do arquivo -> modulo de intro
   }
   if (n < 1) {
     // Sem isto o unico sinal era uma linha de stdout, que na TV nao chega a

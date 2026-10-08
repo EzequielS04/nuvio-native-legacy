@@ -9,6 +9,10 @@
 void *SDL_AndroidGetJNIEnv(void);
 void *SDL_AndroidGetActivity(void);
 #include "../src/video_android.c"
+// capmkv.c (capitulos do MKV) nao faz parte deste teste.
+void capmkv_iniciar(const char *u) { (void)u; }
+void capmkv_zerar(void) {}
+double capmkv_creditos(double d) { (void)d; return 0.0; }
 #include "../src/cacheboost.c"
 #include "../src/audsync.c"   // F06 nativeAudioEstado feeds the boost state too
 #include "../src/velocidade.c" // #202 speed
