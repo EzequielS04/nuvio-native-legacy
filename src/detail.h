@@ -161,7 +161,7 @@ int  detail_pediu_do_inicio(void);
 // no corpo de cada linha.
 #define NV_DETP_EP_TIT_Y     174.0f   // titulo separado do selo
 #define NV_DETP_EP_SIN_Y     224.0f   // tres linhas antes do rodape
-#define NV_DETP_EP_LD_SIN     32.0f
+#define NV_DETP_EP_LD_SIN     ((float)NV_LD_CAPTION)   // entrelinha do TXT_CAPTION (22)
 #define NV_DETP_EP_META_Y    344.0f   // relogio + duracao + data, tinta em +349
 #define NV_DETP_EP_ICONE      28.0f
 #define NV_DETP_EP_BARRA_Y   390.0f   // barra 576x8, raio 999

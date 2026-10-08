@@ -5120,8 +5120,12 @@ static void desenhaEpisodio(GfxRect r, int c, float f, float a, Uint32 agora) {
   // Sinopse: tres linhas, como a referencia, com truncamento do bloco.
   // Sem sinopse o espaco
   // fica vazio: melhor um card com menos texto que um card com texto errado.
+  // TXT_CAPTION (22/400) e nao TXT_DET_SIN (26), dono 08/10: no corpo do card a
+  // sinopse da pagina pesava tanto quanto o titulo e empurrava o nome, os logos
+  // e as notas em negrito para segundo plano. E o estilo que a sinopse ja usa no
+  // card do layout Apple (logo acima), com a entrelinha dele (NV_LD_CAPTION).
   if (epSin)
-    txt_bloco_corta(TXT_DET_SIN, epSin, 255, 255, 255, tx,
+    txt_bloco_corta(TXT_CAPTION, epSin, 255, 255, 255, tx,
                     r.y + NV_DETP_EP_SIN_Y, NV_DETP_EP_TEXTO_W,
                     NV_DETP_EP_LD_SIN, a * 0.9f, 3);
 
