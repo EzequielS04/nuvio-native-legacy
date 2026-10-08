@@ -369,6 +369,31 @@ static void montarSugestoes(void) {
 // Antes isto era uma lista plana do acervo inteiro, o que perdia a informacao de
 // ONDE cada resultado foi achado — e e essa informacao que o subtitulo "from
 // <addon>" mostra.
+// DEBOUNCE DA REDE (#368). Cada tecla chamava desc_buscar: geracao nova,
+// contagens zeradas, TODOS os alvos (ate 16 + Nuvio) refeitos em 3 fios. Em TV
+// antiga isso engasgava a digitacao. Agora refiltrar so ANOTA o termo; o pedido
+// sai quando o texto assenta (BU_ESPERA_REDE_MS). O filtro LOCAL segue imediato.
+#define BU_ESPERA_REDE_MS 300
+#define BU_COALESCE_MS    150
+static int    redeImediata;        // 1 = esta chamada dispara a rede sem esperar
+static int    redePend;            // ha termo anotado e ainda nao disparado
+static Uint32 redePendDesde;
+static char   redePendTermo[BU_MAX_CONSULTA];
+static char   redeDisparado[BU_MAX_CONSULTA];   // ultimo termo entregue a desc_buscar
+// Fileiras de add-on do termo ANTERIOR, mantidas ate a 1a resposta do novo.
+static struct { const char *titulo, *origem; int itens[BU_MAX_POR_FIL]; int n; } velho[BU_MAX_FILEIRAS];
+static int    nVelho;
+static Uint32 ultimoRefiltro;
+
+static void refiltrar(void);
+static void refiltrarJa(void) { redeImediata = 1; refiltrar(); redeImediata = 0; }
+
+static void redeDisparar(void) {
+  redePend = 0;
+  snprintf(redeDisparado, sizeof redeDisparado, "%s", consulta);
+  desc_buscar(consulta);
+}
+
 static void refiltrar(void) {
   char alvo[BU_MAX_CONSULTA * 2];
   int anterior = -1, mesmaConsulta = !strcmp(consultaFiltrada, consulta);
@@ -385,6 +410,7 @@ static void refiltrar(void) {
   if (busca_codepoints(alvo) < 2) {
     if (painel == 1 && !sugestao) painel = 0;
     sugestao = 1;
+    redePend = 0; nVelho = 0; redeDisparado[0] = 0;
     montarSugestoes();
     goto montado;
   }
@@ -401,7 +427,17 @@ static void refiltrar(void) {
   // `alvo` e a forma sem acento e sem caixa, boa para o filtro LOCAL; mandada a
   // um addon localizado ela perde justamente o que ele indexa ("Ștefan",
   // "Друзья"). O addon faz o seu proprio casamento.
-  desc_buscar(consulta);
+  if (!strcmp(consulta, redeDisparado)) { redePend = 0; desc_buscar(consulta); }   // mesmo termo: so confere o interruptor
+  else if (redeImediata) redeDisparar();
+  else {
+    // O relogio so recomeca quando o TEXTO muda; uma resposta que refaz a tela
+    // com o mesmo texto nao pode adiar o pedido.
+    if (!redePend || strcmp(consulta, redePendTermo)) {
+      redePendDesde = SDL_GetTicks();
+      snprintf(redePendTermo, sizeof redePendTermo, "%s", consulta);
+    }
+    redePend = 1;
+  }
 
   // UMA FILEIRA POR CATALOGO CONSULTADO, com a origem embaixo — igual ao web,
   // que monta uma `.search-results-row` por catalogo em vez de uma lista unica.
@@ -418,50 +454,43 @@ static void refiltrar(void) {
   // consultado (desc_busca_*); o Continuar assistindo, que vem das fileiras
   // locais abaixo, nao muda de lugar. A "fonte" sob o grupo some com o ajuste
   // ou quando so ha uma fonte de busca ativa.
+  // UM cat_acrescentar_lote POR refiltrar (#368): cada chamada copia o catalogo
+  // inteiro (CatItem = 16 KB) sob trava, no fio de desenho. Antes era um por
+  // alvo com titulo novo. Fase A monta as fileiras e junta os novos de TODOS os
+  // alvos (marcador -(k+2) em itens[]); fase B acrescenta de uma vez e resolve.
   { int alvoIdx, passo, nAlvos = desc_busca_n_alvos();
     int nuvioDepois = ajustes_busca_nuvio() == 1;
     int mostraFonte = ajustes_busca_origem() && desc_busca_n_fontes() > 1;
-   for (passo = 0; passo < (nuvioDepois ? 2 : 1); passo++)
-    for (alvoIdx = 0; alvoIdx < nAlvos && nFil < BU_MAX_FILEIRAS; alvoIdx++) {
-      int nRem = desc_busca_alvo_n(alvoIdx, consulta), i;
-      // DOIS PASSOS, e a separacao e o conserto: primeiro junta os que ainda
-      // NAO estao no catalogo, depois acrescenta TODOS numa troca de bloco so.
-      //
-      // Antes era cat_acrescentar por resultado, e cada chamada copia o
-      // catalogo inteiro: com 300 titulos, ~2,3 MB por copia, ate 40 vezes, no
-      // fio de DESENHO, a cada tecla digitada. A busca engasgava por isso.
-      CatItem novos[BU_MAX_POR_FIL];
-      int idxNovos[BU_MAX_POR_FIL];
-      int achou = 0, nNovos = 0;
-      int posNovo[BU_MAX_POR_FIL];   // onde cada novo entra em fil[].itens
+    int chegou = desc_busca_chegou(consulta);
+    int fil0 = nFil, nNovos = 0, k;
+    CatItem *novos = NULL;
+    int *idxNovos = NULL;
+    for (passo = 0; passo < (nuvioDepois ? 2 : 1); passo++)
+     for (alvoIdx = 0; alvoIdx < nAlvos && nFil < BU_MAX_FILEIRAS; alvoIdx++) {
+      int nRem = desc_busca_alvo_n(alvoIdx, consulta), i, achou = 0;
       if (nRem <= 0) continue;
       if (nuvioDepois && (desc_busca_alvo_nuvio(alvoIdx) != 0) != (passo == 1)) continue;
       for (i = 0; i < nRem && achou < BU_MAX_POR_FIL; i++) {
         CatItem it;
         int idx;
         if (!desc_busca_alvo_item(alvoIdx, i, &it)) continue;
-        // Ja esta no catalogo? Reaproveita o indice em vez de duplicar o card.
         idx = it.imdb[0] ? cat_indice_por_imdb(it.imdb) : -1;
-        if (idx >= 0) {
-          fil[nFil].itens[achou++] = idx;
-        } else if (nNovos < BU_MAX_POR_FIL) {
-          novos[nNovos] = it;
-          posNovo[nNovos] = achou++;   // reserva o lugar; o indice vem depois
-          nNovos++;
+        if (idx < 0 && it.imdb[0]) {   // ja juntado por outro alvo neste refiltrar?
+          for (k = 0; k < nNovos; k++)
+            if (!strcmp(novos[k].imdb, it.imdb)) { idx = -(k + 2); break; }
         }
-      }
-      if (nNovos > 0) {
-        int entraram = cat_acrescentar_lote(novos, nNovos, idxNovos);
-        for (i = 0; i < nNovos; i++)
-          fil[nFil].itens[posNovo[i]] = (i < entraram) ? idxNovos[i] : -1;
-        // O que nao coube (catalogo no teto) vira -1 e e COMPACTADO para fora.
-        // So diminuir a contagem deixaria buracos no MEIO da fileira, e o card
-        // do buraco apontaria para o item errado — pior que faltar um card.
-        if (entraram < nNovos) {
-          int r = 0, w = 0;
-          for (r = 0; r < achou; r++)
-            if (fil[nFil].itens[r] >= 0) fil[nFil].itens[w++] = fil[nFil].itens[r];
-          achou = w;
+        if (idx >= 0 || idx <= -2) {
+          fil[nFil].itens[achou++] = idx;
+        } else {
+          if (!novos) {
+            novos = malloc(sizeof(CatItem) * (size_t)BU_MAX_FILEIRAS * BU_MAX_POR_FIL);
+            idxNovos = malloc(sizeof(int) * (size_t)BU_MAX_FILEIRAS * BU_MAX_POR_FIL);
+            if (!novos || !idxNovos) { free(novos); free(idxNovos); novos = NULL; idxNovos = NULL; break; }
+          }
+          if (nNovos >= BU_MAX_FILEIRAS * BU_MAX_POR_FIL) break;
+          novos[nNovos] = it;
+          fil[nFil].itens[achou++] = -(nNovos + 2);
+          nNovos++;
         }
       }
       if (achou > 0) {
@@ -470,7 +499,42 @@ static void refiltrar(void) {
         fil[nFil].n = achou;
         nFil++;
       }
-    } }
+    }
+    if (nNovos > 0) {
+      int entraram = cat_acrescentar_lote(novos, nNovos, idxNovos);
+      for (k = fil0; k < nFil; k++) {
+        int r, w = 0;
+        for (r = 0; r < fil[k].n; r++) {
+          int v = fil[k].itens[r];
+          if (v <= -2) { int q = -v - 2; v = q < entraram ? idxNovos[q] : -1; }
+          // Os que nao couberam (catalogo no teto) saem COMPACTADOS: buraco no
+          // meio apontaria o card para o item errado.
+          if (v >= 0) fil[k].itens[w++] = v;
+        }
+        fil[k].n = w;
+      }
+      { int w = fil0;
+        for (k = fil0; k < nFil; k++) if (fil[k].n > 0) { if (w != k) fil[w] = fil[k]; w++; }
+        nFil = w; }
+    }
+    free(novos); free(idxNovos);
+    // SEM PISCAR: ate a 1a resposta do termo novo, as fileiras do termo anterior
+    // ficam. Com resposta (mesmo vazia), so o que e do termo corrente.
+    if (chegou) {
+      nVelho = 0;
+      for (k = fil0; k < nFil && nVelho < BU_MAX_FILEIRAS; k++, nVelho++) {
+        velho[nVelho].titulo = fil[k].titulo; velho[nVelho].origem = fil[k].origem;
+        velho[nVelho].n = fil[k].n;
+        memcpy(velho[nVelho].itens, fil[k].itens, sizeof velho[nVelho].itens);
+      }
+    } else if (nFil == fil0) {
+      for (k = 0; k < nVelho && nFil < BU_MAX_FILEIRAS; k++, nFil++) {
+        fil[nFil].titulo = velho[k].titulo; fil[nFil].origem = velho[k].origem;
+        fil[nFil].n = velho[k].n;
+        memcpy(fil[nFil].itens, velho[k].itens, sizeof velho[k].itens);
+      }
+    }
+  }
 
   int nCat = cat_n_fileiras();
   for (int r = 0; r < nCat && nFil < BU_MAX_FILEIRAS; r++) {
@@ -645,7 +709,7 @@ static void recentesAcionar(void) {
   nConsulta = (int)strlen(consulta);
   buscasrec_registrar(consulta);
   painel = 0;
-  refiltrar();
+  refiltrarJa();
 }
 
 // Pressao longa: remove o termo em foco; no "Limpar", o mesmo que o OK curto.
@@ -1047,7 +1111,7 @@ void busca_atualizar(float dt, Uint32 agora) {
       st_fechar(ST_BUSCA);
       campoDefinir(t, 1);
       memset(t, 0, sizeof t);
-      refiltrar();
+      refiltrarJa();
       campoFoco = 0;
       if (temResultados()) { registrarConsulta(); painel = 1; }
     }
@@ -1055,7 +1119,8 @@ void busca_atualizar(float dt, Uint32 agora) {
     if (r == ST_PEDE_TECLADO) { campoFoco = 1; st_ime_abrir(ST_BUSCA, consulta, BU_MAX_CONSULTA - 1); }
     else if (r == ST_TEXTO || r == ST_FIM) {
       campoDefinir(t, voz || r == ST_FIM);
-      refiltrar();
+      // Concluir / voz entregam o texto FINAL: sem esperar o debounce.
+      if (voz || r == ST_FIM) refiltrarJa(); else refiltrar();
       if (r == ST_FIM && temResultados()) { registrarConsulta(); painel = 1; campoFoco = 0; }
     } }
   // O RESULTADO DA REDE CHEGA DEPOIS DA TECLA. refiltrar() so roda quando o
@@ -1066,6 +1131,10 @@ void busca_atualizar(float dt, Uint32 agora) {
   // PESSOAS: o pedido ao TMDB sai quando o texto assenta (debounce); a resposta
   // refaz a fileira. Com o campo vazio, o catalogo que chega depois da abertura
   // refaz os Populares.
+  // DEBOUNCE DA REDE: o texto assentou? Entao o pedido sai (uma vez por palavra).
+  if (redePend && agora - redePendDesde >= BU_ESPERA_REDE_MS) {
+    redeDisparar();
+  }
   { static int ultimoCat = -1;
     spotpessoa_atualizar(agora);
     if (!sugestao && spotpessoa_geracao() != gerPessoa) refiltrar();
@@ -1075,7 +1144,12 @@ void busca_atualizar(float dt, Uint32 agora) {
     normalizar(consulta, alvo, sizeof alvo);
     if (busca_codepoints(alvo) >= 2) {
       int n = desc_busca_n(consulta);
-      if (n != ultimoRemoto) { ultimoRemoto = n; refiltrar(); }
+      // Respostas de varios alvos no mesmo instante viram UM refiltrar por
+      // BU_COALESCE_MS; `ultimoRemoto` so avanca quando ele roda, entao o
+      // resto nao se perde (roda no proximo quadro depois da janela).
+      if (n != ultimoRemoto && agora - ultimoRefiltro >= BU_COALESCE_MS) {
+        ultimoRemoto = n; ultimoRefiltro = agora; refiltrar();
+      }
     } else {
       ultimoRemoto = -1;
     } }
@@ -1524,3 +1598,12 @@ void busca_desenhar(Uint32 agora) {
   desenhaTeclado();
   desenhaResultados(agora);
 }
+
+#ifdef NV_BUSCA_TESTE
+// Gancho de teste (tests/busca_debounce.sh): soma dos itens das fileiras de titulos.
+int busca_teste_itens(void) {
+  int i, t = 0;
+  for (i = 0; i < nFil; i++) if (!fil[i].pessoas) t += fil[i].n;
+  return t;
+}
+#endif

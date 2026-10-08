@@ -732,6 +732,7 @@ static struct {
 } resAlvo[BUSCA_ALVOS];
 
 static int  geracao;            // sobe a cada termo novo
+static int  respGeracao = -1;   // geracao da ultima resposta aceita (desc_busca_chegou)
 static int  proximoAlvo;        // fila de trabalho: proximo indice a consultar
 static int  fiosVivos;
 
@@ -864,6 +865,7 @@ static void *fioBusca(void *arg) {
       memcpy(resAlvo[meu].itens, achados, sizeof(CatItem) * (size_t)n);
       resAlvo[meu].n = n;
       resAlvo[meu].geracao = g;
+      respGeracao = g;
       snprintf(buscaTermo, sizeof buscaTermo, "%s", termo);
     }
     pthread_mutex_unlock(&buscaTrava);
@@ -901,6 +903,16 @@ void desc_buscar(const char *termo) {
       pthread_detach(t);
     }
   }
+}
+
+// Ja chegou ALGUMA resposta para este termo? Ate la a tela mantem as fileiras
+// do termo anterior (sem piscar); depois, so as do termo novo.
+int desc_busca_chegou(const char *termo) {
+  int r;
+  pthread_mutex_lock(&buscaTrava);
+  r = termo && !strcmp(termo, buscaTermo) && respGeracao == geracao;
+  pthread_mutex_unlock(&buscaTrava);
+  return r;
 }
 
 int desc_busca_geracao(void) {

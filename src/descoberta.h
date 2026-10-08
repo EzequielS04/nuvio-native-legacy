@@ -182,6 +182,7 @@ int  desc_busca_alvo_item(int alvo, int i, CatItem *dst);
 // Sobe a cada termo novo. Quem guarda posicao de foco entre quadros deve
 // reajustar quando este numero mudar.
 int  desc_busca_geracao(void);
+int  desc_busca_chegou(const char *termo);   // 1 = ja houve resposta de algum alvo para `termo`
 
 // Registro dos alvos, chamado pelo carregamento dos manifestos. `zerar` repoe
 // so o Cinemeta.
