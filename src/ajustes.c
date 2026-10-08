@@ -5473,9 +5473,15 @@ static void heroFonteCiclar(int dir) {
   int n = 0, i, atual = 0, total = fil_n();
   snprintf(ops[n++], FIL_CHAVE, "%s", "");
   snprintf(ops[n++], FIL_CHAVE, "%s", "*");
-  for (i = 0; i < total && n < (int)(sizeof ops / sizeof *ops); i++)
-    if (fil_estado(i) == FIL_NA_HOME)
+  for (i = 0; i < total && n < (int)(sizeof ops / sizeof *ops); i++) {
+    // #327: pasta de colecao nao tem titulos para o destaque (escolhe-la o
+    // deixava vazio), e um catalogo que mora dentro de uma pasta ou fora da
+    // Home e uma fonte valida: a descoberta o baixa so para o destaque.
+    int o = fil_origem_de(fil_chave(i));
+    if (o == FIL_ORIGEM_COLECAO) continue;
+    if (fil_estado(i) == FIL_NA_HOME || (o == FIL_ORIGEM_CATALOGO && !fil_linha_sem_addon(i)))
       snprintf(ops[n++], FIL_CHAVE, "%s", fil_chave(i));
+  }
   { const char *f = fil_hero_fonte();
     for (i = 0; i < n; i++) if (!strcmp(ops[i], f)) { atual = i; break; } }
   atual += dir;

@@ -1067,6 +1067,31 @@ int main(void) {
     usaArquivo = 0; }
   puts("ok  #319: addon removido/desligado nao ocupa vaga da home e a poda nao fica adiada");
 
+  // #327: "Adicionada a Home" de um catalogo engolido por pasta de colecao nao
+  // mudava nada (emColecao seguia ligado). A escolha local vence a colecao.
+  { int est = -1, i, dentro[2] = { 1, 1 }, fora[2] = { 0, 0 };
+    const char *chs[2] = { "x_movie_a", "x_movie_b" };
+    fil_esquecer();
+    fil_definir_limite(7);
+    fil_registrar("x_movie_a", "A", "X", "movie", 5);
+    fil_registrar("x_movie_b", "B", "X", "movie", 5);
+    fil_conta_reconciliar(chs, fora, dentro, 2);
+    assert(fil_estado_chave("x_movie_a") == FIL_FORA);
+    assert(!fil_adicionada_na_tv("x_movie_a"));
+    i = -1;
+    { int k; for (k = 0; k < fil_n(); k++) if (!strcmp(fil_chave(k), "x_movie_a")) i = k; }
+    assert(i >= 0);
+    i = fil_adicionar(i, &est);
+    assert(est == FIL_NA_HOME);
+    assert(fil_estado_chave("x_movie_a") == FIL_NA_HOME);
+    assert(fil_adicionada_na_tv("x_movie_a"));
+    // a proxima reconciliacao (o sync) devolve o catalogo a pasta, a menos que
+    // quem reconcilia respeite a escolha local — o contrato e fil_adicionada_na_tv
+    assert(fil_adicionada_na_tv("x_movie_a") && !fil_adicionada_na_tv("x_movie_b"));
+    fil_remover(i);
+    assert(!fil_adicionada_na_tv("x_movie_a")); }
+  puts("ok  #327: adicionar um catalogo de pasta de colecao o traz para a Home");
+
   puts("fileiras: tudo ok");
   return 0;
 }

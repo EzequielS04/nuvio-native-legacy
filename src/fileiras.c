@@ -575,6 +575,10 @@ int fil_adicionar(int i, int *estado) {
   if (i < 0 || i >= nLinhas) { pthread_mutex_unlock(&trava); if (estado) *estado = FIL_FORA; return i; }
   linhas[i].oculta = 0;
   linhas[i].visPessoal = 1;
+  // #327: adicionar e uma escolha que VENCE a colecao. Sem isto o catalogo
+  // engolido por uma pasta visivel continuava emColecao, o estado seguia
+  // "fora" e a tela dizia "Adicionada" sem nada mudar.
+  linhas[i].emColecao = 0;
   for (j = nLinhas - 1; j >= 0; j--) if (!linhas[j].oculta && j != i) { ultimo = j; break; }
   // Ja esta depois do ultimo ligado: nao ha para onde ir.
   if (ultimo >= 0 && i < ultimo) {
@@ -669,6 +673,20 @@ static int doAddon(const char *chave, const char *id, const char *base) {
 static int temEscolha(const Linha *l) {
   return l->visPessoal || l->oculta == OC_PESSOA || l->fila || l->tipo != FIL_TIPO_AUTO ||
          l->tam != FIL_TAM_PADRAO || (heroFonte[0] && !strcmp(heroFonte, l->chave));
+}
+
+// #327: o catalogo que a pessoa ADICIONOU a Home nesta TV (visPessoal, ligado)
+// nao e engolido por colecao: a escolha local vence a regra automatica, do mesmo
+// jeito que ela ja vence a ordem da conta.
+int fil_adicionada_na_tv(const char *chave) {
+  int i, r = 0;
+  if (!chave || !chave[0]) return 0;
+  pthread_mutex_lock(&trava);
+  garantir();
+  i = achar(chave);
+  if (i >= 0) r = linhas[i].visPessoal && !linhas[i].oculta;
+  pthread_mutex_unlock(&trava);
+  return r;
 }
 
 int fil_podar_catalogos(const char *const *ids, const char *const *bases, int n,
@@ -1128,6 +1146,7 @@ const char *fil_titulo(int i) {
   return linhas[i].titulo[0] ? linhas[i].titulo : linhas[i].chave;
 }
 int fil_linha_oculta(int i) { return (i >= 0 && i < nLinhas && (linhas[i].oculta || linhas[i].ocultaConta || linhas[i].emColecao || linhas[i].semAddon)) ? 1 : 0; }
+int fil_linha_sem_addon(int i) { return (i >= 0 && i < nLinhas && linhas[i].semAddon) ? 1 : 0; }
 int fil_linha_tipo(int i)   { return (i >= 0 && i < nLinhas) ? linhas[i].tipo : FIL_TIPO_AUTO; }
 int fil_linha_tam(int i)    { return (i >= 0 && i < nLinhas) ? linhas[i].tam : FIL_TAM_PADRAO; }
 

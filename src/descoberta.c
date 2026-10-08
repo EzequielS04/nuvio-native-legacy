@@ -1349,6 +1349,8 @@ static void lerPrefs(void) {
 // "engolidas=0" enquanto o engolimento acontecia — mais cedo, em outro ponto.
 // Um contador que mede metade do caminho ja me custou uma rodada.
 static int engolidasNaDeclaracao;
+// #327: chave da fileira baixada so para alimentar o destaque (vazia = nenhuma).
+static char heroAlimChave[192];
 
 // A VISIBILIDADE DO GRUPO FAZ PARTE DA PERGUNTA, E EU JA A TIREI UMA VEZ.
 //
@@ -1382,6 +1384,8 @@ static int dentroDeColecaoVisivelBase(const char *base, const char *tipo,
 }
 
 static int dentroDeColecaoVisivel(const Decl *d) {
+  // #327: o que a pessoa adicionou a Home na TV nao e engolido pela pasta.
+  if (fil_adicionada_na_tv(d->chave)) return 0;
   return dentroDeColecaoVisivelBase(d->base, d->tipo, d->id);
 }
 
@@ -1928,7 +1932,7 @@ static int prioCatalogo(const char *chave, const char *desativar,
                         int *pos) {
   int k, n;
   *pos = 0;
-  if (dentroDeColecaoVisivelBase(base, tipo, id) || fil_oculta(chave) ||
+  if ((dentroDeColecaoVisivelBase(base, tipo, id) && !fil_adicionada_na_tv(chave)) || fil_oculta(chave) ||
       catordem_oculta(chave, desativar))
     return COTA_DESLIGADO;
   for (k = 0; k < nPrefOff; k++)
@@ -4311,6 +4315,53 @@ static void *montar(void *u) {
         // certo para o convite da home, inutil para saber se houve catalogo que
         // o teto impediu de PEDIR. Quem precisa disso e desc_remontar_fileiras.
         catalogosNaoPedidos = sobraram; }
+      // #327: O DESTAQUE NAO PODE DEPENDER DE UMA FILEIRA DESENHADA. Com todos
+      // os catalogos dentro de pastas de colecao (ou fora da Home) nenhuma
+      // fileira de catalogo era pedida, o catalogo ficava vazio e o destaque
+      // abria sem imagem. Aqui se baixa UM catalogo so para alimentar o
+      // destaque: a escolhida em "Catalogos do destaque", ou, sem fileira de
+      // catalogo nenhuma, o primeiro da ordem. A fileira entra marcada como
+      // fora da Home (ela esta engolida/oculta/na fila), entao a home nao a
+      // desenha — so o destaque usa os titulos.
+      heroAlimChave[0] = 0;
+      if (nFil < CAT_FIL_MAX) {
+        const char *hf = fil_hero_fonte();
+        const Decl *dh = NULL;
+        int temCat = 0, q, ja = 0;
+        for (q = 0; q < nFil; q++) if (fil[q].base[0]) { temCat = 1; break; }
+        if (hf[0] && !(hf[0] == '*' && !hf[1])) {
+          for (q = 0; q < nFil && !ja; q++) ja = !strcmp(fil[q].chave, hf);
+          if (!ja) for (q = 0; q < nDecl; q++)
+            if (!strcmp(decls[q].chave, hf)) { dh = &decls[q]; break; }
+        } else if (!temCat) {
+          for (q = 0; q < nOrdem && !dh; q++) if (!fil_oculta(decls[ordem[q]].chave)) dh = &decls[ordem[q]];
+          for (q = 0; q < nOrdem && !dh; q++) dh = &decls[ordem[q]];
+        }
+        if (dh && dh->base && dh->base[0] && (fil_estado_chave(dh->chave) == FIL_FORA ||
+                                              fil_estado_chave(dh->chave) == FIL_NA_FILA)) {
+          static CatItem hItens[MAX_POR_FILEIRA];
+          int resp = 0, qtd = ajustes_itens_fileira(), got;
+          if (qtd > MAX_POR_FILEIRA) qtd = MAX_POR_FILEIRA;
+          got = lerCatalogo(dh->base, dh->tipo, dh->id, hItens, MAX_POR_FILEIRA, qtd, &resp);
+          printf("[desc] destaque: catalogo %s so para o destaque (%d titulo(s))\n", dh->titulo, got);
+          if (got > 0) {
+            GARANTE(got);
+            if (got <= cap - n) {
+              CatFileira *f = &fil[nFil++];
+              memset(f, 0, sizeof *f);
+              snprintf(f->chave,  sizeof f->chave,  "%s", dh->chave);
+              snprintf(f->titulo, sizeof f->titulo, "%s", dh->titulo);
+              snprintf(f->tipo,   sizeof f->tipo,   "%s", dh->tipo);
+              snprintf(f->base,   sizeof f->base,   "%s", dh->base);
+              snprintf(f->catId,  sizeof f->catId,  "%s", dh->id);
+              memcpy(lote + n, hItens, sizeof(CatItem) * (size_t)got);
+              f->ini = n; f->n = got;
+              n += got;
+              snprintf(heroAlimChave, sizeof heroAlimChave, "%s", dh->chave);
+            }
+          }
+        }
+      }
       nFilsLote = nFil;
       memcpy(filsLote, fil, sizeof(CatFileira) * (size_t)nFil);
       // UMA LINHA QUE RESPONDE "o que falhou no arranque". As quatro contagens
@@ -4672,8 +4723,11 @@ void desc_remontar_fileiras(void) {
   for (i = 0; i < nFileirasMontadas; i++) {
     const CatFileira *f = &filsMontadas[i];
     if (!f->base[0]) continue;
+    if (heroAlimChave[0] && !strcmp(f->chave, heroAlimChave) &&
+        fil_estado_chave(f->chave) != FIL_NA_HOME) continue;   // #327: volta no fim
     if (fil_oculta(f->chave) || catordem_oculta(f->chave, f->chave)) continue;
-    if (dentroDeColecaoVisivelBase(f->base, f->tipo, f->catId)) { engolidas++; continue; }
+    if (dentroDeColecaoVisivelBase(f->base, f->tipo, f->catId) &&
+        !fil_adicionada_na_tv(f->chave)) { engolidas++; continue; }
     if (nCat < CAT_FIL_MAX) { chaves[nCat] = f->chave; idxCat[nCat] = i; nCat++; }
   }
   // SEMPRE, e nao so quando engoliu: a linha existe para o caso em que ela
@@ -4753,6 +4807,13 @@ void desc_remontar_fileiras(void) {
   for (k = 0; k < nCat && nOut < teto && nOut < CAT_FIL_MAX; k++)
     saidaFil[nOut++] = filsMontadas[idxCat[ordem[k]]];
 
+  // #327: a fileira so do destaque fica, fora da conta do limite.
+  if (heroAlimChave[0] && nOut < CAT_FIL_MAX) {
+    int ja = 0;
+    for (i = 0; i < nOut && !ja; i++) ja = !strcmp(saidaFil[i].chave, heroAlimChave);
+    for (i = 0; !ja && i < nFileirasMontadas; i++)
+      if (!strcmp(filsMontadas[i].chave, heroAlimChave)) { saidaFil[nOut++] = filsMontadas[i]; break; }
+  }
   printf("[desc] fileiras remontadas sem rede: %d de %d%s\n",
          nOut, nFileirasMontadas,
          engolidas ? " (algumas engolidas por colecao)" : "");
