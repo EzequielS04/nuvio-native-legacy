@@ -394,8 +394,25 @@ static int embutidaViva(const LegUiCand *c) {
   return -1;
 }
 
+// OK SEGURADO (#370). O firmware da TV entrega a tecla segurada como KEYDOWNs
+// SEPARADOS, cada um com repeat=0 (ver app.c, alternarSalvos): sem esta guarda
+// cada um deles recarregava a MESMA legenda (download, SubRip, libass e o plano
+// do AutoSync desde o zero) — no log do #370, 9 recargas em 2,3 s. O relogio
+// anda a cada toque, entao uma segurada inteira e UMA escolha; soltar e apertar
+// de novo (retentar a mesma legenda) passa.
+#define LU_REPETE_MS 600u
+static int repeticao(int slot, const LegUiCand *c) {
+  static char ultId[24]; static int ultSlot = -1; static Uint32 ultMs;
+  Uint32 agora = SDL_GetTicks();
+  int igual = ultSlot == slot && !strcmp(ultId, c->id) && (Sint32)(agora - ultMs) < (Sint32)LU_REPETE_MS && (Sint32)(agora - ultMs) >= 0;
+  ultSlot = slot; ultMs = agora;
+  snprintf(ultId, sizeof ultId, "%s", c->id);
+  return igual;
+}
+
 static void escolher(int slot, const LegUiCand *c) {
   char prim[24];
+  if (c && repeticao(slot, c)) return;
   if (slot == 0) {
     if (!c) { faixas_escolher_embutida(-1); return; }
     if (c->embutida) { int i = embutidaViva(c); if (i >= 0) faixas_escolher_embutida(i); }

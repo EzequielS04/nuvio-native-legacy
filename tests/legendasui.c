@@ -50,7 +50,8 @@ uint64_t legsync_hash_url(const char *u) { uint64_t h = 1469598103934665603ull; 
 unsigned rede_pedido_capacidades(void) { return (unsigned)caps; }
 VideoLegendaEstilo *player_leg_estilo(void) { return &estilo; }
 void player_leg_estilo_mudou(void) {}
-Uint32 SDL_GetTicks(void) { return 1000; }
+static Uint32 agoraMs = 1000;
+Uint32 SDL_GetTicks(void) { return agoraMs; }
 void plrui_decimal(char *s) { (void)s; }
 // legenda2: record what the selector asks for (the loader has its own test).
 void legenda2_reiniciar(void) { sec[0] = 0; secOffset = 0; }
@@ -429,6 +430,25 @@ int main(void) {
     b = linhaDe("s|-");
     if (b >= 0) { textoLinha(&linhas[b], nm, sizeof nm, sb, sizeof sb, &id, &ic, &at, &ap); assert(!strcmp(nm, "Sem segunda legenda")); }
     assert(!strcmp(ling_selo(add[1].idioma), "PT")); }
+
+  // --- #370: OK SEGURADO. O firmware da TV manda a tecla segurada como uma
+  //     sequencia de KEYDOWNs separados (repeat=0, ver app.c). Cada OK sobre a
+  //     mesma legenda recarregava o arquivo inteiro (download, SubRip, libass):
+  //     no log do #370, 9 recargas em 2,3 s. Uma segurada vale UMA escolha;
+  //     soltar e apertar de novo (retentar) continua valendo.
+  { int k;
+    montarLinhas(); focar(0);
+    assert(linhas[foco].tipo == LR_CAND && linhas[foco].nVar <= 1);
+    escolhidasExt = 0; extId[0] = 0; ativaEmb = -1;
+    for (k = 0; k < 12; k++) { agoraMs += 200; tecla(SDLK_RETURN); }
+    assert(escolhidasExt == 1);                    // 12 OKs seguidos, 200 ms entre eles
+    agoraMs += 2000; tecla(SDLK_RETURN);
+    assert(escolhidasExt == 2);                    // apertou de novo depois de soltar
+    agoraMs += 200; montarLinhas(); focar(1);
+    if (linhas[foco].tipo == LR_CAND && linhas[foco].nVar <= 1) {
+      tecla(SDLK_RETURN);                          // outra legenda logo em seguida: NAO e a mesma segurada
+      assert(escolhidasExt == 3);
+    } }
 
   assert(tecla(SDLK_ESCAPE) == LEGUI_FECHAR && !aberto);
   // Media change drops the second slot.
