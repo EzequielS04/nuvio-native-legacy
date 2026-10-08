@@ -72,6 +72,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "mkvass.h"
 #include "relogio.h"
 #include "intro.h"
+#include "proximo.h"
 #include "credfonte.h"
 #include "credaprende.h"
 #include "seekr.h"
@@ -578,16 +579,13 @@ int player_pediu_proximo(int *t,int *e) {
   if(!pedProxT||!pedProxE)return 0;
   if(t)*t=pedProxT;if(e)*e=pedProxE;pedProxT=pedProxE=0;return 1;
 }
+// A regra mora em prox_indice_seguinte (proximo.h), a mesma do cartao.
 const CatEp *player_proximo_episodio(void) {
-  const CatEp *melhor=NULL;
-  int ix=idxAtual(),n=cat_n_episodios(ix);
-  for(int i=0;i<n;i++) {
-    const CatEp *p=cat_episodio(ix,i);if(!p)continue;
-    if(p->temporada<epT||(p->temporada==epT&&p->episodio<=epE))continue;
-    if(!melhor||p->temporada<melhor->temporada||
-       (p->temporada==melhor->temporada&&p->episodio<melhor->episodio))melhor=p;
-  }
-  return melhor;
+  int ix=idxAtual(),n=cat_n_episodios(ix),i;
+  const CatEp *base=n>0?cat_episodio(ix,0):NULL;
+  if(!base)return NULL;
+  i=prox_indice_seguinte(base,n,epT,epE);
+  return i>=0?cat_episodio(ix,i):NULL;
 }
 // O MOTIVO DO CARTAO DE ERRO (issue #112). O cartao dizia sempre "Nao foi
 // possivel abrir a fonte / Abra Fontes para escolher outra opcao" — e para um
@@ -2034,17 +2032,13 @@ static int temUltimoBotao(void) {
 // agora aceita-se o que sobra ate 8% da duracao ou 5 min, o que for MAIOR,
 // com teto de 10 min:
 //     25 min -> 300 s     50 min -> 300 s     3 h -> 600 s
-#define PLR_CRED_FRACAO 0.08
-#define PLR_CRED_BASE_S 300.0
-#define PLR_CRED_TETO_S 600.0
-#define PLR_CRED_PISO_S 120.0   // estimativa sem marcador: os 2 min finais
-
-static double credJanelaDe(double durSeg) {
-  double j = durSeg * PLR_CRED_FRACAO;
-  if (j < PLR_CRED_BASE_S) j = PLR_CRED_BASE_S;
-  if (j > PLR_CRED_TETO_S) j = PLR_CRED_TETO_S;
-  return j;
-}
+//
+// 2.0.3 (dono: "o cartao apareceu no meio do episodio"): a janela passou a
+// ser a mesma do botao de pular creditos, intro_creditos_janela — 15% com piso
+// de 2 min e teto de 5 min. 25 min -> 225 s (o caso do R8, 154 s, continua
+// aceito), 22 min -> 198 s (antes 300 s = 23% do episodio), 45 min+ -> 300 s.
+// O teto de 10 min para episodio longo saiu: dez minutos antes do fim e o #34.
+static double credJanelaDe(double durSeg) { return intro_creditos_janela(durSeg); }
 static double credJanela(void) { return credJanelaDe(duracaoSeg); }
 
 // A REGRA SOZINHA, sem o estado do player e sem log: e o que o teste consegue
@@ -2054,11 +2048,13 @@ int player_regra_proximo(double posSeg, double durSeg, double cred) {
   if (durSeg <= 1.0) return 0;
   if (cred > 1.0 && durSeg - cred <= credJanelaDe(durSeg))
     return posSeg >= cred;   // marcador aceito: ele manda, e so ele
-  // PISO DA ESTIMATIVA. Log da TCL na 2.0.0: "2 min finais: pos 0s de 30s" — o
-  // pipeline informou 30 s e os "2 minutos finais" eram o video inteiro, do
-  // segundo zero. Abaixo de duas janelas nao ha "fim" para estimar.
-  if (durSeg < 2.0 * PLR_CRED_PISO_S) return 0;
-  return durSeg - posSeg <= PLR_CRED_PISO_S;
+  // SEM MARCADOR: TEMPO FIXO antes do fim, nunca porcentagem (2.0.3, dono).
+  // Era "os 2 min finais"; agora sao os creditos tipicos (intro_fim_estimado:
+  // 40 s, 15 s em episodio < 10 min). Log da TCL na 2.0.0: "2 min finais: pos
+  // 0s de 30s" — abaixo de 2 min de duracao nao ha "fim" para estimar.
+  { double fimEst = intro_fim_estimado(durSeg);
+    if (fimEst <= 0.0) return 0;
+    return durSeg - posSeg <= fimEst; }
 }
 
 // A DURACAO INFORMADA NAO E A DO EPISODIO. Log de webOS na 2.0.0: uma fonte MP4
@@ -2127,7 +2123,7 @@ static int ofertaProximo(void) {
   // 2 minutos finais, com o tamanho da lista e se ela ainda estava chegando.
   // Lista vazia = o player abriu sem os episodios do titulo; lista cheia sem
   // proximo = fim da serie, ou a temporada seguinte ainda nao esta no addon.
-  if(!p&&epT>0&&duracaoSeg>1&&duracaoSeg-posSeg<=PLR_CRED_PISO_S&&!semProxAvisado){
+  if(!p&&epT>0&&duracaoSeg>1&&duracaoSeg-posSeg<=INTRO_CRED_MIN_S&&!semProxAvisado){
     semProxAvisado=1;
     printf("[posplay] sem proximo episodio depois de T%dE%d: lista com %d episodios%s\n",
            epT,epE,cat_n_episodios(idxAtual()),desc_episodios_carregando(idxAtual())?" (ainda carregando)":"");
@@ -2185,8 +2181,8 @@ static int ofertaProximo(void) {
   if (player_regra_proximo(posSeg, duracaoSeg, 0.0)) {
     if (!credFimAvisado) {
       credFimAvisado = 1;
-      printf("[posplay] 2 min finais: pos %.0fs de %.0fs\n",
-             (double)posSeg, (double)duracaoSeg);
+      printf("[posplay] estimativa sem marcador (%.0f s antes do fim): pos %.0fs de %.0fs\n",
+             intro_fim_estimado(duracaoSeg), (double)posSeg, (double)duracaoSeg);
       fflush(stdout);
     }
     return 1;

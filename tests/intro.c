@@ -14,6 +14,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 // DUBLE DE REDE. intro.c chama rede_baixar no fio de download; este teste so
 // exercita o LEITOR, entao o duble existe para linkar e nada mais. Devolver
@@ -21,6 +22,25 @@
 // zero marcadores, sem rede.
 char *rede_baixar(const char *url, int segundos) {
   (void)url; (void)segundos; return NULL;
+}
+
+
+// Le uma resposta gravada de tests/fixtures/theintrodb (chamadas reais a
+// api.theintrodb.org/v3/media em 07/10/2026, sem chave). Estatico: cabe.
+static const char *fixture(const char *nome) {
+  static char buf[4][2048]; static int k;
+  char caminho[256]; FILE *f; size_t n;
+  char *b = buf[k++ & 3];
+  snprintf(caminho, sizeof caminho, "tests/fixtures/theintrodb/%s", nome);
+  f = fopen(caminho, "rb");
+  if (!f) { fprintf(stderr, "fixture ausente: %s\n", caminho); exit(1); }
+  n = fread(b, 1, sizeof buf[0] - 1, f); fclose(f); b[n] = 0;
+  return b;
+}
+static double credFinal(const IntroTrecho *v, int n) {
+  double s = 0.0; int i;
+  for (i = 0; i < n; i++) if (v[i].tipo == INTRO_CREDITOS && v[i].inicio > s) s = v[i].inicio;
+  return s;
 }
 
 static const IntroTrecho *achar(const IntroTrecho *v, int n, int tipo) {
@@ -149,6 +169,88 @@ int main(void) {
   }
 #endif
 
+
+  // --- 2.0.3: RESPOSTAS REAIS GRAVADAS + SANIDADE CONTRA A DURACAO ------------
+  //
+  // Duracoes: arquivo tipico de cada episodio (Breaking Bad T1E1 58:01, T1E2
+  // 48:06; Silo T1E1 59 min pelo TVmaze; AoT 24:00; One Piece T1E1 25:00, que e
+  // o end_ms da previa). O que se prova: unidade (ms -> s), o marcador cai nos
+  // creditos DESTE episodio, e o marcador de OUTRO episodio/corte e recusado.
+  { struct { const char *arq; int t, e; double dur, credEsperado; } fx[] = {
+      { "bb_s01e01.json",       1, 1, 3481.0, 3431.0 },
+      { "bb_s01e02.json",       1, 2, 2886.0, 2839.0 },
+      { "silo_s01e01.json",     1, 1, 3540.0, 3503.0 },
+      { "aot_s02e01.json",      2, 1, 1440.0, 1330.079 },
+      { "onepiece_s01e01.json", 1, 1, 1500.0, 1389.0 },
+    };
+    const char *m;
+    for (size_t k = 0; k < sizeof fx / sizeof *fx; k++) {
+      const char *j = fixture(fx[k].arq);
+      double c, resta;
+      int i;
+      assert(intro_resposta_confere(j, fx[k].t, fx[k].e));
+      n = intro_extrair(j, v, 8);
+      assert(n >= 2);
+      c = credFinal(v, n);
+      assert(mesmoSeg(c, fx[k].credEsperado));
+      resta = fx[k].dur - c;
+      // creditos nos ultimos 40-120 s: segundos, nao ms nem minutos
+      assert(resta > 30.0 && resta < 130.0);
+      for (i = 0; i < n; i++)
+        if (!intro_janela_ok(v[i].tipo, v[i].inicio, v[i].fim, fx[k].dur, 0, &m)) {
+          fprintf(stderr, "FALHOU %s trecho %d tipo %d: %s\n", fx[k].arq, i, v[i].tipo, m);
+          assert(0);
+        }
+      printf("ok  %-22s creditos %.0fs de %.0fs (sobram %.0fs, janela %.0fs)\n",
+             fx[k].arq, c, fx[k].dur, resta, intro_creditos_janela(fx[k].dur));
+    }
+    // MARCADOR DE OUTRO EPISODIO: o de T1E2 (2839 s) tocando T1E1 (3481 s)
+    // sobra 642 s — meio do terceiro ato, recusado; o de T1E1 (3431 s) num
+    // arquivo de T1E2 (2886 s) passa do fim.
+    assert(!intro_janela_ok(INTRO_CREDITOS, 2839.0, 0, 3481.0, 0, &m));
+    assert(!intro_janela_ok(INTRO_CREDITOS, 3431.0, 0, 2886.0, 0, &m));
+    // OUTRO CORTE: One Piece T1E1 com fim explicito em 1459 s num arquivo de
+    // 1420 s (sem a previa) — o marcador e de um arquivo mais longo.
+    assert(!intro_janela_ok(INTRO_CREDITOS, 1389.0, 1459.0, 1420.0, 0, &m));
+    // ABERTURA no meio do episodio nao e abertura.
+    assert(!intro_janela_ok(INTRO_ABERTURA, 1800.0, 1890.0, 3481.0, 0, &m));
+    assert( intro_janela_ok(INTRO_ABERTURA, 228.664, 246.143, 3481.0, 0, &m));
+    puts("ok  marcador de outro episodio, de outro corte e abertura no meio sao recusados");
+  }
+  // O TheIntroDB REMAPEIA a numeracao: One Piece imdb T4E1 e T4E2 voltam os
+  // dois como T1E48. A resposta que nao ecoa o par pedido e descartada.
+  assert(!intro_resposta_confere(fixture("onepiece_imdb_s04e01_remap.json"), 4, 1));
+  assert(!intro_resposta_confere(fixture("onepiece_imdb_s04e02_remap.json"), 4, 2));
+  assert( intro_resposta_confere(fixture("shawshank.json"), 0, 0));          // filme
+  assert( intro_resposta_confere("{\"intro\":[]}", 3, 4));                  // sem eco
+  assert(intro_extrair(fixture("onepiece_cinemeta_s04e92_404.json"), v, 8) == 0);
+  puts("ok  resposta de outro episodio (remapeada) nao vale");
+  // A JANELA DOS CREDITOS DE SERIE e a ESTIMATIVA FIXA (sem porcentagem).
+  assert(mesmoSeg(intro_creditos_janela(1320.0), 198.0));   // 22 min
+  assert(mesmoSeg(intro_creditos_janela(1500.0), 225.0));   // 25 min (R8: 154 s cabe)
+  assert(mesmoSeg(intro_creditos_janela(2700.0), 300.0));   // 45 min
+  assert(mesmoSeg(intro_creditos_janela(10800.0), 300.0));  // 3 h: teto
+  assert(mesmoSeg(intro_creditos_janela(480.0), 120.0));    // 8 min: piso
+  assert(mesmoSeg(intro_creditos_janela(200.0), 100.0));    // nunca mais que metade
+  assert(mesmoSeg(intro_fim_estimado(3600.0), INTRO_FIM_SERIE_S) && INTRO_FIM_SERIE_S == 40.0);
+  assert(mesmoSeg(intro_fim_estimado(1320.0), 40.0));
+  assert(mesmoSeg(intro_fim_estimado(480.0), INTRO_FIM_CURTO_S) && INTRO_FIM_CURTO_S == 15.0);
+  assert(intro_fim_estimado(100.0) == 0.0);                 // clipe: nada
+  puts("ok  janela dos creditos (15%, 2-5 min) e estimativa fixa (40 s / 15 s)");
+#ifdef NV_SHOT_HOOKS
+  {
+    // intro_creditos_seg so devolve marcador ACEITO: o de "creditos" a 10 min
+    // do fim de um episodio de 58 min nao chega ao cartao.
+    IntroTrecho t[2] = {{2881.0, 0, INTRO_CREDITOS}, {228.0, 246.0, INTRO_ABERTURA}};
+    intro_shot_definir(t, 2);
+    intro_definir_duracao(3481.0, 0);
+    assert(intro_creditos_seg() == 0.0);
+    t[0].inicio = 3431.0;
+    intro_shot_definir(t, 2);
+    assert(mesmoSeg(intro_creditos_seg(), 3431.0));
+    puts("ok  creditos recusados nao chegam ao cartao");
+  }
+#endif
   puts("intro: tudo ok");
   return 0;
 }

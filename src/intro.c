@@ -69,6 +69,13 @@ static char *pedirEp(const char *id,int t,int e){
   montarUrl(url,sizeof url,id,t,e);
   j=rede_baixar(url,12);
   if(!j&&t>0&&e>0)cred_404_marcar(id,t,e,agora);
+  // OUTRO EPISODIO NA RESPOSTA (intro_resposta_confere): descarta como 404.
+  if(j&&!intro_resposta_confere(j,t,e)){
+    printf("[intro] %s S%02dE%02d: a API devolveu outro episodio, marcador descartado\n",id,t,e);
+    fflush(stdout);
+    free(j);j=NULL;
+    cred_404_marcar(id,t,e,agora);
+  }
   return j;
 }
 
@@ -149,8 +156,41 @@ int intro_janela_ok(int tipo,double ini,double fim,double dur,int filme,const ch
   if(motivo)*motivo="ok";
   if(jan>max){if(motivo)*motivo="janela longa";return 0;}
   if(dur>0.0&&ini>=dur){if(motivo)*motivo="inicio alem da duracao";return 0;}
+  // FIM EXPLICITO DEPOIS DO FIM DA MIDIA: o marcador foi feito sobre um corte
+  // mais longo (outro lancamento). 10 s de folga para arredondamento.
+  if(dur>0.0&&fim>dur+10.0){if(motivo)*motivo="fim alem da duracao (outro corte)";return 0;}
   if(tipo==INTRO_CREDITOS&&filme&&dur>0.0&&ini<dur*0.5){if(motivo)*motivo="inicio antes de 50% do filme";return 0;}
+  // 2.0.3: creditos de SERIE no meio do episodio nao sao creditos. Era isso
+  // que punha o botao "Pular creditos" (e o cartao) no meio do episodio.
+  if(tipo==INTRO_CREDITOS&&!filme&&dur>0.0&&dur-ini>intro_creditos_janela(dur)){
+    if(motivo)*motivo="creditos fora da parte final do episodio";return 0;}
+  if(tipo!=INTRO_CREDITOS&&dur>0.0&&ini>dur*0.5){if(motivo)*motivo="abertura/resumo depois da metade";return 0;}
   return 1;
+}
+
+double intro_creditos_janela(double dur){
+  double j=dur*INTRO_CRED_FRAC;
+  if(dur<=0.0)return 0.0;
+  if(j<INTRO_CRED_MIN_S)j=INTRO_CRED_MIN_S;
+  if(j>INTRO_CRED_MAX_S)j=INTRO_CRED_MAX_S;
+  if(j>dur*0.5)j=dur*0.5;
+  return j;
+}
+
+double intro_fim_estimado(double dur){
+  if(dur<INTRO_DUR_MIN_S)return 0.0;
+  return dur<INTRO_CURTO_ATE_S?INTRO_FIM_CURTO_S:INTRO_FIM_SERIE_S;
+}
+
+int intro_resposta_confere(const char *j,int t,int e){
+  const char *f;double rt,re;
+  if(!j)return 0;
+  if(t<1||e<1)return 1;                       // filme: sem par a conferir
+  f=js_fim(j);
+  rt=js_num(j,f,"season",-1);re=js_num(j,f,"episode",-1);
+  // Sem eco (formato antigo): nao ha como provar o contrario, aceita.
+  if(rt<0&&re<0)return 1;
+  return (int)rt==t&&(int)re==e;
 }
 
 static signed char veredito[8];   // 0 nao avaliado, 1 aceito, -1 recusado (por geracao)
@@ -213,10 +253,14 @@ int intro_botao_visivel(double*fim,int*tipo){
 // O trecho de creditos que comeca POR ULTIMO, e nao o primeiro da lista
 // (#115): a API devolve uma lista por tipo, e um filme com creditos de abertura
 // e finais marcados punha o painel de relacionados no comeco.
+//
+// 2.0.3: so os trechos que a guarda de janela ACEITA (valido). Um marcador de
+// creditos recusado para o botao (meio do episodio, outro corte) tambem nao
+// pode abrir o cartao do proximo episodio.
 double intro_creditos_seg(void){
   double s=0.0;pthread_mutex_lock(&trava);
   for(int i=0;i<nTrechos;i++)
-    if(trechos[i].tipo==INTRO_CREDITOS&&trechos[i].inicio>s)s=trechos[i].inicio;
+    if(trechos[i].tipo==INTRO_CREDITOS&&trechos[i].inicio>s&&valido(i))s=trechos[i].inicio;
   pthread_mutex_unlock(&trava);return s;
 }
 

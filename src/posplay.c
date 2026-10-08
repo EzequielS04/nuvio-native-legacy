@@ -1,5 +1,6 @@
 #include "posplay.h"
 #include "intro.h"
+#include "proximo.h"
 #include "idioma.h"
 #include "catalogo.h"
 #include "extras.h"
@@ -151,18 +152,20 @@ int posplay_abrir_relacionados(int idxCatalogo) {
 
 // O episodio SEGUINTE ao que esta tocando, na lista unica (ja ordenada por
 // temporada e episodio). Devolve 0 quando o que toca e o ultimo.
+// 2.0.3: a regra e prox_indice_seguinte, a MESMA de player_proximo_episodio
+// (que abre a janela). Era "o indice seguinte ao do episodio tocando": com o
+// episodio repetido na lista oferecia ele mesmo, e com o episodio fora da lista
+// nao oferecia nada enquanto a janela ja estava aberta (e a legenda, subida).
 static int acharProximo(int idxItem, int t, int e) {
   int n = cat_n_episodios(idxItem), i;
-  for (i = 0; i < n; i++) {
-    const CatEp *ep = cat_episodio(idxItem, i);
-    if (!ep || ep->temporada != t || ep->episodio != e) continue;
-    { const CatEp *px = cat_episodio(idxItem, i + 1);
-      if (!px) return 0;
-      proxT = px->temporada; proxE = px->episodio;
-      snprintf(proxNome, sizeof proxNome, "%s", px->nome);
-      return 1; }
-  }
-  return 0;
+  const CatEp *base = n > 0 ? cat_episodio(idxItem, 0) : NULL, *px;
+  if (!base) return 0;
+  i = prox_indice_seguinte(base, n, t, e);
+  px = i >= 0 ? cat_episodio(idxItem, i) : NULL;
+  if (!px) return 0;
+  proxT = px->temporada; proxE = px->episodio;
+  snprintf(proxNome, sizeof proxNome, "%s", px->nome);
+  return 1;
 }
 
 // Marcador de creditos que o FILME aceita. Ver posplay_regra_filme.

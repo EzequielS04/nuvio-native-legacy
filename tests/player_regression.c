@@ -317,9 +317,10 @@ static void testar(void) {
   //   ultimos 60 s, e sem esse arredondamento trakt.c manda /scrobble/pause,
   //   que nao marca nada. Aceitar o proximo episodio que o proprio app ofereceu
   //   deixava o episodio por marcar — o relato do #100.
-  assert(player_regra_proximo(960,1080,0));   // o app diz: acabou, toma o proximo
-  assert(!(960 >= 1080 - 60));                // a regra VELHA dizia: nao acabou
-  assert(player_regra_concluiu(960,1080,0));  // agora as duas dizem o mesmo
+  //   2.0.3: sem marcador o cartao sobe a 40 s do fim (tempo fixo), aos 1040 s.
+  assert(!player_regra_proximo(960,1080,0));
+  assert(player_regra_proximo(1040,1080,0));  // o app diz: acabou, toma o proximo
+  assert(player_regra_concluiu(1040,1080,0)); // e as duas dizem o mesmo
   //   Marcador de creditos aceito manda sozinho, aqui como no cartao: 50 min
   //   com creditos aos 45 (sobram 300 s = a janela de um episodio de 50 min).
   assert(player_regra_concluiu(2700,3000,2700));
