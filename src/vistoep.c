@@ -152,6 +152,25 @@ int vistoep_ajustar_vistos(int baseTrakt, int contarBase, int contarAgora, int e
   return v < 0 ? 0 : v;
 }
 
+int vistoep_primeiro_nao_visto(const char *imdb, int *temporada, int *episodio) {
+  char id[16];
+  int i, bt = 0, be = 0;
+  base(imdb, id, sizeof id);
+  if (!id[0]) return 0;
+  pthread_mutex_lock(&trava);
+  for (i = 0; i < n; i++) {
+    if (mapa[i].visto || mapa[i].temp < 1 || strcmp(mapa[i].id, id)) continue;
+    if (!bt || mapa[i].temp < bt || (mapa[i].temp == bt && mapa[i].ep < be)) {
+      bt = mapa[i].temp; be = mapa[i].ep;
+    }
+  }
+  pthread_mutex_unlock(&trava);
+  if (!bt) return 0;
+  if (temporada) *temporada = bt;
+  if (episodio) *episodio = be;
+  return 1;
+}
+
 int vistoep_aplicar(const char *imdb, const VistoPar *lote, int n, int visto,
                     VistoPar *envio, int *ja) {
   int i, k = 0;

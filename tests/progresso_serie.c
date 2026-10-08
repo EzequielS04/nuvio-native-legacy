@@ -2,6 +2,7 @@
 // desmarcar pelo menu (cenario do Silo no log da TCL, 08/10 15:58).
 #include "vistoep.h"
 #include "temporadas_grafico.h"
+#include "extras.h"
 #include <SDL2/SDL.h>
 #include <stdio.h>
 #include <string.h>
@@ -43,6 +44,19 @@ int main(int argc, char **argv) {
   CHECK(vistoep_ajustar_vistos(trakt, base, vistoep_contar(id), 30) == 25);
   CHECK(vistoep_ajustar_vistos(trakt, base, 40, 30) == 30);
   CHECK(vistoep_ajustar_vistos(2, 27, 0, 30) == 0);
+  // BOTAO PRINCIPAL / PROXIMO: depois do fetch, o Trakt diz que o proximo e S2E8
+  // (S2E1-7 vistos). O dono desmarca S2E7 sem reabrir a pagina.
+  { int pt = 0, pe = 0;
+    for (t = 1; t <= 3; t++) for (e = 1; e <= 10; e++)
+      vistoep_definir(id, t, e, t == 1 || (t == 2 && e <= 7));
+    extras_teste_progresso(id, 17, 30, 2, 8);
+    CHECK(extras_ep_visto(2, 7) == 1);
+    CHECK(extras_proximo_episodio(&pt, &pe) && pt == 2 && pe == 8);
+    lote[0].temporada = 2; lote[0].episodio = 7;
+    vistoep_aplicar(id, lote, 1, 0, envio, &ja);
+    CHECK(extras_ep_visto(2, 7) == 0);
+    CHECK(extras_proximo_episodio(&pt, &pe) && pt == 2 && pe == 7);
+  }
   printf(falhas ? "FALHAS: %d\n" : "OK\n", falhas);
   return falhas != 0;
 }
