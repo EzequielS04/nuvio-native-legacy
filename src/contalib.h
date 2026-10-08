@@ -169,6 +169,10 @@ typedef struct {
   int  temporada, episodio;   // o episodio SUGERIDO, nao o visto
   long long vistoMs;          // quando o episodio-ancora foi visto
 } ContaSemente;
+// Validade do retrato dos vistos: 24 h. Passou disso sem um pull bom (rede fora,
+// 401), o "a seguir" da conta nao e confiavel e a funcao abaixo devolve -1.
+#define CONTALIB_VISTOS_VALIDADE_S (24 * 3600)
+// Devolve -1 quando os vistos nao foram puxados ou estao velhos.
 int contalib_sementes_a_seguir(ContaSemente *saida, int max, int doMaisAlto);
 // Sobe quando contalib_ler_vistos trouxe vistos DIFERENTES dos guardados. O
 // sync refaz o "Continuar assistindo" so entao: o "a seguir" da conta depende
