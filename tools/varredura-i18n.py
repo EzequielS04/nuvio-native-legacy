@@ -405,6 +405,7 @@ IGNORAR = {
     "%s; eventos=%d fontes=%d fontselect=%d cobertura=%lld-%lldms render=%lluus quadro=%zuB",
     "mkv: %d faixas lidas, %d legendas com idioma",
     "seek para %ds",
+    "seek recusado: nova tentativa %d/%d em %u ms",  # marco(m2) em video.c, log
     # Os quatro motivos do diagnostico [col] (descoberta.c). Sao DADOS DE UM
     # VETOR, e nao argumento de printf: a varredura olha o que vem antes do
     # literal e ali so ha uma chave de inicializacao, entao NAO_E_TELA nao tem
