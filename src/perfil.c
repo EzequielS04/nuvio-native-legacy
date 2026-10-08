@@ -494,14 +494,14 @@ void perfil_evento(const SDL_Event *e) {
       if (amigo>0) amigo--;
       else if (nCards()) secao=1;
       else if (dados.nDias>0) secao=0;
-      else perfil_fechar();
+      else sair = 1;
       return;
     }
     if (k==SDLK_RIGHT) { if (amigo+1<rostosCabem()) amigo++; return; }
     if (ok) { duelo(amigo, 1); return; }
     return;
   }
-  if (k == SDLK_LEFT) perfil_fechar();
+  if (k == SDLK_LEFT) sair = 1;
 }
 
 void perfil_atualizar(float dt, Uint32 agora) {
