@@ -26,6 +26,7 @@
 //      congelado sem saber o que houve.
 #include "horafmt.h"
 #include "player.h"
+#include "dvtela.h"
 #include "ilhacart.h"
 #include "idbase.h"
 #include "dados.h"
@@ -1459,6 +1460,72 @@ static void tocarFonte(const char *url) {
                            (int)(r.w + 0.5f), (int)(r.h + 0.5f)); }
   else aplicarAspecto();
 }
+// A TELA DO DOLBY VISION EM MKV (dvtela.h). O relogio dela e o do quadro do
+// player (dvAgora), o mesmo que as teclas usam: a espera do OK que sobra do
+// Play e medida na mesma regua da entrada.
+static Uint32 dvAgora;
+static Uint32 dvRelogio(void) { return dvAgora ? dvAgora : SDL_GetTicks(); }
+// A fonte nova vai tentar Dolby Vision em MKV? Entra a tela desde ja, no lugar
+// do "Abrindo fonte"; uma fonte que nao vai sai dela (a troca automatica de
+// fonte pode cair numa sem DV).
+static void dvTelaFonte(const char *url) {
+  const CatItem *c = item();
+  if (!mini && !ehCanal() && video_dv_candidato(url)) {
+    dvtela_definir_arte(c && c->backdrop[0] ? artehero_url(c) : "");
+    dvtela_entrar(dvRelogio());
+    video_dv_tela(1);
+  } else if (dvtela_ativa()) {
+    dvtela_sair(DVT_SAIDA_FONTE, dvRelogio());
+    video_dv_tela(0);
+  }
+}
+// O arquivo fica em HDR10: a nota de uma linha na ilha, com o motivo. A
+// conexao lenta e o caminho que nao abriu ja tem a nota do app.c
+// (video_dv_recuo_consumir); as outras saem daqui.
+static void dvTelaNota(int recusa, int perfil) {
+  char t[160];
+  t[0] = 0;
+  if (recusa == VIDEO_DV_NAO_SEM_DV)
+    snprintf(t, sizeof t, "%s", i18n("Este arquivo não tem Dolby Vision. Tocando em HDR10."));
+  else if (recusa == VIDEO_DV_NAO_PERFIL)
+    snprintf(t, sizeof t, i18n("Dolby Vision perfil %d não toca nesta TV. Tocando em HDR10."), perfil);
+  else if (recusa == VIDEO_DV_NAO_AUDIO)
+    snprintf(t, sizeof t, "%s", i18n("O áudio deste arquivo não passa pelo Dolby Vision. Tocando em HDR10."));
+  else if (recusa == VIDEO_DV_NAO_SONDA)
+    snprintf(t, sizeof t, "%s", i18n("Não deu para ler o arquivo. Tocando em HDR10."));
+  if (!t[0]) return;
+  // No relogio do quadro (como o aviso do audio que a TV nao toca): a nota
+  // nasce no mesmo quadro em que a tela comeca a esvair.
+  snprintf(toastTexto, sizeof toastTexto, "%s", t);
+  snprintf(toastIcone, sizeof toastIcone, "aj_info"); toastCor = 0;
+  toastAte = dvRelogio() + 7000u;
+}
+// Por quadro: os sinais reais do backend para a maquina, e o que cada saida
+// pede (o som do HDR10 de volta, a nota, a escolha da pessoa).
+static void dvTelaAtualizar(float dt, Uint32 agora) {
+  VideoDvFase f;
+  DvtelaSinais s;
+  int saiu;
+  if (!dvtela_visivel()) return;
+  memset(&s, 0, sizeof s);
+  if (dvtela_ativa()) {
+    video_dv_fase(&f);
+    s.sessao = f.sessao; s.sondado = f.sondado; s.perfil = f.perfil;
+    s.audioTrocado = f.audioTrocado;
+    snprintf(s.audioDe, sizeof s.audioDe, "%s", f.audioDe);
+    snprintf(s.audioPara, sizeof s.audioPara, "%s", f.audioPara);
+    s.caminho = f.caminho; s.fonteAberta = f.fonteAberta; s.carregado = f.carregado;
+    s.dvConfirmado = f.dvConfirmado; s.tocando = f.tocando; s.recusa = f.recusa;
+    // Erro de fonte do player (prazo, recusa da TV) tambem encerra: o cartao
+    // de erro de sempre e quem oferece Abrir fontes / Voltar.
+    s.falhou = f.falhou || erroFonte;
+  }
+  saiu = dvtela_atualizar(&s, dt, agora);
+  if (!saiu) return;
+  video_dv_tela(0);
+  if (saiu == DVT_SAIDA_RECUSA) dvTelaNota(dvtela_estado()->recusa, dvtela_estado()->perfil);
+}
+
 // So depois do loadCompleted. Antes disso o pipeline ainda nao pos nada no
 // plano de hardware, e furar a superficie cedo trocava a arte por um retangulo
 // PRETO enquanto o fluxo abria — que era o "clica em reproduzir e fica preto".
@@ -1466,6 +1533,7 @@ void player_definir_fonte(const char *url) {
   if ((!aberto && !mini) || !url || !*url) return;
   esperandoFonte = 0;
   erroFonte = 0;
+  dvTelaFonte(url);
 #ifndef __EMSCRIPTEN__
   prebuscaUrl[0] = 0;
   if (prebuscaCabe(url) && mkvass_prebuscar(url, escolherLegendaPrebusca, retomarPct / 100.0)) {
@@ -1482,6 +1550,9 @@ void player_definir_fonte(const char *url) {
 
 void player_voltar_a_esperar(void) {
   if (!aberto) return;
+  // A fonte foi descartada: a tela do DV sai e o cartao de sempre conta a
+  // troca ("Fonte falhou, tentando a proxima"); a proxima, se for DV, a traz.
+  if (dvtela_ativa()) { dvtela_sair(DVT_SAIDA_FONTE, dvRelogio()); video_dv_tela(0); }
   if (comVideo) { video_parar(); comVideo = 0; }
   mkvass_parar();
   mkvass_video_aberto(0);
@@ -1598,6 +1669,9 @@ static void lembrarFonte(void) {
 
 static void fecharSessao(int manter) {
   int jaRetido = retido;
+  // A tela do DV nao sobrevive a sessao (Voltar ja a tirou; aqui e o resto:
+  // troca de titulo, encerramento pelo app).
+  if (dvtela_ativa()) { dvtela_sair(DVT_SAIDA_VOLTAR, dvRelogio()); video_dv_tela(0); }
   // #202: a velocidade e desta reproducao; o trailer da home e o proximo
   // titulo comecam em 1x.
   video_velocidade(VEL_NORMAL);
@@ -2580,6 +2654,15 @@ void player_evento(const SDL_Event *e) {
   // O CARTAO "O QUE ACHOU?" vem antes do pos-reproducao: e o mais recente na
   // tela e some em 8 s. So toma ESQUERDA/DIREITA/OK/VOLTAR, e so com a barra
   // escondida (reacao.h).
+  // A TELA DO DOLBY VISION tem todas as teclas enquanto esta de pe: Voltar
+  // sai do player como sempre, OK no botao fica em HDR10; o resto e engolido
+  // (o OSD esta coberto e nao ha o que pausar).
+  if (aberto && !saindo && dvtela_ativa()) {
+    int r = dvtela_evento(e, dvRelogio());
+    if (r == DVT_EV_VOLTAR) { video_dv_tela(0); saindo = 1; pediuSair = 1; }
+    else if (r == DVT_EV_HDR10) { video_dv_recusar(); video_dv_tela(0); }
+    if (r != DVT_EV_NADA) return;
+  }
   if (reacao_evento(e, visivel)) return;
   { int r = posplay_evento(e);
     if (r) { if (r == 2) acordar(); return; } }
@@ -2830,6 +2913,12 @@ static void introTmdbTardio(Uint32 agora) {
 
 void player_atualizar(float dt, Uint32 agora) {
   if (retido) { player_validar_retido(agora); return; }
+  // DV EM MKV NASCE NO PONTO SALVO: enquanto a retomada nao foi pedida ao
+  // player da TV, a troca para o caminho do DV espera (video.c, iniciarDts le o
+  // seek pendente). Sem ponto salvo nao ha o que esperar.
+  video_dv_segurar(comVideo && !retomadaAplicada && retomarPct > 0 && !ehCanal());
+  dvAgora = agora;
+  dvTelaAtualizar(dt, agora);
   // AUDIO QUE A TV NAO TOCA (uMS errorCode 200, registro 1545): o video segue
   // mudo, e sem isto a pessoa nao tinha como saber que era a fonte e nao o
   // volume. Um aviso por sessao, 6 s, no lugar do de proporcao.
@@ -3013,6 +3102,9 @@ void player_atualizar(float dt, Uint32 agora) {
     // Retomada so com o pipeline ASSENTADO: pronto + tocando (ou 2,5 s depois
     // de pronto, para quem abre pausado). Seek logo no loadCompleted e o que o
     // uMS recusa com "seek Failure" (#246).
+    // O PRELOAD DO CAMINHO PROPRIO (DV/DTS, video_iniciando) nao e "abrir
+    // pausado": la o seek recarrega o fluxo inteiro (native-seek-reload) e o
+    // primeiro quadro ainda vem sozinho. Espera o `playing`.
     static Uint32 prontoDesde;
     if (retomadaAplicada || !video_pronto()) prontoDesde = 0;
     else if (!prontoDesde) prontoDesde = agora | 1;
@@ -3020,7 +3112,7 @@ void player_atualizar(float dt, Uint32 agora) {
 #ifdef NV_ANDROID
         1
 #else
-        (video_tocando() || (int)(agora - prontoDesde) >= 2500)
+        (video_tocando() || (!video_iniciando() && (int)(agora - prontoDesde) >= 2500))
 #endif
         ) {
 #ifdef NV_ANDROID
@@ -3234,6 +3326,10 @@ void player_atualizar(float dt, Uint32 agora) {
                    // piscando" do relato.
                    !ehCanal() && !tocando && !scrubbing && !retomandoSalto && !saindo && !erroFonte &&
                    !player_carregando() &&
+                   // O preroll do caminho proprio (DV/DTS) nao e pausa: o
+                   // fluxo carregou e o primeiro quadro ainda nao veio. Era o
+                   // "comeca pausado" do Dolby Vision em MKV (video_iniciando).
+                   !video_iniciando() && !dvtela_visivel() &&
                    !episodios_aberto() && !stream_folha_aberta() &&
                    !faixas_aberta() && !ofertaProximo() && !posplay_visivel(),
                    idxAtual(), item() ? item()->imdb : "", linhaEp);
@@ -3242,6 +3338,8 @@ void player_atualizar(float dt, Uint32 agora) {
   // comportamento original, com o painel ocupando o rodape sozinho, so que
   // ancorado mais abaixo — onde a barra ficaria. Um lugar, um conteudo.
   if (pausao_visivel()) visivel = 0;
+  // A tela do DV cobre tudo: os controles nao sobem por baixo dela.
+  if (dvtela_visivel()) visivel = 0;
   // O painel de pos-reproducao tambem toma o rodape para si. BAIXO devolve os
   // controles (posplay_evento responde 2), que e a saida documentada.
   if (posplay_visivel()) visivel = 0;
@@ -4344,7 +4442,10 @@ void player_desenhar(Uint32 agora) {
     else snprintf(lin, sizeof lin, "%s", i18n("Sintonizando…"));
     pd.texto = lin; pd.respira = 1; pd.semFim = 1; pd.aberta = 1;
     plrilha_pedir(&pd);
-  } else if (player_carregando() && !stream_folha_aberta() && stream_folha_anim() < 0.05f) {
+  } else if (player_carregando() && !stream_folha_aberta() && stream_folha_anim() < 0.05f &&
+             // A TELA DO DOLBY VISION substitui o cartao: sem ela, o caminho do
+             // DV mostrava "Abrindo fonte" DUAS vezes (a TV e depois o demux).
+             !dvtela_visivel()) {
     // COM A FOLHA DE FONTES NA TELA o cartao fica de fora: ela e a escolha que
     // o player espera, e o cartao no meio tapava a esquerda das primeiras
     // linhas (foto do dono, 04/10). Escolhida a fonte, a folha sai e o cartao
@@ -4933,6 +5034,8 @@ void player_shot_toast(Uint32 agora, const char *texto, const char *icone, int a
   visivel = 0; anim = 0.0f; ultimoInput = agora;
 }
 void player_shot_esconder(void) { visivel = 0; anim = 0.0f; }
+// O aviso da ilha que esta no ar ("" sem aviso): a nota do HDR10 (dvtela.h).
+const char *player_shot_toast_texto(Uint32 agora) { return toastAte > agora ? toastTexto : ""; }
 void player_shot_carregando(int sim) { esperandoFonte = sim; erroFonte = 0; }
 void player_shot_buscando(int sim) { shotBusca = sim; scrubbing = sim; posVisSolto = sim; }
 #endif
