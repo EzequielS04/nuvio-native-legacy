@@ -1524,3 +1524,12 @@ void busca_desenhar(Uint32 agora) {
   desenhaTeclado();
   desenhaResultados(agora);
 }
+
+#ifdef NV_BUSCA_TESTE
+// Gancho de teste (tests/busca_debounce.sh): soma dos itens das fileiras de titulos.
+int busca_teste_itens(void) {
+  int i, t = 0;
+  for (i = 0; i < nFil; i++) if (!fil[i].pessoas) t += fil[i].n;
+  return t;
+}
+#endif
