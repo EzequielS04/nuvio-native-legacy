@@ -416,6 +416,7 @@ int  gfx_snap_ativo(void);     // 1 enquanto o desenho vai para o snapshot
 unsigned gfx_snap_geracao(void);
 
 void gfx_tamanho_alvo(int w, int h);
+float gfx_px_por_unidade(void);   // pixels do alvo da tela por unidade de layout (assrender.c, #335)
 
 // MINIATURA: uma tela DE VERDADE desenhada num alvo proprio e mostrada
 // reduzida (previa das Novidades da 1.8.0, inspetor do Guia de uso). Entre

@@ -47,6 +47,9 @@ void assrender_aplicar_invalidacao(void);
 /* Gera os quads do instante atual no contexto GL do player. Retorna o numero
  * de imagens libass desenhadas, inclusive zero quando a faixa esta carregada
  * mas nao ha evento vivo nesse instante. */
+// Pixels do alvo por unidade de layout (1 em 1080p, 2 em 4K): o libass renderiza
+// neste tamanho e o quadro e desenhado 1:1 (#335). Chamar antes de definir_layout.
+void assrender_pixels_por_unidade(float f);
 int  assrender_desenhar(double posSeg, int atrasoMs, float alpha,
                         float x, float y, float w, float h);
 

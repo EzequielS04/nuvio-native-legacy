@@ -68,6 +68,9 @@ static float escalaTxt = 1.0f;
 // casa menos usada so e reaproveitada quando aparece um fator novo.
 #define TXT_NCAM 4
 static int camada;
+static char arabeBoldCaminho[600];   // face Bold real do Noto Naskh (#335), vazio ate txt_iniciar
+static int arabeCorpo;
+static void arabeBoldFechar(void);
 static float escCamSlot[TXT_NCAM];   // o fator de cada casa (0 = livre; a 0 e sempre 1x)
 static unsigned long usoCam[TXT_NCAM];
 static unsigned long relogioCam;
@@ -124,7 +127,7 @@ static unsigned char *lerTudo(const char *caminho, size_t *tam) {
 }
 // Pesos de fontes legadas que não têm três faces reais usam síntese. Fontes
 // novas e Inter carregam as faces reais, uma família por vez e sob demanda.
-#define TXT_LEG_N (TXT_LEG_200 - TXT_LEG_50 + 1)
+#define TXT_LEG_N (TXT_LEG_250 - TXT_LEG_50 + 1)
 static TTF_Font *fontesLegendaLGCam[TXT_NCAM][TXT_LEG_N];
 #define fontesLegendaLG (fontesLegendaLGCam[camada])
 static int avisoFallback[TXT_FAMILIA_N];
@@ -300,6 +303,8 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { 56, PESO_REGULAR }, { 60, PESO_REGULAR }, { 64, PESO_REGULAR },
   { 68, PESO_REGULAR }, { 72, PESO_REGULAR }, { 76, PESO_REGULAR },
   { 80, PESO_REGULAR },
+  { 84, PESO_REGULAR }, { 88, PESO_REGULAR }, { 92, PESO_REGULAR },
+  { 96, PESO_REGULAR }, { 100, PESO_REGULAR },   // 210..250% (#335)
   { NV_TOP10_NUM_CORPO, PESO_BOLD },   // numeral do Top 10 da Dinamica
   // Escala das ilhas (text.h). 600 e 800 claros sobre o vidro escuro vao para
   // Bold pela regra optica escrita acima; 400 fica Regular.
@@ -893,7 +898,7 @@ const char *txt_fonte_da_linha(TxtFamilia familia, TxtEstilo estilo, const char 
 
 static TTF_Font *fonteLegendaDe(TxtEstilo estilo, const char *s,
                                 TxtFamilia familia) {
-  if (familia == TXT_FAMILIA_LG && estilo >= TXT_LEG_50 && estilo <= TXT_LEG_200) {
+  if (familia == TXT_FAMILIA_LG && estilo >= TXT_LEG_50 && estilo <= TXT_LEG_250) {
     int i = estilo - TXT_LEG_50;
     if (!fontesLegendaLG[i] && !tentouLegendaLG[i]) {
       tentouLegendaLG[i] = 1;
@@ -944,7 +949,7 @@ static TTF_Font *fonteNegritoReal(TxtFamilia familia, TxtEstilo estilo, TTF_Font
   int i = estilo - TXT_LEG_50;
   if (familia < TXT_FAMILIA_INTER || familia >= TXT_FAMILIA_N ||
       familia == TXT_FAMILIA_LG || familia == TXT_FAMILIA_DROID) return NULL;
-  if (estilo < TXT_LEG_50 || estilo > TXT_LEG_200 || ESTILOS[estilo].peso == PESO_BOLD) return NULL;
+  if (estilo < TXT_LEG_50 || estilo > TXT_LEG_250 || ESTILOS[estilo].peso == PESO_BOLD) return NULL;
   if (!fonte || fonte != fontes[familia][estilo]) return NULL;
   if (!bytesPeso[familia][PESO_BOLD] ||
       bytesPeso[familia][PESO_BOLD] == bytesPeso[familia][PESO_REGULAR]) return NULL;
@@ -1214,6 +1219,7 @@ int txt_iniciar(const char *dirRecursos, float escala) {
   // de apresentacao que o bidi.c produz (tools/fonte-arabe.py).
   char arabeEmbarcada[600];
   snprintf(arabeEmbarcada, sizeof arabeEmbarcada, "%sfonts/NotoNaskhArabic-Subset.ttf", base);
+  snprintf(arabeBoldCaminho, sizeof arabeBoldCaminho, "%sfonts/NotoNaskhArabic-Bold.ttf", base);
   { const char *cand[ESC_N][RES_CAND + 1] = {
       /* ESC_CJK (japones)  */ { "/usr/share/fonts/LG_Display_JP.ttf",
                                  "/usr/share/fonts/DroidSansFallback.ttf",
@@ -1288,6 +1294,7 @@ int txt_iniciar(const char *dirRecursos, float escala) {
 }
 
 void txt_encerrar(void) {
+  arabeBoldFechar();
   limparCacheTexto();
   // ORDEM: a fonte primeiro, o RWops depois, o buffer por ultimo. A face do
   // FreeType ainda referencia o stream, e o stream, os bytes.
@@ -1332,7 +1339,7 @@ static void altDe(TxtFamilia familia, TxtEstilo estilo, TTF_Font *f,
   if (familia < TXT_FAMILIA_INTER || familia >= TXT_FAMILIA_N) familia = TXT_FAMILIA_INTER;
   if (!f || estilo < 0 || estilo >= TXT_NFONTES) return;
   if (f == fontes[familia][estilo] || f == fontes[TXT_FAMILIA_INTER][estilo]) return;
-  if (estilo >= TXT_LEG_50 && estilo <= TXT_LEG_200 && f == fontesLegendaLG[estilo - TXT_LEG_50]) return;
+  if (estilo >= TXT_LEG_50 && estilo <= TXT_LEG_250 && f == fontesLegendaLG[estilo - TXT_LEG_50]) return;
   *a = fontes[familia][estilo];
   *b = fontes[TXT_FAMILIA_INTER][estilo];
   if (*b == *a) *b = NULL;
@@ -1362,6 +1369,52 @@ static int corridasDe(TTF_Font *f, TTF_Font *a, TTF_Font *b, const char *s,
   return n;
 }
 
+// #335: negrito SINTETICO sobre arabe estraga a escrita. O Noto Naskh embarcado
+// so tem a face Regular, e o SDL_ttf engorda o bitmap ja rasterizado: as letras
+// ligadas (formas de apresentacao de bidi.c) se fundem e os pontos viram borrao.
+// Texto arabe fica no peso Regular; so o latim da mesma linha recebe o negrito.
+static int txtTemArabe(const char *s) {
+  const unsigned char *p = (const unsigned char *)s;
+  for (; p && *p; p++) {
+    if ((*p >= 0xD8 && *p <= 0xDB) || *p == 0xDD) return 1;               // U+0600-06FF, U+0740-07BF
+    if (*p == 0xEF && ((p[1] >= 0xAD && p[1] <= 0xB7) || (p[1] >= 0xB9 && p[1] <= 0xBB))) return 1; // FB50-FDFF, FE70-FEFF
+  }
+  return 0;
+}
+static int txtTemLatim(const char *s) {
+  for (; s && *s; s++) if ((*s >= 'A' && *s <= 'Z') || (*s >= 'a' && *s <= 'z')) return 1;
+  return 0;
+}
+
+// Face Bold REAL do Noto Naskh (#335), aberta sob demanda no corpo da linha em
+// curso (arabeCorpo, posto por quem desenha). Sem o arquivo, vale a regra
+// acima: arabe sem negrito sintetico. Uma por camada e corpo.
+#define ARABE_BOLD_N 24
+static struct { int corpo; TTF_Font *f; } arabeBoldCache[TXT_NCAM][ARABE_BOLD_N];
+static TTF_Font *arabeBoldFace(void) {
+  int i;
+  if (!arabeBoldCaminho[0] || arabeCorpo < 4) return NULL;
+  for (i = 0; i < ARABE_BOLD_N; i++) {
+    if (arabeBoldCache[camada][i].corpo == arabeCorpo) return arabeBoldCache[camada][i].f;
+    if (!arabeBoldCache[camada][i].corpo) {
+      arabeBoldCache[camada][i].corpo = arabeCorpo;   // tentou: f NULL = arquivo ausente
+      arabeBoldCache[camada][i].f = TTF_OpenFont(arabeBoldCaminho, arabeCorpo);
+      if (arabeBoldCache[camada][i].f)
+        printf("[leg] negrito arabe: face Bold real, %d px\n", arabeCorpo);
+      return arabeBoldCache[camada][i].f;
+    }
+  }
+  return NULL;
+}
+static void arabeBoldFechar(void) {
+  int c, i;
+  for (c = 0; c < TXT_NCAM; c++)
+    for (i = 0; i < ARABE_BOLD_N; i++) {
+      if (arabeBoldCache[c][i].f) TTF_CloseFont(arabeBoldCache[c][i].f);
+      arabeBoldCache[c][i].f = NULL; arabeBoldCache[c][i].corpo = 0;
+    }
+}
+
 // Estilo TTF somado a uma fonte de corrida (o negrito/italico da legenda), e
 // devolvido depois.
 static int estiloSoma(TTF_Font *g, TTF_Font *f, int extra) {
@@ -1383,9 +1436,15 @@ static int medirCorridas(TTF_Font *f, TTF_Font *a, TTF_Font *b, const char *s,
     int cw = 0, ch = 0, ant, len = c[i].fim - c[i].ini;
     if (len <= 0 || len >= (int)sizeof pedaco) continue;
     memcpy(pedaco, s + c[i].ini, (size_t)len); pedaco[len] = 0;
-    ant = estiloSoma(c[i].f, f, extra);
-    if (TTF_SizeUTF8(c[i].f, pedaco, &cw, &ch) == 0) soma += cw;
-    estiloVolta(c[i].f, f, ant);
+    { TTF_Font *g = c[i].f; int ex = extra;
+      if (txtTemArabe(pedaco) && (extra & TTF_STYLE_BOLD)) {
+        TTF_Font *bf = arabeBoldFace();
+        if (bf) g = bf;
+        ex = extra & ~TTF_STYLE_BOLD;
+      }
+      ant = estiloSoma(g, f, ex);
+      if (TTF_SizeUTF8(g, pedaco, &cw, &ch) == 0) soma += cw;
+      estiloVolta(g, f, ant); }
   }
   *w = soma;
   return 0;
@@ -1395,17 +1454,25 @@ static SDL_Surface *renderCorridas(TTF_Font *f, TTF_Font *a, TTF_Font *b,
                                    const char *s, SDL_Color cor, int extra) {
   Corrida c[TXT_CORR_MAX];
   SDL_Surface *sf[TXT_CORR_MAX], *out;
+  TTF_Font *gf[TXT_CORR_MAX];
   int n = corridasDe(f, a, b, s, c, TXT_CORR_MAX), i, asc = 0, abaixo = 0, w = 0, x = 0;
   if (n <= 1) return TTF_RenderUTF8_Blended(f, s, cor);
   for (i = 0; i < n; i++) {
     char pedaco[1600];
-    int ant, len = c[i].fim - c[i].ini, as = TTF_FontAscent(c[i].f);
-    sf[i] = NULL;
+    int ant, len = c[i].fim - c[i].ini, as, ex = extra;
+    TTF_Font *g = c[i].f;
+    sf[i] = NULL; gf[i] = g;
     if (len <= 0 || len >= (int)sizeof pedaco) continue;
     memcpy(pedaco, s + c[i].ini, (size_t)len); pedaco[len] = 0;
-    ant = estiloSoma(c[i].f, f, extra);
-    sf[i] = TTF_RenderUTF8_Blended(c[i].f, pedaco, cor);
-    estiloVolta(c[i].f, f, ant);
+    if (txtTemArabe(pedaco) && (extra & TTF_STYLE_BOLD)) {
+      TTF_Font *bf = arabeBoldFace();
+      if (bf) g = bf;
+      ex = extra & ~TTF_STYLE_BOLD;
+    }
+    gf[i] = g; as = TTF_FontAscent(g);
+    ant = estiloSoma(g, f, ex);
+    sf[i] = TTF_RenderUTF8_Blended(g, pedaco, cor);
+    estiloVolta(g, f, ant);
     if (!sf[i]) continue;
     if (as > asc) asc = as;
     if (sf[i]->h - as > abaixo) abaixo = sf[i]->h - as;
@@ -1417,7 +1484,7 @@ static SDL_Surface *renderCorridas(TTF_Font *f, TTF_Font *a, TTF_Font *b,
   for (i = 0; i < n; i++) {
     if (!sf[i]) continue;
     if (out) {
-      SDL_Rect d = { x, asc - TTF_FontAscent(c[i].f), sf[i]->w, sf[i]->h };
+      SDL_Rect d = { x, asc - TTF_FontAscent(gf[i]), sf[i]->w, sf[i]->h };
       // Copia crua (alfa incluso): as corridas nao se sobrepoem.
       SDL_SetSurfaceBlendMode(sf[i], SDL_BLENDMODE_NONE);
       SDL_BlitSurface(sf[i], NULL, out, &d);
@@ -1576,6 +1643,12 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
   // reserva nascem com TTF_STYLE_BOLD ligado (ver txt_iniciar); zerar aqui
   // tiraria delas o peso que o app inteiro conta com.
   int estiloAnt, novo = 0;
+  arabeCorpo = (int)(ESTILOS[estilo].corpo * ESC_T + 0.5f);
+  if (enfase && txtTemArabe(v) && !txtTemLatim(v) && (enfase & TXT_ENF_NEGRITO)) {   // #335
+    TTF_Font *bf = arabeBoldFace();
+    if (bf) fonte = bf;               // a face Bold de verdade
+    enfase &= ~TXT_ENF_NEGRITO;       // nunca o sintetico sobre arabe
+  }
   if (enfase) fonte = fonteComEnfase(familia, estilo, fonte, enfase, &novo);
   estiloAnt = TTF_GetFontStyle(fonte);
   if (enfase && novo != estiloAnt) TTF_SetFontStyle(fonte, novo);
@@ -1685,6 +1758,12 @@ static int larguraLinhaMedir(TxtEstilo estilo, const char *s, TxtFamilia familia
   altDe(familia, estilo, fonte, &a1, &a2);
   const char *v = visualDe(fonte, s, vis, sizeof vis);
   int estiloAnt, novo = 0;
+  arabeCorpo = (int)(ESTILOS[estilo].corpo * ESC_T + 0.5f);
+  if (enfase && txtTemArabe(v) && !txtTemLatim(v) && (enfase & TXT_ENF_NEGRITO)) {   // #335
+    TTF_Font *bf = arabeBoldFace();
+    if (bf) fonte = bf;               // a face Bold de verdade
+    enfase &= ~TXT_ENF_NEGRITO;       // nunca o sintetico sobre arabe
+  }
   if (enfase) fonte = fonteComEnfase(familia, estilo, fonte, enfase, &novo);
   estiloAnt = TTF_GetFontStyle(fonte);
   if (enfase && novo != estiloAnt) TTF_SetFontStyle(fonte, novo);
