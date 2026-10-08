@@ -457,7 +457,7 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
 // primeiro arquivo que existe": a LG_Display_JP existe em toda LG e nao tem 303
 // dos hanzi simplificados, entao um titulo chines saia em quadradinhos com a
 // DroidSansFallback (que os tem) logo ali ao lado.
-typedef enum { ESC_CJK, ESC_CJK_SC, ESC_CJK_TC, ESC_ARABE, ESC_CIRILICO_ETC, ESC_N } Escrita;
+typedef enum { ESC_CJK, ESC_CJK_SC, ESC_CJK_TC, ESC_ARABE, ESC_TAILANDES, ESC_CIRILICO_ETC, ESC_N } Escrita;
 #define RES_CAND 9
 static TTF_Font *reservasCam[TXT_NCAM][ESC_N][RES_CAND][TXT_NFONTES];
 static unsigned char reservaFalhouCam[TXT_NCAM][ESC_N][RES_CAND][TXT_NFONTES];
@@ -578,6 +578,7 @@ static const char *semDecorativoSemGlifo(TTF_Font *fonte, TTF_Font *alt, TTF_Fon
 static Escrita escritaDe(Uint32 cp) {
   if (cp >= 0x0590 && cp <= 0x07FF) return ESC_ARABE;       // hebraico + arabe
   if (cp >= 0xFB50 && cp <= 0xFEFF) return ESC_ARABE;       // formas de apresentacao
+  if (cp >= 0x0E00 && cp <= 0x0E7F) return ESC_TAILANDES;   // #369: tailandes (tofu antes)
   if (cp >= 0x2E80 && cp <= 0x9FFF) return ESC_CJK;
   if (cp >= 0xAC00 && cp <= 0xD7AF) return ESC_CJK;         // hangul
   if (cp >= 0xF900 && cp <= 0xFAFF) return ESC_CJK;
@@ -895,7 +896,7 @@ int txt_bidi_legenda(TxtFamilia familia, TxtEstilo estilo, const char *in, char 
 // mede.
 const char *txt_fonte_da_linha(TxtFamilia familia, TxtEstilo estilo, const char *s) {
   static char buf[640];
-  static const char *NOME[ESC_N] = { "CJK", "CJK-sc", "CJK-tc", "arabe", "resto" };
+  static const char *NOME[ESC_N] = { "CJK", "CJK-sc", "CJK-tc", "arabe", "tailandes", "resto" };
   camadaAtualizar();
   TTF_Font *f = (s && estilo >= 0 && estilo < TXT_NFONTES) ? fonteDe(familia, estilo, s) : NULL;
   if (!f) return NULL;
@@ -928,7 +929,9 @@ static TTF_Font *fonteLegendaDe(TxtEstilo estilo, const char *s,
         avisoFallback[TXT_FAMILIA_LG] = 1;
       }
     }
-    if (fontesLegendaLG[i]) return fontesLegendaLG[i];
+    // #369: a LG Display/Roboto da legenda nao tem tailandes (nem arabe nem CJK);
+    // linha com glifo que ela nao desenha segue para a reserva por escrita.
+    if (fontesLegendaLG[i] && !faltantes(fontesLegendaLG[i], s, NULL)) return fontesLegendaLG[i];
   }
   return fonteDe(familia, estilo, s);
 }
@@ -1234,6 +1237,11 @@ int txt_iniciar(const char *dirRecursos, float escala) {
   // de apresentacao que o bidi.c produz (tools/fonte-arabe.py).
   char arabeEmbarcada[600];
   snprintf(arabeEmbarcada, sizeof arabeEmbarcada, "%sfonts/NotoNaskhArabic-Subset.ttf", base);
+  // Tailandes (#369): nenhuma outra fonte embarcada tem os glifos U+0E01-0E5B, e
+  // o DroidSansFallback-Subset e a Roboto/Inter tambem nao. Noto Sans Thai v2.002
+  // Regular (OFL), inteira, 21 KB.
+  char tailandesEmbarcada[600];
+  snprintf(tailandesEmbarcada, sizeof tailandesEmbarcada, "%sfonts/NotoSansThai-Regular.ttf", base);
   snprintf(arabeBoldCaminho, sizeof arabeBoldCaminho, "%sfonts/NotoNaskhArabic-Bold.ttf", base);
   { const char *cand[ESC_N][RES_CAND + 1] = {
       /* ESC_CJK (japones)  */ { "/usr/share/fonts/LG_Display_JP.ttf",
@@ -1267,13 +1275,17 @@ int txt_iniciar(const char *dirRecursos, float escala) {
                                  "/system/fonts/NotoNaskhArabic-Regular.ttf",
                                  "/system/fonts/NotoSansArabic-Regular.ttf",
                                  arabeEmbarcada, NULL },
+      /* ESC_TAILANDES      */ { tailandesEmbarcada,
+                                 "/system/fonts/NotoSansThai-Regular.ttf",
+                                 "/system/fonts/NotoSansThaiUI-Regular.ttf",
+                                 "/System/Library/Fonts/Supplemental/Thonburi.ttc", NULL },
       /* ESC_CIRILICO_ETC   */ { "/usr/share/fonts/DroidSansFallback.ttf",
                                  "/usr/share/fonts/DroidSans.ttf",
                                  "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
                                  "/system/fonts/NotoSansCJK-Regular.ttc",
                                  "/system/fonts/Roboto-Regular.ttf", NULL },
     };
-    const char *nomeEsc[ESC_N] = { "CJK", "CJK-sc", "CJK-tc", "arabe", "resto" };
+    const char *nomeEsc[ESC_N] = { "CJK", "CJK-sc", "CJK-tc", "arabe", "tailandes", "resto" };
     // NUVIO_SEM_RESERVA_DE_SISTEMA=1 finge o WASM da Samsung, onde so existe o
     // que vai em deploy/app/fonts: as fontes de sistema saem da lista. Serve
     // para ver, no Mac, o que aquela plataforma desenha (e para o teste).
@@ -1282,7 +1294,8 @@ int txt_iniciar(const char *dirRecursos, float escala) {
       int n = 0;
       for (int i = 0; cand[e][i] && n < RES_CAND; i++) {
         FILE *fr;
-        if (soEmbarcada && cand[e][i] != cjkEmbarcada && cand[e][i] != arabeEmbarcada) continue;
+        if (soEmbarcada && cand[e][i] != cjkEmbarcada && cand[e][i] != arabeEmbarcada &&
+            cand[e][i] != tailandesEmbarcada) continue;
         fr = fopen(cand[e][i], "rb");
         if (fr) { fclose(fr);
                   snprintf(caminhoReserva[e][n], sizeof caminhoReserva[e][n], "%s", cand[e][i]);

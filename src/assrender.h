@@ -71,6 +71,9 @@ void assrender_geracao(unsigned geracao);
 void assrender_preaquecer(void);
 
 /* Assinatura de fonte TrueType/OpenType/colecao nos primeiros bytes. */
+/* #369: texto de evento com as corridas de tailandes marcadas com a fonte Noto
+ * Sans Thai (malloc, ou NULL se nao ha tailandes). Exposto para o teste. */
+char *assrender_marcar_tailandes(const char *txt);
 int  assrender_bytes_sao_fonte(const void *dados, size_t n);
 /* Le os arquivos de fonte de `dir` (so os que tem assinatura de fonte; o
  * resto conta em *ignorados) e entrega cada um a `cb`. Devolve quantos. */
