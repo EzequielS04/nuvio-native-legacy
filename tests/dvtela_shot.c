@@ -59,6 +59,31 @@ static void salvar(const char *passo) {
   printf("captura: %s\n", nome);
 }
 
+// FAIXAS NO FUNDO (dono, C9 OLED, 08/10: "o gradiente do background ta
+// daquele jeito"). Mede a faixa ACIMA do cartao (y 24..156, a arte desfocada
+// com o veu, sem texto nenhum): o maior trecho horizontal com o MESMO pixel e
+// quantos niveis de luminancia distintos ha. Degrade escuro quantizado em 8
+// bits sem ruido vira patamares largos (o que o OLED mostra como contorno);
+// com o meio degrau de ruido do nv_dither os patamares somem.
+static void medirFaixas(int *maiorPatamar, int *niveis) {
+  static unsigned char px[1920 * 3];
+  static char visto[256];
+  int y, x, maior = 0, n = 0;
+  memset(visto, 0, sizeof visto);
+  glFinish(); glBindFramebuffer(GL_FRAMEBUFFER, fbo); glPixelStorei(GL_PACK_ALIGNMENT, 1);
+  for (y = 24; y < 156; y += 4) {
+    int run = 1;
+    glReadPixels(0, LH - 1 - y, LW, 1, GL_RGB, GL_UNSIGNED_BYTE, px);
+    for (x = 0; x < LW; x++) {
+      unsigned char *c = px + x * 3;
+      int l = (c[0] * 54 + c[1] * 183 + c[2] * 19) >> 8;
+      if (!visto[l]) { visto[l] = 1; n++; }
+      if (x && !memcmp(c, c - 3, 3)) { if (++run > maior) maior = run; } else run = 1;
+    }
+  }
+  *maiorPatamar = maior; *niveis = n;
+}
+
 // Um quadro do app na ordem de app.c: player, ilha do player e a tela do DV
 // por cima de tudo. O fundo e claro de proposito: o que a tela nao cobrir
 // aparece.
@@ -143,6 +168,11 @@ int main(int argc, char **argv) {
   assert(video_simulado_dv_tela() == 1);            // o HDR10 do player da TV fica mudo
   assert(plrilha_corpo_alfa() < 0.01f);             // sem "Abrindo fonte" por baixo
   salvar("1-lendo");
+  { int patamar, niveis;
+    medirFaixas(&patamar, &niveis);
+    printf("faixas do fundo: maior patamar %d px, %d niveis de luminancia\n", patamar, niveis);
+    // Sem ruido o patamar passa de 100 px; com o dither fica em poucos px.
+    assert(patamar <= 24); }
 
   // ---- 2. o cabecalho chegou: perfil 8 e a troca do TrueHD -----------------
   V.pronto = 1; V.tocando = 1;                      // o HDR10 tocando, coberto e mudo
