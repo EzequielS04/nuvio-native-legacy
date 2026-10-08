@@ -1,36 +1,78 @@
 # Nuvio Legacy 2.0.3
 
-New Settings, and a long list of fixes. DRAFT, waiting for the owner.
+New Settings, a new episode menu, the Magic Remote pointer on almost every screen, and a long list of fixes.
 
-## Settings
+## Added
 
 - **Settings redesigned.** Categories by task (Watch, Screens, Account and system), plain-language labels, a written On/Off state on every switch, and the technical options behind "More options" in each category.
 - **A preview scene for each option**, so you see what it changes before you change it.
-- **Panel or List layout** for Settings (#339).
+- **Settings layout: Panel or List** (#339).
 - **Search options** (#311): Nuvio catalog results first, last or off; hide the "from <source>" caption. The Cinemeta switch only shows when it can do something.
-- **Next episode in Continue watching** can be turned off, and a single up-next card can be removed (it stays hidden for that profile and on Trakt).
-- **TV guide:** choose which channel add-ons show up (#283).
+- **Next episode in Continue** can be turned off, and a single up-next card can be removed (it stays hidden for that profile and on Trakt).
+- **"View details"** in the Continue Watching hold menu, when OK on the card plays (#350).
+- **New episode menu.** Holding OK on an episode opens the same menu as posters, beside the card. Holding OK on a season tab opens a season panel.
+- **Episode ratings** show the Trakt or TMDB logo next to the score. The episode synopsis is smaller.
+- **TV guide:** choose which channel add-ons show up, per profile (#283). When a provider has more channels than fit, the guide says "Showing N of M channels" instead of dropping categories.
+- **P2P space limit** in the P2P settings (#334). Leftovers from a session that crashed are deleted at start.
+- **LG: Dolby Vision in MKV** shows a screen while it opens, with each step and a "Watch now in HDR10" button. If the audio is TrueHD, it switches to E-AC-3 or AC-3 in the language you were listening to, so Dolby Vision stays on; if it can't match the track safely, it doesn't switch. A failed header read is retried instead of falling back to HDR10, and the film still starts where you pressed Play. If it falls back to HDR10, it continues from that point. The option is still off by default.
+- **LG Magic Remote pointer** on almost every screen: Library, Settings, Explore, View all, Search, Profile, Saved, Agenda, TV guide, Add-ons, the player sheets, the post-play screen and the Dolby Vision screen (#99).
+- **Thai** is drawn with a bundled Noto Sans Thai font, in the interface and in subtitles (#369).
+- **Hide unreleased** now also applies to Home rows and to collection and View all grids (#369).
+- **MKV chapters** on Android and Samsung .tpk are used for intro, credits and preview markers.
+- **Skip intro and next episode** use markers checked against the episode, TMDB numbering first, AniSkip for anime, and a timed fallback.
+- **Simkl sign-in** shows "Expires in m:ss" and no longer rejects the code on a slow or empty reply.
 - **Subtitle size up to 250%** (#335).
 - **Support the project** shows the Patreon and Ko-fi QR codes again.
 - The usage guide now covers 2.0.
 
+## Changed for everyone
+
+- **Settings size** goes from 90% to 80% once, for those still on the old default. 100% and later changes stay.
+- **Hero trailer** does not play by itself on TVs with a Mali-400/450/470 GPU. The setting is kept and the title page trailer still works (#286).
+- **Add-ons disabled on the account** are no longer queried on the TV: catalogs, search, View all, guide, sources and subtitles.
+- **Higher limits:** account add-ons 32 to 64, add-on subtitles 12 to 36 (12 per language), Android TV guide 3000 channels and 128 categories (TVs stay at 900 and 48).
+- **End-of-video card** without an accepted marker: series at 50 s before the end (was 40), movies at a fixed 3 min, 90 s under 1 h, none under 10 min.
+- **Holding fast-forward** speeds up and crosses the whole file in about 10 s. A single press is still 10 s (#340).
+- **Recommendations from friends** no longer open over Home. The clock island announces them and the card opens when you choose it.
+
 ## Fixed
 
+- **Live TV:** the reconnect watcher took the provider's end of stream for a manual pause and never reopened the channel. Manual pause is now tracked on its own (#302, #350).
+- **Samsung .tpk with Mali-400 (Utgard):** poster mipmaps are built on the CPU and the hero image is decoded at 960 px, so Home stutters less (#286).
+- **Search** waits 300 ms after the last key before asking the add-ons, and keeps the previous rows until the first reply (#368). A search with no results clears the previous ones.
+- **Add-on sync** merges your TV edits with the account instead of replacing it: an add-on installed on the phone stays, one removed on the phone does not come back. The merged list is never cut. After 3 refusals (4xx) the TV edit is dropped and the account list is applied (#360).
+- **Fixed sidebar:** the row editor (Reorder and enable rows) and the View all and collection grids start after it instead of under it (#359).
+- **Up next** no longer disappears when the Nuvio catalog does not list the episode; Cinemeta is checked first (#356).
+- **Recommending a series** from a Continue Watching card works again (#363).
+- **Samsung .wgt:** Arabic subtitles use Noto Naskh (#370). Holding OK in the subtitle sheet makes one choice instead of reloading on every repeat (#370).
+- **Profile page:** Left at the edge opens the sidebar without closing the page, also on a new profile or one with only friends (#371).
+- **Continue Watching:** with Episode thumbnail on, the card shows the episode still; a watched movie says Play. With the Nuvio account as source, up next is filled even when Trakt or Simkl is linked, without episodes already watched elsewhere.
+- **Watched:** "up to here" and "season" only send episodes that change, so Trakt gets no duplicate plays. The main button, next episode and "% watched" follow the change right away. Marking a series as watched no longer hides it on Trakt; only "Remove from Continue Watching" does.
+- **Episode list** missing on a title page, or no Up next card in the player, after browsing many titles.
+- **Subtitles** move up only while the Up next card is on screen, and come back down when it hides.
+- **Credits markers** are not accepted before the player knows the video length.
+- **Home hero:** the logo arrives with the art, the next item is loaded ahead, and items from Trakt lists get their synopsis. The hero no longer turns while the profile picker is open. Switching titles quickly no longer loses a synopsis or crashes the app.
+- **LG Dolby Vision:** no more pause panel while the stream fills, and playback starts at the saved point. Smoother background on OLED.
+- **Android:** the saved aspect mode waits for the first frame, so Dolby Vision no longer opens dark.
+- **Speed test** keeps the byte range through debrid redirects, measures with 4 connections on Android again, and handles sources served as octet-stream.
 - **Crashes from threads racing each other** (watched episodes, parallel source check, catalog episodes, sign-in token, collections) (#203, #323).
 - **LG webOS 4:** startup crash from FreeType symbols, and startup crashes are now reported on the next launch (#317).
 - **Android:** start hang on Shield and other boxes, sign-in through the system network stack when libcurl fails (#266, #332); MStar flicker fixes and a crash report on Android 11 and older (#318).
-- **Home:** switching profile no longer shows the previous profile's rows (#294); the hero no longer depends on a drawn row (#327); rebuilds are spaced out so Home settles with many collections (#319, #280).
-- **Add-ons with very long URLs** (2 to 16 KB) are no longer ignored, and accounts with more than 32 add-ons are no longer cut silently.
+- **Home:** switching profile no longer shows the previous profile's rows (#294); the hero no longer depends on a drawn row, and a catalog added from Not on Home is no longer swallowed by a collection (#327); rebuilds are spaced out so Home settles with many collections (#319, #280).
+- **Add-ons with very long URLs** (2 to 16 KB) are no longer ignored, and add-ons past the limit are logged instead of cut silently.
 - **Auto-play** never picks an add-on placeholder; Samsung never picks Dolby Vision (#284).
 - **Embedded subtitles:** large MKV track headers, gentler reads, no stale downloads (#308, #330); more add-on subtitles (#268); Arabic subtitles with real bold and sharp ASS in 4K (#335).
 - **Duplicate episodes** in the episode list (#328).
 - **LG:** resume no longer drops the source on a failed seek (#246); DTS on webOS 26 (#285).
-- **Samsung:** Pause and subtitle list errors (#269); aspect/zoom button on Tizen 4/5.
-- **Player:** UP at the top of the controls hides them (#305); holding fast-forward speeds up and crosses the file in about 10 s (#340); skip intro and next episode use markers checked against the episode, with a timed fallback.
+- **Samsung:** Pause and subtitle list errors (#269); aspect/zoom button on Tizen 4/5; Arabic subtitles when an older install left old fonts.
+- **Player:** UP at the top of the controls hides them (#305); the Seekr time and preview follow the hold.
+- **Live TV:** a channel queued while zapping keeps its add-on (#283).
+- **Trakt:** the watchlist is read page by page.
 - **Trakt/Simkl sign-in** no longer freezes the screen while sending credentials.
-- **Speed test** measures sources served as octet-stream.
-- Saved: section label follows the open card. Glass outline follows the poster radius. Search translated on the spot, "All sources" in Sync (#312).
-- The log is sent once per session, at most 64 KB.
+- Saved: section label follows the open card. Glass outline follows the poster radius. Back from the add-on and plugin lists returns to the row you came from.
+- **Sync** summary is translated on the spot, and the Continue Watching source "Both" is now "All sources" (#312).
+- A username and password inside an add-on URL no longer show up in the log.
+- The log is sent once per session, at most 64 KB, and records the settings you change.
 
 ## Notes
 
@@ -44,3 +86,5 @@ New Settings, and a long list of fixes. DRAFT, waiting for the owner.
 | Samsung Tizen 8 / 9 | `Nuvio-2.0.3-NuvioTpk.tpk` |
 | Samsung web app, Tizen 5.5+ | `NuvioTV-2.0.3-tizen.wgt` |
 | Android TV / Google TV, Android 7+ | `Nuvio-2.0.3-android.apk` |
+
+If something breaks, send the log code from Settings › About and help.
