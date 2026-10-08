@@ -79,4 +79,7 @@ int  assrender_ler_pasta_fontes(const char *dir,
                                            size_t tam, void *u),
                                 void *u, int *ignorados);
 
+/* Pasta de fontes do app que o libass le: <base>fonts, ou deploy/app/fonts. */
+void assrender_pasta_fontes_app(const char *base, int wasm, char *out, size_t n);
+
 #endif

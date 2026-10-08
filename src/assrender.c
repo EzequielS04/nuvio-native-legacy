@@ -68,6 +68,16 @@ int assrender_ler_pasta_fontes(const char *dir,
   return lidas;
 }
 
+/* Pasta das fontes do app que o libass le (Noto Naskh incluso). `wasm` e o
+ * __EMSCRIPTEN__: la SDL_GetBasePath devolve "/" e as fontes vivem em /app/fonts. */
+void assrender_pasta_fontes_app(const char *base, int wasm, char *out, size_t n) {
+  (void)wasm;
+  if (n == 0) return;
+  out[0] = 0;
+  if (base) snprintf(out, n, "%sfonts", base);
+  if (access(out, R_OK)) snprintf(out, n, "%s", "deploy/app/fonts");
+}
+
 #ifdef NV_ASS_LIBASS
 #include <SDL2/SDL.h>
 #include <ass/ass.h>
@@ -371,9 +381,12 @@ static void ass_iniciar_locked(int sistema) {
   }
 #endif
   { char *base = SDL_GetBasePath();
-    if (base) { snprintf(assPastaFontesApp, sizeof assPastaFontesApp, "%sfonts", base); SDL_free(base); }
-    if (access(assPastaFontesApp, R_OK))
-      snprintf(assPastaFontesApp, sizeof assPastaFontesApp, "%s", "deploy/app/fonts");
+#ifdef __EMSCRIPTEN__
+    assrender_pasta_fontes_app(base, 1, assPastaFontesApp, sizeof assPastaFontesApp);
+#else
+    assrender_pasta_fontes_app(base, 0, assPastaFontesApp, sizeof assPastaFontesApp);
+#endif
+    if (base) SDL_free(base);
 #ifdef NV_TPK
     if (fontDir[0] && strstr(fontDir, "/../fonts")) snprintf(assPastaFontesApp, sizeof assPastaFontesApp, "%s", fontDir);
 #endif
