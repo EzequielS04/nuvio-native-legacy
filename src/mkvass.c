@@ -536,6 +536,15 @@ static int prazoDe(long n) {
   return s > 45 ? 45 : (int)s;
 }
 
+// Geracao velha ou mkvass_parar(): o pedido nao serve mais a ninguem.
+static int jobObsoleto(const Job *j) {
+  int velho;
+  pthread_mutex_lock(&S.trava);
+  velho = j->g != S.geracao || S.parar;
+  pthread_mutex_unlock(&S.trava);
+  return velho;
+}
+
 static void *poolFio(void *u) {
   (void)u;
   for (;;) {
@@ -545,6 +554,19 @@ static void *poolFio(void *u) {
     j = filaIni; filaIni = j->prox; if (!filaIni) filaFim = NULL;
     j->estado = 1;
     pthread_mutex_unlock(&PT);
+    // #330: Range de uma geracao que ja passou (a pessoa abriu outra fonte, ou
+    // saiu do player) nao e baixado: ninguem vai usa-lo (colherJobDe descarta o
+    // corpo) e, numa fila FIFO de 3 fios, ele atrasava os Ranges da fonte nova
+    // e disputava a rede e a CPU com o video. Abrir a mesma serie varias vezes
+    // empilhava ate 8 pre-buscas + as fontes anexadas (MBs) de cada fonte velha.
+    if (jobObsoleto(j)) {
+      j->tam = 0; j->st = j->erro = 0; j->r = NULL; j->resto = 0; j->ms = 0;
+      pthread_mutex_lock(&PT);
+      j->estado = 2;
+      pthread_cond_broadcast(&PFeito);
+      pthread_mutex_unlock(&PT);
+      continue;
+    }
     if (!j->semTeto) esperarVez();
     t = agoraMs();
     j->tam = 0; j->st = j->erro = 0;
