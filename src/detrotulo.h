@@ -6,8 +6,9 @@
 #define NV_DETROTULO_H
 
 static inline const char *det_rotulo_primario(int progresso, int concluido) {
-  (void)concluido;
-  return progresso > 0 ? "Retomar" : "Reproduzir";
+  // O MESMO CORTE DO PLAYER (player.c, retomarPct) e de temInicio: do
+  // Percentual assistido em diante o filme esta visto e toca do comeco.
+  return progresso > 0 && progresso < concluido ? "Retomar" : "Reproduzir";
 }
 
 #endif
