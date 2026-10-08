@@ -730,10 +730,14 @@ static int addonsMesclar(void) {
         addonsNaBase(addonsBaseCiclo, nAddonsBaseCiclo, addonsEnv[i].url)) { tirados++; continue; }
     addonsMescla[n++] = addonsEnv[i];
   }
-  for (j = 0; j < nAddonsRem && n < SY_ADD_MAX; j++) {
+  for (j = 0; j < nAddonsRem; j++) {
     int aqui = 0;
     for (i = 0; i < nAddonsEnv && !aqui; i++) aqui = addonsUrlIgual(&addonsEnv[i], &addonsRem[j]);
-    if (!aqui) { addonsMescla[n++] = addonsRem[j]; novos++; }
+    if (aqui) continue;
+    // A UNIAO NAO CABE: o push substitui a lista inteira, entao truncar aqui
+    // apagaria da conta um addon de outro aparelho. Nunca truncar: -1 = sem push.
+    if (n >= SY_ADD_MAX) return -1;
+    addonsMescla[n++] = addonsRem[j]; novos++;
   }
   if (tirados || novos)
     printf("[sync] edicao de addons mesclada com a conta: %d de outro aparelho mantido(s), %d tirado(s) la nao volta(m)%s\n",
@@ -770,7 +774,15 @@ static void empurrarAddons(int puxou) {
     return;
   }
   n = addonsMesclar();
-  if (n <= 0) {
+  if (n < 0) {
+    // Mantem a lista da conta intacta e a edicao local pendente (nao encerra):
+    // o proximo ciclo tenta de novo, e a pessoa pode tirar um addon para caber.
+    printf("[sync] edicao de addons nao sobe: a uniao com a conta passa de %d addons; conta mantida\n",
+           SY_ADD_MAX);
+    fflush(stdout);
+    return;
+  }
+  if (n == 0) {
     // Tudo o que havia aqui foi tirado em outro aparelho: a conta ja esta certa.
     if (addonsEncerrar(0)) addonsAplicarCiclo = 1;
     return;
