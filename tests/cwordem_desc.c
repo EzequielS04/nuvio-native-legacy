@@ -94,7 +94,8 @@ int   fil_unir(const char *const *c, int n, int *s, int m) {
   int i; (void)c; for (i = 0; i < n && i < m; i++) s[i] = i; return i;
 }
 void  marco(const char *n)                 { (void)n; }
-int   simkl_ativo(void)                    { return 0; }
+static int simklAtivoTeste;
+int   simkl_ativo(void)                    { return simklAtivoTeste; }
 int   simkl_continuar(CatItem *s, int m)   { (void)s; (void)m; return 0; }
 int   simkl_plantowatch(CatItem *s, int m) { (void)s; (void)m; return 0; }
 int   ajustes_salvos_no_simkl(void)        { return 0; }
@@ -212,15 +213,31 @@ static const SemFalsa CONTA[] = {
   { "ttX",       9,  1, 900920,  0, 0 },
 };
 #define NCONTA ((int)(sizeof CONTA / sizeof *CONTA))
+// contaSementesTeste: 0 = vistos lidos e sem semente; 1 = as quatro acima;
+// -1 = os vistos da conta NAO foram puxados (ou estao velhos): contrato de
+// contalib_sementes_a_seguir. contaBaseMs soma ao instante de cada ancora: 0
+// deixa os "de 1970" dos testes antigos; os do vinculo (Trakt no ar) usam um
+// instante real, que e o que a janela de 60 dias mede.
+static long long contaBaseMs;
+static const char *contaAntigaId;     // semente cuja ancora foi ha 61 dias
+static const char *vistoEmOutraTeste; // episodio "id:t:e" que outra fonte viu
+int vistoep_estado(const char *imdb, int t, int e) {
+  char k[48];
+  snprintf(k, sizeof k, "%s:%d:%d", imdb, t, e);
+  return vistoEmOutraTeste && !strcmp(k, vistoEmOutraTeste) ? 1 : -1;
+}
 int contalib_sementes_a_seguir(ContaSemente *s, int m, int a) {
   int i;
   (void)a;
+  if (contaSementesTeste < 0) return -1;
   if (!contaSementesTeste) return 0;
   for (i = 0; i < NCONTA && i < m; i++) {
     snprintf(s[i].id, sizeof s[i].id, "%s", CONTA[i].id);
     s[i].temporada = CONTA[i].t;
     s[i].episodio = CONTA[i].e;
-    s[i].vistoMs = CONTA[i].visto;
+    s[i].vistoMs = contaBaseMs + CONTA[i].visto;
+    if (contaAntigaId && !strcmp(contaAntigaId, CONTA[i].id))
+      s[i].vistoMs -= 61LL * 24 * 3600 * 1000;
   }
   return i;
 }
@@ -477,13 +494,51 @@ int main(void) {
     puts("ok  #199 conta nao exibidos desligado: so o nao lancado sai");
     naoExibidosTeste = 1;
 
-    // Com o Trakt no ar o "a seguir" e dele: os vistos da conta nao semeiam.
+    // Fonte AMBAS com o Trakt no ar: o "a seguir" e dele, a conta nao semeia.
     traktAtivoTeste = 1;
+    fonteTeste = 0;
     consultadas = 0;
     nc = montarContinuar(lote, CONT_MAX);
     assert(consultadas == 0 && !cwo_conta_a_seguir("ttT:4:10"));
     for (k = 0; k < nc; k++) assert(strncmp(lote[k].imdb, "ttT", 3) && strncmp(lote[k].imdb, "ttM", 3));
-    puts("ok  #199 com Trakt no ar: os vistos da conta nao semeiam");
+    puts("ok  #199 AMBAS com Trakt no ar: os vistos da conta nao semeiam");
+
+    // FONTE = CONTA com o Trakt no ar: a conta e quem da o "a seguir".
+    fonteTeste = 1;
+    contaBaseMs = agoraMs - 3600LL * 1000;
+    consultadas = 0;
+    nc = montarContinuar(lote, CONT_MAX);
+    assert(cwo_conta_a_seguir("ttT:4:10") && cwo_conta_a_seguir("ttM:1:4"));
+    puts("ok  conta + Trakt vinculado: a conta semeia o a seguir");
+
+    // (a) vistos nao puxados / velhos: nenhuma semente.
+    contaSementesTeste = -1;
+    consultadas = 0;
+    nc = montarContinuar(lote, CONT_MAX);
+    assert(consultadas == 0 && !cwo_conta_a_seguir("ttT:4:10") && !cwo_conta_a_seguir("ttM:1:4"));
+    contaSementesTeste = 1;
+    puts("ok  conta sem vistos puxados: nao semeia");
+
+    // (b) outra fonte (Trakt/Simkl/local) ja viu o episodio: nao volta.
+    vistoEmOutraTeste = "ttM:1:4";
+    nc = montarContinuar(lote, CONT_MAX);
+    assert(!cwo_conta_a_seguir("ttM:1:4") && cwo_conta_a_seguir("ttT:4:10"));
+    for (k = 0; k < nc; k++) assert(strcmp(lote[k].imdb, "ttM:1:4"));
+    vistoEmOutraTeste = NULL;
+    puts("ok  conta + Trakt: episodio visto em outra fonte nao volta");
+
+    // (c) serie parada ha 61 dias: nao ressuscita quando ha outra fonte...
+    contaAntigaId = "ttM";
+    nc = montarContinuar(lote, CONT_MAX);
+    assert(!cwo_conta_a_seguir("ttM:1:4") && cwo_conta_a_seguir("ttT:4:10"));
+    // ...mas sozinha (sem Trakt/Simkl) a conta mantem o comportamento da #199.
+    traktAtivoTeste = 0;
+    nc = montarContinuar(lote, CONT_MAX);
+    assert(cwo_conta_a_seguir("ttM:1:4"));
+    contaAntigaId = NULL;
+    traktAtivoTeste = 1;
+    puts("ok  conta + Trakt: serie parada ha 61 dias nao ressuscita");
+    contaBaseMs = 0;
     contaSementesTeste = 0;
     fonteTeste = 0; }
   puts("cwordem_desc: tudo ok");

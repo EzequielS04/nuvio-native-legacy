@@ -21,6 +21,7 @@
 #include "simkl.h"
 #include "progresso.h"
 #include "contalib.h"
+#include "vistoep.h"
 #include "proximo.h"
 #include "perfis.h"
 #include "artereserva.h"
@@ -2712,14 +2713,22 @@ static void localizarContinuarPublicado(void);
 // So sem Trakt e sem Simkl no ar: e quando o web le os vistos da conta
 // (shouldUseSupabaseWatchProgressSync) e quando sync.c os aplica. Com um deles
 // vinculado, o "a seguir" ja vem dele.
-static int contaASeguir(CatItem *lista, int n, int max) {
+#define CONTA_JANELA_MS (60LL * 24 * 3600 * 1000)
+static int contaASeguir(CatItem *lista, int n, int max, int comOutraFonte) {
   static ContaSemente sem[PROX_MAX_BUSCAS];
   static const char *ids[PROX_MAX_BUSCAS];
   static char idsTxt[PROX_MAX_BUSCAS][sizeof(((CatItem *)0)->imdb)];
   CatItem *lote;
   int nSem, nLote = 0, i, j, confirmados, entraram = 0;
+  int fVelho = 0, fVisto = 0, fPausado = 0;
   nSem = contalib_sementes_a_seguir(sem, PROX_MAX_BUSCAS,
                                     ajustes_cw_do_episodio_mais_alto());
+  if (nSem < 0) {
+    printf("[desc] continuar assistindo: a seguir da conta: vistos da conta nao puxados "
+           "ou velhos; nenhuma semente\n");
+    cwo_conta_definir(NULL, 0);
+    return n;
+  }
   if (nSem < 1) { cwo_conta_definir(NULL, 0); return n; }
   lote = (CatItem *)malloc(sizeof(CatItem) * PROX_MAX_BUSCAS);
   if (!lote) { cwo_conta_definir(NULL, 0); return n; }
@@ -2730,7 +2739,20 @@ static int contaASeguir(CatItem *lista, int n, int max) {
     snprintf(d->imdb, sizeof d->imdb, "%s:%d:%d", sem[i].id, sem[i].temporada,
              sem[i].episodio);
     for (j = 0; j < n && !ja; j++) ja = mesmaObra(&lista[j], d);
-    if (ja) continue;
+    if (ja) { fPausado++; continue; }
+    // Visto em QUALQUER fonte (conta, Trakt, Simkl, esta TV): nao e "a seguir".
+    if (vistoep_estado(sem[i].id, sem[i].temporada, sem[i].episodio) == 1) {
+      fVisto++;
+      continue;
+    }
+    // Com Trakt/Simkl vinculado, serie sem toque ha mais de 60 dias nao volta
+    // so porque a conta a conhece (mesmo corte que o web aplica ao a seguir do
+    // Trakt). Sozinha, a conta mantem o comportamento da #199: sem corte.
+    if (comOutraFonte && sem[i].vistoMs > 0 &&
+        (long long)time(NULL) * 1000LL - sem[i].vistoMs > CONTA_JANELA_MS) {
+      fVelho++;
+      continue;
+    }
     snprintf(d->tipo, sizeof d->tipo, "series");
     d->temporada = sem[i].temporada;
     d->episodio = sem[i].episodio;
@@ -2769,8 +2791,10 @@ static int contaASeguir(CatItem *lista, int n, int max) {
       for (b = a - 1; b >= 0 && lista[b].retomadoMs < t.retomadoMs; b--) lista[b + 1] = lista[b];
       lista[b + 1] = t;
     } }
-  printf("[desc] continuar assistindo: a seguir da conta: %d semente(s), %d consultada(s), "
-         "%d confirmada(s), %d na lista\n", nSem, nLote, confirmados, entraram);
+  printf("[desc] continuar assistindo: a seguir da conta: %d da conta, %d ja pausada(s), "
+         "%d vista(s) em outra fonte, %d velha(s) (>60 dias), %d consultada(s), "
+         "%d confirmada(s), %d na lista\n", nSem, fPausado, fVisto, fVelho, nLote,
+         confirmados, entraram);
   free(lote);
   return n;
 }
@@ -2853,8 +2877,10 @@ static int montarContinuar(CatItem *saida, int max) {
       remotos[achou] = &doSimkl[i];
   }
   nL = querConta ? continuarLocal(daConta, CONT_MAX) : 0;
-  if (querConta && !trakt_ativo() && !simkl_ativo())
-    nL = contaASeguir(daConta, nL, CONT_MAX);
+  // Fonte "Conta" escolhida: a conta da o "a seguir" mesmo com Trakt/Simkl
+  // vinculado (decisao do dono). Em "Ambas" ele continua sendo do vinculo.
+  if (querConta && (fonte == AJ_CWF_CONTA || (!trakt_ativo() && !simkl_ativo())))
+    nL = contaASeguir(daConta, nL, CONT_MAX, trakt_ativo() || simkl_ativo());
   else
     cwo_conta_definir(NULL, 0);
 

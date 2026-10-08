@@ -1,5 +1,6 @@
 #include "contalib.h"
 #include "vistoep.h"
+#include <time.h>
 #include "catalogo.h"
 #include "js.h"
 #include "idioma.h"
@@ -29,6 +30,9 @@ static int nVistos;
 // passam por aqui. O resto deste modulo e do fio principal.
 static pthread_mutex_t vistosTrava = PTHREAD_MUTEX_INITIALIZER;
 static unsigned vistosRev;
+// Quando (s, relogio de parede) os vistos foram puxados COM SUCESSO pela ultima
+// vez. 0 = nunca nesta sessao: os vistos vivem so em memoria.
+static time_t vistosPuxadoEm;
 static int temConta;
 
 // Marca de reconciliacao. `marcaCatN` comeca em -1 de proposito: catalogo com
@@ -274,6 +278,7 @@ int contalib_ler_vistos(const char *json) {
   free(vistos);
   vistos = novo;
   nVistos = k;
+  vistosPuxadoEm = time(NULL);
   pthread_mutex_unlock(&vistosTrava);
   printf("[contalib] vistos da conta: %d linhas\n", k);
   return k;
@@ -499,6 +504,14 @@ int contalib_sementes_de(const ContaVisto *v, int n, ContaSemente *saida, int ma
 int contalib_sementes_a_seguir(ContaSemente *saida, int max, int doMaisAlto) {
   int n;
   pthread_mutex_lock(&vistosTrava);
+  // -1: vistos nunca puxados nesta sessao, ou o ultimo pull bom e velho. "Sem
+  // semente" (0) e "nao sei" (-1) sao coisas diferentes: com outra fonte
+  // vinculada, semear de um retrato velho ressuscita o que ja foi visto.
+  if (!vistos || !vistosPuxadoEm ||
+      time(NULL) - vistosPuxadoEm > CONTALIB_VISTOS_VALIDADE_S) {
+    pthread_mutex_unlock(&vistosTrava);
+    return -1;
+  }
   n = contalib_sementes_de(vistos, nVistos, saida, max, doMaisAlto);
   pthread_mutex_unlock(&vistosTrava);
   return n;
