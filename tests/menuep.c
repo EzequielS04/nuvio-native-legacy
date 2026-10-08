@@ -410,6 +410,13 @@ int main(int argc, char **argv) {
             "temporada: e cresce para baixo e para o lado");
     CONFERE(lin[0].y >= aba.y + aba.h && perto(lin[0].h, 60.0f) && perto(lin[1].y - lin[0].y, 64.0f),
             "temporada: as acoes ficam abaixo da aba, nas linhas do menu do cartaz");
+    // O PAINEL E O PREENCHIMENTO DA ABA CRESCIDO (dono, 08/10): a borda
+    // direita do painel, fora das linhas, tem a cor do miolo da aba em foco.
+    { unsigned char pa[3], pp[3];
+      pixel((int)(aba.x + 12.0f), (int)(aba.y + aba.h * 0.5f), pa);
+      pixel((int)(caixa.x + caixa.w - 6.0f), (int)(caixa.y + caixa.h * 0.5f), pp);
+      CONFERE(abs(pa[0] - pp[0]) < 8 && abs(pa[1] - pp[1]) < 8 && abs(pa[2] - pp[2]) < 8,
+              "temporada: o painel e o preenchimento da aba crescido (mesma cor do miolo da aba)"); }
     mover(lin[1].x + lin[1].w * 0.5f, lin[1].y + lin[1].h * 0.5f);
     quadros(12); gravar("3-temporada-ponteiro");
     mover(lin[0].x + lin[0].w * 0.5f, lin[0].y + lin[0].h * 0.5f);
