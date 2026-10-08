@@ -135,7 +135,10 @@ void  ctx_menu_desenhar(GfxRect m, const char *nome, const char *meta, float met
 // As duas pecas soltas, para a forma que nao e um menu retangular (o painel em
 // que a aba da temporada se abre): a superficie da ilha e uma linha de opcao.
 void  ctx_menu_ilha(GfxRect p, float raioPx, float a);
-void  ctx_menu_linha(GfxRect r, const char *rot, const char *icone, float f, float a);
+// `tinta` < 0: a linha da ilha (texto claro). 0..1: a linha sobre uma
+// superficie cheia de cor, com texto, icone e foco nessa tinta.
+void  ctx_menu_linha(GfxRect r, const char *rot, const char *icone, float f, float a,
+                     float tinta);
 float ctx_menu_passo(void);   // altura de uma linha + o vao
 // Centro horizontal da barra "Segure OK para opções"; negativo = centro da tela.
 void ctx_centro_dica(float cx);

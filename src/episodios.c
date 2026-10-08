@@ -401,17 +401,20 @@ static void menuAtualizar(float dt) {
 static int menuVisivel(void) { return vmAberto || vmAnim > 0.01f; }
 
 // A ABA DA TEMPORADA SE ABRE EM PAINEL (dono, 08/10): segurar OK numa aba nao
-// chama um modal no meio da tela — a propria aba cresce para baixo e para o
-// lado ate virar a ilha que guarda as acoes da temporada. A superficie nasce
-// do retangulo da aba (`vmAncora`) e vai ate o painel; a aba continua no lugar,
-// de cabecalho (a pagina a redesenha por cima), e as linhas acendem no fim do
-// caminho, recortadas pela superficie enquanto ela cresce.
+// chama um modal no meio da tela — o PREENCHIMENTO DA PROPRIA ABA (a pilula
+// cheia do foco, no realce) cresce para baixo e para o lado, na mesma mola, ate
+// virar o painel que guarda as acoes da temporada. Nao e uma superficie nova
+// por baixo dela: e a aba aumentando. Ela continua no lugar, de cabecalho (a
+// pagina a redesenha por cima, com o mesmo preenchimento), e as linhas acendem
+// no fim do caminho, recortadas pelo preenchimento enquanto ele cresce, na
+// TINTA DO REALCE (ajustes_acento_tinta): escura sobre o realce claro, clara
+// sobre o escuro — a mesma que o rotulo da aba usa.
 //
 // O resumo "N de M assistidos" NAO entra: a pagina ja o mostra logo acima das
 // abas, e repetido ao lado da aba era a mesma frase duas vezes.
 //
-// CUSTO: uma ilha, duas linhas e uma frase. Sem veu de tela cheia — a pagina
-// continua inteira por tras, e o que diz "modal" e o foco ter saido dela.
+// CUSTO: um retangulo cheio, duas linhas e uma frase. Sem veu de tela cheia — a
+// pagina continua inteira por tras, e o que diz "modal" e o foco ter saido dela.
 #define PT_PAD   10.0f    // da borda do painel a aba e as linhas
 #define PT_RAIO  30.0f
 static GfxRect painelFinal(void) {
@@ -425,13 +428,13 @@ static GfxRect painelFinal(void) {
 }
 static void painelDesenhar(float a) {
   GfxRect c = vmAncora, f = painelFinal(), r;
-  float e = vmAnim, ec = anim_clamp(e, 0.0f, 1.0f), raio, sa, ca, passo = ctx_menu_passo();
-  int i;
+  float e = vmAnim, ec = anim_clamp(e, 0.0f, 1.0f), raio, ca, passo = ctx_menu_passo();
+  float fr, fg, fb, ti = ajustes_acento_tinta(&fr, &fg, &fb);
+  int i, tin = (int)(ti * 255.0f + 0.5f);
   r.x = c.x + (f.x - c.x) * e; r.y = c.y + (f.y - c.y) * e;
   r.w = c.w + (f.w - c.w) * e; r.h = c.h + (f.h - c.h) * e;
   raio = c.h * 0.5f + (PT_RAIO - c.h * 0.5f) * ec;
   if (raio > r.h * 0.5f) raio = r.h * 0.5f;
-  sa = anim_clamp(e * 3.0f, 0.0f, 1.0f) * a;
   ca = anim_clamp((e - 0.6f) / 0.4f, 0.0f, 1.0f) * a;
   if (vmAberto && e > 0.5f && ponteiro_ativo()) {
     ponteiro_camada();
@@ -439,12 +442,12 @@ static void painelDesenhar(float a) {
     ponteiro_alvo(f.x, f.y, f.w, f.h, NULL, NULL, 0, 0);
   }
   vmCaixa = f; vmTemCaixa = 1;
-  ctx_menu_ilha(r, raio, sa);
-  // UM DEGRAU ACIMA DA PAGINA. A ilha do menu e quase preta porque o menu do
-  // cartaz vem com o veu de .94 por baixo; aqui nao ha veu, e a mesma
-  // superficie lia como um buraco na pagina (#0E0F11 contra #131518). Branco
-  // a 6 % a poe acima do fundo e abaixo das abas em repouso.
-  gfx_cor(r, raio / (r.h > 1.0f ? r.h : 1.0f), 1, 1, 1, 0.06f * sa);
+  // O PREENCHIMENTO DA ABA EM FOCO, o mesmo de desenhaTemporada (detail.c):
+  // pilula cheia de vidro, ou o realce chapado. Opaco desde o primeiro quadro —
+  // no comeco ele E a aba.
+  { float rr = raio / (r.h > 1.0f ? r.h : 1.0f);
+    if (ajustes_vidro()) gfx_vidro_pilula_cheia(r, rr, 1.0f, a);
+    else gfx_cor(r, rr, fr, fg, fb, a); }
   if (ca < 0.01f) return;
   gfx_recorte(r.x, r.y, r.w, r.h);
   { float y0 = f.y + PT_PAD + c.h + PT_PAD - (1.0f - ca / (a > 0.01f ? a : 1.0f)) * 14.0f;
@@ -456,12 +459,12 @@ static void painelDesenhar(float a) {
       float area = (float)VT_N * passo - 4.0f;
       int duas = (float)txt_largura(TXT_PG_ROTULO, vmMsg) > tw;
       float th = duas ? 60.0f : 30.0f, ty = y0 + (area - th) * 0.5f;
-      gfx_icone((GfxRect){ lx, y0 + (area - 24.0f) * 0.5f, 24.0f, 24.0f }, "aj_check", .953f, .949f, .937f, ca);
-      txt_bloco_corta(TXT_PG_ROTULO, vmMsg, 243, 242, 239, lx + 24.0f + 18.0f, ty, tw, 30.0f, ca, 2);
+      gfx_icone((GfxRect){ lx, y0 + (area - 24.0f) * 0.5f, 24.0f, 24.0f }, "aj_check", ti, ti, ti, ca);
+      txt_bloco_corta(TXT_PG_ROTULO, vmMsg, tin, tin, tin, lx + 24.0f + 18.0f, ty, tw, 30.0f, ca, 2);
     } else for (i = 0; i < VT_N; i++) {
       GfxRect ln = { f.x + PT_PAD, y0 + (float)i * passo, f.w - PT_PAD * 2.0f, passo - 4.0f };
       if (vmAberto && e > 0.5f) ponteiro_alvo(ln.x, ln.y, ln.w, ln.h, ponteiroVmOpcao, NULL, i, 0);
-      ctx_menu_linha(ln, vmLin[i].rot, vmLin[i].icone, vmFocoAnim[i], ca);
+      ctx_menu_linha(ln, vmLin[i].rot, vmLin[i].icone, vmFocoAnim[i], ca, ti);
     } }
   gfx_sem_recorte();
 }

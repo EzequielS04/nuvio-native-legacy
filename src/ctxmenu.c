@@ -1254,19 +1254,32 @@ static void kickerCtx(const char *t, float x, float y, float a) {
 // pilula cheia nem contorno — como o menu e o painel de Salvos. A pilula
 // cheia no acento fica para botao.
 #define CTX_ICONE 24.0f
-static void linhaCtx(GfxRect r, const char *rot, const char *icone, float f, float a) {
+// `tinta` < 0 = a linha da ilha escura (texto claro, foco por superficie). De 0
+// a 1 = a linha SOBRE UMA SUPERFICIE CHEIA (o painel da aba, no realce): texto
+// e icone nessa tinta e o foco e a propria tinta a 12 %, que escurece o
+// realce claro e clareia o escuro.
+static void linhaCtxTinta(GfxRect r, const char *rot, const char *icone, float f, float a,
+                          float tinta) {
   float k = f < 0.0f ? 0.0f : f > 1.0f ? 1.0f : f;
   float lum = .72f + .28f * k;
-  if (k > 0.01f) {
+  int cr = 243, cg = 242, cb = 239;
+  if (tinta >= 0.0f) {
+    cr = cg = cb = (int)(tinta * 255.0f + 0.5f);
+    lum = .80f + .20f * k;
+    if (k > 0.01f) gfx_cor(r, 0.5f, tinta, tinta, tinta, .12f * k * a);
+  } else if (k > 0.01f) {
     if (ajustes_vidro()) gfx_cor(r, 0.5f, 1, 1, 1, .14f * k * a);
     else gfx_cor(r, 0.5f, .19f, .195f, .215f, k * a);
   }
   if (icone && icone[0])
     gfx_icone((GfxRect){ r.x + 20.0f, r.y + (r.h - CTX_ICONE) * 0.5f, CTX_ICONE, CTX_ICONE },
-              icone, .953f, .949f, .937f, lum * a);
-  { TxtLinha t = txt_linha_corta(TXT_PG_ROTULO, rot, 243, 242, 239, 255,
+              icone, cr / 255.0f, cg / 255.0f, cb / 255.0f, lum * a);
+  { TxtLinha t = txt_linha_corta(TXT_PG_ROTULO, rot, cr, cg, cb, 255,
                                  r.w - 20.0f - CTX_ICONE - 18.0f - 20.0f);
     txt_desenhar_alpha(t, r.x + 20.0f + CTX_ICONE + 18.0f, r.y + (r.h - t.h) * 0.5f, lum * a); }
+}
+static void linhaCtx(GfxRect r, const char *rot, const char *icone, float f, float a) {
+  linhaCtxTinta(r, rot, icone, f, a, -1.0f);
 }
 
 // --- A MESMA ILHA, PARA OS MENUS QUE NAO SAO DE CARTAZ ----------------------
@@ -1309,8 +1322,9 @@ void ctx_menu_veu(float a) {
   gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, 0.94f * a);
 }
 void ctx_menu_ilha(GfxRect p, float raioPx, float a) { ilhaCtx(p, raioPx, a); }
-void ctx_menu_linha(GfxRect r, const char *rot, const char *icone, float f, float a) {
-  linhaCtx(r, rot, icone, f, a);
+void ctx_menu_linha(GfxRect r, const char *rot, const char *icone, float f, float a,
+                    float tinta) {
+  linhaCtxTinta(r, rot, icone, f, a, tinta);
 }
 float ctx_menu_passo(void) { return CTX_LINHA + CTX_GAP; }
 // O cabecalho de duas linhas, como o do menu do cartaz sem logo: o nome
