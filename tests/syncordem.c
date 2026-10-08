@@ -390,7 +390,10 @@ static int testePersistencia(const char *caso) {
     confere("novo processo restaura antes de resposta da rede", listaLocal("edicao-salva", 0) && !addonNome[0]);
     ateTerminar();
     confere("reabertura envia a edicao salva e estado desligado", pushes == 1 && strstr(ultimoPush, "edicao-salva") && strstr(ultimoPush, "\"enabled\":false"));
-    confere("pull anterior nao reaplicado apos restauracao", aplicacoesAddons == 1 && listaLocal("edicao-salva", 0));
+    // #360: com 200 a edicao sai e a lista mesclada (a edicao na frente) e
+    // aplicada no mesmo ciclo; com 500 nada da leitura e aplicado.
+    confere("pull anterior nao reaplicado apos restauracao",
+            aplicacoesAddons == (pushSt == 200 ? 2 : 1) && listaLocal("edicao-salva", 0));
     confere("apenas ACK exato retira arquivo", pendencias() == (pushSt == 200 ? 0 : 1));
     int g = gravacoesFila, l = leiturasFila;
     quadros(30);
@@ -505,7 +508,11 @@ int main(int argc, char **argv) {
     ateTerminar();
     confere("ack antigo nao aplica pull nem perde mudanca nova", pushes == 2 && !aplicacoesAddons && strstr(ultimoPush, "local-a") && strstr(addonLocal, "local-b"));
     sync_iniciar(); ateTerminar();
-    confere("mudanca nova ainda enviada depois do ack antigo", pushes == 3 && strstr(ultimoPush, "local-b") && !aplicacoesAddons);
+    // #360: com o ACK da edicao ATUAL, a lista mesclada (a daqui + o que so a
+    // conta tinha) e aplicada no mesmo ciclo — e a lista que a conta guarda
+    // agora. A edicao daqui continua na frente.
+    confere("mudanca nova ainda enviada depois do ack antigo", pushes == 3 && strstr(ultimoPush, "local-b") &&
+            strstr(ultimoPush, "server-old") && strstr(addonLocal, "local-b"));
     sync_iniciar(); ateTerminar();
     confere("sem push duplicado apos ack atual", pushes == 3 && aplicacoesAddons > 0);
     return falhas != 0;
@@ -618,3 +625,6 @@ int main(int argc, char **argv) {
   printf("%s\n", falhas ? "FALHOU" : "PASSOU");
   return falhas ? 1 : 0;
 }
+
+// sync.c 2.0 chama no logout; faltava aqui e o teste nao ligava (igual a contaoffline.c)
+void psparede_esquecer(void) {}
