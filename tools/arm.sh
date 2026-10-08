@@ -160,7 +160,16 @@ if [ -n "${NUVIO_DTS_ROOT:-}" ]; then DTS_ENV=(-e "NUVIO_DTS_ROOT=$NUVIO_DTS_ROO
     -DNV_VERSAO="\"$NV_VERSAO\"" \
     -I$SR/usr/include -I$SR/usr/include/SDL2 \
     -lSDL2 -lSDL2_image -lSDL2_ttf -lGLESv2 -lEGL $P2P_LIBS -ldl -lpthread -lz -lm $ASS_LIBS $DTS_LIBS \
-    -Wl,--export-dynamic-symbol=pthread_create
+    -Wl,--export-dynamic-symbol=pthread_create -Wl,--exclude-libs,ALL
+  # #317: --exclude-libs,ALL tira da tabela dinamica tudo o que vem de arquivo
+  # .a (FreeType/harfbuzz do libass, libstdc++ do P2P, FFmpeg). Sem ele o ld
+  # exportava 178 FT_* (+ TT_RunIns/TT_New_Context) do nosso FreeType 2.13,
+  # porque a libfreetype.so do sistema define os mesmos nomes. No webOS 4.0 o
+  # SDL_ttf da LG carrega a FreeType 2.6.5 do sistema por dlsym, e as chamadas
+  # internas dela (FT_Add_Default_Modules, FT_New_Library...) caiam nas NOSSAS:
+  # face com FT_Face_Internal de 2.6.5 (refcount=1 em +0x34) lida pelo nosso
+  # tt_glyph_load como incremental_interface -> SIGSEGV addr=0x1 na partida.
+  # O pthread_create acima vem de objeto nosso, nao de .a, e segue exportado.
   # src/dts/rt_shim.c: the LG audio sink (KADP_OSA_CreateThread) must bind to
   # our pthread_create, which retries its real-time thread with default
   # attributes instead of letting the firmware crash on EINVAL (LG C9 core).

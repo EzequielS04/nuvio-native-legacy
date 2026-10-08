@@ -664,6 +664,68 @@ static int esperaAddonsDaConta(void) {
   return sync_perfil_pronto() ? 0 : 2;   // ciclo terminado E aplicado para o perfil ativo
 }
 
+
+// #317: caminho de arranque defensivo (LG/Tizen/Linux; Android tem o seu).
+#if !defined(NV_ANDROID) && !defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+#define NV_ARRANQUE_REDE 1
+#else
+#define NV_ARRANQUE_REDE 0
+#endif
+#if NV_ARRANQUE_REDE
+// Configs EGL cada vez mais simples: sem profundidade/stencil/MSAA, depois RGB565.
+static void nv_attrs_simples(int nivel) {
+  SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
+  SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
+  SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
+  SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 0);
+  if (nivel == 0) {
+    SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8); SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
+    SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8); SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
+  } else {
+    SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 5); SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 6);
+    SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 5); SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 0);
+  }
+}
+static const char *const nv_nomes_simples[] = { "RGBA8888 sem depth/stencil/MSAA", "RGB565 sem alfa" };
+// Janela NULL -> tenta de novo com configs simples. Devolve a janela (ou NULL).
+static SDL_Window *nv_janela_simples(SDL_Window *w, const char *t, int pw, int ph, Uint32 fl) {
+  for (int i = 0; !w && i < 2; i++) {
+    printf("[arranque] janela: tentando %s\n", nv_nomes_simples[i]); fflush(stdout);
+    nv_attrs_simples(i);
+    w = SDL_CreateWindow(t, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, pw, ph, fl);
+    if (!w) { printf("[arranque] janela falhou: %s\n", SDL_GetError()); fflush(stdout); }
+  }
+  return w;
+}
+// Contexto falhou: recria janela+contexto com configs simples.
+static SDL_GLContext nv_contexto_simples(SDL_Window **w, const char *t, int pw, int ph, Uint32 fl) {
+  for (int i = 0; i < 2; i++) {
+    printf("[arranque] contexto: tentando %s\n", nv_nomes_simples[i]); fflush(stdout);
+    if (*w) { SDL_DestroyWindow(*w); *w = NULL; }
+    nv_attrs_simples(i);
+    *w = SDL_CreateWindow(t, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, pw, ph, fl);
+    SDL_GLContext c = *w ? SDL_GL_CreateContext(*w) : NULL;
+    if (c) { printf("[arranque] contexto GL ok com %s\n", nv_nomes_simples[i]); fflush(stdout); return c; }
+    printf("[arranque] tentativa falhou: %s\n", SDL_GetError()); fflush(stdout);
+  }
+  return NULL;
+}
+// EGL vendor/version via dlsym (sem ligar libEGL no binario: NEEDED nao muda).
+static void nv_log_egl(void) {
+  typedef void *(*cur_t)(void);
+  typedef const char *(*q_t)(void *, int);
+  void *h = dlopen("libEGL.so.1", RTLD_NOW);
+  if (!h) h = dlopen("libEGL.so", RTLD_NOW);
+  cur_t cur = h ? (cur_t)dlsym(h, "eglGetCurrentDisplay") : NULL;
+  q_t q = h ? (q_t)dlsym(h, "eglQueryString") : NULL;
+  void *d = cur ? cur() : NULL;
+  const char *ev = (d && q) ? q(d, 0x3053) : NULL, *ee = (d && q) ? q(d, 0x3054) : NULL;
+  printf("[arranque] EGL vendor=%s version=%s | GL vendor=%s renderer=%s version=%s\n",
+         ev ? ev : "?", ee ? ee : "?", (const char *)glGetString(GL_VENDOR),
+         (const char *)glGetString(GL_RENDERER), (const char *)glGetString(GL_VERSION));
+  fflush(stdout);
+}
+#endif
 int main(int argc, char **argv) {
   // NUMERO COM PONTO, SEMPRE. O host .NET do .tpk poe o processo no locale do
   // idioma da TV, e em alemao/portugues/russo o printf("%.2f") sai "0,50" e o
@@ -939,9 +1001,17 @@ int main(int argc, char **argv) {
   windowTitle = "Nuvio - Linux UI preview";
 #endif
   NV_ETAPA("SDL_CreateWindow");
+  arranque_etapa("SDL_CreateWindow");
   win = SDL_CreateWindow(windowTitle, SDL_WINDOWPOS_CENTERED,
                                      SDL_WINDOWPOS_CENTERED,
                                      pedeW, pedeH, flags);
+#if NV_ARRANQUE_REDE
+  // #317: sem janela nao seguimos as cegas. Registra o erro do SDL e tenta
+  // atributos GL cada vez mais simples (sem profundidade/stencil/MSAA, depois
+  // RGB565 sem alfa), como o Android faz abaixo.
+  if (!win) { printf("[arranque] SDL_CreateWindow falhou: %s\n", SDL_GetError()); fflush(stdout); }
+  win = nv_janela_simples(win, windowTitle, pedeW, pedeH, flags);
+#endif
 #ifdef NV_ANDROID
   // CONFIG EGL DE RESERVA (#266). No Android o SDL_CreateWindow ja escolhe a
   // config EGL e cria a superficie; um driver que recusa RGBA8888 (+ a
@@ -970,7 +1040,12 @@ int main(int argc, char **argv) {
     if (win && i) { printf("[android] janela com EGL de reserva: %s\n", reserva[i - 1].nome); fflush(stdout); }
   }
 #endif
-  if (!win) { printf("janela: %s\n", SDL_GetError()); return 1; }
+  if (!win) {
+    printf("janela: %s\n", SDL_GetError()); fflush(stdout);
+    arranque_etapa("FALHA: sem janela SDL");
+    SDL_Quit();
+    return 1;
+  }
   // CURSOR DO SISTEMA LIGADO NO webOS, DESLIGADO NO RESTO (issue #99).
   //
   // No webOS o SDL_ShowCursor(SDL_DISABLE) NAO SO ESCONDE a seta do Magic
@@ -1000,6 +1075,11 @@ int main(int argc, char **argv) {
     static char infoBuf[512];
     SDL_SysWMinfo *info = (SDL_SysWMinfo *)infoBuf;
     SDL_GetVersion(&info->version);
+    // O SDL do aparelho pode ser bem mais velho que o header (TV: 2.0.4,
+    // header 2.30). So confiamos no layout manual se o runtime e wayland e
+    // novo o bastante para ter o subsistema (>= 2.0.2).
+    printf("[arranque] SDL runtime %d.%d.%d\n", info->version.major, info->version.minor, info->version.patch);
+    arranque_etapa("SDL_GetWindowWMInfo");
     if (SDL_GetWindowWMInfo(win, info)) {
       // O SDL_config.h do SDK vem com SDL_VIDEO_DRIVER_WAYLAND desligado, entao
       // o campo info.wl nem existe no header — mas o SDL do aparelho E wayland.
@@ -1013,15 +1093,38 @@ int main(int argc, char **argv) {
       void (*marshal)(void *, unsigned, ...) =
           wl ? (void (*)(void *, unsigned, ...))dlsym(wl, "wl_proxy_marshal") : NULL;
       printf("syswm sub=%d display=%p surface=%p\n", sub, campos[0], sup);
+      int verOk = info->version.major > 2 || (info->version.major == 2 &&
+                  (info->version.minor > 0 || info->version.patch >= 2));
       // Opcode 4 de wl_surface e set_opaque_region; NULL = "nada e opaco".
       // Sem commit de proposito: o commit vem do proximo SwapWindow.
+      if (sub != (int)SDL_SYSWM_WAYLAND || !verOk) {
+        printf("[arranque] syswm nao e wayland confiavel (sub=%d, SDL %d.%d.%d): pulando set_opaque_region\n",
+               sub, info->version.major, info->version.minor, info->version.patch);
+      } else {
+        arranque_etapa("wayland set_opaque_region");
       if (marshal && sup) { marshal(sup, 4, NULL); printf("superficie nao-opaca\n"); }
       else printf("sem wayland: video nao vai aparecer\n");
+      }
     }
   }
 #endif
   NV_ETAPA("SDL_GL_CreateContext");
+  arranque_etapa("SDL_GL_CreateContext");
   SDL_GLContext ctx = SDL_GL_CreateContext(win);
+#if NV_ARRANQUE_REDE
+  if (!ctx) {
+    printf("[arranque] SDL_GL_CreateContext falhou: %s\n", SDL_GetError()); fflush(stdout);
+    ctx = nv_contexto_simples(&win, windowTitle, pedeW, pedeH, flags);
+    if (!ctx) {
+      printf("[arranque] sem contexto GL em nenhuma config: %s\n", SDL_GetError()); fflush(stdout);
+      arranque_etapa("FALHA: sem contexto GL");
+      if (win) SDL_DestroyWindow(win);
+      SDL_Quit();
+      return 2;
+    }
+  }
+  nv_log_egl();
+#endif
 #ifdef NV_LINUX_DESKTOP
   if (!ctx) {
     printf("[linux] sem contexto GLES2: %s\n", SDL_GetError());
@@ -1161,6 +1264,7 @@ int main(int argc, char **argv) {
 #endif
   rede_discord_ca(discordCa);
   rede_preparar();
+  arranque_enviar();   // #317: se a sessao anterior morreu no arranque, conta isso ao servidor (1x)
   // NIVEL DE GPU (gpunivel.h): le GL_*, marca a GPU fraca no perfil e decide
   // o nivel de partida ANTES de tex_iniciar, que tira o perfil do aparelho.
   gpun_iniciar(dw, dh);
@@ -1254,6 +1358,7 @@ int main(int argc, char **argv) {
   NV_ETAPA("app_iniciar");
   arranque_etapa("app_iniciar");
   if (!app_iniciar(dirArte)) return 1;
+  arranque_etapa("app_iniciar ok");
   NV_ETAPA("addons/catalogo");
   // Cor viva: a paleta da ultima cena volta ANTES do primeiro quadro, entao
   // quem usa o tema dinamico ja abre o app na cor do ultimo titulo.
@@ -1648,6 +1753,7 @@ int main(int argc, char **argv) {
 #endif
     gpun_quadro_inicio();
     glClearColor(NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
+    if (!nvPrimeiroQuadroFeito) arranque_etapa("primeiro glClear");
     fGlClr = NV_DT(t0);
     glClear(GL_COLOR_BUFFER_BIT);
     fGlClr = NV_DT(t0) - fGlClr;
@@ -1689,6 +1795,7 @@ int main(int argc, char **argv) {
     fAux = NV_DT(t0);
     gputempo_quadro_fim();
     t0 = NV_T0();
+    if (!nvPrimeiroQuadroFeito) arranque_etapa("primeiro SwapWindow");
     SDL_GL_SwapWindow(win);
 #ifdef NV_ANDROID
     android_quadro();   // todo quadro apresentado, de qualquer tela (vigia #266)

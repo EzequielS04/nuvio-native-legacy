@@ -1,3 +1,4 @@
+#include "arranque.h"
 #include "avisos.h"
 #include "queda.h"
 #include "saidaandroid.h"
@@ -656,7 +657,7 @@ static int nyxCampo(const char *txt, const char *chave, char *out, size_t cap) {
 // mandava nada, e a issue #265 (50NANO80ASA, travas e quedas na 2.0.0) nao
 // tinha como ser casada com log nenhum. Os dois arquivos sao do nyx; se a
 // jaula do app nao deixar ler, a linha diz isso em vez de sumir.
-static void tvWebos(void) {
+static int tvWebosLinha(char *linha, size_t cap, char *modeloOut, size_t capModelo) {
   static const char *const arqs[] = { "/var/run/nyx/device_info.json", "/var/run/nyx/os_info.json" };
   char buf[2][4096] = { "", "" }, modelo[64], placa[64], versao[48], build[64];
   for (int i = 0; i < 2; i++) {
@@ -665,13 +666,53 @@ static void tvWebos(void) {
     buf[i][fread(buf[i], 1, sizeof buf[i] - 1, f)] = 0;
     fclose(f);
   }
-  if (!buf[0][0] && !buf[1][0]) { printf("[tv] webos: /var/run/nyx ilegivel\n"); return; }
+  if (!buf[0][0] && !buf[1][0]) { snprintf(linha, cap, "[tv] webos: /var/run/nyx ilegivel"); if (modeloOut) snprintf(modeloOut, capModelo, "webos"); return 0; }
   if (!nyxCampo(buf[0], "product_id", modelo, sizeof modelo)) nyxCampo(buf[0], "device_name", modelo, sizeof modelo);
   nyxCampo(buf[0], "hardware_id", placa, sizeof placa);
   nyxCampo(buf[1], "webos_release", versao, sizeof versao);
   nyxCampo(buf[1], "webos_manufacturing_version", build, sizeof build);
-  printf("[tv] modelo=%s host=webos-%s placa=%s fw=%s app=%s\n", modelo[0] ? modelo : "?",
-         versao[0] ? versao : "?", placa[0] ? placa : "?", build[0] ? build : "?", NV_VERSAO);
+  snprintf(linha, cap, "[tv] modelo=%s host=webos-%s placa=%s fw=%s app=%s", modelo[0] ? modelo : "?",
+           versao[0] ? versao : "?", placa[0] ? placa : "?", build[0] ? build : "?", NV_VERSAO);
+  if (modeloOut) snprintf(modeloOut, capModelo, "%s", modelo[0] ? modelo : "webos");
+  return 1;
+}
+static void tvWebos(void) {
+  char linha[256];
+  tvWebosLinha(linha, sizeof linha, NULL, 0);
+  printf("%s\n", linha);
+}
+// Para o relato de arranque (arranque.c), que roda antes de avisos_iniciar.
+void avisos_tv_linha(char *linha, size_t cap, char *modelo, size_t capModelo) {
+  tvWebosLinha(linha, cap, modelo, capModelo);
+}
+// RELATO DE FALHA DE ARRANQUE (#317). Uma TV que cai antes de a home existir
+// nao vive o bastante para o envio automatico (e talvez nem tenha conta): na
+// abertura seguinte o arranque manda UMA vez o rastro e o relato de queda, por
+// /v1/registro/arranque (sem conta, com tetos no servidor; o mesmo que o vigia
+// do Android usa). SINCRONO e curto: `segundos` de teto, sem laco. Quem decide
+// SE manda (ajuste "Enviar registros sozinho") e arranque.c. Devolve 1 se o
+// servidor confirmou.
+int avisos_enviar_arranque(const char *relato, const char *tv, int segundos) {
+  char url[300], *esc, *corpo, *resp;
+  const char *cab[2] = { "Content-Type: application/json", NULL };
+  int status = 0, ok = 0;
+  size_t n;
+  if (!relato || !*relato || !NV_REC_URL[0]) return 0;
+  n = strlen(relato);
+  esc = malloc(n * 2 + 8);
+  corpo = malloc(n * 2 + 512);
+  if (!esc || !corpo) { free(esc); free(corpo); return 0; }
+  jsonEsc(esc, n * 2 + 8, relato);
+  snprintf(corpo, n * 2 + 512,
+           "{\"versao\":\"%s\",\"plataforma\":\"webos\",\"quando\":\"arranque queda\",\"tv\":\"%s\",\"texto\":\"%s\"}",
+           NV_VERSAO, tv ? tv : "webos", esc);
+  snprintf(url, sizeof url, "%s/v1/registro/arranque", NV_REC_URL);
+  resp = rede_postar_st(url, segundos, cab, corpo, &status);
+  ok = status >= 200 && status < 300;
+  printf("[arranque] relato de falha de arranque: HTTP %d\n", status);
+  fflush(stdout);
+  free(resp); free(corpo); free(esc);
+  return ok;
 }
 #endif
 
@@ -682,7 +723,11 @@ void avisos_iniciar(void) {
   // Antes de tudo: o relato da queda anterior entra no log desta sessao (e
   // o que o envio automatico leva) e o registrador volta a ficar armado.
   { char qd[700];
-    if (dados_caminho(qd, sizeof qd, "queda.txt")) { queda_relatar(qd); queda_armar(qd); } }
+    if (dados_caminho(qd, sizeof qd, "queda.txt")) { queda_relatar(qd); queda_armar(qd);
+#ifdef NV_WEBOS
+      arranque_espelhar_queda();   // o relato continua tambem em /tmp (#317)
+#endif
+    } }
 #endif
   vistosLer();
   m = dados_ler(AV_MARCA_ARQ);

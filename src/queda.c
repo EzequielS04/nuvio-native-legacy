@@ -7,6 +7,8 @@
 #if defined(__EMSCRIPTEN__) || defined(_WIN32)
 void queda_armar(const char *arquivo) { (void)arquivo; }
 int  queda_relatar(const char *arquivo) { (void)arquivo; return 0; }
+void queda_espelho(const char *arquivo) { (void)arquivo; }
+int  queda_relatar_em(const char *arquivo, FILE *saida) { (void)arquivo; (void)saida; return 0; }
 #else
 #include <signal.h>
 #include <unistd.h>
@@ -20,6 +22,7 @@ int  queda_relatar(const char *arquivo) { (void)arquivo; return 0; }
 #define QD_ALT_TAM   (64 * 1024)  // pilha alternativa: estouro de pilha tambem e SIGSEGV
 
 static char qdArq[512];
+static char qdEsp[512];   // segundo destino do mesmo relato (queda_espelho)
 static unsigned char qdAlt[QD_ALT_TAM];
 
 // TUDO NO TRATADOR E SO write(): nada de printf, malloc ou trava. O processo
@@ -34,18 +37,8 @@ static void qdHex(int fd, uintptr_t v) {
 }
 static void qdCampo(int fd, const char *nome, uintptr_t v) { qdTexto(fd, nome); qdHex(fd, v); }
 
-static void qdTratar(int sig, siginfo_t *si, void *ctx) {
-  uintptr_t pc = 0, lr = 0, sp = 0;
-  int fd = open(qdArq, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-#if defined(__linux__) && defined(__arm__)
-  { ucontext_t *u = ctx;
-    pc = u->uc_mcontext.arm_pc; lr = u->uc_mcontext.arm_lr; sp = u->uc_mcontext.arm_sp; }
-#elif defined(__linux__) && defined(__aarch64__)
-  { ucontext_t *u = ctx;
-    pc = u->uc_mcontext.pc; lr = u->uc_mcontext.regs[30]; sp = u->uc_mcontext.sp; }
-#else
-  (void)ctx;
-#endif
+static void qdGravar(const char *arq, int sig, siginfo_t *si, uintptr_t pc, uintptr_t lr, uintptr_t sp) {
+  int fd = open(arq, O_WRONLY | O_CREAT | O_TRUNC, 0644);
   if (fd >= 0) {
     qdCampo(fd, "sinal=", (uintptr_t)sig);
     qdCampo(fd, " codigo=", (uintptr_t)(si ? si->si_code : 0));
@@ -69,6 +62,21 @@ static void qdTratar(int sig, siginfo_t *si, void *ctx) {
       } }
     close(fd);
   }
+}
+
+static void qdTratar(int sig, siginfo_t *si, void *ctx) {
+  uintptr_t pc = 0, lr = 0, sp = 0;
+#if defined(__linux__) && defined(__arm__)
+  { ucontext_t *u = ctx;
+    pc = u->uc_mcontext.arm_pc; lr = u->uc_mcontext.arm_lr; sp = u->uc_mcontext.arm_sp; }
+#elif defined(__linux__) && defined(__aarch64__)
+  { ucontext_t *u = ctx;
+    pc = u->uc_mcontext.pc; lr = u->uc_mcontext.regs[30]; sp = u->uc_mcontext.sp; }
+#else
+  (void)ctx;
+#endif
+  qdGravar(qdArq, sig, si, pc, lr, sp);
+  if (qdEsp[0] && strcmp(qdEsp, qdArq)) qdGravar(qdEsp, sig, si, pc, lr, sp);
   qdTexto(1, "[queda] sinal fatal: relato gravado\n");
   // SA_RESETHAND ja devolveu a acao padrao: voltar repete a falha e o sistema
   // mata o processo como mataria sem nos (e gera o crash report dele).
@@ -90,6 +98,11 @@ void queda_armar(const char *arquivo) {
   for (size_t i = 0; i < sizeof sinais / sizeof *sinais; i++) sigaction(sinais[i], &sa, NULL);
 }
 
+void queda_espelho(const char *arquivo) {
+  if (!arquivo || strlen(arquivo) >= sizeof qdEsp) return;
+  snprintf(qdEsp, sizeof qdEsp, "%s", arquivo);
+}
+
 // --- leitura, na abertura seguinte --------------------------------------------
 typedef struct { uintptr_t ini, fim, desl; int exec; char nome[96]; } QdMapa;
 
@@ -107,7 +120,7 @@ static int qdOnde(const QdMapa *m, int n, uintptr_t e, int soExec, char *out, si
   return 0;
 }
 
-int queda_relatar(const char *arquivo) {
+int queda_relatar_em(const char *arquivo, FILE *out) {
   FILE *f = arquivo ? fopen(arquivo, "rb") : NULL;
   char *txt, *pilha, *mapas, *p;
   QdMapa *m; int nm = 0, capm = 512;
@@ -124,7 +137,7 @@ int queda_relatar(const char *arquivo) {
   fclose(f);
   remove(arquivo);
   if (sscanf(txt, "sinal=%lx codigo=%lx addr=%lx pc=%lx lr=%lx sp=%lx", &sinal, &codigo, &addr, &pc, &lr, &sp) < 3) {
-    printf("[queda] relato ilegivel (%ld bytes)\n", tam);
+    fprintf(out, "[queda] relato ilegivel (%ld bytes)\n", tam);
     free(txt); free(m); return 1;
   }
   pilha = strstr(txt, "\npilha=");
@@ -142,10 +155,10 @@ int queda_relatar(const char *arquivo) {
     if (!fimL) break;
     p = fimL + 1;
   }
-  printf("[queda] a sessao anterior morreu com sinal %lu (codigo %lu), endereco 0x%lx\n", sinal, codigo, addr);
-  if (qdOnde(m, nm, pc, 0, onde, sizeof onde)) printf("[queda] pc %s\n", onde);
-  else printf("[queda] pc 0x%lx (fora de qualquer modulo)\n", pc);
-  if (qdOnde(m, nm, lr, 0, onde, sizeof onde)) printf("[queda] lr %s\n", onde);
+  fprintf(out, "[queda] a sessao anterior morreu com sinal %lu (codigo %lu), endereco 0x%lx\n", sinal, codigo, addr);
+  if (qdOnde(m, nm, pc, 0, onde, sizeof onde)) fprintf(out, "[queda] pc %s\n", onde);
+  else fprintf(out, "[queda] pc 0x%lx (fora de qualquer modulo)\n", pc);
+  if (qdOnde(m, nm, lr, 0, onde, sizeof onde)) fprintf(out, "[queda] lr %s\n", onde);
   // Da pilha so interessa o que aponta para CODIGO: sao os candidatos a
   // endereco de retorno. Nao e um desenrolar exato (ha lixo de quadros velhos),
   // mas com os simbolos do pacote mostra o caminho ate a falha.
@@ -154,12 +167,13 @@ int queda_relatar(const char *arquivo) {
     for (p = pilha + 7; *p && *p != '\n' && achados < 24; ) {
       char *fimN; unsigned long v = strtoul(p, &fimN, 16);
       if (fimN == p) break;
-      if (qdOnde(m, nm, v, 1, onde, sizeof onde)) { printf("[queda] pilha %s\n", onde); achados++; }
+      if (qdOnde(m, nm, v, 1, onde, sizeof onde)) { fprintf(out, "[queda] pilha %s\n", onde); achados++; }
       p = fimN; while (*p == ' ') p++;
     }
   }
-  fflush(stdout);
+  fflush(out);
   free(txt); free(m);
   return 1;
 }
+int queda_relatar(const char *arquivo) { return queda_relatar_em(arquivo, stdout); }
 #endif

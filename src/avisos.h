@@ -165,4 +165,10 @@ void avisos_marcar_visto(const char *id);
 // marca o item como lido.
 void avisos_ilha_acao(const char *chave, int botao);
 
+#ifdef NV_WEBOS
+// Linha [tv] e modelo (para o relato de falha de arranque; arranque.c).
+void avisos_tv_linha(char *linha, size_t cap, char *modelo, size_t capModelo);
+// POST sincrono, `segundos` de teto, em /v1/registro/arranque. 1 = confirmado.
+int  avisos_enviar_arranque(const char *relato, const char *tv, int segundos);
+#endif
 #endif
