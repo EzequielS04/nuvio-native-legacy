@@ -6,6 +6,7 @@
 // Left at the edge must ask for the bar WITHOUT closing the page; Back still closes.
 #include "../src/perfil.c"
 #include "dados.h"
+#include "socialvis.h"
 #include <assert.h>
 
 static void tecla(SDL_Keycode k) {
@@ -26,8 +27,24 @@ static void abrir_com_dados(int nDias, int nDestaques) {
   perfil_definir_dados(&d);
 }
 
+// Friends come from socialvis (the same feed the Friends card reads).
+static void com_amigos(int n) {
+  SvEvento v[3];
+  memset(v, 0, sizeof v);
+  for (int i = 0; i < n; i++) {
+    snprintf(v[i].pessoaId, sizeof v[i].pessoaId, "nuvio:a%d", i);
+    snprintf(v[i].pessoaNome, sizeof v[i].pessoaNome, "Amigo%d", i);
+    v[i].acao = SV_FIM; v[i].reacao = SV_REAC_NADA; v[i].pct = -1; v[i].restanteMin = -1;
+    snprintf(v[i].imdb, sizeof v[i].imdb, "tt%d", i);
+    snprintf(v[i].titulo, sizeof v[i].titulo, "Titulo%d", i);
+    v[i].quando = (long long)time(NULL) - 3600;
+  }
+  socialvis_definir_feed(v, n);
+}
+
 int main(void) {
   dados_iniciar("deploy/app/art");
+  ajustes_dir(dados_dir());
 
   abrir_com_dados(30, 3);                 // calendar column, first day
   tecla(SDLK_LEFT);
@@ -36,6 +53,22 @@ int main(void) {
 
   abrir_com_dados(0, 3);                  // no calendar: the cards column is the edge
   assert(secao == 1);
+  tecla(SDLK_LEFT);
+  assert(perfil_quer_sair());
+  assert(perfil_aberto());
+
+  com_amigos(2);                          // friends-only: no days, no cards, 2 friends
+  abrir_com_dados(0, 0);
+  assert(secao == 2 && rostosCabem() == 2);
+  tecla(SDLK_RIGHT);                      // second face
+  tecla(SDLK_LEFT);                       // back to the first face: still inside
+  assert(!perfil_quer_sair() && amigo == 0);
+  tecla(SDLK_LEFT);                       // first face, nothing to the left: the edge
+  assert(perfil_quer_sair());
+  assert(perfil_aberto());
+
+  com_amigos(0);                          // nothing at all: 0 days, 0 cards, 0 friends
+  abrir_com_dados(0, 0);
   tecla(SDLK_LEFT);
   assert(perfil_quer_sair());
   assert(perfil_aberto());
