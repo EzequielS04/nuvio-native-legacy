@@ -1782,6 +1782,7 @@
   T("Experimentar a cor viva", "Coba warna yang serasi"),
   T("Experimentar o vidro", "Coba kaca"),
   T("Experimente", "Saran"),
+  T("Expira em %d:%02d", "Kedaluwarsa dalam %d:%02d"),
   T("Explorar", "Jelajahi"),
   T("Explorar Ajustes", "Jelajahi Pengaturan"),
   T("Explorar a partir daqui", "Jelajahi dari sini"),

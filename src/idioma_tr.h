@@ -1782,6 +1782,7 @@
   T("Experimentar a cor viva", "Uyumlu rengi dene"),
   T("Experimentar o vidro", "Glass'ı dene"),
   T("Experimente", "Öneriler"),
+  T("Expira em %d:%02d", "Kalan süre %d:%02d"),
   T("Explorar", "Keşfet"),
   T("Explorar Ajustes", "Ayarlar'ı keşfet"),
   T("Explorar a partir daqui", "Buradan keşfet"),

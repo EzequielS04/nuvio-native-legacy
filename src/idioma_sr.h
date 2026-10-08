@@ -1782,6 +1782,7 @@
   T("Experimentar a cor viva", "Isprobajte usklađenu boju"),
   T("Experimentar o vidro", "Isprobaj staklo"),
   T("Experimente", "Predlozi"),
+  T("Expira em %d:%02d", "Ističe za %d:%02d"),
   T("Explorar", "Istraži"),
   T("Explorar Ajustes", "Podešavanja istraživanja"),
   T("Explorar a partir daqui", "Istraži odavde"),

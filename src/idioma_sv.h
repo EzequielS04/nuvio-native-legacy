@@ -1782,6 +1782,7 @@
   T("Experimentar a cor viva", "Testa dynamisk färg"),
   T("Experimentar o vidro", "Testa glaset"),
   T("Experimente", "Förslag"),
+  T("Expira em %d:%02d", "Går ut om %d:%02d"),
   T("Explorar", "Utforska"),
   T("Explorar Ajustes", "Utforska Inställningar"),
   T("Explorar a partir daqui", "Utforska härifrån"),

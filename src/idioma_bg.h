@@ -1782,6 +1782,7 @@
   T("Experimentar a cor viva", "Опитайте съвпадащ цвят"),
   T("Experimentar o vidro", "Пробвай стъклото"),
   T("Experimente", "Предложения"),
+  T("Expira em %d:%02d", "Изтича след %d:%02d"),
   T("Explorar", "Разгледай"),
   T("Explorar Ajustes", "Настройки за разглеждане"),
   T("Explorar a partir daqui", "Разгледай оттук"),

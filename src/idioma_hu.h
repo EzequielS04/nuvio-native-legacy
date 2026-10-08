@@ -1782,6 +1782,7 @@
   T("Experimentar a cor viva", "Illeszkedő szín kipróbálása"),
   T("Experimentar o vidro", "Az üveg kipróbálása"),
   T("Experimente", "Javaslatok"),
+  T("Expira em %d:%02d", "Lejár: %d:%02d"),
   T("Explorar", "Felfedezés"),
   T("Explorar Ajustes", "Beállítások felfedezése"),
   T("Explorar a partir daqui", "Felfedezés innen"),

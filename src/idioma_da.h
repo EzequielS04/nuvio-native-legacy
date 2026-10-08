@@ -1782,6 +1782,7 @@
   T("Experimentar a cor viva", "Prøv dynamisk farve"),
   T("Experimentar o vidro", "Prøv glasset"),
   T("Experimente", "Forslag"),
+  T("Expira em %d:%02d", "Udløber om %d:%02d"),
   T("Explorar", "Udforsk"),
   T("Explorar Ajustes", "Udforsk Indstillinger"),
   T("Explorar a partir daqui", "Udforsk herfra"),

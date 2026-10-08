@@ -1782,6 +1782,7 @@
   T("Experimentar a cor viva", "連動カラーを試す"),
   T("Experimentar o vidro", "ガラス調を試す"),
   T("Experimente", "おすすめの検索"),
+  T("Expira em %d:%02d", "あと %d:%02d で期限切れ"),
   T("Explorar", "探索"),
   T("Explorar Ajustes", "設定を探索"),
   T("Explorar a partir daqui", "ここから探索"),

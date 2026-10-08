@@ -1782,6 +1782,7 @@
   T("Experimentar a cor viva", "Δοκίμασε το ταιριαστό χρώμα"),
   T("Experimentar o vidro", "Δοκιμάστε το γυαλί"),
   T("Experimente", "Προτάσεις"),
+  T("Expira em %d:%02d", "Λήγει σε %d:%02d"),
   T("Explorar", "Εξερεύνηση"),
   T("Explorar Ajustes", "Εξερεύνηση των Ρυθμίσεων"),
   T("Explorar a partir daqui", "Εξερεύνηση από εδώ"),

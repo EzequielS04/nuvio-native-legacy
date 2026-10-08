@@ -1782,6 +1782,7 @@
   T("Experimentar a cor viva", "Probeer bijpassende kleur"),
   T("Experimentar o vidro", "Glass proberen"),
   T("Experimente", "Suggesties"),
+  T("Expira em %d:%02d", "Verloopt over %d:%02d"),
   T("Explorar", "Ontdekken"),
   T("Explorar Ajustes", "Instellingen verkennen"),
   T("Explorar a partir daqui", "Vanaf hier verkennen"),

@@ -1781,6 +1781,7 @@
   { "Experimentar a cor viva", "Try matching color" },
   { "Experimentar o vidro", "Try the glass UI" },
   { "Experimente", "Suggestions" },
+  { "Expira em %d:%02d", "Expires in %d:%02d" },
   { "Explorar", "Explore" },
   { "Explorar Ajustes", "Explore Settings" },
   { "Explorar a partir daqui", "Explore from here" },

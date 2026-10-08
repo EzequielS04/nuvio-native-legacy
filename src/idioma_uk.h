@@ -1781,6 +1781,7 @@
   T("Experimentar a cor viva", "Спробувати живий колір"),
   T("Experimentar o vidro", "Спробувати скло"),
   T("Experimente", "Пропозиції"),
+  T("Expira em %d:%02d", "Спливає через %d:%02d"),
   T("Explorar", "Огляд"),
   T("Explorar Ajustes", "Дослідити налаштування"),
   T("Explorar a partir daqui", "Досліджувати звідси"),

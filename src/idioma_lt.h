@@ -1782,6 +1782,7 @@
   T("Experimentar a cor viva", "Išbandykite suderintą spalvą"),
   T("Experimentar o vidro", "Išbandyti stiklą"),
   T("Experimente", "Pasiūlymai"),
+  T("Expira em %d:%02d", "Baigsis po %d:%02d"),
   T("Explorar", "Naršyti"),
   T("Explorar Ajustes", "Naršymo nustatymai"),
   T("Explorar a partir daqui", "Tyrinėti nuo čia"),

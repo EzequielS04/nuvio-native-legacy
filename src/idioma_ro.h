@@ -1781,6 +1781,7 @@
   T("Experimentar a cor viva", "Încearcă culoarea vie"),
   T("Experimentar o vidro", "Încearcă sticla"),
   T("Experimente", "Sugestii"),
+  T("Expira em %d:%02d", "Expiră în %d:%02d"),
   T("Explorar", "Explorează"),
   T("Explorar Ajustes", "Explorează Setările"),
   T("Explorar a partir daqui", "Explorează de aici"),

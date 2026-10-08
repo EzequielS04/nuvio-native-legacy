@@ -1782,6 +1782,7 @@
   T("Experimentar a cor viva", "Prova il colore abbinato"),
   T("Experimentar o vidro", "Prova Glass"),
   T("Experimente", "Suggerimenti"),
+  T("Expira em %d:%02d", "Scade tra %d:%02d"),
   T("Explorar", "Esplora"),
   T("Explorar Ajustes", "Esplora le Impostazioni"),
   T("Explorar a partir daqui", "Esplora da qui"),

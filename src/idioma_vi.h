@@ -1782,6 +1782,7 @@
   T("Experimentar a cor viva", "Thử màu phù hợp"),
   T("Experimentar o vidro", "Thử giao diện kính"),
   T("Experimente", "Gợi ý"),
+  T("Expira em %d:%02d", "Hết hạn sau %d:%02d"),
   T("Explorar", "Khám phá"),
   T("Explorar Ajustes", "Khám phá Cài đặt"),
   T("Explorar a partir daqui", "Khám phá từ đây"),

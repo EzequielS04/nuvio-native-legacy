@@ -1782,6 +1782,7 @@
   T("Experimentar a cor viva", "試試跟隨作品配色"),
   T("Experimentar o vidro", "試試玻璃質感"),
   T("Experimente", "建議"),
+  T("Expira em %d:%02d", "%d:%02d 後過期"),
   T("Explorar", "探索"),
   T("Explorar Ajustes", "探索設定"),
   T("Explorar a partir daqui", "從這裡探索"),

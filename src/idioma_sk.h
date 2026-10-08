@@ -1782,6 +1782,7 @@
   T("Experimentar a cor viva", "Skúsiť zodpovedajúcu farbu"),
   T("Experimentar o vidro", "Vyskúšať sklo"),
   T("Experimente", "Návrhy"),
+  T("Expira em %d:%02d", "Vyprší o %d:%02d"),
   T("Explorar", "Objavovať"),
   T("Explorar Ajustes", "Preskúmať Nastavenia"),
   T("Explorar a partir daqui", "Preskúmať odtiaľto"),
