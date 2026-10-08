@@ -37,6 +37,9 @@ void capmkv_aplicar(const MkvCap *caps, int n);
 int capmkv_trechos(const MkvCap *caps, int n, IntroTrecho *out, int max);
 // Folga antes da leitura lateral (ms): o video abre primeiro. Ajustavel so por teste.
 extern int capmkv_espera_inicial_ms;
+// So para teste (NULL em producao): chamado pelo fio lateral depois de ler os
+// capitulos e antes de publica-los, para o teste trocar de video nessa janela.
+extern void (*capmkv_teste_antes_de_publicar)(void);
 // Para teste: roda a leitura de `url` no fio atual (bloqueia). Devolve capitulos.
 int capmkv_ler_agora(const char *url, MkvCap *caps, int max, int esperaMs);
 #endif
