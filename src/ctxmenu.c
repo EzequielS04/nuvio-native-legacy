@@ -3,6 +3,7 @@
 #include "logotitulo.h"
 #include "descoberta.h"
 #include "syncprog.h"
+#include "tirarremoto.h"
 #include "visto.h"
 #include "trakt.h"
 #include "cwordem.h"
@@ -295,14 +296,10 @@ static float prevT = 1.0f;
 // Os DELETE remotos de "Tirar de Continuar assistindo", fora do fio de
 // desenho. Nenhum dos dois e obrigatorio: sem Trakt nao ha id de playback, sem
 // conta nao ha RPC. Os dois dizem no log o que fizeram.
-typedef struct { char imdb[64]; char chave[192]; } TirarRemoto;
+typedef struct { char imdb[64]; char chave[192]; int ocultar; } TirarRemoto;
 static void *fioTirarRemoto(void *u) {
   TirarRemoto *tr = (TirarRemoto *)u;
-  trakt_playback_remover(tr->imdb);
-  // O "a seguir" vem do progresso da serie, nao do playback: esconde la tambem
-  // (#203), senao outro aparelho o traz de volta. Sem Trakt/IMDb nao faz nada.
-  trakt_progresso_ocultar(tr->imdb, 1);
-  syncprog_remover(tr->chave);
+  tirarremoto_executar(tr->imdb, tr->chave, tr->ocultar);
   free(tr);
   return NULL;
 }
@@ -765,6 +762,7 @@ static void espelharAssistido(int atual, const CatItem *ci, int intencao) {
         pthread_t t;
         snprintf(tr->imdb, sizeof tr->imdb, "%s", ci->imdb);
         snprintf(tr->chave, sizeof tr->chave, "%s", chave);
+        tr->ocultar = 0;   // marcar como visto NAO esconde a serie no Trakt
         if (pthread_create(&t, NULL, fioTirarRemoto, tr) == 0) pthread_detach(t);
         else fioTirarRemoto(tr);
       } }
@@ -1020,6 +1018,7 @@ static void aplicar(void) {
       if (tr) {
         snprintf(tr->imdb, sizeof tr->imdb, "%s", imdb);
         prog_chave(tr->chave, sizeof tr->chave, imdb, temp, ep);
+        tr->ocultar = 1;   // so o "Tirar de Continuar assistindo" explicito esconde
         if (pthread_create(&t, NULL, fioTirarRemoto, tr) == 0) pthread_detach(t);
         else fioTirarRemoto(tr);   // sem fio: faz aqui, como antes
       }

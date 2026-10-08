@@ -105,6 +105,9 @@ int  perfis_puxar(void) { return 1; }
 static char conta[32];
 static int pushModo = 200, pushes;
 static char ultimoPush[4096];
+// Cenario "cheio": a conta tem ate 80 addons numerados (https://nNN.exemplo/...),
+// fora do mapa de letras. contaN[] guarda os numeros; pushN[] o que o ultimo push levou.
+static int cheio, contaN[80], nContaN, pushN[80], nPushN;
 
 static void url(char *dst, size_t t, char l) {
   snprintf(dst, t, "https://%c.exemplo/manifest.json", l | 0x20);
@@ -127,6 +130,16 @@ char *sessao_tabela(const char *t, const char *q, int *st) {
   (void)q;
   *st = 200;
   if (strcmp(t, "addons")) return strdup("[]");
+  if (cheio) {
+    static char g[80 * 90];
+    size_t kk = 0;
+    kk += (size_t)snprintf(g, sizeof g, "[");
+    for (i = 0; i < nContaN; i++)
+      kk += (size_t)snprintf(g + kk, sizeof g - kk,
+        "%s{\"url\":\"https://n%d.exemplo/manifest.json\",\"name\":\"n%d\",\"enabled\":true}", i ? "," : "", contaN[i], contaN[i]);
+    snprintf(g + kk, sizeof g - kk, "]");
+    return strdup(g);
+  }
   k += (size_t)snprintf(b + k, sizeof b - k, "[");
   for (i = 0; conta[i]; i++) {
     url(u, sizeof u, conta[i]);
@@ -144,6 +157,13 @@ char *sessao_rpc(const char *funcao, const char *corpo, int *st) {
     char nova[32];
     int n = 0;
     pushes++;
+    if (cheio) {
+      nPushN = 0;
+      for (p = strstr(corpo, "https://n"); p && nPushN < 80; p = strstr(p + 1, "https://n")) pushN[nPushN++] = atoi(p + 9);
+      nContaN = nPushN;                        // push SUBSTITUI a lista
+      memcpy(contaN, pushN, sizeof contaN);
+      return strdup("null");
+    }
     snprintf(ultimoPush, sizeof ultimoPush, "%s", corpo);
     *st = pushModo;
     if (pushModo == 0) return NULL;
@@ -173,12 +193,12 @@ void nuvem_url_escapar(const char *v, char *d, unsigned t) { snprintf(d, t, "%s"
 // A lista de addons da TV (addons.c): o sync aplica com addons_definir_lista e
 // le com addons_exportar.
 
-static AddonRemoto tv[32];
+static AddonRemoto tv[80];
 static int nTv, aplicacoes;
 int addons_definir_lista(const AddonRemoto *l, int n) {
   int i;
-  for (i = 0; i < n && i < 32; i++) tv[i] = l[i];
-  nTv = n < 32 ? n : 32;
+  for (i = 0; i < n && i < 80; i++) tv[i] = l[i];
+  nTv = n < 80 ? n : 80;
   aplicacoes++;
   return 1;
 }
@@ -351,6 +371,29 @@ int main(int argc, char **argv) {
     tvLetras(l, sizeof l);
     printf("  lista da TV depois do ciclo: %s\n", l);
     confere("a TV mostra a lista da conta ja neste ciclo", !strcmp(l, conta));
+  } else if (!strcmp(cen, "cheio")) {
+    // Base = 63 em comum; a TV acrescenta 1000, o celular 2000 (a conta vai a 64
+    // = SY_ADD_MAX). A uniao tem 65: o push (substituicao) nao pode perder 2000.
+    int i, perdido = 0;
+    cheio = 1;
+    for (i = 0; i < 63; i++) contaN[i] = i;
+    nContaN = 63;
+    sync_iniciar(); ateTerminar();
+    confere("a TV aplicou os 63 da conta", nTv == 63);
+    memset(&tv[nTv], 0, sizeof tv[nTv]);
+    snprintf(tv[nTv].url, sizeof tv[nTv].url, "https://n1000.exemplo/manifest.json");
+    snprintf(tv[nTv].nome, sizeof tv[nTv].nome, "n1000");
+    tv[nTv++].ativo = 1;
+    sync_sujar_addons();
+    contaN[nContaN++] = 2000;               // o celular instala o 64o
+    proximoCiclo();
+    for (i = 0; i < nContaN; i++) if (contaN[i] == 2000) break;
+    perdido = i == nContaN;
+    printf("  pushes=%d, conta com %d addons\n", pushes, nContaN);
+    confere("o addon do celular (2000) continua na conta", !perdido);
+    confere("conta nao encolheu nem trocou (64)", nContaN == 64);
+    confere("nao houve push de substituicao truncado", pushes == 0);
+    confere("a edicao da TV continua pendente (nada foi descartado)", existe(PEND));
   } else if (!strcmp(cen, "recusa1")) {
     snprintf(conta, sizeof conta, "AB"); contaGravar();
     sync_iniciar(); ateTerminar();
