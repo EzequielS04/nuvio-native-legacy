@@ -156,6 +156,9 @@ static int epsExibidos, epsVistos;
 // player ou Agenda mexe no mapa na hora, e sem isto a linha "% assistido"
 // ficava congelada ate reabrir a pagina.
 static int epsBase;
+// Revisao do mapa vistoep na leitura do Trakt: se mudou, o que o Trakt disse do
+// "proximo episodio" e da matriz `vistos` ficou velho e o mapa manda.
+static unsigned epsRev;
 static int  nRel;
 static struct { int numero; int nEps; struct { int ep, nota; } eps[EX_EP_MAX]; }
             temps[EX_TEMP_MAX];
@@ -575,6 +578,7 @@ static void *buscar(void *arg) {
         proximoT = pt; proximoE = pe; progressoPronto = 1;
         epsExibidos = exib; epsVistos = vist;
         epsBase = vistoep_contar(id);
+        epsRev = vistoep_revisao();
       }
       pthread_mutex_unlock(&trava);
     }
@@ -1900,12 +1904,17 @@ const char *extras_relacionado_poster(int i) {
 }
 
 int extras_ep_visto(int temporada, int episodio) {
-  if (temporada < 0 || temporada >= EX_VIS_T) return 0;
-  if (episodio < 0 || episodio >= EX_VIS_E) return 0;
+  char id[sizeof idPedido];
+  int visto, m;
   pthread_mutex_lock(&trava);
-  int visto = vistos[temporada][episodio];
+  snprintf(id, sizeof id, "%s", idPedido);
+  visto = (temporada >= 0 && temporada < EX_VIS_T && episodio >= 0 && episodio < EX_VIS_E)
+              ? vistos[temporada][episodio] : 0;
   pthread_mutex_unlock(&trava);
-  return visto;
+  // O MAPA LOCAL MANDA: marcar/desmarcar muda o vistoep na hora, a matriz so
+  // muda no proximo fetch. -1 = o mapa nao sabe, vale a matriz.
+  m = id[0] ? vistoep_estado(id, temporada, episodio) : -1;
+  return m >= 0 ? m : visto;
 }
 
 int extras_progresso_pronto(void) {
@@ -1936,8 +1945,17 @@ int extras_progresso_serie(int *vistosEp, int *exibidos) {
 int extras_proximo_episodio(int *t, int *e) {
   pthread_mutex_lock(&trava);
   int ok = progressoPronto && proximoT > 0 && proximoE > 0;
+  unsigned rev = epsRev;
+  char id[sizeof idPedido];
+  snprintf(id, sizeof id, "%s", idPedido);
   if (ok) { *t = proximoT; *e = proximoE; }
   pthread_mutex_unlock(&trava);
+  // Mapa mexido depois do fetch: o proximo e o primeiro nao visto DO MAPA.
+  if (ok && id[0] && rev != vistoep_revisao() && vistoep_conhecido(id)) {
+    int pt, pe;
+    if (!vistoep_primeiro_nao_visto(id, &pt, &pe)) return 0;
+    *t = pt; *e = pe;
+  }
   return ok;
 }
 
@@ -2161,4 +2179,16 @@ void extras_resumo_definir(const char *imdb, const ExResumo *r) {
   pthread_mutex_lock(&exrTrava);
   { ExrVaga *v = exrVaga(id, 1); v->r = *r; }
   pthread_mutex_unlock(&exrTrava);
+}
+
+// Costura de teste: o estado que o fetch de /progress/watched deixa. Sem rede.
+void extras_teste_progresso(const char *id, int nVistos, int exibidos, int pt, int pe) {
+  pthread_mutex_lock(&trava);
+  snprintf(idPedido, sizeof idPedido, "%s", id);
+  proximoT = pt; proximoE = pe; progressoPronto = 1;
+  epsExibidos = exibidos; epsVistos = nVistos;
+  epsBase = vistoep_contar(id); epsRev = vistoep_revisao();
+  memset(vistos, 0, sizeof vistos);
+  { int t, e; for (t = 1; t <= 3; t++) for (e = 1; e < 8 && t < 3; e++) vistos[t][e] = 1; }
+  pthread_mutex_unlock(&trava);
 }

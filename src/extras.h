@@ -163,6 +163,7 @@ int  extras_ep_visto(int temporada, int episodio);
 // 1 apenas depois de receber o historico desta obra. Sem resposta nao inferir
 // que todos os episodios estao por assistir.
 int extras_progresso_pronto(void);
+void extras_teste_progresso(const char *id, int vistos, int exibidos, int pt, int pe);
 int extras_proximo_episodio(int *temporada, int *episodio);
 // QUANTO DA SERIE JA FOI VISTO. Os dois contadores vem do TOPO da mesma
 // resposta de /progress/watched que ja e baixada — zero pedido a mais. Devolve

@@ -67,6 +67,8 @@ int  vistoep_marcar_lote(const char *imdb, const VistoPar *pares, int n, int vis
 // Vistos da serie = o que o Trakt disse (baseTrakt) mais o que o mapa mudou
 // desde entao (contarAgora - contarBase), preso a [0, exibidos].
 int  vistoep_ajustar_vistos(int baseTrakt, int contarBase, int contarAgora, int exibidos);
+// Primeiro episodio NAO visto (temporada >= 1, ordem temporada/numero). 0 = nenhum.
+int  vistoep_primeiro_nao_visto(const char *imdb, int *temporada, int *episodio);
 int  vistoep_aplicar(const char *imdb, const VistoPar *lote, int n, int visto,
                      VistoPar *envio, int *ja);
 
