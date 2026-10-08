@@ -1286,8 +1286,24 @@ static void txt_peso(TxtLinha l, float x, float y, float a, float grossura) {
   if (grossura > 0.9f)  txt_desenhar_alpha(l, x + grossura, y, a);
 }
 
+// AUDITORIA (tools/auditoria-release.sh): uma linha quando o numero de
+// episodios da pagina aberta muda. E o que o smoke do Mac le para dizer se a
+// serie abriu com a lista; a captura de tela nao diz isso sozinha.
+static int audIdx = -1, audN = -2;
+static void auditoriaEpisodios(void) {
+  const CatItem *ci;
+  int n;
+  if (!aberto || saindo || !ehSerie() || !(ci = cat_item(idx))) return;
+  n = cat_n_episodios(idx);
+  if (idx == audIdx && n == audN) return;
+  audIdx = idx; audN = n;
+  printf("[detail] episodios na pagina: %s %d\n", ci->imdb, n);
+  fflush(stdout);
+}
+
 static void abrirInterno(const HomeItem *it) {
   pediuMenu = 0;
+  audIdx = -1;
   marco("detail_abrir");
   // O TITULO ANTERIOR PODE TER DEIXADO FIO NO AR. Trocar de titulo por dentro
   // (um credito de ator, um "Mais como este") reabre esta tela sem passar pelo
@@ -3164,6 +3180,7 @@ void detail_atualizar(float dt, Uint32 agora) {
   // Solta o pedido de episodios que ficou guardado por ter chegado com outro
   // carregamento em voo.
   desc_episodios_pendente();
+  auditoriaEpisodios();
 
   // TROCA DE TEMPORADA PELO MOVIMENTO DO FOCO, nao pelo OK.
   //

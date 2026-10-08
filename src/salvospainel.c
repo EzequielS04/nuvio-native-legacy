@@ -1757,6 +1757,9 @@ void spainel_abrir(void) {
   // que le como "alguem acabou de mexer aqui".
   animSw = -1.0f;
   reconstruir();
+  // AUDITORIA (tools/auditoria-release.sh): o smoke do Mac le esta linha.
+  printf("[spainel] aberto: %d salvos (lista local %d)\n", nLinhas, salvos_n());
+  fflush(stdout);
   reconstruirSocial();
   reconstruirAgenda();
   // A PRIMEIRA ABA DA FAIXA DO PERFIL, nao sempre Salvos.
