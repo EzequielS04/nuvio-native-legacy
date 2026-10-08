@@ -28,6 +28,7 @@ void video_buscar(double pos) { buscas++; posicao = pos; }
 int video_pausa_confirmada(void) { return pausaAck && ativo && pronto && !tocando; }
 int video_tocando(void) { return tocando; }
 int video_pronto(void) { return pronto; }
+int video_superficie_estavel(void) { return 1; }
 int video_ativo(void) { return ativo; }
 int video_falhou(void) { return 0; }
 int video_conflito_recurso(void) { return 0; }
@@ -91,6 +92,11 @@ int main(void) {
   puts("ok preparacao recusada recua a um seek normal");
 
   n = buscas;
+  // O fio de "Continuar assistindo" (catalogo.c) refaz a fileira sozinho depois
+  // de cada gravacao de progresso e troca o item do indice 0 pelo do registro
+  // salvo (fixture-filme, 34%): se a troca cair entre abrir() e fonteAbrir() a
+  // fixture sem registro herda a posicao dele. Deixa o fio assentar antes.
+  SDL_Delay(300);
   abrir("fixture-percentual", "movie", 34, 0, 0); fonteAbrir();
   assert(inicio == 0); pronto = 1; quadro(); quadro();
   assert(buscas == n + 1 && fabs(posicao - 612) < .01); player_encerrar();
