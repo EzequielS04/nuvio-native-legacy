@@ -48,7 +48,7 @@ static void *fioVazio(void *u) { (void)u; return NULL; }
 static int testeCriar(pthread_t *t, const pthread_attr_t *a, void *(*f)(void *), void *arg) {
   if (f == montar) {
     int k = atomic_fetch_add(&montaresCriados, 1);
-    if (k < 16) montarEm[k] = agoraMs();
+    if (k < 16) __atomic_store_n(&montarEm[k], agoraMs(), __ATOMIC_SEQ_CST);
     return pthread_create(t, a, fioVazio, NULL);
   }
   return pthread_create(t, a, f, arg);
@@ -100,7 +100,7 @@ int main(void) {
   n = atomic_load(&montaresCriados);
   CONFERE(n == 3, "tres voltas: a 1, a da pessoa e UMA agendada (foram %d)", n);
   if (n >= 3) {
-    folga = (long)(montarEm[2] - montarEm[1]);
+    folga = (long)(__atomic_load_n(&montarEm[2], __ATOMIC_SEQ_CST) - __atomic_load_n(&montarEm[1], __ATOMIC_SEQ_CST));
     CONFERE(folga >= (long)NV_DESC_MIN_MS - 50,
             "a agendada respeita o minimo depois da volta da pessoa (%ld ms, minimo %llu)",
             folga, NV_DESC_MIN_MS);

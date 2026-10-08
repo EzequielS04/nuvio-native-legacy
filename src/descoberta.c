@@ -1015,7 +1015,9 @@ static void descIniciarAdiado(void);
 // Sem isso a volta do perfil que saiu (recente, nao condenada) publicava as
 // fileiras dele na Home do perfil novo (#294) e o pedido esperava ate 10 s.
 static volatile int descPedidoPessoa;
-static volatile unsigned descVoltas, descVoltasAoAgendar;   // volta comecou depois do agendamento?
+// Sob listaTrava (junto com buscando e descDeb): o fio adiado leva a marca de
+// quando foi agendado e confere contra esta para saber se ja foi atendido.
+static volatile unsigned descVoltas;
 // GERACAO DO PEDIDO DE REMONTAGEM, e a razao dela existir esta medida.
 //
 // `repetirAoFim` sozinho nao distingue duas coisas muito diferentes: um pedido
@@ -1045,6 +1047,10 @@ static unsigned geracaoLida;
 // completa.
 static pthread_mutex_t listaTrava = PTHREAD_MUTEX_INITIALIZER;
 static int listaLidaNaVolta;
+// Fim de volta: `buscando` cai sob a mesma trava em que desc_iniciar o testa e marca.
+static void buscandoSoltar(void) {
+  pthread_mutex_lock(&listaTrava); buscando = 0; pthread_mutex_unlock(&listaTrava);
+}
 // O QUE ESTA NA TELA E PARCIAL: publicado em partes por uma volta que nao
 // chegou ao fim (condenada no meio, ou ainda no ar). A volta seguinte continua
 // publicando em partes por cima disso em vez de montar em silencio: sem isto,
@@ -1056,7 +1062,7 @@ static int catalogosFora;
 // Quantos catalogos NAO DESLIGADOS o teto impediu de pedir na ultima montagem,
 // sem o clamp de catalogosFora. Ver o uso em desc_remontar_fileiras.
 static int catalogosNaoPedidos;
-static pthread_t fio, fioEp;
+static pthread_t fioEp;
 static int epItem = -1, epTemp, fioEpVivo;
 
 int desc_buscando(void) {
@@ -3772,7 +3778,7 @@ static void *montar(void *u) {
   pthread_mutex_lock(&cargaTrava);
   memset(&carga, 0, sizeof carga); cargaDesde = SDL_GetTicks();
   pthread_mutex_unlock(&cargaTrava);
-  if (!lote) { buscando = 0; return NULL; }
+  if (!lote) { buscandoSoltar(); return NULL; }
 
   // O "continue assistindo" vem PRIMEIRO e do Trakt. A home usa as primeiras
   // posicoes do catalogo nessa fileira, entao a ordem aqui e o que define o
@@ -4636,7 +4642,7 @@ static void *montar(void *u) {
                  homeestado_mudancas_texto(mudou & HOMEESTADO_MUDOU_FONTE,
                                            txt, sizeof txt)); }
       fflush(stdout);
-      free(lote); repetirAoFim = 0; buscando = 0;
+      free(lote); repetirAoFim = 0; buscandoSoltar();
       // Recomeca JA, sem o minimo entre voltas: a fonte (conta/perfil/addons)
       // mudou ou a pessoa pediu, e a volta so e condenada quando o minimo ja
       // passou (repetirInterno). Esperar 10 s aqui deixava a Home com o pacote
@@ -4756,7 +4762,7 @@ static void *montar(void *u) {
   fflush(stdout);
   free(lote);
   listasAbandonar(listas);   // so sobra se o lote veio vazio antes de usa-las
-  buscando = 0;
+  buscandoSoltar();
   // Um pedido que chegou COM o ciclo no ar roda agora, com as credenciais que
   // entraram no meio do caminho. Zerar a marca antes de disparar evita que uma
   // falha de pthread_create deixe o pedido preso para sempre.
@@ -4782,34 +4788,57 @@ condenada:
   listasAbandonar(listas);
   free(lote);
   repetirAoFim = 0;
-  buscando = 0;
+  buscandoSoltar();
   desc_iniciar();   // condenada so passa do minimo entre voltas (ver acima)
   return NULL;
 #undef CONDENADA
 #undef LISTAS_SE_PRONTAS
 }
 
-void desc_iniciar(void) {
-  if (buscando) { printf("[desc] ja montando; pedido ignorado\n"); fflush(stdout); return; }
+// INICIO DE VOLTA ATOMICO. O teste de `buscando` e a marca ficam sob
+// listaTrava, na mesma secao: antes o teste vinha SEM trava e a marca so
+// depois, e dois chamadores (o fio adiado acordando, a volta condenada
+// recomecando e o quadro) passavam juntos e largavam dois montar(). Nada de rede
+// sob a trava; pthread_create fica fora dela (montar toma listaTrava logo).
+// `conferirVoltas`: so inicia se nenhuma volta comecou desde `voltasAoAgendar`
+// (o fio adiado). `repetirSeOcupado`: com volta no ar, ela repete ao fim em vez
+// de o pedido ser ignorado. tests/desc_iniciar_corrida.sh.
+enum { DESC_INICIOU, DESC_OCUPADO, DESC_ATENDIDO };
+static int descIniciarTravado(int conferirVoltas, unsigned voltasAoAgendar,
+                              int repetirSeOcupado) {
+  pthread_t th;
+  unsigned long long agora = descAgoraMs();
   pthread_mutex_lock(&listaTrava);
+  if (conferirVoltas && descVoltas != voltasAoAgendar) {
+    pthread_mutex_unlock(&listaTrava);
+    return DESC_ATENDIDO;   // uma volta ja comecou depois do pedido
+  }
+  if (buscando) {
+    if (repetirSeOcupado) { descDeb.adiado = 0; repetirAoFim = 1; }   // a volta no ar repete ao fim
+    pthread_mutex_unlock(&listaTrava);
+    if (!repetirSeOcupado) { printf("[desc] ja montando; pedido ignorado\n"); fflush(stdout); }
+    return DESC_OCUPADO;
+  }
   buscando = 1;
   listaLidaNaVolta = 0;
-  pthread_mutex_unlock(&listaTrava);
-  nv_desc_iniciou(&descDeb, descAgoraMs());
+  nv_desc_iniciou(&descDeb, agora);
   descVoltas++;
   descPedidoPessoa = 0;   // esta volta atende o pedido da pessoa
   montagemGeracao++;
-  if (pthread_create(&fio, NULL, montar, NULL) != 0) {
+  pthread_mutex_unlock(&listaTrava);
+  if (pthread_create(&th, NULL, montar, NULL) != 0) {
     // NAO FALHAR CALADO. No webOS um pthread_create nunca falhou e o caminho de
     // erro era so uma bandeira; no alvo WASM o fio e um Worker do navegador,
     // que E um recurso limitado e PODE acabar. Quando acaba, a home fica com o
     // catalogo do pacote para sempre e nao ha uma linha no log dizendo por que.
-    buscando = 0;
+    buscandoSoltar();
     printf("[desc] pthread_create FALHOU: o catalogo nao vai remontar\n");
     fflush(stdout);
   }
-  else pthread_detach(fio);
+  else pthread_detach(th);
+  return DESC_INICIOU;
 }
+void desc_iniciar(void) { (void)descIniciarTravado(0, 0, 0); }
 
 // Remontar depois de uma mudanca de credencial (vincular o Trakt, receber a
 // chave do TMDB pela conta). Chamar desc_iniciar() direto NAO resolve: se um
@@ -4990,13 +5019,16 @@ void desc_repetir_silencioso(void) {
   if (!buscando) montSilenciosa = 1;
   repetirInterno();
 }
+// O fio adiado leva no argumento o que precisa (quanto dormir e a marca de
+// voltas do AGENDAMENTO): ler descVoltasAoAgendar global depois de dormir lia a
+// marca de um agendamento POSTERIOR e largava volta antes do minimo.
+typedef struct { unsigned ms, voltas; } DescAdiado;
 static void *adiadoFio(void *arg) {
-  unsigned ms = (unsigned)(uintptr_t)arg;
-  struct timespec t = { ms / 1000u, (long)(ms % 1000u) * 1000000L };
+  DescAdiado a = *(DescAdiado *)arg;
+  struct timespec t = { a.ms / 1000u, (long)(a.ms % 1000u) * 1000000L };
+  free(arg);
   nanosleep(&t, NULL);
-  if (descVoltas != descVoltasAoAgendar) return NULL;   // uma volta ja comecou depois do pedido: atendido
-  if (!buscando) desc_iniciar();
-  else { descDeb.adiado = 0; repetirAoFim = 1; }   // a volta no ar repete ao fim
+  (void)descIniciarTravado(1, a.voltas, 1);
   return NULL;
 }
 // Inicia uma volta respeitando o minimo entre voltas; pedidos no intervalo
@@ -5004,8 +5036,13 @@ static void *adiadoFio(void *arg) {
 static void descIniciarAdiado(void) {
   long w;
   pthread_t th;
+  DescAdiado *a;
+  unsigned voltas;
   if (descPedidoPessoa) { descPedidoPessoa = 0; desc_iniciar(); return; }
+  pthread_mutex_lock(&listaTrava);
   w = nv_desc_pedido(&descDeb, descAgoraMs());
+  voltas = descVoltas;
+  pthread_mutex_unlock(&listaTrava);
   if (w == 0) { desc_iniciar(); return; }
   if (w < 0) {
     printf("[desc] remontagem coalescida: ja ha uma agendada (minimo %llu s entre voltas)\n",
@@ -5014,9 +5051,12 @@ static void descIniciarAdiado(void) {
   }
   printf("[desc] remontagem adiada %ld ms (minimo %llu s entre voltas)\n", w, NV_DESC_MIN_MS / 1000ull);
   fflush(stdout);
-  descVoltasAoAgendar = descVoltas;
-  if (pthread_create(&th, NULL, adiadoFio, (void *)(uintptr_t)w) != 0) {
-    descDeb.adiado = 0; desc_iniciar(); return;
+  a = malloc(sizeof *a);
+  if (a) { a->ms = (unsigned)w; a->voltas = voltas; }
+  if (!a || pthread_create(&th, NULL, adiadoFio, a) != 0) {
+    free(a);
+    pthread_mutex_lock(&listaTrava); descDeb.adiado = 0; pthread_mutex_unlock(&listaTrava);
+    desc_iniciar(); return;
   }
   pthread_detach(th);
 }
