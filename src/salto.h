@@ -58,7 +58,7 @@ static inline float salto_passo(unsigned heldMs, float duracaoSeg) {
 #define SALTO_REP_MS      130u
 #define SALTO_REP_MIN_MS   20u
 
-typedef struct { unsigned inicio, ultimaTecla, ultimoPasso; } SaltoEst;
+typedef struct { unsigned inicio, ultimaTecla, ultimoPasso; int rep; } SaltoEst;
 
 // `novo`: rajada nova (primeira tecla, ou a direcao mudou). `flagRepeat`:
 // key.repeat do SDL. Devolve o passo em segundos (0 = ignorar a repeticao).
@@ -67,6 +67,7 @@ static inline float salto_tecla(SaltoEst *st, int novo, int flagRepeat,
   unsigned gap = agoraMs - st->ultimaTecla;
   int rep = !novo && (flagRepeat || (gap >= SALTO_REP_MIN_MS && gap <= SALTO_REP_MS));
   st->ultimaTecla = agoraMs;
+  st->rep = rep;
   if (!rep) {                       // toque: 10 s agora, rampa recomeca
     st->inicio = agoraMs; st->ultimoPasso = agoraMs;
     return SALTO_SEG;
@@ -87,6 +88,30 @@ static inline float salto_tecla(SaltoEst *st, int novo, int flagRepeat,
 #define SALTO_FIM_SEEKR_MS 1000u
 static inline unsigned salto_fim_ms(int seekrLigado) {
   return seekrLigado ? SALTO_FIM_SEEKR_MS : SALTO_FIM_MS;
+}
+
+
+// AVANCO CONTINUO (2.0.3). O passo discreto (10 s ... 5 min a cada 300 ms) fazia
+// a posicao andar aos pulos: a barra (mola) parava entre dois passos e o tempo
+// escrito e a miniatura do Seekr, que liam a posicao crua, saltavam o passo
+// inteiro de uma vez. A velocidade media nao muda (V0 = 10 s / 300 ms, e a
+// rampa de salto_passo), mas a REPETICAO da tecla agora so mantem o avanco vivo
+// e a posicao anda um pouco por quadro: salto_quadro().
+// O toque (rep == 0) continua somando 10 s na hora: salto_tecla devolve o passo
+// e o player so o aplica quando `st->rep == 0`.
+#define SALTO_VIVO_MS 260u   // sem tecla ha mais que isso, o avanco para
+
+// Velocidade (s de midia por s real) de quem esta com a tecla ha `heldMs`.
+static inline float salto_vel(unsigned heldMs, float duracaoSeg) {
+  return salto_passo(heldMs, duracaoSeg) * 1000.0f / SALTO_INTERVALO_MS;
+}
+
+// Quanto a posicao anda neste quadro (segundos, ja com o sinal de `dir`).
+static inline float salto_quadro(const SaltoEst *st, int dir, unsigned agoraMs,
+                                 float dt, float duracaoSeg) {
+  if (!st->rep || agoraMs - st->ultimaTecla > SALTO_VIVO_MS || dt <= 0.0f) return 0.0f;
+  if (dt > 0.05f) dt = 0.05f;
+  return dir * salto_vel(agoraMs - st->inicio, duracaoSeg) * dt;
 }
 
 #endif

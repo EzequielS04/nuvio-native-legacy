@@ -2627,7 +2627,8 @@ static void saltar(int dir, int repeticao) {
   // Repeticao de tecla segurada entre dois passos: so mantem o avanco vivo (scrubUltimo), nao anda.
   float passo = salto_tecla(&scrubSalto, novo, repeticao, agora, duracaoSeg);
   scrubUltimo = agora;
-  if (passo <= 0.0f) return;
+  // Repeticao so mantem o avanco vivo: quem anda e salto_quadro, por quadro.
+  if (passo <= 0.0f || scrubSalto.rep) return;
   scrubPassos++;
   posSeg += dir * passo;
   posSeg = anim_clamp(posSeg, 0.0f, duracaoSeg);
@@ -3198,7 +3199,11 @@ void player_atualizar(float dt, Uint32 agora) {
   }
   // BUSCA SUAVE (ver posVis). Desliza enquanto o dono avanca e ate assentar
   // depois de soltar; no resto do tempo e a posicao de verdade, sem atraso.
-  if (scrubbing) posVisSolto = 1;
+  if (scrubbing) {
+    posVisSolto = 1;
+    posSeg = anim_clamp(posSeg + salto_quadro(&scrubSalto, scrubDir, agora, dt, duracaoSeg),
+                        0.0f, duracaoSeg);
+  }
   if (posVisSolto) {
     posVis = anim_mola2(&posVisV, posVis, posSeg, dt, PLR_BUSCA_MOLA);
     // Assentou, ou o pipeline demorou a confirmar a posicao nova: o teto de
@@ -3458,10 +3463,11 @@ static void seekrMiniatura(float bx, float bw, float frac, float yBarra, float a
   seekr_definir_ajuste_ms((long)ajustes_seekr_ajuste_s() * 1000L);
   fita = ajustes_seekr_fita();
   n = fita ? 3 : 1;
-  if (est == SEEKR_PRONTO) seekr_quadros(posSeg, n, t, cue);
+  { float pv = posVisSolto ? posVis : posSeg;
+  if (est == SEEKR_PRONTO) seekr_quadros(pv, n, t, cue);
   // A sincronia ja entra no tempo do quadro; sem cue ainda (a folha chegando),
   // a posicao com o mesmo ajuste.
-  if (cue[n == 1 ? 0 : 1] < 0.0) cue[n == 1 ? 0 : 1] = posSeg + ajustes_seekr_ajuste_s();
+  if (cue[n == 1 ? 0 : 1] < 0.0) cue[n == 1 ? 0 : 1] = pv + ajustes_seekr_ajuste_s(); }
   tot = fita ? 20.0f + ws * 2.0f + w + vao * 2.0f : w + 20.0f;
   x = bx + bw * frac - tot * 0.5f;
   if (x < PLR_MARGEM) x = PLR_MARGEM;
@@ -4903,7 +4909,7 @@ static void desenharOsdCorpo(Uint32 agora, float a, float ac, const CatItem *c) 
       TxtLinha l = txt_linha(TXT_ILHA_NOME, i18n("AO VIVO"), 243, 242, 239, 235);
       txt_desenhar_alpha(l, cx + cw - l.w, cyBotoes - (float)l.h * 0.5f, a);
     } else {
-      plrui_tempo(t1, sizeof t1, posSeg);
+      plrui_tempo(t1, sizeof t1, posVisSolto ? posVis : posSeg);
       plrui_tempo(d, sizeof d, duracaoSeg);
       snprintf(t2, sizeof t2, "/ %s", d);
       if (cheio > 0.01f) {
