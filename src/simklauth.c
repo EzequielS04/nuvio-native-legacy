@@ -20,15 +20,22 @@
 #define SMK_ARQ_FMT    "simkl-p%d.txt"
 #define SMK_PERFIS     16   // o logout varre p0..16, como fontepref/traktauth
 #define SMK_BASE "https://api.simkl.com"
-// O Simkl nao devolve `interval`; 5s e o passo que o app web usa.
+// O pedido de PIN devolve `interval` (5 s na pratica); sem ele, 5 s, o passo
+// do app web. Nunca consultar mais rapido que isso: o Simkl responde "Slow down".
 #define SMK_POLL_MS 5000u
+#define SMK_LIMITE_PADRAO_MS 900000u
+// Falhas de rede/HTTP seguidas toleradas antes de desistir. Uma queda de
+// Wi-Fi ou um 5xx/429 passageiro NAO e o codigo recusado.
+#define SMK_FALHAS_MAX 8
 
 static SmkEstado estado = SMK_PARADO;
 static char userCode[48];
 static char url[200];
 static char erro[200];
 static char token[300];
-static unsigned proximoPoll, comecouMs, limiteMs = 900000u;
+static unsigned proximoPoll, comecouMs, limiteMs = SMK_LIMITE_PADRAO_MS, passoMs = SMK_POLL_MS;
+static unsigned ultimoAgora;
+static int falhasSeguidas;
 
 static pthread_t fio;
 static int fioVivo, fioPronto, tokenNovo;
@@ -107,6 +114,7 @@ static void zerarEstado(void) {
   token[0] = userCode[0] = url[0] = erro[0] = 0;
   tokenNovo = 0;
   comecouMs = 0;
+  falhasSeguidas = 0;
   estado = SMK_PARADO;
 }
 
@@ -149,7 +157,7 @@ static void *fioPedir(void *u) {
   char *r;
   int st = 0;
   char uc[48] = "", vu[200] = "";
-  unsigned novoLimite = 0;
+  unsigned novoLimite = 0, novoPasso = 0;
   (void)u;
 
   if (!nuvem_simkl_cliente()[0]) {
@@ -174,6 +182,8 @@ static void *fioPedir(void *u) {
       js_texto(r, fim, "verification_uri", vu, sizeof vu);
     expira = js_num(r, fim, "expires_in", 0);
     if (expira > 30.0 && expira < 3600.0) novoLimite = (unsigned)(expira * 1000.0);
+    expira = js_num(r, fim, "interval", 0);   // reaproveita a variavel
+    if (expira >= 1.0 && expira <= 60.0) novoPasso = (unsigned)(expira * 1000.0);
   }
   pthread_mutex_lock(&trava);
   // PIN pedido por um perfil que ja saiu da tela: ninguem vai digita-lo.
@@ -186,7 +196,12 @@ static void *fioPedir(void *u) {
   erro[0] = 0;
   snprintf(userCode, sizeof userCode, "%s", uc);
   snprintf(url, sizeof url, "%s", vu);
-  if (novoLimite) limiteMs = novoLimite;
+  // Cada codigo novo traz o relogio dele; sem o campo, o padrao — nunca o
+  // limite do codigo anterior.
+  limiteMs = novoLimite ? novoLimite : SMK_LIMITE_PADRAO_MS;
+  passoMs = novoPasso ? novoPasso : SMK_POLL_MS;
+  falhasSeguidas = 0;
+  comecouMs = 0;
   if (!userCode[0]) {
     snprintf(erro, sizeof erro, i18n("nao consegui pedir o codigo ao Simkl (HTTP %d)"), st);
     estado = SMK_ERRO;
@@ -198,6 +213,40 @@ static void *fioPedir(void *u) {
   free(r);
   fioPronto = 1;
   return NULL;
+}
+
+// O QUE UMA RESPOSTA DO POLL SIGNIFICA. Antes, qualquer 2xx que nao fosse
+// exatamente {"result":"KO"} e sem token virava "o Simkl invalidou este codigo"
+// na hora, e qualquer HTTP fora de 2xx tambem — corpo vazio, pagina do
+// Cloudflare, 429 do proprio limite do Simkl, um 5xx: o codigo era dado como
+// recusado segundos depois de aparecer. So e fim de verdade: expirar o prazo
+// (simklauth_passo) ou o Simkl dizer que negou/expirou/nao existe.
+SmkPoll simklauth_classificar(int st, const char *corpo, char *tk, unsigned tam) {
+  char res[16] = "", msg[120] = "";
+  const char *fim;
+  if (tk && tam) tk[0] = 0;
+  if (st == 429) return SMK_POLL_LENTO;
+  if (!corpo || st < 200 || st >= 300) return SMK_POLL_FALHA;
+  fim = corpo + strlen(corpo);
+  if (tk && tam && js_texto(corpo, fim, "access_token", tk, tam) && tk[0]) return SMK_POLL_OK;
+  js_texto(corpo, fim, "result", res, sizeof res);
+  js_texto(corpo, fim, "message", msg, sizeof msg);
+  if (!strcmp(res, "KO") || !strcmp(res, "ko")) {
+    char m[120];
+    unsigned i;
+    for (i = 0; i < sizeof m - 1 && msg[i]; i++)
+      m[i] = (char)((msg[i] >= 'A' && msg[i] <= 'Z') ? msg[i] + 32 : msg[i]);
+    m[i] = 0;
+    if (strstr(m, "slow")) return SMK_POLL_LENTO;
+    // "Authorization pending" e o caso comum: continuar. So palavras de fim
+    // de verdade encerram.
+    if (strstr(m, "expire") || strstr(m, "denied") || strstr(m, "reject") ||
+        strstr(m, "invalid") || strstr(m, "not found") || strstr(m, "revoked"))
+      return SMK_POLL_NEGADO;
+    return SMK_POLL_ESPERA;
+  }
+  // Nem KO nem token (corpo vazio, HTML, JSON estranho): resposta ruim, nao veredito.
+  return SMK_POLL_FALHA;
 }
 
 static void *fioPoll(void *u) {
@@ -221,24 +270,40 @@ static void *fioPoll(void *u) {
     fioPronto = 1;
     return NULL;
   }
-  if (r && st >= 200 && st < 300) {
-    char res[16], t[300];
-    const char *fim = r + strlen(r);
-    js_texto(r, fim, "result", res, sizeof res);
-    if (!strcmp(res, "KO")) {
-      /* ainda nao autorizado */
-    } else if (js_texto(r, fim, "access_token", t, sizeof t) && t[0]) {
-      snprintf(token, sizeof token, "%s", t);
-      tokenNovo = 1;
-      estado = SMK_LIGADO;
-    } else {
-      // Resposta que nao e KO nem traz token: o Simkl invalidou este PIN.
-      snprintf(erro, sizeof erro, "o Simkl invalidou este código");
-      estado = SMK_ERRO;
+  { char t[300];
+    switch (simklauth_classificar(st, r, t, sizeof t)) {
+      case SMK_POLL_OK:
+        snprintf(token, sizeof token, "%s", t);
+        tokenNovo = 1;
+        estado = SMK_LIGADO;
+        falhasSeguidas = 0;
+        break;
+      case SMK_POLL_ESPERA:
+        falhasSeguidas = 0;
+        break;
+      case SMK_POLL_LENTO:
+        falhasSeguidas = 0;
+        passoMs += 5000u;   // o Simkl pediu calma: afrouxa o passo
+        if (passoMs > 30000u) passoMs = 30000u;
+        break;
+      case SMK_POLL_NEGADO:
+        snprintf(erro, sizeof erro, "o Simkl invalidou este código");
+        estado = SMK_ERRO;
+        break;
+      default:   // SMK_POLL_FALHA: rede, 5xx, corpo ilegivel
+        printf("[simkl] poll sem resposta util (HTTP %d, %d seguidas); sigo esperando\n",
+               st, falhasSeguidas + 1);
+        fflush(stdout);
+        // Rede morta, timeout, 5xx e corpo cortado (Wi-Fi lento da Shield) so
+        // acabam pelo prazo do codigo. Desistir antes so cabe a um 4xx que se
+        // repete (chave recusada), nao a falha de transporte.
+        falhasSeguidas++;
+        if (st >= 400 && st < 500 && st != 408 && falhasSeguidas >= SMK_FALHAS_MAX) {
+          snprintf(erro, sizeof erro, i18n("falha ao consultar o Simkl (HTTP %d)"), st);
+          estado = SMK_ERRO;
+        }
+        break;
     }
-  } else if (st) {
-    snprintf(erro, sizeof erro, i18n("falha ao consultar o Simkl (HTTP %d)"), st);
-    estado = SMK_ERRO;
   }
   pthread_mutex_unlock(&trava);
   free(r);
@@ -290,14 +355,15 @@ void simklauth_passo(unsigned agoraMs) {
   }
 
   if (estado != SMK_AGUARDANDO) return;
-  if (!comecouMs) comecouMs = agoraMs;
+  ultimoAgora = agoraMs;
+  if (!comecouMs) { comecouMs = agoraMs ? agoraMs : 1; proximoPoll = 0; }
   if (agoraMs - comecouMs > limiteMs) {
     snprintf(erro, sizeof erro, "o código expirou");
     estado = SMK_ERRO;
     return;
   }
   if (agoraMs >= proximoPoll) {
-    proximoPoll = agoraMs + SMK_POLL_MS;
+    proximoPoll = agoraMs + passoMs;
     soltar(fioPoll);
   }
 }
@@ -308,6 +374,14 @@ void simklauth_cancelar(void) {
 }
 
 SmkEstado   simklauth_estado(void) { return estado; }
+// Segundos que faltam para o codigo expirar (o mesmo relogio do passo), ou -1
+// quando nao ha codigo esperando.
+int simklauth_restante_s(void) {
+  unsigned gasto;
+  if (estado != SMK_AGUARDANDO || !comecouMs) return -1;
+  gasto = ultimoAgora - comecouMs;
+  return gasto >= limiteMs ? 0 : (int)((limiteMs - gasto + 999u) / 1000u);
+}
 const char *simklauth_codigo(void) { return userCode; }
 const char *simklauth_url(void)    { return url; }
 const char *simklauth_erro(void)   { return erro; }

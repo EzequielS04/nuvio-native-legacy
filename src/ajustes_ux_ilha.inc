@@ -601,6 +601,16 @@ static void desenhaVinculo(const char *servico, const char *codigo,
       gfx_cor((GfxRect){ x - 6, by + 15 - 11, 22, 22 }, 0.5f, ar, ag, ab, 0.22f * p);
       gfx_cor((GfxRect){ x, by + 10, 10, 10 }, 0.5f, ar, ag, ab, p);
       txt_desenhar_alpha(l, x + 20, by + (30 - l.h) * 0.5f, 0.62f);
+      if (!strcmp(servico, "Simkl")) {
+        int rest = simklauth_restante_s();
+        if (rest >= 0) {
+          char c[64];
+          TxtLinha lc;
+          snprintf(c, sizeof c, i18n("Expira em %d:%02d"), rest / 60, rest % 60);
+          lc = ajTxt(TXT_AJ_ESTADO, c);
+          txt_desenhar_alpha(lc, x + 20 + l.w + 28, by + (30 - lc.h) * 0.5f, rest < 60 ? 0.95f : 0.45f);
+        }
+      }
     }
     ajDicasLinha(d, 1, m.x + m.w - 56 - dw, by, 1); }
 }
