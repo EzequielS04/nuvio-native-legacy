@@ -2,6 +2,7 @@
 // trocado por um falso que dorme; credfio_iniciar tem de voltar na hora, nao
 // deixar dois no ar para o mesmo provedor e entregar o resultado uma vez.
 #include "credfio.h"
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -9,11 +10,18 @@
 
 static int chamadas, simultaneas, maxSimult, retorno = 0;
 static char ultJson[64];
+static pthread_mutex_t ultTrava = PTHREAD_MUTEX_INITIALIZER;
 int sync_empurrar_credencial(const char *p, const char *j) {
   (void)p;
   __sync_fetch_and_add(&chamadas, 1);
-  maxSimult = (__sync_add_and_fetch(&simultaneas, 1) > maxSimult) ? simultaneas : maxSimult;
+  int agoraSim = __sync_add_and_fetch(&simultaneas, 1), m;
+  // max atomico: o falso roda em dois fios ao mesmo tempo (TSAN acusava o
+  // ternario antigo, que lia e escrevia maxSimult sem trava)
+  while ((m = __atomic_load_n(&maxSimult, __ATOMIC_SEQ_CST)) < agoraSim &&
+         !__sync_bool_compare_and_swap(&maxSimult, m, agoraSim)) {}
+  pthread_mutex_lock(&ultTrava);
   snprintf(ultJson, sizeof ultJson, "%s", j);
+  pthread_mutex_unlock(&ultTrava);
   usleep(300000);
   __sync_sub_and_fetch(&simultaneas, 1);
   return retorno;
