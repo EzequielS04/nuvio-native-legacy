@@ -27,6 +27,7 @@
 #include "streams.h"
 #include "video.h"
 #include "idioma.h"
+#include "artehero.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -103,6 +104,24 @@ static void quadros(int n) {
     dvtela_desenhar(relogio);
   }
 }
+// O FUNDO PRONTO ANTES DE MEDIR. dvtelaui.c (fundo) so desenha a arte quando
+// tex_obter_larg ja decodificou o JPEG (fila assincrona, tex_bombear) E o
+// gfx_desfocado ja gerou a copia 96x54 (no maximo NV_DESF_POR_QUADRO por
+// quadro); antes disso o fundo e o chapado gfx_cor, uma linha inteira do
+// mesmo pixel — o "maior patamar 1920 px" que aparecia de vez em quando. Aqui
+// espera os dois (a mesma chave: a copia fica em cache para o desenho) e mais
+// alguns quadros para a mola assentar.
+static int esperarFundo(void) {
+  const char *u = artehero_url(cat_item(0));
+  int i;
+  for (i = 0; i < 1200; i++) {
+    GLuint t = u && u[0] ? tex_obter_larg(u, 480) : 0;
+    if (t && gfx_desfocado(t, u)) { quadros(8); return i; }
+    quadros(1);
+  }
+  return -1;
+}
+
 // Segundos de relogio sem desenhar cada quadro (o painel de pausa espera 5 s).
 static void segundos(int s) { int i; for (i = 0; i < s * 4; i++) { relogio += 234; quadros(1); } }
 
@@ -167,6 +186,9 @@ int main(int argc, char **argv) {
   assert(dvtela_ativa());
   assert(video_simulado_dv_tela() == 1);            // o HDR10 do player da TV fica mudo
   assert(plrilha_corpo_alfa() < 0.01f);             // sem "Abrindo fonte" por baixo
+  { int q = esperarFundo();
+    printf("fundo pronto depois de %d quadros a mais\n", q);
+    assert(q >= 0); }
   salvar("1-lendo");
   { int patamar, niveis;
     medirFaixas(&patamar, &niveis);
