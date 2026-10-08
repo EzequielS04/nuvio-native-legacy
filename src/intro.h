@@ -83,11 +83,13 @@ double intro_creditos_janela(double dur);
 // SEM MARCADOR NENHUM, quanto antes do fim o cartao do proximo episodio sobe
 // (2.0.3, pedido do dono: NADA de porcentagem). Tempo FIXO de creditos finais
 // tipicos: medidos no TheIntroDB, Breaking Bad T1E1/T1E2 tem 47 s/45 s de
-// creditos, Silo T1E1 ~100 s, anime ~110 s (ED + previa). 40 s fica dentro dos
-// creditos de quase toda serie sem roubar a ultima cena. Episodio curto
+// creditos, Silo T1E1 ~100 s, anime ~110 s (ED + previa). Eram 40 s; 50 s desde
+// 08/10: na TCL do dono os creditos de Silo T2E6 comecam ~50 s antes do fim
+// (o marcador do TheIntroDB, 2519 s de 3077 s, e de outro corte e e recusado
+// pela janela), e com 40 s o cartao chegava atrasado. Episodio curto
 // (< 10 min, desenho/web serie) tem creditos de ~10-20 s: 15 s. Abaixo de 2 min
 // nao e episodio (clipe de erro, duracao provisoria): nao ha estimativa.
-#define INTRO_FIM_SERIE_S   40.0
+#define INTRO_FIM_SERIE_S   50.0
 #define INTRO_FIM_CURTO_S   15.0
 #define INTRO_CURTO_ATE_S  600.0
 #define INTRO_DUR_MIN_S    120.0

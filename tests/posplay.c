@@ -334,11 +334,19 @@ int main(void) {
       { "marcador aceito, chegou nele",        1290.0, 1350.0, 1290.0, 1 },
       { "marcador aceito, depois dele",        1330.0, 1350.0, 1290.0, 1 },
       // SEM MARCADOR (2.0.3): tempo FIXO antes do fim, nunca porcentagem —
-      // 40 s (intro_fim_estimado); era "os 2 min finais".
+      // 50 s (intro_fim_estimado, eram 40 s ate 08/10); era "os 2 min finais".
       { "sem marcador, 40 s finais",           1311.0, 1350.0,    0.0, 1 },
+      { "sem marcador, 50 s finais",           1300.0, 1350.0,    0.0, 1 },
       { "sem marcador, 110 s do fim (antes: 2 min)", 1240.0, 1350.0, 0.0, 0 },
       { "sem marcador, 1 h, 39 s do fim",      3561.0, 3600.0,    0.0, 1 },
-      { "sem marcador, 1 h, 41 s do fim",      3559.0, 3600.0,    0.0, 0 },
+      { "sem marcador, 1 h, 51 s do fim",      3549.0, 3600.0,    0.0, 0 },
+      // SILO T2E6 NA TCL DO DONO (08/10): o TheIntroDB marca creditos em
+      // 2519 s, o arquivo tem 3077 s e os creditos reais comecam ~50 s antes do
+      // fim. O marcador e RECUSADO (sobram 558 s) e o cartao cai na estimativa
+      // fixa — no marcador nada sobe, aos 50 s finais sobe.
+      { "Silo T2E6, no marcador recusado",     2519.0, 3077.0, 2519.0, 0 },
+      { "Silo T2E6, 51 s do fim",              3026.0, 3077.0, 2519.0, 0 },
+      { "Silo T2E6, 50 s do fim",              3027.0, 3077.0, 2519.0, 1 },
       // Episodio < 10 min: 15 s.
       { "8 min, 15 s finais",                   465.0,  480.0,    0.0, 1 },
       { "8 min, 20 s do fim",                   460.0,  480.0,    0.0, 0 },
@@ -350,7 +358,7 @@ int main(void) {
       // sanidade e nao pode calar a regra de baixo — senao o cartao nunca
       // apareceria naquele episodio.
       { "marcador recusado, meio do episodio", 2000.0, 3000.0, 1000.0, 0 },
-      { "marcador recusado, fim do episodio",  2961.0, 3000.0, 1000.0, 1 },
+      { "marcador recusado, fim do episodio",  2951.0, 3000.0, 1000.0, 1 },
       { "marcador recusado, 100 s do fim",     2900.0, 3000.0, 1000.0, 0 },
       // Duracao invalida: nao decide nada.
       { "sem duracao",                            0.0,    0.0,    0.0, 0 },
@@ -361,7 +369,7 @@ int main(void) {
       { "536 s falsos, marcador adiante",       416.0,  536.0, 1335.0, 0 },
       { "536 s falsos, chegou no marcador",    1335.0,  536.0, 1335.0, 1 },
       // Uma hora com creditos a 369 s do fim: sobra mais que a janela, quem
-      // decide a estimativa fixa de 40 s.
+      // decide a estimativa fixa de 50 s.
       { "1 h, marcador fora da janela",        3231.0, 3600.0, 3231.0, 0 },
       { "1 h, 2 min finais (antes abria)",     3480.0, 3600.0, 3231.0, 0 },
       { "1 h, 40 s finais",                    3560.0, 3600.0, 3231.0, 1 },

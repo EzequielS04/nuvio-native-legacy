@@ -268,8 +268,31 @@ int main(void) {
   assert(mesmoSeg(intro_creditos_janela(10800.0), 300.0));  // 3 h: teto
   assert(mesmoSeg(intro_creditos_janela(480.0), 120.0));    // 8 min: piso
   assert(mesmoSeg(intro_creditos_janela(200.0), 100.0));    // nunca mais que metade
-  assert(mesmoSeg(intro_fim_estimado(3600.0), INTRO_FIM_SERIE_S) && INTRO_FIM_SERIE_S == 40.0);
-  assert(mesmoSeg(intro_fim_estimado(1320.0), 40.0));
+  assert(mesmoSeg(intro_fim_estimado(3600.0), INTRO_FIM_SERIE_S) && INTRO_FIM_SERIE_S == 50.0);
+  assert(mesmoSeg(intro_fim_estimado(1320.0), 50.0));
+  // SILO NA TCL DO DONO (08/10), respostas reais por tmdb_id. T3E4, T3E5 e
+  // T2E7 so tem abertura: nenhum credito pode sair delas. T2E6 tem creditos
+  // 2519-2582 s, mas o arquivo dele tem 3077 s e os creditos de verdade comecam
+  // ~50 s antes do fim: o marcador e de outro corte e a janela o recusa (sobram
+  // 558 s) — o cartao fica com a estimativa fixa de 50 s (tests/posplay.c).
+  { static const struct { const char *arq; int t, e; } so[] = {
+      { "silo_tmdb_s03e04.json", 3, 4 }, { "silo_tmdb_s03e05.json", 3, 5 },
+      { "silo_tmdb_s02e07.json", 2, 7 } };
+    const char *m;
+    for (size_t k = 0; k < sizeof so / sizeof *so; k++) {
+      const char *j = fixture(so[k].arq);
+      int i;
+      assert(intro_resposta_confere(j, so[k].t, so[k].e));
+      n = intro_extrair(j, v, 8);
+      assert(n == 1 && v[0].tipo == INTRO_ABERTURA);
+      for (i = 0; i < n; i++) assert(v[i].tipo != INTRO_CREDITOS);
+    }
+    n = intro_extrair(fixture("silo_tmdb_s02e06.json"), v, 8);
+    assert(n == 2 && v[1].tipo == INTRO_CREDITOS);
+    assert(mesmoSeg(v[1].inicio, 2519.08) && mesmoSeg(v[1].fim, 2582.106));
+    assert(!intro_janela_ok(INTRO_CREDITOS, v[1].inicio, v[1].fim, 3077.0, 0, &m));
+    assert(intro_janela_ok(INTRO_ABERTURA, v[0].inicio, v[0].fim, 3077.0, 0, &m));
+    puts("ok  Silo T3E4/T3E5/T2E7 sem creditos; T2E6 (2519 s de 3077 s) recusado"); }
   assert(mesmoSeg(intro_fim_estimado(480.0), INTRO_FIM_CURTO_S) && INTRO_FIM_CURTO_S == 15.0);
   assert(intro_fim_estimado(100.0) == 0.0);                 // clipe: nada
   puts("ok  janela dos creditos (15%, 2-5 min) e estimativa fixa (40 s / 15 s)");
