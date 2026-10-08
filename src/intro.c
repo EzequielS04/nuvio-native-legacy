@@ -386,6 +386,12 @@ int intro_janela_ok(int tipo,double ini,double fim,double dur,int filme,const ch
   double max=tipo==INTRO_CREDITOS?900.0:180.0;
   if(motivo)*motivo="ok";
   if(jan>max){if(motivo)*motivo="janela longa";return 0;}
+  // CREDITOS/PREVIA SEM A DURACAO DO VIDEO NAO SE ACEITAM (Silo T2E6, TCL
+  // 08/10: "janela aceita ... dur=0s" antes de o pipeline dizer 2582 s). Sem
+  // duracao so o proprio marcador fala, e e justamente o que a janela existe
+  // para desmentir (outro corte). valido() reavalia a cada chamada, entao o
+  // veredito sai assim que a duracao real chegar.
+  if(fimDeObra(tipo)&&!(dur>0.0)){if(motivo)*motivo="duracao desconhecida";return 0;}
   if(dur>0.0&&ini>=dur){if(motivo)*motivo="inicio alem da duracao";return 0;}
   // FIM EXPLICITO DEPOIS DO FIM DA MIDIA: o marcador foi feito sobre um corte
   // mais longo (outro lancamento). 10 s de folga para arredondamento.

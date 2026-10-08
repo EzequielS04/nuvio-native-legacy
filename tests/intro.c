@@ -171,7 +171,16 @@ int main(void) {
     assert(intro_janela_ok(INTRO_CREDITOS, 3503, 0, 3600, 0, &m) == 1);       // serie
     assert(intro_janela_ok(INTRO_ABERTURA, 60, 400, 3600, 0, &m) == 0);       // > 3 min
     assert(intro_janela_ok(INTRO_ABERTURA, 272, 366, 3600, 0, &m) == 1);
-    assert(intro_janela_ok(INTRO_CREDITOS, 100, 0, 0, 1, &m) == 1);           // sem duracao: nao chuta
+    assert(intro_janela_ok(INTRO_CREDITOS, 100, 0, 0, 1, &m) == 0);           // sem duracao: nao aceita
+    // Silo T2E6, TCL 08/10 11:46:40: creditos 2519-2582 aceitos com dur=0s (a
+    // duracao do video ainda nao tinha chegado). Sem duracao nao ha como
+    // saber se o marcador e deste corte; aceitar e confiar so no fim do proprio
+    // marcador. Com a duracao real a janela decide (e re-decide: valido()).
+    assert(intro_janela_ok(INTRO_CREDITOS, 2519.08, 2582.106, 0, 0, &m) == 0);
+    assert(intro_janela_ok(INTRO_PREVIA, 2519.08, 2582.106, 0, 0, &m) == 0);
+    assert(intro_janela_ok(INTRO_CREDITOS, 2519.08, 2582.106, 2582.144, 0, &m) == 1);  // corte de 2582 s
+    assert(intro_janela_ok(INTRO_CREDITOS, 2519.08, 2582.106, 3077.0, 0, &m) == 0);    // corte de 3077 s
+    assert(intro_janela_ok(INTRO_ABERTURA, 215, 292, 0, 0, &m) == 1);                  // abertura segue sem duracao
     puts("ok  guarda de janela");
   }
 #ifdef NV_SHOT_HOOKS
