@@ -5841,6 +5841,19 @@ const char *home_arte(int i) { return (nBd && i >= 0 && i < nBd) ? bd[i] : NULL;
 // Consome o pedido de abrir: quem le, zera. Assim o OK vale uma vez so, mesmo
 // que o quadro demore.
 int home_pediu_abrir(void) { int v = pedidoAbrir; pedidoAbrir = 0; return v; }
+// "Ver detalhes" do menu do cartao de retomada (#350): OK ali toca, e a pagina
+// do titulo ficava sem porta. O foco nao mudou, entao e o mesmo pedido que o OK
+// faria com "OK no card = abre a pagina": app.c o atende por abrirTitulo.
+void home_pedir_abrir(void) { pedidoAbrir = 1; }
+// O card focado e de retomada e o OK nele TOCA (Ajustes > Continuar)?
+int home_foco_retomada(void) {
+  const Fileira *s;
+  if (focoHero || foco.fileira < 0 || foco.fileira >= nFileiras) return 0;
+  s = &fileiras[foco.fileira];
+  return strcmp(s->chave, "upcoming_section") &&
+         (s->tipo == FILEIRA_CONTINUE || s->tipo == FILEIRA_RETORNO ||
+          !strcmp(s->chave, "continue_watching"));
+}
 int home_pediu_tocar(void) { int v = pedidoTocar; pedidoTocar = 0; return v; }
 
 // Consome o pedido de abrir o menu lateral: quem le, zera.

@@ -232,11 +232,15 @@ static int nOps;
 static float focoAnim[CTX_MAX];
 static int holdObservador;
 enum { OP_LISTA = 1, OP_ASSISTIDO, OP_TIRAR_CONTINUAR, OP_RECOMENDAR, OP_DISPENSAR,
-       OP_ESTILO, OP_CATEGORIA, OP_L_ABRIR, OP_L_FIXAR, OP_L_HOME,
+       OP_ESTILO, OP_CATEGORIA, OP_DETALHES, OP_L_ABRIR, OP_L_FIXAR, OP_L_HOME,
        OP_EXTRA = 100 };   // OP_EXTRA + k = extras[k] (modo social)
 // "Mover para categoria" pedido no modo painel: o IMDb do titulo, consumido
 // uma vez pelo painel (ctx_pediu_categoria), que abre a escolha dele.
 static char pedCategoriaImdb[24];
+// "Ver detalhes" so no card de RETOMADA da home com "OK = tocar" (#350): ali o
+// OK nao abre a pagina e nao havia outra porta. Nos demais cartoes o toque ja
+// abre o titulo (dono, 06/10/2026).
+static int detalhesOk, detalhesPend, deOutraTela;
 
 // --- ESTILO DA FILEIRA -------------------------------------------------------
 //
@@ -410,6 +414,7 @@ static void montar(void) {
   // na extensao ao lado do menu (ctxinfo.h).
   // Sem IMDb nao ha endpoint remoto suportado para esta acao. Nao oferecer
   // um botao que so aparentaria funcionar e inventaria estado local.
+  if (detalhesOk && !doPainel && ci->imdb[0]) juntar("Ver detalhes", OP_DETALHES);
   if (ci->imdb[0]) {
     // O MESMO VERBO DO PAINEL E DO BOTAO "+". Estava "Adicionar à biblioteca",
     // e "Biblioteca" e o nome de uma TELA — a pessoa lia o rotulo, ia ate a
@@ -541,6 +546,7 @@ void ctx_abrir(int indice) {
   doSocial = 0;
   soFileira = 0;
   doLista = 0;
+  detalhesPend = !deOutraTela && ajustes_cw_ok_toca() && home_foco_retomada();
   abrirComum(indice);
   { HomeItem hi;
     // So um CARTAZ: o destaque tambem e "item focado", mas o retangulo dele e
@@ -555,7 +561,9 @@ void ctx_abrir(int indice) {
 }
 
 void ctx_abrir_cartaz(int indice, GfxRect r, const char *arte) {
+  deOutraTela = 1;
   ctx_abrir(indice);
+  deOutraTela = 0;
   if (!aberto || doLista) return;
   cartazFixo = 0;
   if (r.w > 8.0f && r.h > 8.0f && arte && arte[0]) {
@@ -612,6 +620,7 @@ static void abrirComum(int indice) {
   esperandoSoltura = 1;   // o OK que abriu ainda esta afundado; ver a nota acima
   idx = indice; foco = 0; aberto = 1;
   dispensarOp = dispensarPend; dispensarPend = 0;
+  detalhesOk = detalhesPend; detalhesPend = 0;
   temCartaz = 0; cartazFixo = 0;
   pagina = soFileira ? 1 : 0;
   estFoco = -1;               // montar() poe o foco na forma atual
@@ -962,6 +971,11 @@ static void aplicar(void) {
       // mesma razao que salvospainel.c copia: o vetor do catalogo troca de
       // bloco a cada republicacao da descoberta.
       if (recenviar_abrir(ci)) aberto = 0;
+      break;
+    case OP_DETALHES:
+      home_pedir_abrir();
+      aberto = 0;
+      pagina = 0;
       break;
     case OP_DISPENSAR:
       home_retomar_dispensar();
@@ -1969,6 +1983,7 @@ static void ctx_desenharCorpo_(Uint32 agora) {
       case OP_TIRAR_CONTINUAR: icone = "aj_x"; break;
       case OP_DISPENSAR:  icone = "aj_x"; break;
       case OP_RECOMENDAR: icone = "aj_users"; break;
+      case OP_DETALHES:   icone = "aj_info"; break;
       case OP_ESTILO:     icone = "aj_rows-3"; break;
       case OP_CATEGORIA:  icone = "aj_folders"; break;
       default:
