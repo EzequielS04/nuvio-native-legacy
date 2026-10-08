@@ -1131,6 +1131,22 @@ static PlrRect destinoComRecuo(PlrRect d) {
 // Definida abaixo, junto do ciclo de modos: quem aplica precisa dela antes.
 static int modoPrecisaRecorte(int modo);
 
+#ifdef NV_ANDROID
+// DOLBY VISION ESCURO (2.0.3). A fonte abre com o layout NEUTRO da SurfaceView
+// (quadro inteiro encaixado, nada pedido) e o modo salvo so entra DEPOIS do
+// primeiro quadro + ASP_ASSENTA_MS; aplicar o recorte/zoom antes disso fazia o
+// decoder/painel escolher o caminho errado (escuro) no DV. Mudanca manual
+// durante a reproducao continua imediata (player_aspecto_definir libera).
+#define ASP_ASSENTA_MS 300u
+static int    aspPendente = 0;
+#define ASP_SEGURANCA_MS 3000u
+static Uint32 aspLiberarEm = 0, aspProntoDesde = 0;
+static void aspArmar(void) { aspPendente = comVideo ? 1 : 0; aspLiberarEm = aspProntoDesde = 0; }
+#else
+#define aspPendente 0
+static void aspArmar(void) {}
+#endif
+
 static void aplicarAspecto(void) {
   PlrRect r, d;
   float qw, qh;
@@ -1145,6 +1161,9 @@ static void aplicarAspecto(void) {
               video_janela((int)(o.x + 0.5f), (int)(o.y + 0.5f),
                            (int)(o.w + 0.5f), (int)(o.h + 0.5f));
               return; }
+
+  // Layout neutro ate o modo salvo ser liberado (ver aspArmar).
+  if (aspPendente) return;
 
   // VALOR HERDADO. `aspecto` e gravado por aparelho, mas um arquivo copiado —
   // ou um modo que existia numa versao anterior — pode trazer um modo que esta
@@ -1196,6 +1215,9 @@ void player_aspecto_definir(int modo) {
   if (modo < 0 || modo >= PLR_ASP_N) modo = PLR_ASP_ORIGINAL;
   aspecto = modo;
   prefsGravar();
+#ifdef NV_ANDROID
+  aspPendente = 0;   // pedido manual: vale na hora
+#endif
   aplicarAspecto();
 }
 
@@ -1335,6 +1357,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
   mkvass_video_aberto(comVideo);
   legsync_iniciar(comVideo ? video_url_atual() : "");   // F05: geracao nova, sem rede nem espera
   legsync_ui_ligar();   // F05: a linha de AutoSync do seletor de legendas (legendasui.c)
+  aspArmar();
   aplicarAspecto();
 
   const CatItem *c = item();
@@ -1424,6 +1447,7 @@ static void tocarFonte(const char *url) {
 #endif
   }
   mkvass_video_aberto(comVideo);
+  aspArmar();
   if (!comVideo) erroSemVideo();
   // No PiP a fonte nova retoca o mesmo canto — o destino de tela cheia do
   // aplicarAspecto so vale com a tela aberta.
@@ -2905,6 +2929,25 @@ void player_atualizar(float dt, Uint32 agora) {
   // videoInfo chega — segundos depois da abertura. Sem esta releitura o modo
   // ficaria calculado com o chute de 16:9 para sempre, e num arquivo 3840x1606
   // (que e o caso real medido nesta TV) o "Original" cortaria a imagem.
+#ifdef NV_ANDROID
+  if (!comVideo) aspPendente = 0;   // fonte fechada: cancela
+  else if (aspPendente && video_pronto()) {
+    // video_pronto() = primeiro quadro renderizado (EV_PRIMEIRO_QUADRO).
+    // Espera a superficie ESTAVEL (ultima recriacao do HDR/DV, NvPlayer.kt);
+    // o prazo de seguranca evita ficar neutro para sempre.
+    if (!aspProntoDesde) aspProntoDesde = agora | 1;
+    if (!aspLiberarEm) {
+      if (video_superficie_estavel()) aspLiberarEm = agora + ASP_ASSENTA_MS;
+      else if ((int)(agora - aspProntoDesde) >= (int)ASP_SEGURANCA_MS) aspLiberarEm = agora;
+    }
+    else if ((int)(agora - aspLiberarEm) >= 0) {
+      aspPendente = 0;
+      printf("[aspect] aplicado apos primeiro quadro: %d\n", aspecto);
+      fflush(stdout);
+      aplicarAspecto();
+    }
+  }
+#endif
   if (comVideo) {
     static int ultLarg, ultAlt;
     int lw = video_largura(), lh = video_altura();
