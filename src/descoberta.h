@@ -170,6 +170,8 @@ int  desc_busca_item(int i, CatItem *dst);
 // lento de dez.
 int  desc_busca_n_alvos(void);
 const char *desc_busca_alvo_titulo(int alvo);   // "Filmes", "Séries"
+int desc_busca_alvo_nuvio(int alvo);             // 1 = catalogo do Nuvio (#311)
+int desc_busca_n_fontes(void);                   // fontes distintas consultadas (#311)
 const char *desc_busca_alvo_addon(int alvo);    // "Cinemeta", "Xperience"
 // O NOME que o manifesto da a um catalogo (base sem /manifest.json, tipo, id);
 // "" enquanto o manifesto nao passou pela descoberta. Para a aba da colecao

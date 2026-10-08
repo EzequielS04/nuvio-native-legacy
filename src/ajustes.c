@@ -479,6 +479,10 @@ typedef enum {
   // series entram na fileira; Desligado = so o que esta em andamento. Por perfil, local
   // (como AJ_CW_FONTE). No fim: valor[]/CHAVE[] posicionais.
   AJ_CW_PROXIMO,
+  // #311: onde ficam os resultados do catalogo do Nuvio na busca (Primeiro | Por
+  // ultimo | Desligado) e se cada grupo diz "de <fonte>". LOCAIS. No fim:
+  // valor[]/CHAVE[] posicionais.
+  AJ_BUSCA_NUVIO, AJ_BUSCA_ORIGEM,
   AJ_N
 } OpcaoId;
 
@@ -520,6 +524,7 @@ static const char *V_BRILHO_PLAYER[] = { "100%", "80%", "65%", "50%" };
 static const char *V_DTS_SAIDA[] = { "Estéreo (AAC)", "5.1 (Dolby Digital)" };
 static const char *V_PROPORCAO[] = { "Último usado", "Original", "Recortar", "Esticar", "Zoom leve", "Zoom cinema", "Zoom ultra", "Ajustar altura", "Ajustar largura" };
 static const char *V_LOGO_APP[] = { "Novo", "Clássico" };
+static const char *V_BUSCA_NUVIO[] = { "Primeiro", "Por último", "Desligado" };
 static const char *V_ABERTURA[] = { "Padrão", "Só esmaece", "Direto" };
 // #202: "Instantâneo" e 15/30 s, como o "Stream Selection Timeout" do
 // oficial (0 = instantaneo; Unlimited = todos). O indice e o gravado em
@@ -1294,6 +1299,8 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Conferir várias fontes ao mesmo tempo", V_LIGA, 2),   // local: fonteConferirVariasLocal
   ESC("Preparar a fonte ao abrir o título", V_LIGA, 2),   // local: fontePrepararLocal
   ESC("Próximo episódio no Continuar",   V_LIGA, 2),   // por perfil: cwProximoLocal
+  ESC("Resultados do catálogo do Nuvio na busca", V_BUSCA_NUVIO, 3), // local: buscaNuvioLocal
+  ESC("Mostrar a fonte nos resultados da busca", V_LIGA, 2),   // local: buscaOrigemLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1514,6 +1521,7 @@ static const char *CHAVE[] = {
   "fonteConferirVariasLocal",
   "fontePrepararLocal",
   "cwProximoLocal",
+  "buscaNuvioLocal", "buscaOrigemLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1774,6 +1782,18 @@ static const char *heroFonteRotulo(void);
 static void heroFonteCiclar(int dir);
 
 static int lig(int op)  { return valor[op] == 0; }
+// #311: "Buscar no Cinemeta" so governa a BUSCA (o add-on Cinemeta e a reserva
+// do catalogo do Nuvio). Sem o add-on instalado e com o ajuste no padrao ele nao
+// tem o que mostrar, e a pessoa o lia como "esconder o Cinemeta da Home": some da
+// folha. Desligado continua visivel, para poder ser religado.
+static int cinemetaInstalado(void) {
+  int i, n = addons_n();
+  for (i = 0; i < n; i++) {
+    const char *b = addons_base(i);
+    if (b && strstr(b, "cinemeta")) return 1;
+  }
+  return 0;
+}
 
 int ajustes_animacoes_reduzidas(void) { return valor[AJ_ANIM] == 1; }
 // Lido UMA vez, na criacao da janela, antes de qualquer desenho: trocar isto
@@ -1830,6 +1850,8 @@ int ajustes_fonte_aquecer(void) { return lig(AJ_FONTE_AQUECER); }
 int ajustes_fonte_conferir_varias(void) { return lig(AJ_FONTE_CONFERIR_VARIAS); }
 int ajustes_fonte_preparar(void) { return lig(AJ_FONTE_PREPARAR); }
 int ajustes_cw_proximo(void) { return lig(AJ_CW_PROXIMO); }
+int ajustes_busca_nuvio(void) { int v = valor[AJ_BUSCA_NUVIO]; return v < 0 || v > 2 ? 0 : v; }
+int ajustes_busca_origem(void) { return lig(AJ_BUSCA_ORIGEM); }
 int ajustes_fonte_escopo(void)      { int v = valor[AJ_FONTE_ESCOPO]; return v < 0 || v > 2 ? 0 : v; }
 int ajustes_fonte_regex_modo(void)  { int v = valor[AJ_FONTE_REGEX]; return v < 0 || v > 2 ? 0 : v; }
 int ajustes_fonte_usar_outros(void) { return lig(AJ_FONTE_OUTROS); }
@@ -3850,6 +3872,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
     case AJ_GPU_EFEITOS:    /* a GPU e desta TV */
     case AJ_BUSCA_CINEMETA: /* o web nao tem esta escolha */
+    case AJ_BUSCA_NUVIO: case AJ_BUSCA_ORIGEM: /* idem (#311) */
     case AJ_ESMAECER: case AJ_BRILHO_PLAYER: /* o painel OLED e desta TV */
     case AJ_PROPORCAO_PADRAO: /* o aspecto e a tela desta TV */
     case AJ_MANTER_VIDEO:   /* a memoria e o decoder sao desta TV */
@@ -4807,6 +4830,7 @@ static int visivel(int i) {
   if (TELA[i].tipo == IT_OPC) {
     int op = TELA[i].op;
     if ((op == AJ_PERFIL_PESQ || op == AJ_PERFIL_EDITAR) && !recomenda_ativo()) return 0;
+    if (op == AJ_BUSCA_CINEMETA && valor[op] == 0 && !cinemetaInstalado()) return 0;
     if (uxAvancada(op) && !lig(AJ_AVANCADAS)) return 0;
   }
   return 1;
@@ -5139,7 +5163,9 @@ static const char *ajudaOpcao(int op) {
     case AJ_DESCANSO_FONTE: return "De onde a vitrine tira os títulos: o catálogo inteiro, ou só o que está na sua lista e em Continuar assistindo.";
     case AJ_PROPORCAO_PADRAO: return "Como a imagem do filme ocupa a tela quando o vídeo começa. Último usado mantém o que você escolheu por último no player. Os outros modos valem em todo vídeo, e você ainda pode trocar durante a reprodução com a tecla 0 ou o botão Proporção. Em TVs que não recortam a imagem, os modos de zoom caem para Original.";
     case AJ_BRILHO_PLAYER: return "Escurece os controles, o título e a barra do player (as legendas não mudam). Com o filme tocando e a barra parada, ela ainda baixa um degrau até você apertar uma tecla.";
-    case AJ_BUSCA_CINEMETA: return "Ligado (padrão): a busca consulta o catálogo do Nuvio e, se ele falhar, o Cinemeta; um add-on Cinemeta instalado também responde. Desligado: o Cinemeta fica de fora da busca, e só o catálogo do Nuvio e os seus add-ons respondem. Não muda a ficha do título (veja Usar sempre o Cinemeta).";
+    case AJ_BUSCA_CINEMETA: return "Só a busca. Ligado (padrão): consulta o catálogo do Nuvio e, se ele falhar, o Cinemeta; um add-on Cinemeta instalado também responde. Desligado: o Cinemeta fica de fora da busca. Não mexe nas fileiras da Home (para escondê-las, use Fileiras da Home) nem na ficha do título.";
+    case AJ_BUSCA_NUVIO: return "Onde ficam os resultados do catálogo do Nuvio (os grupos Filmes e Séries da busca). Primeiro (padrão): antes dos seus add-ons. Por último: depois deles, para os seus resultados virem na frente. Desligado: a busca não consulta o catálogo do Nuvio. O Continuar assistindo não muda.";
+    case AJ_BUSCA_ORIGEM: return "Ligado (padrão): cada grupo de resultados diz de qual fonte veio, como de AIOMetadata. Desligado: só o nome do grupo. Com uma única fonte de busca ativa, a fonte nunca aparece.";
     case AJ_ENQUETES: return "Ligado, o Nuvio pode convidar você a votar numa enquete curta na ilha do relógio. Desligado, nenhuma aparece. A escolha fica na sua conta.";
     case AJ_RELOGIO: return "Desligado, a pílula do relógio não fica na tela em repouso. Os avisos continuam saindo dela: ela aparece só para o aviso e some depois.";
     case AJ_SAIDA_PLAYER: return "Ao sair de um filme ou episódio no meio. Home: o vídeo encolhe até a pílula do relógio, que fica com o título para você retomar (CH+ ou AZUL). Página do título: volta para onde você estava. Só vale com o relógio na tela; terminar o título segue para o próximo episódio como sempre.";
@@ -6948,7 +6974,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_CW_FURTHEST: case AJ_CW_NAO_EXIBIDOS: case AJ_CW_ORDEM: case AJ_CW_RETIDO_TAMBEM:
       return AJPV_CONTINUAR;
     case AJ_DET_BLUR_NAO_VISTOS: case AJ_DET_TRAILER: case AJ_DET_META_EXT:
-    case AJ_DET_SO_CINEMETA: case AJ_BUSCA_CINEMETA:
+    case AJ_DET_SO_CINEMETA: case AJ_BUSCA_CINEMETA: case AJ_BUSCA_NUVIO: case AJ_BUSCA_ORIGEM:
     case AJ_DET_DATA_CHEIA: case AJ_DET_VEU: case AJ_DET_TRAILER_AUTO:
     case AJ_DET_TRAILER_SOM:
     case AJ_TRAILER_QUAL: case AJ_TRAILER_ASPECTO: case AJ_TRAILER_FONTE: case AJ_TRAILER_ZOOM_TPK:

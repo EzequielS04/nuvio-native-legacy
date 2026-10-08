@@ -414,7 +414,14 @@ static void refiltrar(void) {
   // Os itens entram no catalogo global via cat_acrescentar_lote porque a tela
   // abre titulo por INDICE de catalogo — um resultado que vivesse so aqui nao
   // seria abrivel.
-  { int alvoIdx, nAlvos = desc_busca_n_alvos();
+  // #311: o catalogo do Nuvio pode ir para o FIM dos alvos (passo 1) ou nem ser
+  // consultado (desc_busca_*); o Continuar assistindo, que vem das fileiras
+  // locais abaixo, nao muda de lugar. A "fonte" sob o grupo some com o ajuste
+  // ou quando so ha uma fonte de busca ativa.
+  { int alvoIdx, passo, nAlvos = desc_busca_n_alvos();
+    int nuvioDepois = ajustes_busca_nuvio() == 1;
+    int mostraFonte = ajustes_busca_origem() && desc_busca_n_fontes() > 1;
+   for (passo = 0; passo < (nuvioDepois ? 2 : 1); passo++)
     for (alvoIdx = 0; alvoIdx < nAlvos && nFil < BU_MAX_FILEIRAS; alvoIdx++) {
       int nRem = desc_busca_alvo_n(alvoIdx, consulta), i;
       // DOIS PASSOS, e a separacao e o conserto: primeiro junta os que ainda
@@ -428,6 +435,7 @@ static void refiltrar(void) {
       int achou = 0, nNovos = 0;
       int posNovo[BU_MAX_POR_FIL];   // onde cada novo entra em fil[].itens
       if (nRem <= 0) continue;
+      if (nuvioDepois && (desc_busca_alvo_nuvio(alvoIdx) != 0) != (passo == 1)) continue;
       for (i = 0; i < nRem && achou < BU_MAX_POR_FIL; i++) {
         CatItem it;
         int idx;
@@ -458,7 +466,7 @@ static void refiltrar(void) {
       }
       if (achou > 0) {
         fil[nFil].titulo = desc_busca_alvo_titulo(alvoIdx);
-        fil[nFil].origem = desc_busca_alvo_addon(alvoIdx);
+        fil[nFil].origem = mostraFonte ? desc_busca_alvo_addon(alvoIdx) : NULL;
         fil[nFil].n = achou;
         nFil++;
       }

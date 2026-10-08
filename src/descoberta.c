@@ -799,6 +799,7 @@ static int consultarAlvo(const AlvoBusca *a, const char *termo,
   // estao la. O alvo do Nuvio tem 5 s e, se falhar, o Cinemeta mais 6.
   // #231: com "Buscar no Cinemeta" desligado, nem o add-on Cinemeta nem a reserva
   // do catalogo do Nuvio (seg_cine < 0) respondem.
+  if (a->nuvio && ajustes_busca_nuvio() == 2) return 0;   // #311: Nuvio fora da busca
   if (!a->nuvio && !ajustes_busca_cinemeta() &&
       (baseEhCinemeta(a->base) || desc_busca_base_oculta(a->base) ||
        !strcasecmp(a->addon, "cinemeta"))) return 0;
@@ -867,7 +868,7 @@ static void *fioBusca(void *arg) {
   }
 }
 
-static int cinemetaVisto = 1;   // ultimo valor de ajustes_busca_cinemeta() visto aqui
+static int cinemetaVisto = 1;   // ultimo valor de ajustes_busca_cinemeta()/_nuvio() visto aqui (#311: junta os dois)
 
 void desc_buscar(const char *termo) {
   int k, faltam;
@@ -875,7 +876,7 @@ void desc_buscar(const char *termo) {
   pthread_mutex_lock(&buscaTrava);
   // Mudar "Buscar no Cinemeta" com a mesma palavra ainda guardada nao pode
   // devolver o resultado de antes: o interruptor invalida o termo pedido.
-  { int cine = ajustes_busca_cinemeta() ? 1 : 0;
+  { int cine = (ajustes_busca_cinemeta() ? 1 : 0) | (ajustes_busca_nuvio() == 2 ? 2 : 0);
     if (cine != cinemetaVisto) { cinemetaVisto = cine; buscaPedido[0] = 0; buscaTermo[0] = 0; } }
   if (!strcmp(termo, buscaPedido)) { pthread_mutex_unlock(&buscaTrava); return; }
   snprintf(buscaPedido, sizeof buscaPedido, "%s", termo);
@@ -925,6 +926,30 @@ const char *desc_busca_alvo_titulo(int alvo) {
 }
 const char *desc_busca_alvo_addon(int alvo) {
   return (alvo >= 0 && alvo < nAlvos) ? alvos[alvo].addon : "";
+}
+
+int desc_busca_alvo_nuvio(int alvo) {
+  return (alvo >= 0 && alvo < nAlvos) ? alvos[alvo].nuvio : 0;
+}
+
+// #311: quantas FONTES (nomes de addon distintos) a busca consulta de fato, com
+// "Nuvio" e "Cinemeta" ja descontados quando desligados. Com uma so, o nome da
+// fonte sob o grupo e ruido: a tela o omite. Conta alvos, nao resultados, para
+// o rotulo nao aparecer e sumir enquanto as respostas chegam.
+int desc_busca_n_fontes(void) {
+  int i, j, n = 0;
+  for (i = 0; i < nAlvos; i++) {
+    const AlvoBusca *a = &alvos[i];
+    int repetida = 0;
+    if (a->nuvio ? ajustes_busca_nuvio() == 2
+                 : (!ajustes_busca_cinemeta() &&
+                    (baseEhCinemeta(a->base) || desc_busca_base_oculta(a->base) ||
+                     !strcasecmp(a->addon, "cinemeta")))) continue;
+    for (j = 0; j < i && !repetida; j++)
+      if (!strcasecmp(alvos[j].addon, a->addon)) repetida = 1;
+    if (!repetida) n++;
+  }
+  return n;
 }
 
 int desc_busca_alvo_item(int alvo, int i, CatItem *dst) {
