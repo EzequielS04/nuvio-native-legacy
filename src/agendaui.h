@@ -27,6 +27,12 @@ int  agendaui_menu_aberto(void);
 // Consumido uma vez. Quem abre o titulo e pede a reproducao e o roteador
 // (app.c), pelo mesmo caminho do cartao de Continuar assistindo.
 const char *agendaui_pediu_tocar(int *temporada, int *episodio);
+// TESTE (#99): o foco de agora, para conferir o ponteiro de fora. NULL = nao
+// quer. `modal` 0 lista/mes, 1 modal, 2 manchetes, 3 noticia; `modalFoco` e
+// a acao (1) ou a manchete (2); `celula` -1 com o painel do dia em foco;
+// `evento` -1 fora dele.
+void agendaui_teste_foco(int *linha, int *cabecalho, int *modal, int *modalFoco,
+                         int *celula, int *evento);
 
 // O DESPERTADOR, desenhado em qualquer tela que fale de lembrete (a estacao da
 // agenda, o botao do hero, o cartao de abertura). Mora aqui porque as tres

@@ -56,6 +56,7 @@
 #include "tex_cache.h"
 #include "text.h"
 #include "js.h"
+#include "ponteiro.h"
 #include <stdatomic.h>
 #include <math.h>
 #include <stdio.h>
@@ -2913,6 +2914,50 @@ static void desenharVazao(float y0, float ar, float ag, float ab, Uint32 agora) 
                x0, y0 + (ve != 1 ? 736.0f : 668.0f));
 }
 
+// PONTEIRO (#99). Os alvos das ilhas poem o foco nas MESMAS variaveis das
+// setas (focoModo/focoLinha no objetivo, d.botao no resultado, vz.botao no
+// teste de velocidade); o OK do clique segue o caminho de sempre. So foco:
+// nada abre, nada roda, e o que ja esta em foco nao e mexido.
+static int dgPonteiroLivre(void) {
+  return !d.intro && !introGlobal && !sairTela;
+}
+// Cartao de objetivo: hover e clique so ESCOLHEM o modo (ativar proprio); o
+// OK do teclado nessa fileira inicia o teste, mas um clique no cartao nao
+// pode disparar oito minutos de rede.
+static void ponteiroModo(int i, int b) {
+  (void)b;
+  if (!dgPonteiroLivre() || vz.aberto || atomic_load(&d.estado) != 0 || i < 0 || i > 1) return;
+  if (focoModo == i && !focoLinha) return;
+  focoModo = i; focoLinha = 0;
+}
+// Os dois botoes do objetivo: linha 0 = "Iniciar diagnostico", 1 = "Teste
+// de velocidade".
+static void ponteiroLinhaObj(int l, int b) {
+  (void)b;
+  if (!dgPonteiroLivre() || vz.aberto || atomic_load(&d.estado) != 0 || l < 0 || l > 1) return;
+  focoLinha = l;
+}
+static void ponteiroBotaoRes(int i, int b) {
+  int lista[B_N];
+  (void)b;
+  if (!dgPonteiroLivre() || vz.aberto || atomic_load(&d.estado) != 2 || d.sugEstado == DS_TESTANDO) return;
+  if (i < 0 || i >= botoesVisiveis(lista)) return;
+  d.botao = i;
+}
+static void ponteiroBotaoVaz(int i, int b) {
+  int lista[VB_N];
+  (void)b;
+  if (!vz.aberto || atomic_load(&vz.estado) == 1 || i < 0 || i >= vazBotoes(lista)) return;
+  vz.botao = i;
+}
+int diagnostico_teste_foco(int *modo, int *linha, int *botao, int *vzBotao) {
+  if (modo) *modo = focoModo;
+  if (linha) *linha = focoLinha;
+  if (botao) *botao = d.botao;
+  if (vzBotao) *vzBotao = vz.botao;
+  return atomic_load(&d.estado);
+}
+
 static void diagnosticoAntigo(Uint32 agora);
 #include "diagnostico_ilha.inc"
 
@@ -2929,7 +2974,7 @@ void diagnostico_desenhar(Uint32 agora) {
       if (d.intro) gfx_opacidade_grupo = 0.16f;   // a tela RECUA atras do modal
       dgObjetivo();
       gfx_opacidade_grupo = 1.0f;
-      if (d.intro) dgApresentacao(0);
+      if (d.intro) { ponteiro_camada(); dgApresentacao(0); }
       return;
     }
     if (est == 1) { dgAndamento(agora); return; }
@@ -2937,7 +2982,7 @@ void diagnostico_desenhar(Uint32 agora) {
       if (d.intro) gfx_opacidade_grupo = 0.16f;
       dgResultado();
       gfx_opacidade_grupo = 1.0f;
-      if (d.intro) dgApresentacao(0);
+      if (d.intro) { ponteiro_camada(); dgApresentacao(0); }
       return;
     }
   }

@@ -14,6 +14,7 @@
 #include "relogiofim.h"
 #include "desempenho.h"
 #include "velocidade.h"
+#include "ponteiro.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
 #include "escala.h"
 #include <math.h>
@@ -346,6 +347,13 @@ static void plrilha_desenharCorpo_(Uint32 agora) {
     if (raioPx > RAIO_CORPO * cresce + h * 0.5f * (1.0f - cresce)) raioPx = RAIO_CORPO * cresce + h * 0.5f * (1.0f - cresce);
     if (raioPx > h * 0.5f) raioPx = h * 0.5f;
     ultRect = R; ultOk = 1;
+    // PONTEIRO (#99): a pilula que pediu clique (ponteiroOk), so assentada —
+    // sem corpo, opaca e no tamanho final. Sem camada propria: o alvo cai na
+    // camada de quem estiver por cima no player, como a pilula cai na tela.
+    // O corpo de uma folha (faixas, fontes, episodios) registra os seus alvos
+    // ele mesmo, na camada da folha, quando a ilha o chama abaixo.
+    if (p->ponteiroOk && !corpo && A > 0.99f && fabsf(W - alvoW) < 1.0f && fabsf(H - alvoH) < 1.0f)
+      ponteiro_alvo(R.x, R.y, R.w, R.h, p->ponteiroOk, NULL, 0, 0);
     plrui_material(R, raioPx, (temUlt ? ult.modal : 0), A);
     gfx_recorte(R.x, R.y, R.w, R.h);
     { float cabH = h < CAB_H ? h : CAB_H;

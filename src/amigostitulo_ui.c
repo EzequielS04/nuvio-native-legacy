@@ -8,6 +8,7 @@
 #include "anim.h"
 #include "ajustes.h"
 #include "idioma.h"
+#include "ponteiro.h"
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -40,6 +41,16 @@ void amtui_abrir(const AmigosTitulo *t, int t2, int e2, const char *tit) {
 
 int  amtui_aberta(void) { return aberta; }
 void amtui_fechar(void) { aberta = 0; }
+
+// PONTEIRO (#99). A linha sob o cursor vira o foco (a MESMA variavel das
+// setas). O clique e o OK, que aqui fecha a folha — como no controle. A
+// camada e de detail.c, que chama ponteiro_camada antes de amtui_desenhar.
+static void ponteiroLinha(int i, int b) {
+  (void)b;
+  if (!aberta || i == foco || i < 0 || i >= lista.n) return;
+  foco = i;
+}
+int amtui_teste_foco(void) { return aberta ? foco : -1; }
 
 void amtui_evento(const SDL_Event *e) {
   SDL_Keycode k;
@@ -95,6 +106,9 @@ void amtui_desenhar(Uint32 agora) {
     TxtLinha ln, ls, le;
     float bloco, ty;
     if (ly + AMTUI_LIN_H < y0 + AMTUI_TOPO - 4.0f || ly > y0 + h) continue;
+    if (a >= 1.0f)
+      ponteiro_alvo_faixa(x + 16.0f, ly + 4.0f, AMTUI_W - 32.0f, AMTUI_LIN_H - 8.0f,
+                          y0 + AMTUI_TOPO, y0 + AMTUI_TOPO + areaH + 12.0f, ponteiroLinha, NULL, i, 0);
     if (i == foco) plrui_linha_foco((GfxRect){ x + 16.0f, ly + 4.0f, AMTUI_W - 32.0f, AMTUI_LIN_H - 8.0f }, 24.0f, a);
     svd_avatar((GfxRect){ x + AMTUI_PAD, ly + (AMTUI_LIN_H - AMTUI_AV) * 0.5f, AMTUI_AV, AMTUI_AV },
                am->avatar, am->nome, am->id, a);

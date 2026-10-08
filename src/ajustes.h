@@ -86,6 +86,10 @@ int  ajustes_opcao_em_foco(void);
 // 1 = o foco esta na coluna de categorias, que e onde a tela abre sempre —
 // menos logo depois de ajustes_abrir_na_cor, que pousa na lista.
 int  ajustes_foco_no_indice(void);
+// Testes do ponteiro (#99): o editor aberto (0 fechado, 1 painel/linha,
+// 2 dependencia), o valor pendente, se o foco esta no rodape "Restaurar
+// padrao" e se a pergunta de restaurar esta na tela (com o botao em foco).
+int  ajustes_teste_editor(int *pendente, int *rodape, int *restaurar, int *confirmar);
 void ajustes_encerrar(void);
 
 // Leitura pelo resto do app. "Animacoes reduzidas" e a que mais importa: com

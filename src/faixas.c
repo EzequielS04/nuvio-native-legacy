@@ -298,6 +298,11 @@ void faixas_shot_pilula(int estado, const char *idioma, const char *provedor, Ui
 }
 #endif
 
+// PONTEIRO (#99) NA PILULA DE FALHA: nada a focar (ela e o unico botao); o
+// alvo existe para o clique virar o OK que faixas_pilula_tecla ja trata — sem
+// ele o clique caia no fundo do player (pausar/tocar).
+static void ponteiroPilula(int a, int b) { (void)a; (void)b; }
+
 static void pilPedir(void) {
   static char texto[200], dir[48];
   char nome[64];
@@ -324,7 +329,8 @@ static void pilPedir(void) {
       snprintf(texto, sizeof texto, pilFalhaBaixar ? "%s" : i18n("Nenhuma legenda em %s"),
                pilFalhaBaixar ? i18n("Não deu para baixar a legenda") : nome);
       snprintf(dir, sizeof dir, "%s", i18n("OK abre a lista"));
-      p.icone = "pl_triangle-alert"; p.corIcone = 1; p.direita = dir; break;
+      p.icone = "pl_triangle-alert"; p.corIcone = 1; p.direita = dir;
+      p.ponteiroOk = ponteiroPilula; break;
   }
   p.texto = texto; p.semFim = 1; p.aberta = 1;
   plrilha_pedir(&p);
@@ -457,6 +463,16 @@ void faixas_abrir_em(int col) {
 int faixas_aberta(void) { return aberta; }
 int faixas_estilo_topo(void) { return aberta && modo && coluna == FX_COL_ESTILO; }
 float faixas_anim(void) { return anim; }
+void faixas_aba_estilo(int estilo) {
+  if (!aberta || !modo) return;
+  coluna = estilo ? FX_COL_ESTILO : 1;
+}
+int faixas_teste_foco(int *col, int *vol, int *vel) {
+  if (col) *col = coluna;
+  if (vol) *vol = volFoco;
+  if (vel) *vel = velFoco;
+  return aberta ? foco[coluna] : -1;
+}
 
 // CANAL AO VIVO NAO TEM LEGENDA DE ADDON (dono, 03/10: "a legenda ta errada,
 // ta pegando e uma de filmes"). A lista de addons.c e GLOBAL: guarda o que o
@@ -817,6 +833,24 @@ static void legendaAutomatica(Uint32 agora) {
   escolherLegenda(r);
 }
 
+// Os passos de ESQUERDA/DIREITA do volume, da velocidade e do atraso da barra
+// de estilo: um caminho so para a seta e para os discos < > do ponteiro.
+static void passoVolume(int d) {
+  int antes = cacheboost_volume(), v = cacheboost_volume_passo(d);
+  if (v != antes) cacheboost_backend_ganho(v);
+}
+static void passoVelocidade(int d) {
+  int antes = video_velocidade_atual(), v = vel_passo(antes, d);
+  if (v != antes) { video_velocidade(v); velPedidaUi = v; }
+}
+static void passoAtrasoEstilo(int d) {
+  VideoLegendaEstilo *e = player_leg_estilo();
+  e->atrasoMs += d > 0 ? 250 : -250;
+  if (e->atrasoMs > 5000) e->atrasoMs = 5000;
+  if (e->atrasoMs < -5000) e->atrasoMs = -5000;
+  player_leg_estilo_mudou();
+}
+
 void faixas_evento(const SDL_Event *e) {
   SDL_Keycode k;
   if (!aberta || e->type != SDL_KEYDOWN) return;
@@ -834,11 +868,7 @@ void faixas_evento(const SDL_Event *e) {
   // OK just closes, like Back.
   if (!modo && volFoco) {
     if (!volFocavel()) { volFoco = 0; return; }
-    if (k == SDLK_LEFT || k == SDLK_RIGHT) {
-      int antes = cacheboost_volume(), v = cacheboost_volume_passo(k == SDLK_RIGHT ? 1 : -1);
-      if (v != antes) cacheboost_backend_ganho(v);
-      return;
-    }
+    if (k == SDLK_LEFT || k == SDLK_RIGHT) { passoVolume(k == SDLK_RIGHT ? 1 : -1); return; }
     if (k == SDLK_DOWN) {
       if (velFocavel()) { volFoco = 0; velFoco = 1; }
       else if (nLinhas(0) > 0) volFoco = 0;
@@ -850,11 +880,7 @@ void faixas_evento(const SDL_Event *e) {
   // #202: the speed row. The change is live, like the volume; OK closes.
   if (!modo && velFoco) {
     if (!velFocavel()) { velFoco = 0; return; }
-    if (k == SDLK_LEFT || k == SDLK_RIGHT) {
-      int antes = video_velocidade_atual(), v = vel_passo(antes, k == SDLK_RIGHT ? 1 : -1);
-      if (v != antes) { video_velocidade(v); velPedidaUi = v; }
-      return;
-    }
+    if (k == SDLK_LEFT || k == SDLK_RIGHT) { passoVelocidade(k == SDLK_RIGHT ? 1 : -1); return; }
     if (k == SDLK_UP) { if (volFocavel()) { velFoco = 0; volFoco = 1; } return; }
     if (k == SDLK_DOWN) { if (nLinhas(0) > 0) velFoco = 0; return; }
     if (k == SDLK_RETURN || k == SDLK_KP_ENTER) { aberta = 0; return; }
@@ -874,11 +900,7 @@ void faixas_evento(const SDL_Event *e) {
     // atrasa 0,25 s, sem dar a volta; para sair dele, cima/baixo. O OK segue
     // girando, como nas outras opcoes.
     if (*f == 7 && (k == SDLK_LEFT || k == SDLK_RIGHT) && !estiloPreservadoAss(7)) {
-      VideoLegendaEstilo *e = player_leg_estilo();
-      e->atrasoMs += k == SDLK_RIGHT ? 250 : -250;
-      if (e->atrasoMs > 5000) e->atrasoMs = 5000;
-      if (e->atrasoMs < -5000) e->atrasoMs = -5000;
-      player_leg_estilo_mudou();
+      passoAtrasoEstilo(k == SDLK_RIGHT ? 1 : -1);
       return;
     }
     if (k == SDLK_LEFT)  { if (*f % FX_BARRA_COLS) (*f)--; else coluna = 1; return; }
@@ -1173,6 +1195,34 @@ static void linhaLista(int col, int i, float x, float y, float w, float a) {
 
 static int visiveisLista(int col) { int n = nLinhas(col); return n < IL_VIS_COL(col) ? n : IL_VIS_COL(col); }
 
+// PONTEIRO (#99) NAS LINHAS DE VOLUME E VELOCIDADE. Passar por cima poe o foco
+// como as setas (volFoco/velFoco, zerando o outro). O OK delas FECHA a folha,
+// e clicar no controle para fechar seria surpresa: o clique na LINHA so foca
+// (ativar proprio = o mesmo focar) e os discos < >, que aparecem com a linha
+// em foco, sao os botoes — ESQUERDA/DIREITA, o mesmo passo da seta.
+static void ponteiroVol(int a, int b) {
+  (void)a; (void)b;
+  if (!aberta || modo || !volFocavel() || (volFoco && coluna == 0)) return;
+  coluna = 0; volFoco = 1; velFoco = 0;
+}
+static void ponteiroVel(int a, int b) {
+  (void)a; (void)b;
+  if (!aberta || modo || !velFocavel() || (velFoco && coluna == 0)) return;
+  coluna = 0; velFoco = 1; volFoco = 0;
+}
+static void ponteiroVolPasso(int d, int b) {
+  if (!aberta || modo || !volFocavel()) return;
+  ponteiroVol(d, b); passoVolume(d);
+}
+static void ponteiroVelPasso(int d, int b) {
+  if (!aberta || modo || !velFocavel()) return;
+  ponteiroVel(d, b); passoVelocidade(d);
+}
+// Disco < > clicavel, com folga em volta (ele tem 34 px).
+static void alvoDisco(GfxRect d, PonteiroFn focar, PonteiroFn ativar, int passo) {
+  ponteiro_alvo(d.x - 6.0f, d.y - 6.0f, d.w + 12.0f, d.h + 12.0f, focar, ativar, passo, 0);
+}
+
 // F07: the island's red (the live dot of ilha.c), the app's alert color.
 #define VOL_VERMELHO 1.0f, 0.353f, 0.322f
 #define VOL_BARRA_W 112.0f
@@ -1186,10 +1236,12 @@ static void linhaVolume(float x, float y, float w, float a) {
   int sel = disp && volFoco && !modo, v = cacheboost_volume(), acima = v > CB_VOL_NORMAL;
   float da = disp ? a : a * 0.5f, dir = x + w - 22.0f, tx, tw;
   GfxRect lr = { x, y, w, IL_LN_H };
+  int pont = a > 0.99f && ponteiro_ativo();   // so com a ilha assentada
   const char *sub = !disp ? "Não disponível nesta TV"
                   : pt    ? "Passthrough: o receptor controla o volume"
                   : acima ? "Reforço ativo, só neste vídeo" : "Só neste vídeo";
   if (sel) plrui_linha_foco(lr, 22.0f, a);
+  if (pont && disp && !modo) ponteiro_alvo(x, y, w, IL_LN_H, ponteiroVol, ponteiroVol, 0, 0);
   rostoIdioma((GfxRect){ x + 22.0f, y + (IL_LN_H - 52.0f) * 0.5f, 52.0f, 52.0f }, NULL, "pl_audio-lines", sel, da);
   if (disp) {
     char val[16];
@@ -1204,6 +1256,7 @@ static void linhaVolume(float x, float y, float w, float a) {
         GfxRect d = { dir - 34.0f, yc - 17.0f, 34.0f, 34.0f };
         gfx_cor(d, 0.5f, 1, 1, 1, 0.10f * a);
         gfx_icone((GfxRect){ d.x + 7.0f, d.y + 7.0f, 20.0f, 20.0f }, "pl_chevron-right", 1, 1, 1, a);
+        if (pont) alvoDisco(d, ponteiroVol, ponteiroVolPasso, 1);
         dir -= 34.0f + 10.0f;
       }
       txt_desenhar_alpha(lv, dir - (float)lv.w, yc - (float)lv.h * 0.5f, a);
@@ -1212,6 +1265,7 @@ static void linhaVolume(float x, float y, float w, float a) {
         GfxRect d = { dir - 34.0f, yc - 17.0f, 34.0f, 34.0f };
         gfx_cor(d, 0.5f, 1, 1, 1, 0.10f * a);
         gfx_icone((GfxRect){ d.x + 7.0f, d.y + 7.0f, 20.0f, 20.0f }, "pl_chevron-left", 1, 1, 1, a);
+        if (pont) alvoDisco(d, ponteiroVol, ponteiroVolPasso, -1);
         dir -= 34.0f + 14.0f;
       } }
     // Passthrough: no bar (there is no boost to show); the reason gets the room.
@@ -1247,9 +1301,11 @@ static void linhaVelocidade(float x, float y, float w, float a) {
   int sel = velFoco && !modo && !bloq, v = video_velocidade_atual();
   float da = bloq ? a * 0.5f : a, dir = x + w - 22.0f, yc = y + IL_LN_H * 0.5f, tx, tw;
   GfxRect lr = { x, y, w, IL_LN_H };
+  int pont = a > 0.99f && ponteiro_ativo() && !bloq && !modo;   // so com a ilha assentada
   char val[16];
   TxtLinha lv;
   if (sel) plrui_linha_foco(lr, 22.0f, a);
+  if (pont) ponteiro_alvo(x, y, w, IL_LN_H, ponteiroVel, ponteiroVel, 0, 0);
   rostoIdioma((GfxRect){ x + 22.0f, y + (IL_LN_H - 52.0f) * 0.5f, 52.0f, 52.0f }, NULL, "aj_gauge", sel, da);
   vel_rotulo(val, sizeof val, v);
   plrui_decimal(val);
@@ -1266,6 +1322,7 @@ static void linhaVelocidade(float x, float y, float w, float a) {
       GfxRect d = { dir - 34.0f, yc - 17.0f, 34.0f, 34.0f };
       gfx_cor(d, 0.5f, 1, 1, 1, 0.10f * a);
       gfx_icone((GfxRect){ d.x + 7.0f, d.y + 7.0f, 20.0f, 20.0f }, "pl_chevron-right", 1, 1, 1, a);
+      if (pont) alvoDisco(d, ponteiroVel, ponteiroVelPasso, 1);
       dir -= 34.0f + 10.0f;
     }
     txt_desenhar_alpha(lv, dir - slot + (slot - (float)lv.w) * 0.5f, yc - (float)lv.h * 0.5f, da);
@@ -1274,6 +1331,7 @@ static void linhaVelocidade(float x, float y, float w, float a) {
       GfxRect d = { dir - 34.0f, yc - 17.0f, 34.0f, 34.0f };
       gfx_cor(d, 0.5f, 1, 1, 1, 0.10f * a);
       gfx_icone((GfxRect){ d.x + 7.0f, d.y + 7.0f, 20.0f, 20.0f }, "pl_chevron-left", 1, 1, 1, a);
+      if (pont) alvoDisco(d, ponteiroVel, ponteiroVelPasso, -1);
       dir -= 34.0f;
     }
     dir -= 18.0f; }
@@ -1337,7 +1395,7 @@ static void corpoLista(GfxRect c, float a) {
   ajustarRolagem();
   r = rolagem[col]; fim = r + visiveis; if (fim > n) fim = n;
   for (i = r; i < fim; i++) {
-    if (!modo) ponteiro_alvo(x0, y + (i - r) * (IL_LN_H + IL_LN_VAO), w, IL_LN_H, ponteiroFaixa, NULL, i, 0);
+    if (!modo && a > 0.99f) ponteiro_alvo(x0, y + (i - r) * (IL_LN_H + IL_LN_VAO), w, IL_LN_H, ponteiroFaixa, NULL, i, 0);
     linhaLista(col, i, x0, y + (i - r) * (IL_LN_H + IL_LN_VAO), w, a);
   }
   if (!n) txt_bloco(TXT_ILHA_TEXTO, "Nenhuma faixa disponível nesta fonte.", 160, 160, 158, x0 + 10.0f, y + 12.0f, w - 20.0f, 28, a, 2);
@@ -1367,12 +1425,31 @@ static void corpoLista(GfxRect c, float a) {
     } }
 }
 
+// PONTEIRO (#99) NA BARRA DE ESTILO. A celula sob o cursor ganha o foco
+// (foco[FX_COL_ESTILO], o das setas); o OK do clique cicla o valor, como o do
+// controle. Os discos < > do Atraso focado sao ESQUERDA/DIREITA. A aba
+// "Faixas" do segmentado volta para a lista (o ESQUERDA da primeira coluna).
+static void ponteiroEstilo(int i, int b) {
+  (void)b;
+  if (!faixas_estilo_topo() || i < 0 || i >= FX_N_ESTILO || foco[FX_COL_ESTILO] == i) return;
+  foco[FX_COL_ESTILO] = i;
+}
+static void ponteiroAtrasoPasso(int d, int b) {
+  (void)b;
+  if (!faixas_estilo_topo() || estiloPreservadoAss(7)) return;
+  foco[FX_COL_ESTILO] = 7;
+  passoAtrasoEstilo(d);
+}
+static void ponteiroAba(int estilo, int b) { (void)b; faixas_aba_estilo(estilo); }
+
 // Uma celula do ESTILO: rotulo em cima, valor embaixo; o Atraso focado ganha
 // os discos < > (ESQUERDA/DIREITA mudam 0,25 s); "Restaurar padrao" e acao.
 static void celulaEstilo(int i, GfxRect r, float a) {
   int sel = coluna == FX_COL_ESTILO && i == foco[FX_COL_ESTILO];
   int pres = estiloPreservadoAss(i);
+  int pont = a > 0.99f && ponteiro_ativo();   // so com a barra assentada
   if (sel) plrui_linha_foco(r, 22.0f, a);
+  if (pont) ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroEstilo, NULL, i, 0);
   if (i == FX_N_ESTILO - 1) {
     TxtLinha l = txt_linha(TXT_G20B, EST_ROT[i], 243, 242, 239, sel ? 255 : 191);
     gfx_icone((GfxRect){ r.x + 20.0f, r.y + (r.h - 22.0f) * 0.5f, 22.0f, 22.0f }, "pl_rotate-ccw", 1, 1, 1, (sel ? 1.0f : 0.75f) * a);
@@ -1392,6 +1469,7 @@ static void celulaEstilo(int i, GfxRect r, float a) {
       GfxRect d = { x, yv + ((float)lv.h - 34.0f) * 0.5f, 34.0f, 34.0f };
       gfx_cor(d, 0.5f, 1, 1, 1, 0.10f * a);
       gfx_icone((GfxRect){ d.x + 7.0f, d.y + 7.0f, 20.0f, 20.0f }, "pl_chevron-left", 1, 1, 1, a);
+      if (pont && !pres) alvoDisco(d, ponteiroEstilo, ponteiroAtrasoPasso, -1);
       x += 34.0f + 10.0f;
     }
     if (i == 2 && !pres) {
@@ -1405,6 +1483,7 @@ static void celulaEstilo(int i, GfxRect r, float a) {
       GfxRect d = { x + (float)lv.w + 10.0f, yv + ((float)lv.h - 34.0f) * 0.5f, 34.0f, 34.0f };
       gfx_cor(d, 0.5f, 1, 1, 1, 0.10f * a);
       gfx_icone((GfxRect){ d.x + 7.0f, d.y + 7.0f, 20.0f, 20.0f }, "pl_chevron-right", 1, 1, 1, a);
+      if (pont && !pres) alvoDisco(d, ponteiroEstilo, ponteiroAtrasoPasso, 1);
     } }
 }
 
@@ -1420,6 +1499,10 @@ static void corpoEstilo(GfxRect c, float a) {
     float yc = y + IL_EST_TOPO * 0.5f;
     txt_desenhar_alpha(t, x0 + 10.0f, yc - (float)t.h * 0.5f, a);
     plrui_seg(rot, cont, 2, 1, 0, x0 + 10.0f + (float)t.w + 18.0f, yc - 27.0f, a);
+    // A aba "Faixas": a largura do primeiro segmento e a do segmentado de um so.
+    if (a > 0.99f && ponteiro_ativo())
+      ponteiro_alvo(x0 + 10.0f + (float)t.w + 18.0f, yc - 27.0f, plrui_seg(rot, cont, 1, 1, 0, -1.0f, 0, a),
+                    54.0f, NULL, ponteiroAba, 0, 0);
     { const char *k[3] = { "\xe2\x86\x90 \xe2\x86\x92", "OK", "Voltar" };
       const char *rt[3] = { foco[FX_COL_ESTILO] == 7 ? "Ajustar" : "Op\xc3\xa7\xc3\xa3o", "Mudar", "Fechar" };
       plrui_dicas(k, rt, 3, x0 + w - 10.0f, yc, 1, a); } }

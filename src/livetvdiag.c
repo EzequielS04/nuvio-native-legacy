@@ -33,6 +33,7 @@
 #include "idioma.h"
 #include "layout.h"
 #include "player.h"
+#include "ponteiro.h"
 #include "proxyts.h"
 #include "rede.h"
 #include "streams.h"
@@ -713,6 +714,17 @@ void livetvdiag_evento(const SDL_Event *e) {
   }
 }
 
+// PONTEIRO (#99). Os botoes do rodape (so existem com o teste pronto) poem o
+// foco em L.botao, a mesma variavel das setas; o OK do clique aplica, envia
+// ou testa de novo pelo caminho de sempre.
+static void ponteiroBotao(int i, int b) {
+  int lista[B_N];
+  (void)b;
+  if (L.sair || i < 0 || i >= botoes(lista)) return;
+  L.botao = i;
+}
+int livetvdiag_teste_foco(void) { return L.botao; }
+
 // --- desenho -------------------------------------------------------------------
 static float areaX(void) { float x; ajustes_area_conteudo(NV_MARGEM_X, NV_MARGEM_X, &x, NULL); return x; }
 static float areaW(void) { float w; ajustes_area_conteudo(NV_MARGEM_X, NV_MARGEM_X, NULL, &w); return w; }
@@ -1056,7 +1068,11 @@ static void desenharRecomendacoes(GfxRect r, float ar, float ag, float ab) {
   { static const char *const ROT[B_N] = { "Aplicar recomendadas", "Enviar no registro", "Testar de novo" };
     float x = r.x + 32.0f, by = r.y + r.h - 28.0f - 60.0f;
     if (L.botao >= n) L.botao = n ? n - 1 : 0;
-    for (i = 0; i < n; i++) x += ajustes_ui_botao(i18n(ROT[lista[i]]), NULL, x, by, i == L.botao) + 12.0f; }
+    for (i = 0; i < n; i++) {
+      float bw = ajustes_ui_botao(i18n(ROT[lista[i]]), NULL, x, by, i == L.botao);
+      ponteiro_alvo(x, by, bw, 60.0f, ponteiroBotao, NULL, i, 0);
+      x += bw + 12.0f;
+    } }
 }
 
 void livetvdiag_desenhar(Uint32 agora) {
