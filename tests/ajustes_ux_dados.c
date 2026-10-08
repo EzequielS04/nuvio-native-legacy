@@ -518,7 +518,9 @@ int main(void) {
   /* #311: sem o add-on Cinemeta instalado (o teste nao tem add-ons) o interruptor Ligado nao aparece. */
   assert(indiceResultado(AJ_BUSCA_CINEMETA, ajustes_buscar("cinemeta", resultados, AJ_N)) < 0);
   /* #311: Nuvio na busca (Primeiro/Por ultimo/Desligado) e a fonte nos grupos: locais, no padrao de antes. */
-  assert(AJ_BUSCA_ORIGEM == AJ_BUSCA_NUVIO + 1 && AJ_N == AJ_BUSCA_ORIGEM + 1);
+  /* Fim do enum na 2.0.3: FONTE_PREPARAR, CW_PROXIMO (upnext), BUSCA_NUVIO, BUSCA_ORIGEM (#311), LAYOUT_AJUSTES (#339). */
+  assert(AJ_CW_PROXIMO == AJ_FONTE_PREPARAR + 1 && AJ_BUSCA_NUVIO == AJ_CW_PROXIMO + 1);
+  assert(AJ_BUSCA_ORIGEM == AJ_BUSCA_NUVIO + 1 && AJ_LAYOUT_AJUSTES == AJ_BUSCA_ORIGEM + 1);
   assert(!strcmp(CHAVE[AJ_BUSCA_NUVIO], "buscaNuvioLocal") && OPCOES[AJ_BUSCA_NUVIO].n == 3 && valorPadrao[AJ_BUSCA_NUVIO] == 0);
   assert(!strcmp(CHAVE[AJ_BUSCA_ORIGEM], "buscaOrigemLocal") && OPCOES[AJ_BUSCA_ORIGEM].n == 2 && valorPadrao[AJ_BUSCA_ORIGEM] == 0);
   assert(ajustes_busca_nuvio() == 0 && ajustes_busca_origem());
@@ -628,7 +630,7 @@ int main(void) {
   { int vz = 0, k; for (k = 0; k < AJ_N_TELA; k++) if (TELA[k].tipo == IT_OPC && TELA[k].op == AJ_FONTE_PREPARAR) vz++; assert(vz == 1); }
   assert(indiceResultado(AJ_FONTE_PREPARAR, ajustes_buscar("preparar fonte", resultados, AJ_N)) >= 0);
   // #339: Settings layout. Local, last, default Painel (today's grid), once on screen, findable.
-  assert(AJ_LAYOUT_AJUSTES == AJ_FONTE_PREPARAR + 1 && AJ_LAYOUT_AJUSTES == AJ_N - 1);
+  assert(AJ_LAYOUT_AJUSTES == AJ_BUSCA_ORIGEM + 1 && AJ_LAYOUT_AJUSTES == AJ_N - 1);
   assert(!strcmp(CHAVE[AJ_LAYOUT_AJUSTES], "ajustesLayoutLocal") && OPCOES[AJ_LAYOUT_AJUSTES].n == 2);
   assert(valorPadrao[AJ_LAYOUT_AJUSTES] == 0 && !ajustes_layout_lista());
   assert(somenteDesteAparelho(AJ_LAYOUT_AJUSTES) && !dePerfil(AJ_LAYOUT_AJUSTES));
