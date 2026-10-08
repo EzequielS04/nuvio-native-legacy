@@ -4118,7 +4118,7 @@ static void desenhaAtalhos(int r, float y) {
     if (f > .01f && ajustes_borda_foco()) {
       float menor = w < h ? w : h;
       float ar, ag, ab; ajustes_acento(&ar, &ag, &ab);
-      if (ajustes_vidro()) gfx_vidro_cartao((GfxRect){x, y, w, h}, raio * menor / h, f, 1.0f);
+      if (ajustes_vidro()) gfx_vidro_cartao((GfxRect){x, y, w, h}, raio, f, 1.0f);
       else
       gfx_cor((GfxRect){x - NV_ANEL_FOCO, y - NV_ANEL_FOCO,
         w + 2*NV_ANEL_FOCO, h + 2*NV_ANEL_FOCO},
@@ -5087,7 +5087,7 @@ static void pintarCartao(const CartaoFoco *k, float raio) {
             // "pontas feias" da foto do dono (21/09/2026); e a conta que a
             // fileira de colecoes ja fazia.
             { float menor = w < h ? w : h;
-              if (ajustes_vidro()) gfx_vidro_cartao((GfxRect){px, py, w, h}, raio * menor / h, f, 1.0f);
+              if (ajustes_vidro()) gfx_vidro_cartao((GfxRect){px, py, w, h}, raio, f, 1.0f);
               else
               gfx_cor(borda, (raio * menor + NV_ANEL_FOCO) / (menor + 2 * NV_ANEL_FOCO),
                       ar, ag, ab, f); }
