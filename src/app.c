@@ -543,9 +543,14 @@ static Uint32 trocaPerfilDesde;
 // O detalhe precisa do retangulo REAL de onde o card saiu para o voo comecar
 // dali. Cada tela que abre um titulo entrega o seu; quando nenhuma entrega
 // (caso do menu ou de um indice vindo de fora), cai para a tela inteira.
-static void abrirTitulo(const HomeItem *it) {
+// `exigeArte` = 0 para o pos-play e a grade (abriam mesmo sem arte);
+// `descartarRetido` = 0 so no pos-play (nunca descartou a sessao retida).
+static void abrirTitulo(const HomeItem *it, int exigeArte, int descartarRetido) {
   const CatItem *c;
-  if (!it || !it->arte) return;
+  if (!it || (exigeArte && !it->arte)) return;
+  // Uma pagina nova pode abrir trailer no mesmo plano. Retomar na ilha ja
+  // foi tratado antes deste caminho, sem passar pela pagina nem por fontes.
+  if (descartarRetido) player_descartar_retido();
   // ITEM COM ID "tmdb:<n>" — resultado de busca de um addon do TMDB (o dono,
   // 20/09/2026: "tem titulos da busca que quando abre nao vem com as artes e
   // informacoes nenhuma"). O detalhe pede tudo ao Cinemeta por imdb, e
@@ -555,9 +560,6 @@ static void abrirTitulo(const HomeItem *it) {
   // aqui e nao. Um so lugar para os dois: o titulo resolvido entra no catalogo
   // e trocaDeTituloSeSolicitada abre ele.
   c = cat_item(it->indice);
-  // Uma pagina nova pode abrir trailer no mesmo plano. Retomar na ilha ja
-  // foi tratado antes deste caminho, sem passar pela pagina nem por fontes.
-  player_descartar_retido();
   if (c && !strncmp(c->imdb, "tmdb:", 5) && desc_chave_tmdb() &&
       desc_chave_tmdb()[0] && !desc_titulo_buscando()) {
     // Sem chave do TMDB nao ha como resolver: abre como dava (arte e sinopse,
@@ -590,7 +592,7 @@ static void abrirPorIndice(int i) {
   it.titulo = c->titulo;
   it.genero = c->genero;
   it.meta = c->meta;
-  abrirTitulo(&it);
+  abrirTitulo(&it, 1, 1);
 }
 
 // Monta o id que os addons esperam. Para serie e "tt1234567:temporada:episodio";
@@ -3546,7 +3548,7 @@ void app_atualizar(float dt, Uint32 agora) {
     HomeItem it;
     SpotPedido pedPessoa;
     if (tela == TELA_HOME && home_pediu_abrir()) {
-      if (home_item_focado(&it)) abrirTitulo(&it);
+      if (home_item_focado(&it)) abrirTitulo(&it, 1, 1);
     } else if (tela == TELA_EXPLORAR && explorar_pediu_abrir(&idx)) {
       abrirPorIndice(idx);
     } else if (tela == TELA_HOME && home_pediu_tocar()) {
@@ -3592,13 +3594,13 @@ void app_atualizar(float dt, Uint32 agora) {
             }
           }
         }
-        abrirTitulo(&it);
+        abrirTitulo(&it, 1, 1);
         if (tocar) detail_pedir_reproduzir();
       }
     } else if (tela == TELA_BUSCA && busca_pediu_pessoa(&pedPessoa)) {
       abrirPessoa(&pedPessoa);
     } else if (tela == TELA_BUSCA && busca_pediu_abrir(&idx)) {
-      if (busca_item_focado(&it)) abrirTitulo(&it); else abrirPorIndice(idx);
+      if (busca_item_focado(&it)) abrirTitulo(&it, 1, 1); else abrirPorIndice(idx);
     } else if (tela == TELA_BIBLIOTECA && biblioteca_pediu_abrir(&idx)) {
       abrirPorIndice(idx);
     } else if (tela == TELA_PERFIL) {
@@ -4525,7 +4527,9 @@ void app_atualizar(float dt, Uint32 agora) {
       it.titulo = ci ? ci->titulo : NULL;
       it.genero = ci ? ci->genero : NULL;
       it.meta   = ci ? ci->meta : NULL;
-      detail_abrir(&it);
+      // Mesma resolucao de "tmdb:<n>" do funil, sem o descarte da sessao
+      // retida (o pos-reproducao nunca fez) nem a exigencia de arte.
+      abrirTitulo(&it, 0, 0);
     } }
 
   vertudo_atualizar(dt, agora);
@@ -4538,7 +4542,6 @@ void app_atualizar(float dt, Uint32 agora) {
   // Titulo escolhido na grade: abre o detalhe, como se tivesse vindo da home.
   { int idx = vertudo_pediu_abrir();
     if (idx >= 0) {
-      player_descartar_retido();
       const CatItem *ci = cat_item(idx);
       // A grade nao tem retangulo de origem para a transicao crescer a partir
       // dele: o card fica na tela que esta saindo. Entra centrado, do tamanho
@@ -4552,7 +4555,7 @@ void app_atualizar(float dt, Uint32 agora) {
       it.titulo = ci ? ci->titulo : NULL;
       it.genero = ci ? ci->genero : NULL;
       it.meta   = ci ? ci->meta : NULL;
-      detail_abrir(&it);
+      abrirTitulo(&it, 0, 1);
     } }
   switch (tela) {
     case TELA_EXPLORAR:   explorar_atualizar(dt, agora);   break;
