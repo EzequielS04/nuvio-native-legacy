@@ -5,7 +5,7 @@
 # (o Kotlin 2.0.21 nao roda no JDK 25); sem eles, pula.
 #
 #   bash tests/tombstone.sh
-set -eu
+set -euo pipefail
 cd "$(dirname "$0")/.."
 R="$HOME/.gradle/caches/modules-2/files-2.1"
 J="${JAVA17_HOME:-$(/usr/libexec/java_home -v 17 2>/dev/null || ls -d "$HOME"/.local/jdks/jdk-17*/Contents/Home 2>/dev/null | head -1)}"

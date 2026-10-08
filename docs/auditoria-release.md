@@ -35,6 +35,7 @@ liga pelo nome), e aresta para funcao de outro arquivo que nao esta em nenhum
 | 4 | Estado de arquivo escrito por 2+ fios sem trava | estatica escrita sem trava pelo fio e pelo quadro (trava no chamador conta; `volatile`, atomico e `_Thread_local` ficam fora) |
 | 5 | Rede/espera no fio do quadro | `rede_*`/curl/`sleep` alcancavel de `app_atualizar/app_desenhar/app_evento` sem passar por fio; `pthread_join` e aviso; portao de teste (flag so ligada por funcao sem chamador) e ignorado |
 | 6 | Helper duplicado | mesmo corpo (>= 160 caracteres) em 2+ arquivos |
+| 7 | `tests/*.sh` que cala o status do teste | pipe cujo lado esquerdo e o binario do teste, compilador ou interprete (`./bin \| tail`, `\| tee`, `\| grep`) em script sem `set -o pipefail`/`set -euo pipefail`: o status vira o do `tail`/`grep` e um teste que falha sai 0. Lista `arquivo:linha`; sem base, e contrato |
 
 Os contratos (nomes de funcao) ficam no topo do script. Renomeou a funcao? A
 verificacao falha dizendo "atualizar ENTRADAS" em vez de passar calada.
