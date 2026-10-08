@@ -398,6 +398,12 @@ int addons_definir_lista(const AddonRemoto *nova, int n) {
   }
   nAddon = aceitos;
   printf("[addons] %d vindos da conta\n", nAddon);
+  { static int avisou; int q, off = 0;
+    for (q = 0; q < nAddon; q++) if (!addon[q].ativo) off++;
+    if (off && !avisou) {
+      avisou = 1;
+      printf("[addons] %d desligados na conta: nao consultados\n", off);
+    } }
   // DIZER QUANDO CORTOU. Um addon que some sem uma linha de log e indistinguivel
   // de um addon que a conta nao tem.
   { int uteis = 0, q;
@@ -1013,7 +1019,7 @@ static void *buscarUmAddon(void *u) {
   RedeMedida medida = {0};
   LegLote *lote = calloc(1, sizeof *lote);
   if (!lote) return NULL;
-  if (pedidoMudou(B->geracao)) { free(lote); return NULL; }
+  if (pedidoMudou(B->geracao) || !addon[i].ativo) { free(lote); return NULL; }
   // Com extras (#201) quando ha; o formato antigo continua sendo o pedido de
   // quem nao sabe o arquivo. O protocolo diz que extra e opcional, mas um addon
   // que responder 4xx/5xx ao caminho com extras ganha o pedido antigo em
@@ -1235,6 +1241,24 @@ static void *buscarLegendas(void *u) {
 // ------------------------------------------------------------ lista e sonda
 
 int addons_ativo(int i)   { return (i >= 0 && i < nAddon) ? addon[i].ativo : 0; }
+
+// O PREDICADO UNICO DE "ESTE ADDON FOI DESLIGADO NA CONTA". Todo pedido a um
+// addon por BASE (catalogo, busca, "ver tudo", guia, meta) passa por aqui. O
+// log do dono (D1 58666) mostrou "Minha TV: desligado na conta" e, depois de um
+// OK, a TV pedindo e esperando 20 s o minhatv: desligar so tirava a fileira.
+// Base que nenhum addon da lista reclama (portal Stalker, Cinemeta, addon
+// removido) NAO e desligada.
+int addons_base_desligada(const char *base) {
+  char alvo[NV_ADDON_URL_MAX], mine[NV_ADDON_URL_MAX];
+  int i;
+  if (!base || !*base) return 0;
+  baseNormalizada(base, alvo, sizeof alvo);
+  for (i = 0; i < nAddon; i++) {
+    baseNormalizada(addon[i].base, mine, sizeof mine);
+    if (!strcmp(mine, alvo)) return !addon[i].ativo;
+  }
+  return 0;
+}
 int addons_sondado(int i) { return (i >= 0 && i < nAddon) ? addon[i].sondado : 0; }
 int addons_catalogos_canal(int i, AddCatCanal *saida, int max) {
   int k;
@@ -1869,6 +1893,7 @@ static void *fioFontes(void *u) {
     // interrompe (libcurl), mas o proximo nem comeca.
     if (c->cancelado && c->cancelado(c->ctx)) continue;
     i = c->baldes[meu].idx;
+    if (!addon[i].ativo) continue;   // desligado na conta: nunca consultado
     // Id codificado como o Nuvio web (nv_addon_id): "tt123:1:2" sai igual.
     if (!nv_addon_id(idUrl, sizeof idUrl, c->id)) idUrl[0] = 0;
     // O NOME QUE O MANIFESTO DECLARA VAI PRIMEIRO (issue #112). Ver

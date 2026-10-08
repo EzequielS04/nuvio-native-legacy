@@ -3,6 +3,7 @@
 #include <assert.h>
 static const char *responses[3];
 static char ultimaUrl[3][2048];
+static int desligaIdx = -1;
 static int recusaExtras, semRange, trechos;
 static _Atomic int requests;
 static int status[3] = {200, 200, 200};
@@ -49,6 +50,7 @@ static void run(int n, const char *id, const char *tipo) {
   memset(addon, 0, sizeof addon); nAddon = n;
   for (int i = 0; i < n; i++) {
     addon[i].ativo = addon[i].legenda = 1;
+    if (i == desligaIdx) addon[i].ativo = 0;   // desligado na conta
     snprintf(addon[i].base, sizeof addon[i].base, "https://fixture.invalid/provider%d", i);
     snprintf(addon[i].nome, sizeof addon[i].nome, "%s", nomes[i]);
   }
@@ -161,6 +163,12 @@ int main(void) {
       responses[0] = longo; memset(&legExt, 0, sizeof legExt); run(1, "tt123", "movie");
       assert(nLegs == 1 && strstr(legs[0].url, "curto.srt")); }
   }
+
+  // Desligado na conta: nenhuma requisicao de legenda ao addon (2.0.3).
+  { responses[0] = responses[1] = "{\"subtitles\":[{\"lang\":\"eng\",\"url\":\"https://fixture.invalid/x.srt\"}]}";
+    memset(ultimaUrl, 0, sizeof ultimaUrl);
+    desligaIdx = 1; antes = requests; run(2, "tt123", "movie"); desligaIdx = -1;
+    assert(requests - antes == 1 && ultimaUrl[0][0] && !ultimaUrl[1][0]); }
 
   puts("addon subtitles: provider fairness, real origin, ordered languages, empty/missing/HTTP and episode checks ok");
 }

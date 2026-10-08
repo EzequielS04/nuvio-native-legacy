@@ -606,6 +606,7 @@ static int lerPagina(const GFonte *f, int skip, int teto, int *novos) {
   else
     w = nv_addon_url(url, sizeof url, f->base, "/catalog/%s/%s.json", f->tipo, f->id);
   *novos = 0;
+  if (addons_base_desligada(f->base)) return 0;   // desligado na conta: nenhuma rede
   // Pedido cortado nao sai (addonurl.h); o log leva o nome do catalogo.
   if (!nv_addon_pedido_coube(f->nome, w, sizeof url)) return 0;
   corpo = rede_baixar(url, 15);
