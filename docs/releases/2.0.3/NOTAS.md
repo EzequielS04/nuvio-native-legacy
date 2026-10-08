@@ -47,11 +47,11 @@ New Settings, a new episode menu, the Magic Remote pointer on almost every scree
 - **Samsung .wgt:** Arabic subtitles use Noto Naskh (#370). Holding OK in the subtitle sheet makes one choice instead of reloading on every repeat (#370).
 - **Profile page:** Left at the edge opens the sidebar without closing the page, also on a new profile or one with only friends (#371).
 - **Continue Watching:** with Episode thumbnail on, the card shows the episode still; a watched movie says Play. With the Nuvio account as source, up next is filled even when Trakt or Simkl is linked, without episodes already watched elsewhere.
-- **Watched:** "up to here" and "season" only send episodes that change, so Trakt gets no duplicate plays. The main button, next episode and "% watched" follow the change right away.
+- **Watched:** "up to here" and "season" only send episodes that change, so Trakt gets no duplicate plays. The main button, next episode and "% watched" follow the change right away. Marking a series as watched no longer hides it on Trakt; only "Remove from Continue Watching" does.
 - **Episode list** missing on a title page, or no Up next card in the player, after browsing many titles.
 - **Subtitles** move up only while the Up next card is on screen, and come back down when it hides.
 - **Credits markers** are not accepted before the player knows the video length.
-- **Home hero:** the logo arrives with the art, the next item is loaded ahead, and items from Trakt lists get their synopsis. The hero no longer turns while the profile picker is open.
+- **Home hero:** the logo arrives with the art, the next item is loaded ahead, and items from Trakt lists get their synopsis. The hero no longer turns while the profile picker is open. Switching titles quickly no longer loses a synopsis or crashes the app.
 - **LG Dolby Vision:** no more pause panel while the stream fills, and playback starts at the saved point. Smoother background on OLED.
 - **Android:** the saved aspect mode waits for the first frame, so Dolby Vision no longer opens dark.
 - **Speed test** keeps the byte range through debrid redirects, measures with 4 connections on Android again, and handles sources served as octet-stream.
