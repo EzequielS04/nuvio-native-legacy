@@ -5,6 +5,7 @@
 #include "video_escala.h"
 #include "video_reconexao.h"
 #include "video_seekretry.h"
+#include "video_dvretry.h"
 #include "idioma.h"
 #include "linguas.h"
 #include <SDL2/SDL.h>
@@ -207,6 +208,13 @@ static Uint32 seekEm;
 // come back, and the seekable/trickable flags the uMS reported. Log only.
 static Uint32 seekEnvEm;
 static NvSeekRetry seekRetry;
+// Sonda do MKV que falhou: nova tentativa agendada (relogio) para a MESMA
+// fonte. mkvRetrySessao/mkvRetryUrl amarram o agendamento a quem o pediu.
+static NvDvSonda mkvRetry;
+static Uint32 mkvRetryEm;
+static unsigned mkvFioSessao;   // sessao em que o fio lerMkv atual nasceu
+static unsigned mkvRetrySessao;
+static char   mkvRetryUrl[1024];
 static Uint32 seekRetryEm;   // != 0: reenviar seekAlvo quando o relogio passar disto
 static int    seekEnvAlvo, seekEnvAviso;
 static int    srcSeekable = -1, srcTrickable = -1;
@@ -1851,6 +1859,28 @@ static void *lerMkv(void *arg) {
     // saber se o arquivo nao e MKV, se o Range falhou ou se o cabecalho passa
     // dos 2 MB que baixamos.
     marco("mkv: nenhuma faixa lida (nao e MKV, ou Range falhou)");
+    // Falha de sonda nao e "nao e MKV" (C9: a rede da TV ficou ~10 s fora logo
+    // apos o disparo). Se o DV ainda pode valer para ESTA fonte, agenda nova
+    // tentativa em vez de dar dvSondado=1 e perder o DV pelo resto da sessao.
+    if (dvHabilitado && !fonteMp4 && !dtsSessao && !dtsTentou && !dvSondado &&
+        mkvFioSessao == __atomic_load_n(&sessao, __ATOMIC_ACQUIRE) && !strcmp(url, urlAtual)) {
+      int tent = 0;
+      unsigned espera = nv_dvsonda_falhou(&mkvRetry, &tent);
+      if (espera) {
+        char m[96];
+        snprintf(m, sizeof m, "mkv: sonda falhou: nova tentativa %d/%d em %u ms", tent, NV_DVSONDA_MAX, espera);
+        printf("[mkv] sonda falhou: nova tentativa %d/%d em %u ms\n", tent, NV_DVSONDA_MAX, espera);
+        fflush(stdout);
+        marco(m);
+        snprintf(mkvRetryUrl, sizeof mkvRetryUrl, "%s", url);
+        mkvRetrySessao = mkvFioSessao;
+        mkvRetryEm = SDL_GetTicks() + espera;
+        if (!mkvRetryEm) mkvRetryEm = 1;
+        fioMkvVivo = 0; return NULL;
+      }
+      printf("[mkv] sonda desistiu\n"); fflush(stdout);
+      marco("mkv: sonda desistiu");
+    }
     dvSondado = 1;
     fioMkvVivo = 0; return NULL;
   }
@@ -2017,6 +2047,7 @@ int video_tocar(const char *url) {
   dtsHabilitado = dts_playback_enabled() && dtsLiberadoNestaTv();
   printf("[dts] fallback %s\n", dtsHabilitado ? "available" : "unavailable");
   dvSondado = dvMkvPerfil = dvAudios = 0; dtsModoDv = 0;
+  nv_dvsonda_zerar(&mkvRetry); mkvRetryEm = 0;
   dvHabilitado = dvLiberadoNestaTv();
   fflush(stdout);
   // O modo vale para esta fonte e para os recarregar dela (tocarInterno).
@@ -2039,8 +2070,23 @@ int video_tocar(const char *url) {
 // Chamado uma vez por quadro. So existe para o prazo acima: sem ele o recuo
 // dependeria de o usuario perceber que nao ha imagem e sair da tela.
 static void velBombear(void);
+// Nova tentativa da sonda do MKV (ver mkvRetry). Roda no fio de desenho; so
+// dispara com o prazo vencido, FORA de buffering, e se a fonte e a sessao ainda
+// sao as de quem agendou — trocar de fonte ou sair cancela em silencio.
+static void mkvRetryBombear(void) {
+  if (!mkvRetryEm) return;
+  if (mkvRetrySessao != __atomic_load_n(&sessao, __ATOMIC_ACQUIRE) || strcmp(mkvRetryUrl, urlAtual) ||
+      dtsSessao || fonteMp4 || !dvHabilitado || dtsTentou) {
+    mkvRetryEm = 0; return;
+  }
+  if (fioMkvVivo || !nv_dvsonda_pronta((int)(SDL_GetTicks() - mkvRetryEm) >= 0, bufferandoDesde != 0)) return;
+  mkvRetryEm = 0;
+  mkvPendente = 1;
+  video_sondar_mkv_agora();
+}
 void video_bombear(void) {
   velBombear();
+  mkvRetryBombear();
   acbBindRecolher();
   if (ligado) acbConfigurarTipo(dtsSessao != NULL);
   if (dtsSessao) bombearDts();
@@ -2459,6 +2505,7 @@ static void pararSessao(void) {
   legUrlAoCarregar[0] = 0;
   pausaPedida = 0; seekEm = 0; mkvPendente = 0;
   nv_seek_zerar(&seekRetry); seekRetryEm = 0;
+  mkvRetryEm = 0;   // sonda reagendada morre com a sessao (o contador zera em video_tocar)
   pausaConfirmada = 0;
   if (ligado && midia[0] && !tinhaDts) {
     snprintf(b, sizeof b, "{\"mediaId\":\"%s\"}", midia);
@@ -3099,6 +3146,7 @@ void video_sondar_mkv_agora(void) {
   fioMkvVivo = 1;
   printf("[mkv] sonda do cabecalho disparada (buffer %.0f s a frente)\n", bufferSeg - posSeg);
   fflush(stdout);
+  mkvFioSessao = __atomic_load_n(&sessao, __ATOMIC_ACQUIRE);
   if (pthread_create(&fioMkv, NULL, lerMkv, NULL) != 0) fioMkvVivo = 0;
   else pthread_detach(fioMkv);
 }
