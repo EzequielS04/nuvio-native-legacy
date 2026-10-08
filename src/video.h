@@ -155,6 +155,9 @@ int    video_tocando(void);
 // video_pausar. Alvos sem confirmacao confiavel devolvem 0.
 int    video_pausa_confirmada(void);
 int    video_pronto(void);   // 1 depois do loadCompleted
+#ifdef NV_ANDROID
+int    video_superficie_estavel(void);   // 1 depois da ultima recriacao da Surface (HDR/DV)
+#endif
 int    video_ativo(void);    // 1 assim que ha mediaId — e o que abre o furo
 int    video_falhou(void);   // 1 depois de um errorText real na fonte atual
 // O ULTIMO ERRO REAL do pipeline na fonte atual, como o pipeline o disse

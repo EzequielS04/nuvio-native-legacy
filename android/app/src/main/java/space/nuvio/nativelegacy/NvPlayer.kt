@@ -61,6 +61,7 @@ object NvPlayer {
     private const val EV_BUFFER = 7
     private const val EV_PRIMEIRO_QUADRO = 8
     private const val EV_AUDIO_SEM_DECODER = 9
+    private const val EV_SUPERFICIE_ESTAVEL = 10
 
     private const val TELA_W = 1920   // coordenadas de layout do app
     private const val TELA_H = 1080
@@ -288,8 +289,10 @@ object NvPlayer {
         novaSuperficie(act)
         pedidoAtivo = pedido
         hdrRecriado = false; hdrRecriadoPara = ""; quadroVisto = false
+        hdrSegundaFeita = false; estavelEmitido = false
         principal.removeCallbacks(recriar)
         principal.removeCallbacks(hdrSegunda)
+        principal.removeCallbacks(estavelRun)
         val minha = sessao
         urlAtual = url
         cabAtual = cabecalhos
@@ -687,6 +690,27 @@ object NvPlayer {
             Log.i(TAG, "HDR ($ultHdr): segunda recriacao da superficie")
             recriarSuperficie(0)
         }
+        hdrSegundaFeita = true
+        avaliarEstavel()
+    }
+    // SUPERFICIE ESTAVEL (DV escuro, 2.0.3): o C so aplica o aspecto salvo
+    // depois da ULTIMA recriacao agendada. SDR (ou MStar, que nao recria):
+    // logo apos o primeiro quadro. HDR/DV: depois da segunda recriacao.
+    private var hdrSegundaFeita = false
+    private var estavelEmitido = false
+    private val estavelRun = Runnable {
+        if (player != null && quadroVisto && !estavelEmitido) {
+            estavelEmitido = true
+            Log.i(TAG, "[aspect] superficie estavel (hdr=$ultHdr)")
+            ev(EV_SUPERFICIE_ESTAVEL)
+        }
+    }
+    private fun avaliarEstavel() {
+        if (!quadroVisto || estavelEmitido) return
+        val hdr = ultHdr.isNotEmpty() && ultHdr != "none" && !mstar
+        principal.removeCallbacks(estavelRun)
+        if (hdr && !hdrSegundaFeita) return   // a segunda recriacao chama de novo
+        principal.postDelayed(estavelRun, 150L)
     }
     // Evidencia para "a TV nao acompanha o fps do filme": fps do video, modos que o
     // painel oferece e o ativo. TCL do dono (06/10): so existe 3840x2160@60, entao
@@ -791,6 +815,7 @@ object NvPlayer {
             quadroVisto = true
             logTaxaDeQuadros()
             hdrNaSuperficie()
+            avaliarEstavel()
         }
 
         override fun onVideoSizeChanged(v: VideoSize) {

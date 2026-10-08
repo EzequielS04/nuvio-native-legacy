@@ -239,6 +239,7 @@ static char urlAtual[4096];
 static char cabecalhos[2048];
 // prontoLoad = o player preparou (evento 1); primeiroQuadro = evento 8.
 // video_pronto() so e 1 com imagem (ver o cabecalho).
+static volatile int superficieEstavel;
 static volatile int ativo, prontoLoad, primeiroQuadro, falhou, terminou, tocando, largura, altura;
 static volatile int conflito, semDecoderAudio;
 // PAUSA CONFIRMADA (player_suspender): o pedido daqui e o evento 3 do Kotlin
@@ -470,7 +471,8 @@ JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeCache(JNIEnv
 }
 
 enum { EV_PRONTO = 1, EV_TOCANDO = 2, EV_PAUSADO = 3, EV_FIM = 4, EV_ERRO = 5,
-       EV_TAMANHO = 6, EV_BUFFER = 7, EV_PRIMEIRO_QUADRO = 8, EV_AUDIO_SEM_DECODER = 9 };
+       EV_TAMANHO = 6, EV_BUFFER = 7, EV_PRIMEIRO_QUADRO = 8, EV_AUDIO_SEM_DECODER = 9,
+       EV_SUPERFICIE_ESTAVEL = 10 };
 
 JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeEvento(JNIEnv *env, jclass cls, jint tipo, jint a, jint b) {
   (void)env; (void)cls;
@@ -489,6 +491,7 @@ JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeEvento(JNIEn
       else if (a >= 100) bufferando = 0;
       break;
     case EV_PRIMEIRO_QUADRO: marco("video: primeiro quadro (android)"); primeiroQuadro = 1; break;
+    case EV_SUPERFICIE_ESTAVEL: superficieEstavel = 1; break;
     case EV_AUDIO_SEM_DECODER: semDecoderAudio = 1; break;
     default: break;
   }
@@ -508,7 +511,7 @@ int  video_registro_negado(void) { return 0; }
 // Abre urlAtual no Kotlin. Serve a fonte nova e ao recarregar da reconexao.
 static int abrirSessao(int inicioMs) {
   JNIEnv *env;
-  ativo = 1; prontoLoad = primeiroQuadro = falhou = terminou = tocando = 0;
+  ativo = 1; superficieEstavel = 0; prontoLoad = primeiroQuadro = falhou = terminou = tocando = 0;
   velEnviada = 100;
   largura = altura = durMs = posMs = 0; bufferando = 1; bufferDesde = SDL_GetTicks();
   tocandoDesde = 0; semDecoderAudio = 0; erroTxt[0] = 0;
@@ -637,7 +640,7 @@ void video_parar(void) {
   nv_recon_zerar(&recon);
   reconErroPend = 0; reconFaixasPend = 0; reconBuscarMs = -1;
   if (ativo) kSemArg(mParar);
-  ativo = prontoLoad = primeiroQuadro = tocando = 0;
+  ativo = prontoLoad = primeiroQuadro = tocando = 0; superficieEstavel = 0;
   pausaPedida = pausaVista = 0;
 }
 void video_pausar(int p) { pausaVista = 0; pausaPedida = p ? 1 : 0; kInt(mPausar, p ? 1 : 0); }
@@ -725,6 +728,7 @@ int  video_pronto(void) {
   return desde && tocando && SDL_GetTicks() - desde >= ANDROID_FURO_PRAZO_MS;
 }
 int  video_ativo(void) { return ativo; }
+int  video_superficie_estavel(void) { return superficieEstavel; }
 int  video_falhou(void) { return falhou; }
 int  video_audio_nao_suportado(void) { return semDecoderAudio; }
 int  video_seek_desistiu(void) { return 0; }

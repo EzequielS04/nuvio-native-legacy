@@ -1139,8 +1139,9 @@ static int modoPrecisaRecorte(int modo);
 // durante a reproducao continua imediata (player_aspecto_definir libera).
 #define ASP_ASSENTA_MS 300u
 static int    aspPendente = 0;
-static Uint32 aspLiberarEm = 0;
-static void aspArmar(void) { aspPendente = comVideo ? 1 : 0; aspLiberarEm = 0; }
+#define ASP_SEGURANCA_MS 3000u
+static Uint32 aspLiberarEm = 0, aspProntoDesde = 0;
+static void aspArmar(void) { aspPendente = comVideo ? 1 : 0; aspLiberarEm = aspProntoDesde = 0; }
 #else
 #define aspPendente 0
 static void aspArmar(void) {}
@@ -2932,7 +2933,13 @@ void player_atualizar(float dt, Uint32 agora) {
   if (!comVideo) aspPendente = 0;   // fonte fechada: cancela
   else if (aspPendente && video_pronto()) {
     // video_pronto() = primeiro quadro renderizado (EV_PRIMEIRO_QUADRO).
-    if (!aspLiberarEm) aspLiberarEm = agora + ASP_ASSENTA_MS;
+    // Espera a superficie ESTAVEL (ultima recriacao do HDR/DV, NvPlayer.kt);
+    // o prazo de seguranca evita ficar neutro para sempre.
+    if (!aspProntoDesde) aspProntoDesde = agora | 1;
+    if (!aspLiberarEm) {
+      if (video_superficie_estavel()) aspLiberarEm = agora + ASP_ASSENTA_MS;
+      else if ((int)(agora - aspProntoDesde) >= (int)ASP_SEGURANCA_MS) aspLiberarEm = agora;
+    }
     else if ((int)(agora - aspLiberarEm) >= 0) {
       aspPendente = 0;
       printf("[aspect] aplicado apos primeiro quadro: %d\n", aspecto);
