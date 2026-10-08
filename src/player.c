@@ -204,6 +204,7 @@ static int   aberto = 0, saindo = 0, pediuSair = 0;
 static int   idx = 0;
 #define PLR_SCR_TOCOU_S 5.0f   // #179: reproducao continua antes do /scrobble/start
 static int   tocando = 1;
+static int   pausaPessoa;   // pausa pedida pela pessoa (player_pausa_pessoa, #302)
 static int retomandoSalto; // seek requested playback; buffering is not user pause
 // Uma unica sessao VOD pausada, por no maximo dois minutos. Nao abre conexao
 // especulativa: e o pipeline que ja estava exibindo este titulo.
@@ -1269,7 +1270,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
     // A grade EPG comeca a baixar ja: o banner "agora/a seguir" do OSD e o
     // overlay do guia dependem dela. Idempotente.
     if (canalSessao) { guia_carregar(); epg_iniciar(); } }
-  tocando = 1; retomandoSalto = 0; visivel = 1; anim = 0.0f; entrada = 0.0f; soBarra = 0; cheio = 1.0f; fileira = 1.0f;
+  tocando = 1; pausaPessoa = 0; retomandoSalto = 0; visivel = 1; anim = 0.0f; entrada = 0.0f; soBarra = 0; cheio = 1.0f; fileira = 1.0f;
   pedFontes = erroFonte = pedFaixas = pedProxT = pedProxE = 0; inicioImagem = 0;
   abrindoExp = 0; abrindoT = 0.0f; abrindoDesde = 0;
   erroTitulo[0] = erroDica[0] = 0;
@@ -1436,7 +1437,7 @@ void player_voltar_a_esperar(void) {
 #ifndef __EMSCRIPTEN__
   prebuscaUrl[0] = 0;
 #endif
-  esperandoFonte = 1; erroFonte = 0; tocando = 1;
+  esperandoFonte = 1; erroFonte = 0; tocando = 1; pausaPessoa = 0;
   erroTitulo[0] = erroDica[0] = 0;
   retomadaAplicada = 0; inicioImagem = 0;
 }
@@ -1447,6 +1448,10 @@ int  player_pediu_faixas(void) { int v = pedFaixas; pedFaixas = 0; return v; }
 int  player_com_video(void) { return comVideo && !retido && video_pronto(); }
 // Para o Discord (discord.c), que so le: pausado, duracao e se e canal ao vivo.
 int   player_pausado(void) { return !tocando; }
+// Pausa DA PESSOA (tecla/botao), nunca o `tocando` espelhado do backend: no
+// quadro, `tocando = video_tocando()` vira 0 quando o provedor fecha o fluxo
+// (PlaybackCompleted) e o vigia do canal (livestall.h) lia isso como pausa (#302).
+int   player_pausa_pessoa(void) { return pausaPessoa; }
 float player_duracao_seg(void) { return duracaoSeg; }
 int   player_eh_canal(void) { return ehCanal(); }
 // StreamFit (F03): the backend's REAL duration of this session's own source,
@@ -2250,6 +2255,7 @@ static void alternarTocando(void) {
   if (ehCanal() && !avPodePausar()) return;
   retomandoSalto = 0;
   tocando = !tocando;
+  pausaPessoa = !tocando;
   if (comVideo) video_pausar(!tocando);
 }
 
@@ -2288,6 +2294,7 @@ static void avVoltarAoVivo(void) {
   if (!avPodePausar()) return;
   video_buscar(alvo > 0.0 ? alvo : 0.0);
   if (!tocando) { tocando = 1; video_pausar(0); }
+  pausaPessoa = 0;
   avAtraso = 0.0; avPausaDesde = 0;
   botaoAV = 0;   // o botao some da fileira; o foco volta ao primeiro
 }
