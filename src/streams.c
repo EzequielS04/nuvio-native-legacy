@@ -779,11 +779,48 @@ static long penalAudioTv(const Stream *s) {
 }
 #endif
 
+// AS MULTAS de pontos() (teto, cache, origem, P2P, StreamFit, sem resolucao),
+// em separado: o "MP4 primeiro" da LG (mp4PrimeiroNaFaixa) so reordena fontes
+// com as MESMAS multas — e desempate, nunca passa por cima delas.
+static long multasDe(const Stream *s) {
+  long m = 0;
+#ifdef NV_TPK
+  m += penalAudioTv(s);
+#endif
+  // ACIMA DO TETO vai para o fim da fila, e nao para fora dela: o teto e
+  // preferencia, nao filtro. Uma lista em que so ha 4K e com teto de 1080p tem
+  // de continuar tocando — em 4K, com uma linha no log dizendo por que.
+  // SEM RESOLUCAO (0p) vem depois de toda fonte com resolucao no mesmo estado de
+  // cache: a altura desconhecida nao e prova de nada (#284). Maior que a
+  // qualidade (< 50000), menor que cache/origem/teto.
+  if (s->altura <= 0) m += 60000;
+  if (!cabeNoTeto(s)) m += 1000000;
+  // FORA DE CACHE NO DEBRID vai para depois das cacheadas, e tambem nao sai
+  // da fila: o automatico prefere o que TOCA AGORA. Registro 1163 (1.3.12,
+  // AIOStreams+TorBox): a verificacao aceitou "⏳ FHD", o link do AIOStreams
+  // manda o TorBox baixar e devolve um clipe de aviso de 8 s — que a
+  // verificacao nao tem como distinguir de filme. Com a marca do proprio
+  // addon, a cacheada da mesma lista vem antes. Menor que o teto (1000000):
+  // uma cacheada acima do teto ainda perde para uma fora de cache dentro dele,
+  // como ja perdia para qualquer fonte dentro dele.
+  if (s->foraCache) m += 500000;
+  // P2P do servidor de streaming: o fim da fila. O automatico nem chega a
+  // toca-lo (nao ha debrid que o resolva), mas a ORDEM da folha tambem conta:
+  // link direto primeiro, torrent sem garantia de peers por ultimo.
+  if (soP2P(s)) m += 600000;
+  // ORIGEM, depois de qualidade/HDR/cache (R9): o plugin so ganha de uma fonte
+  // de addon que esta FORA do cache (-500000, que so abre um aviso de 8 s) ou
+  // que estoura o teto; de qualquer fonte de addon em cache, de qualquer
+  // altura, ele perde. Sem outra opcao ele toca como sempre.
+  if (ehPlugin(s)) m += 200000;
+  // MEDIDA PESADA PARA A CONEXAO: abaixo de toda fonte normal (4K DV MP4
+  // inteiro soma 137 mil), acima do plugin. So com medida confiavel.
+  else if (ajustes_fonte_prioridade() != 1 && fitPesadaAuto(s)) m += 140000;
+  return m;
+}
+
 static long pontos(const Stream *s) {
   long p = 0;
-#ifdef NV_TPK
-  p -= penalAudioTv(s);
-#endif
   // DOLBY VISION SO VALE PONTO EM MP4 — e isto e medida, nao teoria.
   //
   // Marcado no aparelho do dono (LG C9, webOS 4.10) tocando um MKV que o addon
@@ -818,39 +855,87 @@ static long pontos(const Stream *s) {
         if (pref == 0) p += h * 50; else if (pref == 2 && h) p -= 50; }
     } else p += qualidade(s, modo);
   }
-  // ACIMA DO TETO vai para o fim da fila, e nao para fora dela: o teto e
-  // preferencia, nao filtro. Uma lista em que so ha 4K e com teto de 1080p tem
-  // de continuar tocando — em 4K, com uma linha no log dizendo por que.
-  // SEM RESOLUCAO (0p) vem depois de toda fonte com resolucao no mesmo estado de
-  // cache: a altura desconhecida nao e prova de nada (#284). Maior que a
-  // qualidade (< 50000), menor que cache/origem/teto.
-  if (s->altura <= 0) p -= 60000;
-  if (!cabeNoTeto(s)) p -= 1000000;
-  // FORA DE CACHE NO DEBRID vai para depois das cacheadas, e tambem nao sai
-  // da fila: o automatico prefere o que TOCA AGORA. Registro 1163 (1.3.12,
-  // AIOStreams+TorBox): a verificacao aceitou "⏳ FHD", o link do AIOStreams
-  // manda o TorBox baixar e devolve um clipe de aviso de 8 s — que a
-  // verificacao nao tem como distinguir de filme. Com a marca do proprio
-  // addon, a cacheada da mesma lista vem antes. Menor que o teto (1000000):
-  // uma cacheada acima do teto ainda perde para uma fora de cache dentro dele,
-  // como ja perdia para qualquer fonte dentro dele.
-  if (s->foraCache) p -= 500000;
-  // P2P do servidor de streaming: o fim da fila. O automatico nem chega a
-  // toca-lo (nao ha debrid que o resolva), mas a ORDEM da folha tambem conta:
-  // link direto primeiro, torrent sem garantia de peers por ultimo.
-  if (soP2P(s)) p -= 600000;
-  // ORIGEM, depois de qualidade/HDR/cache (R9): o plugin so ganha de uma fonte
-  // de addon que esta FORA do cache (-500000, que so abre um aviso de 8 s) ou
-  // que estoura o teto; de qualquer fonte de addon em cache, de qualquer
-  // altura, ele perde. Sem outra opcao ele toca como sempre.
-  if (ehPlugin(s)) p -= 200000;
-  // MEDIDA PESADA PARA A CONEXAO: abaixo de toda fonte normal (4K DV MP4
-  // inteiro soma 137 mil), acima do plugin. So com medida confiavel.
-  else if (ajustes_fonte_prioridade() != 1 && fitPesadaAuto(s)) p -= 140000;
+  p -= multasDe(s);
   return p;
 }
 
 long stream_pontos(const Stream *s) { return s ? pontos(s) : 0; }
+
+// LG, AUTO-PLAY: MP4 PRIMEIRO NA MESMA FAIXA DE RESOLUCAO (pedido do dono,
+// 2.0.3, C9). Com auto-play ligado, HDR em "Preferir" e Dolby Vision ligado, o
+// MP4 vem antes de MKV e outros DA MESMA faixa (degrauRes) — ate de DV em MKV:
+// MP4 DV > MP4 HDR > MP4 SDR > o resto pela regra de sempre. Na LG o MP4 abre
+// direto no player da TV, com o DV dela; o MKV DV depende do nosso demux.
+//   * nunca desce de resolucao: so reordena dentro da faixa, e o MP4 sobe so
+//     ate logo acima da melhor nao-MP4 da faixa (um 4K MKV que ganhava de toda
+//     a faixa 1080p continua ganhando de um 1080p MP4);
+//   * as regras de auto-play (grupo do fonteregra) e as multas (cache, origem,
+//     teto, StreamFit) ficam acima: so fontes do mesmo grupo e com as mesmas
+//     multas entram na comparacao;
+//   * Samsung (.tpk/.wgt), Android e o desktop Linux: nada muda.
+#ifndef NV_STREAMS_LG
+#if !defined(NV_ANDROID) && !defined(NV_TPK) && !defined(__EMSCRIPTEN__) && !defined(NV_LINUX_DESKTOP)
+#define NV_STREAMS_LG 1
+#else
+#define NV_STREAMS_LG 0
+#endif
+#endif
+static int lgMp4Primeiro(void) {
+#if NV_STREAMS_LG
+  return !ajustes_fonte_manual() && ajustes_fonte_hdr() == 0 && ajustes_dolby_vision();
+#else
+  return 0;
+#endif
+}
+// 0 = nao e MP4; 1 MP4 SDR, 2 MP4 HDR, 3 MP4 com DV que esta TV toca.
+static int classeMp4(const Stream *s) {
+  int h;
+  if (!stream_e_mp4(s)) return 0;
+  h = nivelHdr(s);
+  return h == 4 ? 3 : h > 0 ? 2 : 1;
+}
+// `pts` (na ordem de `idx`, ou de ORD(q) com idx NULL) e ajustado no lugar:
+// em cada (grupo, faixa, multas) com alguma nao-MP4 elegivel, os MP4 sobem
+// para logo acima da melhor delas, em ordem de classe e depois de pontos. So
+// sobe, nunca desce. `grp` e `excl` podem ser NULL. Devolve quantos subiram.
+static int mp4PrimeiroNaFaixa(const int *idx, long *pts, const signed char *grp,
+                              const unsigned char *excl, int total) {
+  int q, r, subiram = 0;
+  long *orig;
+  if (total < 2) return 0;
+  // A comparacao e sobre os pontos de ANTES: o MP4 que ja subiu nao muda o
+  // degrau dos outros.
+  orig = malloc(sizeof *orig * (size_t)total);
+  if (!orig) return 0;
+  memcpy(orig, pts, sizeof *orig * (size_t)total);
+  for (q = 0; q < total; q++) {
+    const Stream *s = &lista[idx ? idx[q] : ORD(q)];
+    int g = grp ? grp[q] : 0, d = degrauRes(s), c = classeMp4(s), acima = 0;
+    long mq = multasDe(s), teto = 0, novo;
+    int temNao = 0;
+    if (!c || (excl && excl[q]) || g < 0) continue;
+    for (r = 0; r < total; r++) {
+      const Stream *o = &lista[idx ? idx[r] : ORD(r)];
+      int co;
+      if (r == q || (excl && excl[r]) || (grp ? grp[r] : 0) != g || degrauRes(o) != d ||
+          multasDe(o) != mq) continue;
+      co = classeMp4(o);
+      if (!co) { if (!temNao || orig[r] > teto) teto = orig[r]; temNao = 1; continue; }
+      // Outro MP4 da mesma faixa: quantos ficam ABAIXO deste (classe, pontos,
+      // e a ordem da lista no empate) decide o degrau dele acima da nao-MP4.
+      if (co < c || (co == c && (orig[r] < orig[q] || (orig[r] == orig[q] && r > q)))) acima++;
+    }
+    if (!temNao) continue;
+    novo = teto + 1 + acima;
+    if (novo > orig[q]) { pts[q] = novo; subiram++; }
+  }
+  free(orig);
+  return subiram;
+}
+static const char *nomeFaixa(const Stream *s) {
+  static const char *const N[] = { "SD", "720p", "1080p", "2160p" };
+  return N[degrauRes(s)];
+}
 
 // QUAIS FONTES O AUTOMATICO PODE TOCAR, E EM QUE ORDEM DE GRUPO (#202). A
 // regra e de fonteregra.h; aqui so o texto que a regex le (o mesmo do
@@ -1386,6 +1471,8 @@ int stream_primeira_boa(int tentativas) {
       rk[q] = fonteregra_ordem_rank(lista[i].provedor);
       if (!excl[q]) livres++;
     }
+    // LG: o MP4 da mesma faixa na frente, a mesma regra do automatico.
+    if (lgMp4Primeiro()) mp4PrimeiroNaFaixa(ordem, pts, grp, excl, total);
     pthread_mutex_unlock(&verTrava);
     nf = fonteauto_fila_o(modo, total, posPref, pts, acima, excl, grp, rk, ordemUso, tentativas, fila);
     for (q = 0; q < nf; q++) fila[q] = ordem[fila[q]];
@@ -1520,6 +1607,7 @@ int stream_auto_pode_decidir(int preferida, int prefPendente, int prazoPassou, i
     grp[q] = (signed char)grupoDe(i);
     rk[q] = fonteregra_ordem_rank(lista[i].provedor);
   }
+  if (lgMp4Primeiro()) mp4PrimeiroNaFaixa(NULL, pts, grp, excl, total);
   pthread_mutex_unlock(&verTrava);
   p.modo = ajustes_fonte_primeira() ? FONTEAUTO_PRIMEIRA : FONTEAUTO_MELHOR;
   p.total = total; p.preferida = posPref; p.prefPendente = prefPendente;
@@ -1806,21 +1894,45 @@ int stream_canal_prazo_longo(int idx) {
 // pelo menos um dos dois.
 
 static int canalFolha;
+static unsigned lgMp4LogGer; static int lgMp4LogIdx = -1;
 static int automaticoCom(int regras) {
   if (!stream_n()) return -1;
-  int melhor = -1, gMelhor = 0;
+  int melhor = -1, gMelhor = 0, m = 0;
   long maior = 0;
+  int lg = regras && lgMp4Primeiro();
+  int *idx = lg ? malloc(sizeof *idx * (size_t)n) : NULL;
+  long *pts = lg ? malloc(sizeof *pts * (size_t)n) : NULL;
+  signed char *grp = lg ? malloc((size_t)n) : NULL;
+  if (lg && (!idx || !pts || !grp)) lg = 0;
   // NA ORDEM DE EXIBICAO (#221), que e a da lista inteira: com a lista
   // enchendo por addon o indice e a ordem de CHEGADA, nao a dos addons.
   for (int k = 0; k < n; k++) {
     int i = ORD(k), g = regras ? grupoDe(i) : 0;
     if (automaticaExcluida(i) || ehInformativa(&lista[i]) || g < 0) continue;
     long p = pontos(&lista[i]);
+    if (lg) { idx[m] = i; pts[m] = p; grp[m] = (signed char)g; m++; }
     // O GRUPO das regras (#202) vem antes da pontuacao: permitida primeiro.
     // `>` e nao `>=`: em empate fica o PRIMEIRO da lista, que e a ordem em que
     // o addon devolveu — e ele costuma saber algo que a pontuacao nao ve.
     if (melhor < 0 || g < gMelhor || (g == gMelhor && p > maior)) { maior = p; melhor = i; gMelhor = g; }
   }
+  // LG: o MP4 da mesma faixa na frente (mp4PrimeiroNaFaixa). Mesma escolha,
+  // agora sobre os pontos ajustados.
+  if (lg && m > 1 && mp4PrimeiroNaFaixa(idx, pts, grp, NULL, m)) {
+    int antes = melhor;
+    melhor = -1;
+    for (int q = 0; q < m; q++)
+      if (melhor < 0 || grp[q] < gMelhor || (grp[q] == gMelhor && pts[q] > maior)) {
+        maior = pts[q]; melhor = idx[q]; gMelhor = grp[q];
+      }
+    if (melhor != antes && (lgMp4LogGer != listaGeracao || lgMp4LogIdx != melhor)) {
+      lgMp4LogGer = listaGeracao; lgMp4LogIdx = melhor;
+      printf("[fonte] LG: mp4 primeiro na faixa %s (autoplay+hdr+dv): \"%s\" no lugar de \"%s\"\n",
+             nomeFaixa(&lista[melhor]), lista[melhor].rotulo, lista[antes].rotulo);
+      fflush(stdout);
+    }
+  }
+  free(idx); free(pts); free(grp);
   return melhor;
 }
 // As regras de auto-play (#202) sao de filme e serie, como no oficial: canal
