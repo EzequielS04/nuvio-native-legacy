@@ -26,6 +26,7 @@
 #include "mkv.h"
 #include "capmkv.h"
 #include "mkvass.h"
+#include "rede.h"
 #include "faixasmkv.h"
 #include "velocidade.h"
 #include <SDL2/SDL.h>
@@ -401,7 +402,11 @@ static void guardarMkv(const MkvFaixa *fx, int n) {
 static void *fioMkv(void *arg) {
   PedidoMkv *p = arg;
   MkvFaixa *fx = calloc(MKV_MAX_FAIXAS, sizeof *fx);
-  int n = fx ? mkv_faixas(p->url, fx, MKV_MAX_FAIXAS) : 0;
+  int n;
+  // #385: a sonda e leitura LATERAL ao video. Host que acabou de recusar
+  // conexao (pre-busca da legenda, capitulos) nao recebe outra daqui.
+  rede_lateral(1);
+  n = fx ? mkv_faixas(p->url, fx, MKV_MAX_FAIXAS) : 0;
   if (p->geracao == mkvGeracao) {
     printf("[mkv] sonda pela rede: %d faixa(s)\n", n);
     if (n > 0) guardarMkv(fx, n);

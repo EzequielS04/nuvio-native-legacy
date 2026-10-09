@@ -7,6 +7,9 @@
 #include <string.h>
 #include <time.h>
 
+// #385: rede.c define; fraca para os testes que trocam rede.c por um stub.
+__attribute__((weak)) void rede_lateral(int sim) { (void)sim; }
+
 #define CAP_JANELA (320L * 1024)
 #define CAP_TENTATIVAS 3
 #define CAP_CACHE 4
@@ -159,7 +162,9 @@ static int lerComRecuo(const char *url, MkvCap *caps, int max, unsigned g, int e
 static void *fio(void *arg) {
   Pedido *p = arg;
   MkvCap caps[MKV_MAX_CAPS];
-  int n = lerComRecuo(p->url, caps, MKV_MAX_CAPS, p->g, capmkv_espera_inicial_ms);
+  int n;
+  rede_lateral(1);   // #385: leitura lateral ao video (ver rede.h)
+  n = lerComRecuo(p->url, caps, MKV_MAX_CAPS, p->g, capmkv_espera_inicial_ms);
   if (n >= 0) {
     cacheGuardar(p->url, caps, n);      // por URL: vale mesmo se o video ja mudou
     if (capmkv_teste_antes_de_publicar) capmkv_teste_antes_de_publicar();

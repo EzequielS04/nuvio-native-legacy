@@ -115,6 +115,12 @@
 #define MKVASS_RECUO_MAX_MS 8000L
 #endif
 static long pausasCdn;   // quantas pausas de CDN o modulo ja fez (testes)
+// #385: os fios do mkvass sao leitura LATERAL ao video (rede_lateral). Fraca:
+// os testes que trocam rede.c por um transporte local nao precisam defini-la.
+__attribute__((weak)) void rede_lateral(int sim) { (void)sim; }
+// Conexao que nem abriu (curl 6, 7, 35): o no do CDN recusou, sumiu ou
+// derrubou o aperto de mao. Mesma familia do "CDN pediu calma" do #308.
+static int conexaoRecusada(int e) { return e == 6 || e == 7 || e == 35; }
 // Janela menor da varredura, depois de estouros de prazo: cada estouro corta a
 // janela pela metade ate aqui. 64 KB ainda cobre o cabecalho de um Cluster e
 // dezenas de blocos de legenda.
@@ -617,6 +623,7 @@ static int jobObsoleto(const Job *j) {
 
 static void *poolFio(void *u) {
   (void)u;
+  rede_lateral(1);
   for (;;) {
     Job *j; long t;
     pthread_mutex_lock(&PT);
@@ -748,6 +755,18 @@ static void falhou(Fio *f, Off ini, long n, int st, int erro, int resto) {
       f->falhas = MKVASS_FALHAS_MAX;
       printf("[mkvass] HTTP %d: recusa definitiva, nao adianta tentar de novo\n", st);
     }
+  } else if (conexaoRecusada(erro)) {
+    // #385: o host do video RECUSOU a conexao (no registro do .tpk, o no do
+    // CDN do TorBox, 11 vezes em 13-15 s com o video aberto). Nada de mais
+    // quatro Ranges com recuo de 0,5-8 s: esta rodada acaba aqui (a pre-busca
+    // desiste, o cabecalho e o Cues voltam no-go de rede para faixas.c recuar,
+    // o laco dos blocos pausa como no #308) e, quando voltar, UMA conexao
+    // extra. rede.c ja pos o host em pausa: ate ela vencer, nenhum Range
+    // lateral abre conexao a ele.
+    f->falhas = MKVASS_FALHAS_MAX;
+    f->paralelos = 1;
+    printf("[mkvass] host do video recusou conexao (curl %d, %s): sem nova tentativa agora, "
+           "leitura da legenda em pausa\n", erro, momentoVideo());
   } else {
     if (httpFreio(st)) f->freios++;
     // curl 18/56 aqui e um corte que NEM o resto trouxe (rede.c ja junta os
@@ -3135,6 +3154,7 @@ static void *trabalhar(void *arg) {
   Fio *f = arg;
   char *sc;
   int r;
+  rede_lateral(1);
 
   // Espera o fio anterior morrer: os dois escreveriam o mesmo sidecar e
   // entregariam corpos ao overlay fora de ordem.
@@ -3364,8 +3384,9 @@ static void *trabalhar(void *arg) {
         // #308: curl 28, 429 e 5xx sao o CDN pedindo calma, nao o fim da faixa.
         // PAUSA a leitura lateral (10 s, dobrando ate 60 s) em vez de falhar:
         // a faixa nao vai para a TV, e o video fica com a conexao so para ele.
+        // #385: conexao recusada (curl 6/7/35) e o mesmo pedido, ja na primeira.
         if (f->falhas >= MKVASS_FALHAS_MAX && !f->definitivo &&
-            (f->ultErro == 28 || f->ultSt == 429 || f->ultSt >= 500)) {
+            (f->ultErro == 28 || f->ultSt == 429 || f->ultSt >= 500 || conexaoRecusada(f->ultErro))) {
           f->pausaMs = f->pausaMs ? (f->pausaMs * 2 > MKVASS_PAUSA_CDN_MAX_MS ? MKVASS_PAUSA_CDN_MAX_MS : f->pausaMs * 2) : MKVASS_PAUSA_CDN_INI_MS;
           __atomic_add_fetch(&pausasCdn, 1, __ATOMIC_RELAXED);
           printf("[mkvass] CDN pediu calma (HTTP %d, curl %d): leitura da legenda em pausa %ld ms\n",
