@@ -6642,8 +6642,8 @@
     "ultimo_comentario_por": "Namer03",
     "ultima_nossa": "2026-10-07"
    },
-   "proximo_passo": "responder: bug do binge group na escolha manual entra na 2.0.4; reusar último link e regex por tipo ficam para a 2.1",
-   "notas": "REABERTA em 09/10 pelo autor (Namer03) com novo comentário; no GitHub o estado é aberta (motivo REOPENED), então a issue volta ao mapa como aberta com alvo. A regex/exigir/preferir da 2.0.2 continua entregue (sem commit #310). Três pedidos novos: (a) BUG, alvo 2.0.4: o binge group não é usado quando o usuário escolhe outro episódio À MÃO no seletor de episódios ou no carrossel de títulos. Causa: suspeita: fontepref só aplica o binge group no autoplay/próximo; a provar (o branch agente/204-binge está investigando). Indício, não prova: fontepref_escolher é chamado em app.c:1549, 3263, 3819, 3892 e 4341, mas a escolha manual de outro episódio não foi rastreada. (b) FEATURE, alvo 2.1: \"reusar último link\" + \"Last Link Cache Duration\". Não existe cache de link: fontepref guarda só a identidade da fonte (bingeGroup, provedor, trilha) por título e perfil, por 180 dias, e resolve a URL de novo (fontepref.h:112-140 diz isso de propósito); fontecache é prefetch de lista com validade de 30 s (fontecache.h:166, FONTECACHE_VALIDADE_MS). Guardar a URL exige arquivo novo, validade configurável, linha nos Ajustes e queda para a busca quando o link de debrid (assinado, expira em minutos) falhar: médio, com risco de tocar link morto; por isso 2.1. (c) FEATURE, alvo 2.1: regex separada por tipo (filmes / séries / anime) e modo preferir x exigir por tipo. Hoje há UMA regex e UM modo para tudo: padrao único em fonteregra.c:15, FonteRegraCfg com um regexModo (fonteregra.h:47), um único modo em ajustes.c:1301 (V_FONTE_REGEX), um fonteregra.txt por TV com cópia por perfil, e a chave do oficial stream_auto_play_regex é uma só na conta (sync). Por tipo pede três regex compiladas, três modos, arquivo e blob novos sem quebrar o sync com o oficial, três linhas a mais nos Ajustes e uma regra para dizer o que é anime (o app não tem esse tipo hoje: suspeita, não conferido): grande; por isso 2.1. ALVO da issue = 2.0.4 (o mais cedo, pelo item (a)); (b) e (c) só saem na 2.1.",
+   "proximo_passo": "responder: (a) não é mais bug (a escolha manual de outro episódio já aplica o binge group); a 2.0.4 passa a lembrar também o binge group da fonte que o automático tocou (aprovado pelo dono); reusar último link e regex por tipo ficam para a 2.1",
+   "notas": "REABERTA em 09/10 pelo autor (Namer03) com novo comentário; no GitHub o estado é aberta (motivo REOPENED), então a issue volta ao mapa como aberta com alvo. A regex/exigir/preferir da 2.0.2 continua entregue (sem commit #310). Três pedidos novos: (a) JÁ NÃO É BUG (revisão de código em 09/10): a abertura manual de outro episódio já aplica o binge group (teste 29d2c248 passa sem conserto); a lacuna real era que só a fonte ESCOLHIDA À MÃO era lembrada. FEATURE 2.0.4, origem dono 09/10 (\"sim vamos adicionar na 2.0.4\"): lembrar também o binge group da fonte que o automático tocou. Branch agente/204-binge (29d2c248, 02753401, 6345e9ff), ainda não integrado. (b) FEATURE, alvo 2.1: \"reusar último link\" + \"Last Link Cache Duration\". Não existe cache de link: fontepref guarda só a identidade da fonte (bingeGroup, provedor, trilha) por título e perfil, por 180 dias, e resolve a URL de novo (fontepref.h:112-140 diz isso de propósito); fontecache é prefetch de lista com validade de 30 s (fontecache.h:166, FONTECACHE_VALIDADE_MS). Guardar a URL exige arquivo novo, validade configurável, linha nos Ajustes e queda para a busca quando o link de debrid (assinado, expira em minutos) falhar: médio, com risco de tocar link morto; por isso 2.1. (c) FEATURE, alvo 2.1: regex separada por tipo (filmes / séries / anime) e modo preferir x exigir por tipo. Hoje há UMA regex e UM modo para tudo: padrao único em fonteregra.c:15, FonteRegraCfg com um regexModo (fonteregra.h:47), um único modo em ajustes.c:1301 (V_FONTE_REGEX), um fonteregra.txt por TV com cópia por perfil, e a chave do oficial stream_auto_play_regex é uma só na conta (sync). Por tipo pede três regex compiladas, três modos, arquivo e blob novos sem quebrar o sync com o oficial, três linhas a mais nos Ajustes e uma regra para dizer o que é anime (o app não tem esse tipo hoje: suspeita, não conferido): grande; por isso 2.1. ALVO da issue = 2.0.4 (o mais cedo, pelo item (a), agora recurso); (b) e (c) só saem na 2.1.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/310",
    "criada_em": "2026-10-07",
    "alvo": "2.0.4"
@@ -8147,9 +8147,30 @@
     "ultimo_comentario_por": "Namer03",
     "ultima_nossa": null
    },
-   "proximo_passo": "ler os logs DDRROH e 98ZQED (já no corpo) e responder",
-   "notas": "LG C5, webOS 26, Nuvio 2.0.2; Re:Zero S1 (Seadex): legenda embutida do ep. 3 funcionou, a do ep. 4 parou de aparecer depois da abertura. O autor (Vidhin05) JÁ mandou dois códigos de log no corpo (DDRROH e 98ZQED), ainda não lidos por nós; por isso o status é aberta e não precisa-log. Um comentário do próprio autor fala de \"quedas de conexão e falhas de rede, talvez queda do debrid\": relato solto, sem log próprio, tratar como segundo sintoma e checar nos mesmos logs. Namer03 (não é do projeto) respondeu \"mesma coisa do #308, sai na 2.0.3\": SUSPEITA, o #308 é legenda que bloqueia a fonte, o sintoma aqui (legenda some no meio) pode ser outro; não confirmado. Candidatos já na 2.0.3: #269 (legenda embutida) e #335 (ASS). ALVO 2.0.4 = triagem: pode virar 2.0.3 se os logs mostrarem que é o #308.",
+   "proximo_passo": "causa achada nos logs do autor (limite de 8000 blocos do coletor de ASS embutido); aguarda o branch agente/203-384; responder ao autor com a causa",
+   "notas": "LG C5, webOS 26, Nuvio 2.0.2; Re:Zero S1 (Seadex): legenda embutida do ep. 3 funcionou, a do ep. 4 parou de aparecer depois da abertura. O autor (Vidhin05) JÁ mandou dois códigos de log no corpo (DDRROH e 98ZQED), ainda não lidos por nós; por isso o status é aberta e não precisa-log. Um comentário do próprio autor fala de \"quedas de conexão e falhas de rede, talvez queda do debrid\": relato solto, sem log próprio, tratar como segundo sintoma e checar nos mesmos logs. Namer03 (não é do projeto) respondeu \"mesma coisa do #308, sai na 2.0.3\": SUSPEITA, o #308 é legenda que bloqueia a fonte, o sintoma aqui (legenda some no meio) pode ser outro; não confirmado. Candidatos já na 2.0.3: #269 (legenda embutida) e #335 (ASS). ALVO 2.0.4 = triagem: pode virar 2.0.3 se os logs mostrarem que é o #308. CAUSA ACHADA (09/10, nos logs do próprio autor): NÃO é o #308 e NÃO está corrigido na 2.0.3 até agora. O coletor de ASS embutido indexa no máximo 8000 blocos (MKVASS_MAX_PONTOS, src/mkvass.c:61) NA ORDEM DO ARQUIVO; numa release com muito typeset (letreiros, karaokê) os 8000 acabam logo depois da abertura, e o resto do episódio fica sem legenda (log: \"cobertura=7360-217270ms\" com exatamente 8000 eventos). O branch agente/203-384 trabalha nisso; o alvo continua 2.0.4 a menos que esse branch entre na 2.0.3. Próximo passo: integrar agente/203-384 (ou deixar para a 2.0.4) e avisar o autor. O comentário de \"queda do debrid\" segue sem log próprio.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/384",
+   "criada_em": "2026-10-09",
+   "alvo": "2.0.4"
+  },
+  {
+   "numero": 385,
+   "titulo": "Internet Connection Drop and Reconnecting Bug to no end",
+   "estado_github": "aberta",
+   "plataforma": "Samsung .wgt",
+   "tipo": "bug",
+   "status": "precisa-log",
+   "release": "-",
+   "conserto": [],
+   "ultima_resposta": {
+    "nos": false,
+    "data": null,
+    "ultimo_comentario_por": null,
+    "ultima_nossa": null
+   },
+   "proximo_passo": "pedir log: Ajustes > Sobre > Enviar registro logo depois da queda, e comentar o código",
+   "notas": "Samsung UT8000 (Tizen 5.5), .wgt, Nuvio 2.0.2; sem log. Relato: VOD de debrid cai no meio com \"reconectando\" em laço; depois TODA fonte dá \"não deu para carregar\", só add-on https segue tocando. Triagem (09/10) no D1 e no código, sem TV: NÃO provado. No D1 (.wgt, ~32 mil ids recentes, ~300 registros) só 2 registros (2 pessoas, ambos 2.0.1) mostram a reconexão de VOD começar (\"conexao caiu ... tentativa 1/3\"), nenhum chega a \"reconexao: desistiu\" e nenhum tem o par \"queda e depois toda fonte falha\"; os outros ~25 registros com PLAYER_ERROR_CONNECTION_FAILED são falha de abertura de uma fonte, e a próxima fonte abriu (sem envenenamento). Código: a reconexão do .wgt (video_tizen.c:1180-1215, video_reconexao.h) são 3 tentativas por queda, e o contador zera 10 s depois do ponto da queda, então rede instável gera laço de \"reconectando\" por desenho; o 2.0.3 só mexeu na reconexão de TV ao vivo (#302/#350), VOD não mudou. Descartado por leitura: negcache (só 4 APIs de metadados), flag offline (redesaude.c só pinta a ilha), pool de threads (strict=0, [fios] estável nos logs), lista de fontes recusadas (zera a cada lista nova), XHR síncrono (estado por fio). \"Só o https funciona\" contraria um AVPlay quebrado (os dois passam por ele) e aponta para a conta do debrid/links do host, que é do lado de lá. SUSPEITA, não provada: (1) o open de reconexão não tem prazo: se o prepareAsync nunca responder, video_reconectando() fica 1 e tentarProximaFonteVOD (app.c) volta cedo, então fica \"reconectando\" sem fim; (2) a op \"abrir\" do JS faz stop() e close() no MESMO try (video_tizen.c:264-267): se o stop() levantar, o close() não roda e o próximo open() falha; (3) debrid.c marca conta sem plano para a SESSÃO inteira (semPlano), mas só com corpo \"PLAN_RESTRICTED/not premium\", não com 429. ALVO 2.0.4 = triagem: sem log não há conserto provável; pode ficar para 2.1 se o log mostrar defeito do debrid.",
+   "url": "https://github.com/iqui27/nuvio-native-legacy/issues/385",
    "criada_em": "2026-10-09",
    "alvo": "2.0.4"
   }
@@ -8292,12 +8313,13 @@
       379,
       306,
       337,
-      384
+      384,
+      385
      ]
     },
     {
-     "nome": "Binge group na escolha manual de episódio (bug do #310)",
-     "porque": "Pedido (a) do #310: o binge group não vale quando o usuário escolhe outro episódio no seletor de episódios ou no carrossel de títulos. Causa: suspeita (fontepref só aplica no autoplay/próximo; a provar). Em investigação em agente/204-binge.",
+     "nome": "Binge group: lembrar também a fonte que o automático tocou (#310)",
+     "porque": "Pedido (a) do #310. A revisão de código mostrou que a escolha manual de outro episódio já aplica o binge group; a lacuna era só a fonte escolhida à mão ser lembrada. O dono aprovou em 09/10 (\"sim vamos adicionar na 2.0.4\") lembrar também o binge group da fonte que o automático tocou. Código em agente/204-binge (29d2c248, 02753401, 6345e9ff), não integrado. Origem: dono 09/10.",
      "issues": [
       310
      ],
