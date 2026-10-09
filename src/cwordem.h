@@ -119,7 +119,9 @@ int cwo_data_curta(long long estreiaMs, long long agoraMs, int idioma, int maius
 // home (que escreve "A seguir"/"Estreia") os leem, e os dois ja linkam este
 // arquivo. Trocado inteiro de uma vez, sob trava: nada de janela vazia.
 void cwo_conta_definir(const char *const *ids, int n);
+// Tambem diz sim para os ajustados pela desmarcacao (cwo_ajustados_definir).
 int  cwo_conta_a_seguir(const char *id);
+void cwo_ajustados_definir(const char *const *ids, int n);
 // A virada de temporada do enfeite (S3E10 nao existe, vira S4E1) muda o id.
 void cwo_conta_trocar(const char *velho, const char *novo);
 

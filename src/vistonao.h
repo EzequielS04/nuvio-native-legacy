@@ -62,6 +62,15 @@ void vistonao_gesto(const char *imdb, const VistoPar *pares, int n, int visto);
 //  -1  havia, o remoto e mais novo: ele ganha e a entrada caiu
 int  vistonao_barra(const char *imdb, int temporada, int episodio, long long remotoMs);
 
+// O PRIMEIRO EPISODIO DESMARCADO ate (temporada, episodio) inclusive — o "a
+// seguir" do Continuar assistindo recua para ele quando o remoto esta adiante
+// do que a pessoa deixou como visto (Silo: remoto T2E10, desmarcados T2E7..E10
+// -> T2E7). So conta entrada que ainda vale contra `remotoMs` (mesma regra e
+// mesma folga de vistonao_barra); nao mexe em nada. Temporada 0 (extras) nao
+// puxa. 1 e *pt/*pe preenchidos, ou 0.
+int  vistonao_primeira(const char *imdb, int temporada, int episodio, long long remotoMs,
+                       int *pt, int *pe);
+
 int  vistonao_n(void);          // entradas em memoria (todos os perfis do usuario)
 void vistonao_esquecer(void);   // larga a memoria; o arquivo fica
 // Teste: relogio em ms.

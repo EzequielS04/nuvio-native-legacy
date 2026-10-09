@@ -313,4 +313,9 @@ void desc_pedir_titulo_semente(const char *imdb, long tmdb, const char *tipo,
 int  desc_titulo_pronto(void);
 int  desc_titulo_buscando(void);
 
+// O PRIMEIRO EPISODIO DESMARCADO NA TV (vistonao_primeira), ligado por app.c.
+// Sem ele o "a seguir" do Continuar assistindo fica como o remoto o deu.
+void desc_lapides_primeira(int (*primeira)(const char *imdb, int temporada, int episodio,
+                                           long long remotoMs, int *pt, int *pe));
+
 #endif

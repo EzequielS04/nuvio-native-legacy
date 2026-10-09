@@ -2672,6 +2672,48 @@ static unsigned cwGer;          // ++ a cada montarContinuar
 static unsigned cwGerNaTela;    // a do ultimo fioContinuar que publicou
 static unsigned cwGerMontar;    // a que esta no lote de montar() (um montar por vez)
 
+// O "A SEGUIR" NAO PASSA DO QUE A PESSOA DESMARCOU (Silo, tt14688458, 08/10).
+// O remoto diz "ultimo visto T2E10" e o "a seguir" dele e T3E1 (ou T2E11); mas
+// T2E7..E10 foram desmarcados NESTA TV, e o proximo de verdade e o T2E7. A regra
+// mora aqui, UMA vez, para as tres fontes: o primeiro episodio desmarcado ate a
+// posicao do remoto (vistonao_primeira, que descarta a desmarcacao que o remoto
+// ja superou — folga de 2 min). `remotoMs` e o instante do ultimo visto do
+// remoto. Devolve 1 e troca (*t, *e) quando recuou. Um log por item por montagem.
+static int (*cwPrimeira)(const char *, int, int, long long, int *, int *);
+void desc_lapides_primeira(int (*primeira)(const char *, int, int, long long, int *, int *)) {
+  cwPrimeira = primeira;
+}
+static int recuarPelaDesmarcacao(const char *serie, int *t, int *e, long long remotoMs) {
+  int nt, ne;
+  if (!cwPrimeira || *t < 1 || *e < 1) return 0;
+  if (!cwPrimeira(serie, *t, *e, remotoMs, &nt, &ne) || (nt == *t && ne == *e)) return 0;
+  printf("[desc] continuar assistindo: %s a seguir ajustado pela desmarcacao: T%dE%d -> T%dE%d\n",
+         serie, *t, *e, nt, ne);
+  *t = nt; *e = ne;
+  return 1;
+}
+// Os ids que ele moveu nesta montagem; montarContinuar os publica (cwordem.c)
+// antes de perguntar quem e "a seguir".
+static char ajustadosIds[CONT_MAX * 3][sizeof(((CatItem *)0)->imdb)];
+static int nAjustados;
+static void ajustarASeguir(CatItem *it) {
+  char serie[sizeof it->imdb], velho[sizeof it->imdb];
+  int t = it->temporada, e = it->episodio;
+  snprintf(serie, sizeof serie, "%s", it->imdb);
+  { char *dp = strchr(serie, ':'); if (dp) *dp = 0; }
+  if (!recuarPelaDesmarcacao(serie, &t, &e, it->retomadoMs)) return;
+  snprintf(velho, sizeof velho, "%s", it->imdb);
+  it->temporada = t; it->episodio = e;
+  snprintf(it->imdb, sizeof it->imdb, "%s:%d:%d", serie, t, e);
+  // O que o remoto sabia do episodio de ANTES nao descreve este.
+  it->nomeEpisodio[0] = 0;
+  it->restanteMin = 0;
+  // Episodio antigo: ja foi ao ar (sem isto contaria "sem data de estreia").
+  cwo_marcar_estreia(it->imdb, 0);
+  if (nAjustados < (int)(sizeof ajustadosIds / sizeof *ajustadosIds))
+    snprintf(ajustadosIds[nAjustados++], sizeof ajustadosIds[0], "%s", it->imdb);
+}
+
 // Aplica a um lote REMOTO (Trakt ou Simkl) os limites de 1% a 90% e o
 // cruzamento com o registro local mais novo. Compacta no lugar; devolve quantos
 // ficaram. `aSeguir` diz quais itens sao "a seguir" (entram com 0%).
@@ -2746,6 +2788,9 @@ static int filtrarRemoto(CatItem *v, int n, int (*aSeguir)(const char *),
         }
       }
     }
+    // "A seguir" que passa da desmarcacao da pessoa recua (ajustarASeguir).
+    if (v[i].progresso == 0 && v[i].temporada > 0 && v[i].episodio > 0 &&
+        aSeguir(v[i].imdb)) ajustarASeguir(&v[i]);
     if (w != i) v[w] = v[i];
     w++;
   }
@@ -2800,6 +2845,8 @@ static int contaASeguir(CatItem *lista, int n, int max, int comOutraFonte) {
     CatItem *d = &lote[nLote];
     int ja = 0;
     memset(d, 0, sizeof *d);
+    // A semente da conta tambem recua para o primeiro desmarcado.
+    recuarPelaDesmarcacao(sem[i].id, &sem[i].temporada, &sem[i].episodio, sem[i].vistoMs);
     snprintf(d->imdb, sizeof d->imdb, "%s:%d:%d", sem[i].id, sem[i].temporada,
              sem[i].episodio);
     for (j = 0; j < n && !ja; j++) ja = mesmaObra(&lista[j], d);
@@ -2901,6 +2948,7 @@ static int montarContinuar(CatItem *saida, int max) {
 
   if (max > CONT_MAX) max = CONT_MAX;
   cwGer++;
+  nAjustados = 0;
   nT = querTrakt ? trakt_continuar(doTrakt, CONT_MAX) : 0;
   // Os limites AGORA valem para todas as fontes. Sem isto, o /sync/playback
   // devolve o que qualquer cliente pausou uma vez — inclusive titulos em 0% e
@@ -2947,6 +2995,13 @@ static int montarContinuar(CatItem *saida, int max) {
     nL = contaASeguir(daConta, nL, CONT_MAX, trakt_ativo() || simkl_ativo());
   else
     cwo_conta_definir(NULL, 0);
+
+  // Os "a seguir" que a desmarcacao moveu (Trakt/Simkl acima; a conta, que ja
+  // foi montada em contaASeguir, entra pelo seu proprio registro e pelo id novo).
+  { const char *aj[CONT_MAX * 3];
+    int k;
+    for (k = 0; k < nAjustados; k++) aj[k] = ajustadosIds[k];
+    cwo_ajustados_definir(aj, nAjustados); }
 
   // A CONTA ENTRA PRIMEIRO porque ela e a fonte DATADA (lastWatchedMs, que o
   // syncprog ja reconciliou entre celular e TV). O item remoto que fala da
