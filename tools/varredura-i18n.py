@@ -496,7 +496,7 @@ IGNORAR = {
     "escolha manual: a folha abre com o que chegou", "fonte boa o bastante",
     "fonte lembrada deste titulo", "prazo de espera pelos add-ons",
     "outra fonte foi a escolhida",
-    "interface em 1080p: mede de novo", "sem-acesso", "sem-dv", "temporada",
+    "interface em 1080p: mede de novo", "sem-acesso", "sem-dv", "nao-mkv", "temporada",
     # Nomes de arquivo e de pasta (addonstats.c, assrender.c): nunca tela.
     "fonte-latencia.txt", "%s/fontes",
     # Listas de COMPARACAO, nao de desenho: apelidos de genero em pt/es (mapa.c,
