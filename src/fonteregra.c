@@ -416,16 +416,30 @@ void fonteregra_ordem_texto(char *dst, size_t tam) {
 }
 
 // --- a regra ----------------------------------------------------------------
+// O ESCOPO E FILTRO, NAO PREFERENCIA (bloqueador 2.0.3, TCL do dono 21:24).
+// "Somente add-ons instalados" com "usar os outros" ligado deixava o plugin no
+// grupo 2 e, sem fonte de add-on na lista, "MegaEmbed - 1080" tocou ("winner
+// other+match"). "Os outros" e a folga das listas de PERMITIDOS (o add-on que a
+// pessoa nao marcou); fonte fora do escopo nunca entra no automatico — como o
+// "Auto-play Source Scope" do oficial. Sem fonte no escopo, a espera segue ou
+// a lista de fontes abre (regraBloqueou em streams.c).
+static int foraDoEscopo(const FonteRegraCfg *c, int plugin) {
+  return (c->escopo == FR_ESCOPO_ADDONS && plugin) ||
+         (c->escopo == FR_ESCOPO_PLUGINS && !plugin);
+}
+int fonteregra_no_escopo(const FonteRegraCfg *c, int plugin) {
+  return !c || !foraDoEscopo(c, plugin ? 1 : 0);
+}
 static int permitidoSemTrava(const FonteRegraCfg *c, const char *nome, int plugin) {
   plugin = plugin ? 1 : 0;
-  if (c->escopo == FR_ESCOPO_ADDONS && plugin) return 0;
-  if (c->escopo == FR_ESCOPO_PLUGINS && !plugin) return 0;
+  if (foraDoEscopo(c, plugin)) return 0;
   return !nNomes[plugin] || achaSemTrava(plugin, nome ? nome : "") >= 0;
 }
 
 int fonteregra_grupo(const FonteRegraCfg *c, const char *nome, int plugin, const char *texto) {
   int perm, sub = 0;
   if (!c) return 0;
+  if (foraDoEscopo(c, plugin ? 1 : 0)) return -1;
   pthread_mutex_lock(&trava);
   perm = permitidoSemTrava(c, nome, plugin);
   if (c->regexModo != FR_REGEX_DESLIGADA && reEstado == 1) {
@@ -441,6 +455,7 @@ int fonteregra_grupo(const FonteRegraCfg *c, const char *nome, int plugin, const
 int fonteregra_grupo_pendente(const FonteRegraCfg *c, const char *nome, int plugin) {
   int perm;
   if (!c) return 0;
+  if (foraDoEscopo(c, plugin ? 1 : 0)) return -1;
   pthread_mutex_lock(&trava);
   perm = permitidoSemTrava(c, nome, plugin);
   pthread_mutex_unlock(&trava);

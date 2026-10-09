@@ -1357,6 +1357,7 @@ int stream_primeira_boa(int tentativas) {
   // indice: o desempate de fonteauto_fila ("o de menor indice, que e a ordem
   // do addon") so vale se a posicao for a da lista inteira, e nao a de chegada.
   { int *ordem = malloc(sizeof *ordem * (size_t)total), posPref = -1;
+    FonteRegraCfg cfgEscopo = regraCfg();
     if (!ordem) {
       pthread_mutex_unlock(&verTrava);
       free(pts); free(acima); free(excl); free(grp); free(rk);
@@ -1365,7 +1366,10 @@ int stream_primeira_boa(int tentativas) {
     for (q = 0; q < total; q++) {
       int i = ORD(q);
       ordem[q] = i;
-      if (i == pref) posPref = q;
+      // A lembrada entra na frente da fila, mas nunca fora do escopo: plugin
+      // escolhido a mao num dia nao toca sozinho com "so add-ons" (bloqueador
+      // 2.0.3).
+      if (i == pref && fonteregra_no_escopo(&cfgEscopo, ehPlugin(&lista[i]))) posPref = q;
       pts[q] = pontos(&lista[i]);
       acima[q] = (unsigned char)!cabeNoTeto(&lista[i]);
       excl[q] = (unsigned char)foraDoAuto(i);

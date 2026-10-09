@@ -87,6 +87,7 @@ static void grupos(void) {
   assert(fonteregra_grupo(&c, "MegaEmbed", 1, "x") == -1);
   assert(fonteregra_grupo_pendente(&c, "MegaEmbed", 1) == -1);
   assert(fonteregra_grupo(&c, "Torrentio", 0, "x") == 2);         // os outros add-ons: sim
+  assert(!fonteregra_no_escopo(&c, 1) && fonteregra_no_escopo(&c, 0));  // nem a lembrada
   c.usarOutros = 0;
   assert(fonteregra_grupo(&c, "MegaEmbed", 1, "x") == -1);
   c.escopo = FR_ESCOPO_PLUGINS;

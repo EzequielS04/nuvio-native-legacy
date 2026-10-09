@@ -17,7 +17,9 @@
 //     Regex invalida e IGNORADA (a linha de Ajustes diz isso).
 //   - "Usar os outros se nao houver" (nosso, o oficial nao tem): sem ele,
 //     fonte fora do permitido nunca toca (o oficial abre a lista de fontes).
-//     Com ele, ela vai para o FIM da fila, depois de toda permitida.
+//     Com ele, ela vai para o FIM da fila, depois de toda permitida. Vale so
+//     para as listas de permitidos: fonte FORA DO ESCOPO e sempre -1, com ou
+//     sem "os outros" (bloqueador 2.0.3: plugin tocou com "so add-ons").
 //
 // O resultado por fonte e um GRUPO: -1 = nunca no automatico; 0..3 = ordem
 // da fila (0 permitida e casa a regex, 1 permitida sem casar, 2 de fora e
@@ -78,6 +80,9 @@ int  fonteregra_grupo(const FonteRegraCfg *c, const char *nome, int plugin, cons
 // O MELHOR grupo que uma fonte AINDA SEM RESPOSTA deste addon/plugin pode
 // trazer: 0 se ele e permitido, 2 se so entra como "os outros", -1 se nunca.
 int  fonteregra_grupo_pendente(const FonteRegraCfg *c, const char *nome, int plugin);
+// 0 = a fonte (add-on ou plugin) esta fora do escopo e NUNCA toca sozinha,
+// nem como a fonte lembrada do titulo (fontepref).
+int  fonteregra_no_escopo(const FonteRegraCfg *c, int plugin);
 // Alguma regra mexe na fila? (log e "por que" da escolha)
 int  fonteregra_ativa(const FonteRegraCfg *c);
 
