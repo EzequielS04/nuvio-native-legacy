@@ -306,6 +306,7 @@ void debrid_definir_chave(const char *s, const char *c) { (void)s; (void)c; }
 void debrid_esquecer(void) {}
 void extras_definir_chave(const char *c) { (void)c; }
 void fontepref_esquecer(void) {}
+void legmem_esquecer(void) {}
 void homeestado_esquecer(void) {}
 void mapa_esquecer(void) {}
 void prog_esquecer_tudo(void) {}
