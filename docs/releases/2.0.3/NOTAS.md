@@ -1,6 +1,6 @@
 # Nuvio Legacy 2.0.3
 
-New Settings, a new episode menu, the Magic Remote pointer on almost every screen, and a long list of fixes.
+A release focused on fixes and optimization: Dolby Vision in MKV on LG TVs (off by default), Settings redesigned, the Magic Remote pointer on almost every screen, a new episode menu and a long list of fixes.
 
 ## Added
 

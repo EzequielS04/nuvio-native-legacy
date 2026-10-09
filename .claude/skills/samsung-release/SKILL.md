@@ -94,6 +94,36 @@ nao existe: o pacote sairia sem servidor e sem login).
    `avisos.json` no master (`plataforma` `tizen` alcanca `.wgt` e `.tpk`;
    `tizen-tpk` so o `.tpk`; ids com `tpk-preview` sao ignorados pelo `.tpk`).
 
+## Cartao de novidades da versao (um .inc por release)
+
+O cartao "Novidades da X.Y.Z" NAO se copia mais por versao. O motor
+(`src/novidades_cartao.c/.h`: desenho, paginas, botoes, foco, ponteiro, os QRs
+de `apoio.h`, a marca de "ja visto") e unico; o que muda e o CONTEUDO em
+`src/novidades/<versao>.inc`. O `app.c` tem um gancho so (`novcartao_*`) e nao
+se mexe. Para o cartao da versao X:
+
+1. `cp src/novidades/<anterior>.inc src/novidades/X.inc` e troque `.versao`,
+   `.arquivo` (`novidades-X.txt`: a marca de "ja visto" desta versao),
+   `.subtitulo`, a lista `ITENS_*` (grupo, icone `aj_*` que existe em
+   `deploy/app/art/icones`, nome, frase, `.linhas`, `.plataformas` com
+   `NOV_LG|NOV_TPK|NOV_WGT|NOV_ANDROID`) e as cenas da previa (`CENAS_*`).
+   Se a previa e uma tela do app, chame o desenho DELA (como `cenaDv` chama
+   `dvtela_previa_desenhar`), nunca um desenho a parte.
+2. Em `src/novidades_cartao.c` troque a linha `#include "novidades/<anterior>.inc"`.
+3. Toda frase nova entra na tabela: `src/idioma_tab.h` (ordem por bytes) e as 28
+   irmas (`python3 tools/idiomas.py --sincronizar` cria as linhas vazias; preencha
+   e rode `python3 tools/idiomas.py` ate passar). Frase de UMA linha tem de caber
+   em ~45 letras latinas (menos em cirilico, grego e japones): a captura reprova
+   reticencias.
+4. `tests/novidades_cartao.c`: a versao esperada em `main` e as contas por
+   plataforma em `plataformas()`.
+5. `bash tests/novidades_cartao.sh` e a captura, com a fonte da TV:
+   `NUVIO_SHOT_FONTE=3 bash tests/novidades_cartao_shot.sh /tmp/nuvio-novcartao`
+   (mede os 30 idiomas em 3 plataformas; manda o PNG ao dono para aprovar; o da
+   2.0.3 esta em `docs/releases/2.0.3/`).
+6. `docs/releases/X/NOTAS.md`: a PRIMEIRA linha de conteudo e a frase-resumo da
+   versao, a mesma do `.subtitulo`.
+
 ## Pre-releases (canarios)
 
 Mudanca de HOST (.NET, `tizen-tpk/*.cs`) ainda nao vista numa TV vai antes num
