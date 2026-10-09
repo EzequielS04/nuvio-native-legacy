@@ -51,6 +51,17 @@ static int ordem(const char *url) {
   pthread_mutex_unlock(&logMtx);
   return r;
 }
+// Decodificada (ou ja textura) no cache: o que a virada precisa. Sem contexto GL
+// aqui nao ha textura de verdade; o estado do item e o que a virada consulta.
+static int decodificada(const char *url) {
+  int i, r = 0;
+  SDL_LockMutex(mtx);
+  for (i = 0; i < nMax; i++)
+    if (itens[i].caminho[0] && !strcmp(itens[i].caminho, url) &&
+        (itens[i].estado == DECODIFICADO || itens[i].estado == PRONTO)) r = 1;
+  SDL_UnlockMutex(mtx);
+  return r;
+}
 static int total(void) { int r; pthread_mutex_lock(&logMtx); r = nBaixadas; pthread_mutex_unlock(&logMtx); return r; }
 
 static CatItem fazItem(int i) {
@@ -106,21 +117,21 @@ int main(void) {
 
   // (a) em repouso os dois vizinhos ja estao no cache, sem ninguem ter virado.
   quadros(30, 40);
-  if (!tex_obter_hero(arteDe(2)) || !tex_obter_hero(arteDe(4))) {
+  if (!decodificada(arteDe(2)) || !decodificada(arteDe(4))) {
     printf("FALHA a: vizinhos nao estao no cache em repouso\n"); falhas++;
   } else printf("ok a: vizinhos +-1 decodificados em repouso\n");
 
   // (b) virar a mao para +1 e depois -1 nao baixa nada na hora.
   antes = total();
   heroPasso(1);
-  if (!tex_obter_hero(arte_por_identidade(heroDesejado, 2)) || total() != antes) {
+  if (!decodificada(arte_por_identidade(heroDesejado, 2)) || total() != antes) {
     printf("FALHA b: virar para +1 esperou rede/decode (novos downloads=%d)\n", total() - antes); falhas++;
   } else printf("ok b: +1 encontrou a arte pronta, sem rede\n");
   heroAtual = heroDesejado; heroDesejado = -1;         // o desenho efetivou a troca
   heroPasso(-1);
   heroAtual = heroDesejado; heroDesejado = -1;
   heroPasso(-1);                                        // -1 a partir da posicao original
-  if (!tex_obter_hero(arte_por_identidade(heroDesejado, 2)) || total() != antes) {
+  if (!decodificada(arte_por_identidade(heroDesejado, 2)) || total() != antes) {
     printf("FALHA b: virar para -1 esperou rede/decode (novos downloads=%d)\n", total() - antes); falhas++;
   } else printf("ok b: -1 encontrou a arte pronta, sem rede\n");
 

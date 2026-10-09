@@ -367,6 +367,20 @@ static int heroPreLogado = -1;
 // ultima linha (ver o bloco no passo).
 static Uint32 heroPreDiagEm;
 static unsigned heroPreDiagSig;
+// AQUECIMENTO DOS VIZINHOS +-1 (09/10, C9 2.0.3). A pre-busca acima so serve a
+// rotacao AUTOMATICA: tem de estar ligada (!heroAutoDesligado — a seta esquerda
+// a desliga) e, com o foco no destaque, sem tecla ha 12 s (ver a condicao no
+// passo). Quem vira o hero na mao nunca atende a nenhuma das duas, entao nada era
+// aquecido (`pre-busca nao saiu: alvo=-1 desejado=-1 ... focoHero=1`) e 8 de 13
+// viradas pagavam resolucao + rede + decode e estouravam os ~610 ms. Com o hero
+// no comando (sem card em foco, sem virada em curso) a arte de heroAtual+-1 e
+// pedida UMA vez por posicao com tex_obter_hero_quente: mesma arte e mesmo teto
+// da virada, mas sem furar a fila de quem esta na tela; a virada a promove.
+// heroVizBase = o heroAtual cujos vizinhos ja foram pedidos; bits de heroVizFeito:
+// 1 = anterior, 2 = proximo (so marca quando a URL resolveu).
+static int heroVizBase = -1;
+static int heroVizFeito;
+static Uint32 heroVizTentaEm;
 
 // --- EXPANSAO DO CARTAZ FOCADO EM REPOUSO ------------------------------------
 //
@@ -2657,6 +2671,33 @@ void home_ir_topo(void) {
 static int homeOculta;
 void home_oculta(int oculta) { homeOculta = oculta ? 1 : 0; }
 
+// Pede (uma vez por posicao) a arte do hero de heroAtual+-1, em prioridade
+// baixa. Barato no quadro: depois de pedidos os dois, so compara dois inteiros;
+// enquanto a URL nao resolve (catalogo chegando) tenta no maximo a cada 250 ms.
+static void heroAquecerVizinhos(Uint32 agora) {
+  int n = heroNLista(), pos, d;
+  if (heroAtual != heroVizBase) { heroVizBase = heroAtual; heroVizFeito = 0; heroVizTentaEm = 0; }
+  if (n < 2 || heroVizFeito == 3) return;
+  if (heroVizTentaEm && agora - heroVizTentaEm < 250) return;
+  heroVizTentaEm = agora ? agora : 1;
+  pos = heroPosDe(heroAtual);
+  if (pos < 0) return;
+  for (d = -1; d <= 1; d += 2) {
+    const int bit = d < 0 ? 1 : 2;
+    int viz = heroIdxEm((pos + d + n) % n);
+    const char *arte;
+    if (heroVizFeito & bit) continue;
+    if (viz < 0 || viz == heroAtual || (d > 0 && n == 2)) { heroVizFeito |= bit; continue; }
+    arte = arte_por_identidade(viz, 2);
+    if (!arte) continue;
+    heroVizFeito |= bit;
+    (void)tex_obter_hero_quente(arte);
+    printf("[hero] pre-busca vizinho %s hash=%08lx\n", d < 0 ? "anterior" : "proximo",
+           tex_hash_public(arte));
+    fflush(stdout);
+  }
+}
+
 void home_atualizar(float dt, Uint32 agora) {
   sincronizarFileiras();
   // A FILEIRA DE AMIGOS tem tantas colunas quantos rostos (+ "Adicionar"), e
@@ -2850,6 +2891,10 @@ void home_atualizar(float dt, Uint32 agora) {
     // (heroTrailerMaxEspera), entao pre-buscar nele custa uma arte a mais por
     // poucos segundos. Com o trailer TOCANDO nada: ele pode durar minutos e a
     // arte ficaria ocupando memoria parada.
+    // Hero no comando e nenhuma virada em curso: aquece os vizinhos (ver
+    // heroVizBase). Com card em foco (alvo>=0) o hero segue o card, e durante a
+    // virada (heroDesejado>=0) o pedido de quem esta chegando e que manda.
+    if (alvo < 0 && heroDesejado < 0 && !homeOculta) heroAquecerVizinhos(agora);
     heroPreItem = -1;
     { const int janela = agora + NV_HERO_PRE_MS >= heroTrocaEm;
       const int seg = heroTrailerSegurando(agora);

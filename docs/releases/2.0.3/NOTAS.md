@@ -56,6 +56,7 @@ A release focused on fixes and optimization: Dolby Vision in MKV on LG TVs (off 
 - **Subtitles** move up only while the Up next card is on screen, and come back down when it hides.
 - **Credits markers** are not accepted before the player knows the video length.
 - **Home hero:** the logo arrives with the art, the next item is loaded ahead, and items from Trakt lists get their synopsis. The hero no longer turns while the profile picker is open. Switching titles quickly no longer loses a synopsis or crashes the app.
+- **Home hero:** the previous and next hero art are now loaded in the background while you rest on one, so flipping the hero by hand (either direction) shows the art right away instead of waiting.
 - **LG Dolby Vision:** no more pause panel while the stream fills, and playback starts at the saved point. Smoother background on OLED.
 - **Android:** the saved aspect mode waits for the first frame, so Dolby Vision no longer opens dark.
 - **Android:** recreating the video surface (HDR start, aspect change) no longer freezes the remote for seconds while the decoder lets go of it, which could end in "app not responding".
