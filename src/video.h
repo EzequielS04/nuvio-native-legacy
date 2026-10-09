@@ -189,7 +189,8 @@ enum {
   VIDEO_DV_NAO_SONDA,     // o cabecalho nao veio (a sonda desistiu)
   VIDEO_DV_NAO_LENTO,     // o caminho abriu e a fonte nao acompanhou
   VIDEO_DV_NAO_FALHOU,    // o caminho nao abriu
-  VIDEO_DV_NAO_PESSOA     // a pessoa escolheu HDR10
+  VIDEO_DV_NAO_PESSOA,    // a pessoa escolheu HDR10
+  VIDEO_DV_NAO_CONTENTOR  // o arquivo nao e Matroska (MP4/TS sem extensao na URL)
 };
 typedef struct {
   int sessao;          // muda a cada video_tocar (fonte nova)

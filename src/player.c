@@ -1493,6 +1493,8 @@ static void dvTelaNota(int recusa, int perfil) {
     snprintf(t, sizeof t, "%s", i18n("O áudio deste arquivo não passa pelo Dolby Vision. Tocando em HDR10."));
   else if (recusa == VIDEO_DV_NAO_SONDA)
     snprintf(t, sizeof t, "%s", i18n("Não deu para ler o arquivo. Tocando em HDR10."));
+  // VIDEO_DV_NAO_CONTENTOR (o arquivo nao e Matroska): sem nota. O player da TV
+  // segue tocando o MP4/TS como tocaria sem a tela — no MP4 o DV e o da TV.
   if (!t[0]) return;
   // No relogio do quadro (como o aviso do audio que a TV nao toca): a nota
   // nasce no mesmo quadro em que a tela comeca a esvair.

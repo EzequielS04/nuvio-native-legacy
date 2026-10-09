@@ -688,14 +688,52 @@ int mkv_rpu_alem(const char *url, int nalTam, long teto) {
   return diag.rpu;
 }
 
+// Ver a nota em mkv.h (MKV_CONT_*). Estado estatico como `diag`: le-se no
+// mesmo fio, logo depois da sonda.
+static int ultimoContentor;
+static int caixaIso(const unsigned char *t) {
+  static const char *tipos[] = { "ftyp", "styp", "moov", "mdat", "free", "skip", "wide", "pdin" };
+  size_t i;
+  for (i = 0; i < sizeof tipos / sizeof tipos[0]; i++) if (!memcmp(t, tipos[i], 4)) return 1;
+  return 0;
+}
+int mkv_contentor(const unsigned char *p, long n) {
+  long i = 0;
+  if (!p || n < 4) return MKV_CONT_NADA;
+  if (p[0] == 0x1A && p[1] == 0x45 && p[2] == 0xDF && p[3] == 0xA3) return MKV_CONT_MKV;
+  if (n >= 8 && caixaIso(p + 4)) return MKV_CONT_MP4;
+  if (p[0] == 0x47 && (n <= 188 || p[188] == 0x47)) return MKV_CONT_TS;
+  if (n >= 5 && p[4] == 0x47 && (n <= 196 || p[196] == 0x47)) return MKV_CONT_TS;
+  if (n >= 3 && p[0] == 0xEF && p[1] == 0xBB && p[2] == 0xBF) i = 3;   // BOM do UTF-8
+  while (i < n && i < 64 && (p[i] == ' ' || p[i] == '\t' || p[i] == '\r' || p[i] == '\n')) i++;
+  if (i < n && (p[i] == '<' || p[i] == '{' || p[i] == '[')) return MKV_CONT_TEXTO;
+  return MKV_CONT_OUTRO;
+}
+int mkv_ultimo_contentor(void) { return ultimoContentor; }
+int mkv_contentor_definitivo(int c) {
+  return c == MKV_CONT_MP4 || c == MKV_CONT_TS || c == MKV_CONT_OUTRO;
+}
+const char *mkv_contentor_nome(int c) {
+  switch (c) {
+    case MKV_CONT_MKV:   return "mkv";
+    case MKV_CONT_MP4:   return "mp4";
+    case MKV_CONT_TS:    return "mpeg-ts";
+    case MKV_CONT_TEXTO: return "texto";
+    case MKV_CONT_OUTRO: return "outro";
+    default:             return "nada";
+  }
+}
+
 int mkv_faixas_e_caps(const char *url, MkvFaixa *saida, int max,
                       MkvCap *caps, int maxCaps, int *nCaps) {
   char *buf;
   long n = 0;
   int achou;
+  ultimoContentor = MKV_CONT_NADA;
   if (!url || !url[0] || !saida || max < 1) return 0;
   buf = rede_baixar_trecho(url, 20, 0, MKV_TRECHO - 1, &n);
   if (!buf) return 0;
+  ultimoContentor = mkv_contentor((const unsigned char *)buf, n);
   // Assinatura EBML. Sem ela nao e Matroska (pode ser MP4, ou um HTML de erro
   // que o servidor devolveu com 200), e seguir seria interpretar lixo.
   if (n < 64 || (unsigned char)buf[0] != 0x1A || (unsigned char)buf[1] != 0x45 ||
