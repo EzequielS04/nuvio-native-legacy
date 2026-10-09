@@ -3766,6 +3766,14 @@ GLuint tex_obter_hero(const char *caminho) {
   return tex_obter_limite(caminho, tetoDoHeroi(), 1, 0);
 }
 
+// O MESMO HERO, SEM FURAR A FILA: o vizinho do carrossel que ainda nao esta em
+// cena. Mesmo teto e mesmo item de tex_obter_hero (a chegada promove o pedido
+// a urgente, e tirarFila o puxa para a frente); so nao toma o lugar de quem
+// ja esta esperando como tela cheia.
+GLuint tex_obter_hero_quente(const char *caminho) {
+  return tex_obter_limite(caminho, tetoDoHeroi(), 0, 0);
+}
+
 // O ARQUIVO, e nao a textura. Ver a nota em tex_cache.h.
 //
 // TUDO AQUI E REAPROVEITAMENTO, de proposito. O download, o nome estavel da
