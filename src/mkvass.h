@@ -173,7 +173,10 @@ int  mkvass_varredura(void);
 int  mkvass_ocupado(void);
 
 // Telemetria: Ranges feitos, bytes baixados, blocos colhidos e total de
-// blocos indexados. Qualquer ponteiro pode ser NULL.
+// blocos indexados. Qualquer ponteiro pode ser NULL. `colhidos` conta o que ja
+// foi colhido ATE AGORA: com o corpo em janela (#384, faixa que nao cabe
+// inteira) os blocos que sairam do corpo continuam na conta, entao o numero
+// so cresce — e pode passar de `total` depois de varios seeks.
 void mkvass_estatisticas(long *pedidos, long *bytes, int *colhidos, int *total);
 
 #endif
