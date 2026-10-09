@@ -86,10 +86,24 @@ int main(void) {
   // Qualquer das tres opcoes desligada: a regra de sempre (MKV DV vence).
   cfg(1, 0, 1);
   espera("MKV DV 2160p", vence(l, 2), "LG, auto-play desligado");
-  cfg(0, 1, 1);
-  espera("MKV DV 2160p", vence(l, 2), "LG, HDR Indiferente");
+  // Dolby Vision desligado: o MKV DV cai para HDR10 e o MP4 HDR ja ganharia
+  // pelos +300; o caso que mostra a regra desligada e MKV HDR x MP4 SDR (com a
+  // regra ligada o MP4 SDR passaria na frente).
+  fonte(&l[0], "MKV HDR 2160p", 2160, 0, 0, "2160p HDR10 BluRay");
+  fonte(&l[1], "MP4 SDR 2160p", 2160, 1, 0, "2160p WEB-DL");
   cfg(0, 0, 0);
-  espera("MKV DV 2160p", vence(l, 2), "LG, Dolby Vision desligado");
+  espera("MKV HDR 2160p", vence(l, 2), "LG, Dolby Vision desligado");
+  cfg(1, 0, 1);
+  espera("MKV HDR 2160p", vence(l, 2), "LG, auto-play desligado (MKV HDR x MP4 SDR)");
+  cfg(0, 0, 1);
+  espera("MP4 SDR 2160p", vence(l, 2), "LG, as tres ligadas (MKV HDR x MP4 SDR)");
+  // HDR fora de "Preferir". Em "Indiferente" o MP4 da faixa ja ganha pela regra
+  // de sempre (+300 sem o HDR contar), entao o caso que mostra a regra DESLIGADA
+  // e "Evitar": la o MKV SDR ganha do MP4 HDR — com a regra ligada perderia.
+  fonte(&l[0], "MKV SDR 2160p", 2160, 0, 0, "2160p WEB-DL");
+  fonte(&l[1], "MP4 HDR 2160p", 2160, 1, 0, "2160p HDR10 WEB-DL");
+  cfg(0, 2, 1);
+  espera("MKV SDR 2160p", vence(l, 2), "LG, HDR Evitar");
 #else
   // Fora da LG (Samsung/Android): nada muda, com as tres opcoes ligadas.
   espera("MKV DV 2160p", vence(l, 2), "fora da LG: MKV DV 2160p x MP4 HDR 2160p");
