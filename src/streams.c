@@ -398,11 +398,20 @@ static float velRol = 0.0f;
 
 
 static int soP2P(const Stream *s);
+// "E MP4?" tem UMA resposta (streams.h). O cartao da fonte e o anuncio ao video
+// (app.c, video_definir_mp4) perguntavam cada um do seu jeito: o cartao olhava
+// o rotulo, o video nao — e na C9 (2.0.3) um MP4 com ".mp4" so no rotulo
+// (AIOStreams, URL sem extensao) mostrava MP4 e abria a tela/sonda do Dolby
+// Vision em MKV.
+int stream_e_mp4(const Stream *s) {
+  if (!s) return 0;
+  return s->mp4 || strstr(s->url, ".mp4") || strstr(s->rotulo, ".mp4");
+}
 static const char *containerDa(const Stream *s) {
   // "P2P": torrent que so o servidor de streaming toca. Sigla igual nas duas
   // linguas, como MP4/MKV.
   if (soP2P(s)) return "P2P";
-  if (s->mp4 || strstr(s->url, ".mp4") || strstr(s->rotulo, ".mp4")) return "MP4";
+  if (stream_e_mp4(s)) return "MP4";
   if (strstr(s->url, ".mkv") || strstr(s->arquivo, ".mkv") || strstr(s->descricao, ".mkv")) return "MKV";
   if (strstr(s->url, ".m3u8") || strstr(s->rotulo, "HLS")) return "HLS";
   // A CHAVE PASSA POR i18n AQUI, e nao no chamador. As outras tres devolucoes
@@ -718,10 +727,10 @@ static int nivelHdr(const Stream *s) {
     int toca = ajustes_dolby_vision() && telaDv != 0;
 #ifndef NV_ANDROID
 #ifdef NV_TPK
-    toca = toca && (s->mp4 || strstr(s->url, ".mp4"));
+    toca = toca && stream_e_mp4(s);
 #else
     // LG: DV em MKV so com o ajuste "Dolby Vision em MKV" ligado.
-    toca = toca && (s->mp4 || strstr(s->url, ".mp4") || ajustes_dv_mkv());
+    toca = toca && (stream_e_mp4(s) || ajustes_dv_mkv());
 #endif
 #endif
     if (perfil5(s)) { if (nivel < 1) nivel = 1; }

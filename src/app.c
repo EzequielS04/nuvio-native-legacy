@@ -853,7 +853,7 @@ static int tocarFonteGuardada(void) {
   stream_definir_atual(-1);
   video_definir_dv(s.dolbyVision);
   video_definir_cabecalhos(s.cabecalhos);
-  video_definir_mp4(s.mp4 || strstr(s.url, ".mp4") != NULL);
+  video_definir_mp4(stream_e_mp4(&s));
   fontevolta_conferir(s.url, s.cabecalhos);
   player_definir_fonte(s.url);
   voltaAtiva = 1;
@@ -1598,7 +1598,7 @@ static void abrirAntecipada(int i) {
   stream_definir_atual(i);
   video_definir_dv(s->dolbyVision);
   video_definir_cabecalhos(s->cabecalhos);
-  video_definir_mp4(s->mp4 || strstr(s->url, ".mp4") != NULL);
+  video_definir_mp4(stream_e_mp4(s));
   player_definir_fonte(s->url);
   fonteVODAutomatica = 1;
   fonteVODTentativas++;
@@ -3928,7 +3928,7 @@ void app_atualizar(float dt, Uint32 agora) {
     if (s) video_definir_cabecalhos(s->cabecalhos);
     // Anuncia o CONTENTOR pelo mesmo caminho: e o que dispensa a sonda de
     // Matroska num arquivo que nunca teria um cabecalho desses.
-    if (s) video_definir_mp4(s->mp4 || strstr(s->url, ".mp4") != NULL);
+    if (s) video_definir_mp4(stream_e_mp4(s));
     { int esperarMais = !s && !player_id_canal()[0] && !ajustes_fonte_primeira() &&
                         addons_busca_parcial();
       marco(s ? "fonte escolhida" : esperarMais ? "fonte: nenhuma das parciais serve"
