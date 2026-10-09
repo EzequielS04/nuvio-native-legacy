@@ -1533,7 +1533,11 @@ static void carAplicar(void) {
 // cada vez e uma tentativa por titulo e por abertura (rede fora nao vira laco).
 static void carPreBuscar(void) {
   static const int passo[2] = { 1, -1 };
+  static int ligada = -1;
   int j;
+  // So para medir (A/B na bancada): NUVIO_CARROSSEL_PREBUSCA=0 desliga. Nao e ajuste.
+  if (ligada < 0) { const char *e = getenv("NUVIO_CARROSSEL_PREBUSCA"); ligada = !(e && e[0] == '0'); }
+  if (!ligada) return;
   if (desc_episodios_carregando(carIdx[carPos])) return;
   for (j = 0; j < 2; j++) {
     int k = carPos + passo[j], r;
@@ -3363,10 +3367,12 @@ void detail_atualizar(float dt, Uint32 agora) {
     if (carAplicado != carPos && fabsf(carOff - (float)carPos) < 0.25f && !saindo)
       carAplicar();
     // ARTE DOS VIZINHOS PRE-CARREGADA: dois para cada lado, para o passo
-    // seguinte ja encontrar a foto na tira.
+    // seguinte ja encontrar a foto na tira. So o titulo em cena e URGENTE: os
+    // vizinhos eram pedidos urgentes tambem, e o hero de quem chegava entrava
+    // em FIFO atras deles (a chegada o promove e ele fura a fila).
     for (k = carPos - 2; k <= carPos + 2; k++) {
       const char *a = (k >= 0 && k < carN) ? arteDe(carIdx[k]) : NULL;
-      if (a) (void)tex_obter_hero(a);
+      if (a) (void)(k == carPos ? tex_obter_hero(a) : tex_obter_hero_quente(a));
     }
     if (carAplicado == carPos && !saindo && !carCheia) carPreBuscar();
     // VOLTA: a fileira recebe o titulo em cena e o cartao encolhe ate o cartaz
@@ -6866,7 +6872,7 @@ static void carFundo(void) {
     GLuint tex;
     if (r.x >= NV_TELA_W || r.x + r.w <= 0.0f) continue;
     arte = arteDe(carIdx[k]);
-    tex = arte ? tex_obter_hero(arte) : 0;
+    tex = arte ? (k == carPos || k == carAplicado ? tex_obter_hero(arte) : tex_obter_hero_quente(arte)) : 0;
     // Os VIZINHOS entram tarde na abertura e saem cedo na volta: por cima da
     // home meio apagada, um cartao grande a meia forca le como borrao.
     { float ak = k == carAplicado ? a : anim_clamp((s - 0.55f) * 2.2f, 0.0f, 1.0f);
