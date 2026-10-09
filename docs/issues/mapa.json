@@ -1,5 +1,5 @@
 {
- "atualizado_em": "2026-10-08",
+ "atualizado_em": "2026-10-09",
  "base": "80fc8e6d",
  "nota": "Status: aberta, respondida, consertada-nao-lancada, lancada, por-desenho, fora-do-escopo, precisa-log, duplicada (+ fechada-sem-resposta, usado só em issues fechadas sem nenhum comentário).",
  "itens": [
@@ -6628,24 +6628,25 @@
   {
    "numero": 310,
    "titulo": "[port] regex/options for autoplay",
-   "estado_github": "fechada",
+   "estado_github": "aberta",
    "plataforma": "?",
    "tipo": "feature",
-   "status": "lancada",
+   "status": "aberta",
    "release": "2.0.2",
    "conserto": [
     "sem commit"
    ],
    "ultima_resposta": {
     "nos": false,
-    "data": "2026-10-07",
+    "data": "2026-10-09",
     "ultimo_comentario_por": "Namer03",
     "ultima_nossa": "2026-10-07"
    },
-   "proximo_passo": "nada (fechada)",
-   "notas": "Sem commit #310; versão 2.0.2 citada na nossa resposta.",
+   "proximo_passo": "responder: bug do binge group na escolha manual entra na 2.0.4; reusar último link e regex por tipo ficam para a 2.1",
+   "notas": "REABERTA em 09/10 pelo autor (Namer03) com novo comentário; no GitHub o estado é aberta (motivo REOPENED), então a issue volta ao mapa como aberta com alvo. A regex/exigir/preferir da 2.0.2 continua entregue (sem commit #310). Três pedidos novos: (a) BUG, alvo 2.0.4: o binge group não é usado quando o usuário escolhe outro episódio À MÃO no seletor de episódios ou no carrossel de títulos. Causa: suspeita: fontepref só aplica o binge group no autoplay/próximo; a provar (o branch agente/204-binge está investigando). Indício, não prova: fontepref_escolher é chamado em app.c:1549, 3263, 3819, 3892 e 4341, mas a escolha manual de outro episódio não foi rastreada. (b) FEATURE, alvo 2.1: \"reusar último link\" + \"Last Link Cache Duration\". Não existe cache de link: fontepref guarda só a identidade da fonte (bingeGroup, provedor, trilha) por título e perfil, por 180 dias, e resolve a URL de novo (fontepref.h:112-140 diz isso de propósito); fontecache é prefetch de lista com validade de 30 s (fontecache.h:166, FONTECACHE_VALIDADE_MS). Guardar a URL exige arquivo novo, validade configurável, linha nos Ajustes e queda para a busca quando o link de debrid (assinado, expira em minutos) falhar: médio, com risco de tocar link morto; por isso 2.1. (c) FEATURE, alvo 2.1: regex separada por tipo (filmes / séries / anime) e modo preferir x exigir por tipo. Hoje há UMA regex e UM modo para tudo: padrao único em fonteregra.c:15, FonteRegraCfg com um regexModo (fonteregra.h:47), um único modo em ajustes.c:1301 (V_FONTE_REGEX), um fonteregra.txt por TV com cópia por perfil, e a chave do oficial stream_auto_play_regex é uma só na conta (sync). Por tipo pede três regex compiladas, três modos, arquivo e blob novos sem quebrar o sync com o oficial, três linhas a mais nos Ajustes e uma regra para dizer o que é anime (o app não tem esse tipo hoje: suspeita, não conferido): grande; por isso 2.1. ALVO da issue = 2.0.4 (o mais cedo, pelo item (a)); (b) e (c) só saem na 2.1.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/310",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.4"
   },
   {
    "numero": 311,
@@ -8130,6 +8131,27 @@
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/379",
    "criada_em": "2026-10-08",
    "alvo": "2.0.4"
+  },
+  {
+   "numero": 384,
+   "titulo": "Embedded ASS subtitles stopped rendering after anime intro",
+   "estado_github": "aberta",
+   "plataforma": "LG",
+   "tipo": "bug",
+   "status": "aberta",
+   "release": "-",
+   "conserto": [],
+   "ultima_resposta": {
+    "nos": false,
+    "data": "2026-10-09",
+    "ultimo_comentario_por": "Namer03",
+    "ultima_nossa": null
+   },
+   "proximo_passo": "ler os logs DDRROH e 98ZQED (já no corpo) e responder",
+   "notas": "LG C5, webOS 26, Nuvio 2.0.2; Re:Zero S1 (Seadex): legenda embutida do ep. 3 funcionou, a do ep. 4 parou de aparecer depois da abertura. O autor (Vidhin05) JÁ mandou dois códigos de log no corpo (DDRROH e 98ZQED), ainda não lidos por nós; por isso o status é aberta e não precisa-log. Um comentário do próprio autor fala de \"quedas de conexão e falhas de rede, talvez queda do debrid\": relato solto, sem log próprio, tratar como segundo sintoma e checar nos mesmos logs. Namer03 (não é do projeto) respondeu \"mesma coisa do #308, sai na 2.0.3\": SUSPEITA, o #308 é legenda que bloqueia a fonte, o sintoma aqui (legenda some no meio) pode ser outro; não confirmado. Candidatos já na 2.0.3: #269 (legenda embutida) e #335 (ASS). ALVO 2.0.4 = triagem: pode virar 2.0.3 se os logs mostrarem que é o #308.",
+   "url": "https://github.com/iqui27/nuvio-native-legacy/issues/384",
+   "criada_em": "2026-10-09",
+   "alvo": "2.0.4"
   }
  ],
  "fora_do_github": [
@@ -8269,7 +8291,18 @@
       378,
       379,
       306,
-      337
+      337,
+      384
+     ]
+    },
+    {
+     "nome": "Binge group na escolha manual de episódio (bug do #310)",
+     "porque": "Pedido (a) do #310: o binge group não vale quando o usuário escolhe outro episódio no seletor de episódios ou no carrossel de títulos. Causa: suspeita (fontepref só aplica no autoplay/próximo; a provar). Em investigação em agente/204-binge.",
+     "issues": [
+      310
+     ],
+     "branches": [
+      "agente/204-binge"
      ]
     }
    ]
@@ -8384,6 +8417,15 @@
      "branches": [
       "agente/refatoracao-plano"
      ]
+    },
+    {
+     "nome": "Auto-play: reusar último link com validade e regex separada por tipo (filmes / séries / anime)",
+     "porque": "Pedidos (b) e (c) do #310. (b) não há cache de link hoje (fontepref guarda só a identidade, 180 dias; fontecache é prefetch de 30 s): guardar URL de debrid pede arquivo, validade nos Ajustes e queda para a busca. (c) hoje há uma regex e um modo só (fonteregra.c:15, ajustes.c:1301, uma chave na conta): por tipo pede três regex, três modos, blob novo e uma definição de anime. Médio e grande, por isso 2.1 e não 2.0.4. Sem aprovação do dono ainda.",
+     "issues": [
+      310
+     ],
+     "origem": "suspeita (sugestão do agente, não aprovado)",
+     "branches": []
     }
    ]
   },
