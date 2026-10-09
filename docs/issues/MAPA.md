@@ -30,7 +30,7 @@ Pequenos recursos de player e Biblioteca que já têm código fora da 2.0.3, mai
 - **Catálogos da conta, sync de add-ons, fonte recusada, P2P por formato** (#358, #365, #360, #364, #349): Branches agente/204-conta-catalogos, 204-sync-addons, 204-fonte-recusada prontos ou quase.
 - **Samsung: DTS/TrueHD escondido (fase 1)** (#313): Plano e spike em agente/204-samsung-dts (docs/plans); fase 1 já planejada para a 2.0.4.
 - **Android: fileiras ilimitadas na Home, armazenamento rotativo do P2P** (#334): agente/204-fileiras-android e agente/203-334-janela (janela de streaming do P2P) existem e ficaram fora da 2.0.3 por risco.
-- **Triagem de bugs sem conserto e dois pedidos pequenos (#306, #337)** (#288, #315, #316, #344, #345, #346, #353, #357, #367, #372, #373, #378, #379, #306, #337, #384): Todos aguardam log do autor; entram na 2.0.4 se o log aparecer a tempo, senão escorregam.
+- **Triagem de bugs sem conserto e dois pedidos pequenos (#306, #337)** (#288, #315, #316, #344, #345, #346, #353, #357, #367, #372, #373, #378, #379, #306, #337, #384, #385): Todos aguardam log do autor; entram na 2.0.4 se o log aparecer a tempo, senão escorregam.
 - **Binge group: lembrar também a fonte que o automático tocou (#310)** (#310): Pedido (a) do #310. A revisão de código mostrou que a escolha manual de outro episódio já aplica o binge group; a lacuna era só a fonte escolhida à mão ser lembrada. O dono aprovou em 09/10 ("sim vamos adicionar na 2.0.4") lembrar também o binge group da fonte que o automático tocou. Código em agente/204-binge (29d2c248, 02753401, 6345e9ff), não integrado. Origem: dono 09/10. Branches: `agente/204-binge`.
 
 ### 2.1 - aprovada pelo dono em 06/10/2026 (e 07/10 para Ajustes); sem data
@@ -77,8 +77,8 @@ Plano de refatoração: `docs/plans/refatoracao-geral.md` (branch `agente/refato
 
 | Alvo | Qtd | Issues |
 |---|---|---|
-| 2.0.3 | 37 | #246, #266, #269, #280, #283, #284, #286, #294, #302, #305, #308, #311, #312, #317, #318, #319, #320, #321, #322, #323, #328, #330, #332, #334, #335, #339, #340, #341, #350, #356, #359, #361, #363, #368, #369, #370, #385 |
-| 2.0.4 | 32 | #256, #288, #306, #310, #313, #315, #316, #326, #329, #331, #337, #338, #344, #345, #346, #349, #352, #353, #355, #357, #358, #360, #362, #364, #365, #366, #367, #372, #373, #378, #379, #384 |
+| 2.0.3 | 36 | #246, #266, #269, #280, #283, #284, #286, #294, #302, #305, #308, #311, #312, #317, #318, #319, #320, #321, #322, #323, #328, #330, #332, #334, #335, #339, #340, #341, #350, #356, #359, #361, #363, #368, #369, #370 |
+| 2.0.4 | 33 | #256, #288, #306, #310, #313, #315, #316, #326, #329, #331, #337, #338, #344, #345, #346, #349, #352, #353, #355, #357, #358, #360, #362, #364, #365, #366, #367, #372, #373, #378, #379, #384, #385 |
 | 2.1 | 3 | #250, #333, #374 |
 | 2.2 | 0 |  |
 | futuro | 7 | #135, #260, #304, #342, #343, #347, #348 |
@@ -109,11 +109,11 @@ Por status:
 | Status | Qtd |
 |---|---|
 | lancada | 233 |
-| consertada-nao-lancada | 45 |
+| consertada-nao-lancada | 44 |
 | aberta | 26 |
 | respondida | 20 |
 | por-desenho | 14 |
-| precisa-log | 7 |
+| precisa-log | 8 |
 | fechada-sem-resposta | 6 |
 | fora-do-escopo | 3 |
 | duplicada | 2 |
@@ -123,8 +123,8 @@ Por release (grupo de planejamento):
 | Grupo | Qtd |
 |---|---|
 | lançadas em tag v* (qualquer versão) | 233 |
-| sem release | 69 |
-| 2.0.3 (integracao/2.0.3) | 38 |
+| sem release | 70 |
+| 2.0.3 (integracao/2.0.3) | 37 |
 | 2.0.4 (branches) | 11 |
 | futuro (2.1/2.2) | 5 |
 
@@ -135,7 +135,7 @@ Abertas sem nenhum comentário nosso: 39.
 
 ## Sai na 2.0.3 (integracao/2.0.3, ainda não lançada)
 
-38 issues.
+37 issues.
 
 | # | Título | Plat. | Tipo | Status | Release | Alvo | Conserto | Última resposta | Próximo passo |
 |---|---|---|---|---|---|---|---|---|---|
@@ -176,7 +176,6 @@ Abertas sem nenhum comentário nosso: 39.
 | [#369](https://github.com/iqui27/nuvio-native-legacy/issues/369) | [Bug] Multiple issues/Missing Features on Android TV version | Android | bug | consertada-nao-lancada | 2.0.3 | 2.0.3 | 712557ca, 5f04c36b | sem comentários | responder (sem resposta); relatório de 9 itens, só 2 com commit |
 | [#370](https://github.com/iqui27/nuvio-native-legacy/issues/370) | Subtitles sync issues | Samsung .wgt | bug | consertada-nao-lancada | 2.0.3 | 2.0.3 | 2aee231b, 3fe3c8ca, 56c9832e | nós 10-08 | nada (aguardar release 2.0.3) |
 | [#371](https://github.com/iqui27/nuvio-native-legacy/issues/371) | [bug] Ui issue viewing "profile & stats" | Samsung .tpk | bug | consertada-nao-lancada | 2.0.3 | - | b39f4149, 1cdd1cbb, 2fa6e51a | autor 10-08 | nada (aguardar release 2.0.3) |
-| [#385](https://github.com/iqui27/nuvio-native-legacy/issues/385) | Internet Connection Drop and Reconnecting Bug to no end | Samsung .wgt | bug | consertada-nao-lancada | 2.0.3 | 2.0.3 | b65c3324, 73ce1648 | autor 10-09 | responder: deve sair na 2.0.3 (#308); perguntar se a legenda era ASS embutida e pedir log  |
 
 Notas:
 
@@ -206,7 +205,6 @@ Notas:
 - **#368**: Rascunho de correção: ocultar add-ons no guia sai na 2.0.3, não na 2.0.2; busca espera 300 ms.
 - **#369**: Parcial: tailandês (712557ca) e ocultar não lançados (5f04c36b). Os outros itens do relatório de 9: sem commit identificado.
 - **#371**: Fechada no GitHub antes do release 2.0.3.
-- **#385**: SUSPEITA, sem log: provavelmente coberta pelo conserto da #308 que já está na 2.0.3 (b65c3324 leitor lateral mais gentil: menos Ranges, uma conexão, pausa quando o CDN aperta; 73ce1648). Namer03 comentou (09/10) que a leitura da legenda embutida enche o CDN do TorBox de pedidos; bate com o relato: o CDN do debrid passa a recusar, o vídeo reconecta em laço e TODA fonte de debrid falha, enquanto add-on https segue. CONDIÇÃO: no .wgt o mkvass (leitura por Range) só entra para legenda embutida ASS/SSA (faixas.c: FX_TEXTO_OVERLAY é 1 só no .tpk; SRT/texto embutido a TV desenha), e ele roda no .wgt (tizen.sh compila com NV_ASS_LIBASS, video_tizen.c tem a sonda do MKV). Então só é a #308 se o usuário estava com uma faixa ASS embutida ligada num MKV: perguntar isso (título, se a legenda era embutida, se desligando a embutida a queda some). Não medido quantos Ranges o mkvass fazia no .wgt antes do b65c3324, e nenhum registro .wgt do D1 mostra o laço. Se persistir na 2.0.3, volta para precisa-log com as suspeitas abaixo (plano 2.0.4). Triagem anterior: Samsung UT8000 (Tizen 5.5), .wgt, Nuvio 2.0.2; sem log. Relato: VOD de debrid cai no meio com "reconectando" em laço; depois TODA fonte dá "não deu para carregar", só add-on https segue tocando. Triagem (09/10) no D1 e no código, sem TV: NÃO provado. No D1 (.wgt, ~32 mil ids recentes, ~300 registros) só 2 registros (2 pessoas, ambos 2.0.1) mostram a reconexão de VOD começar ("conexao caiu ... tentativa 1/3"), nenhum chega a "reconexao: desistiu" e nenhum tem o par "queda e depois toda fonte falha"; os outros ~25 registros com PLAYER_ERROR_CONNECTION_FAILED são falha de abertura de uma fonte, e a próxima fonte abriu (sem envenenamento). Código: a reconexão do .wgt (video_tizen.c:1180-1215, video_reconexao.h) são 3 tentativas por queda, e o contador zera 10 s depois do ponto da queda, então rede instável gera laço de "reconectando" por desenho; o 2.0.3 só mexeu na reconexão de TV ao vivo (#302/#350), VOD não mudou. Descartado por leitura: negcache (só 4 APIs de metadados), flag offline (redesaude.c só pinta a ilha), pool de threads (strict=0, [fios] estável nos logs), lista de fontes recusadas (zera a cada lista nova), XHR síncrono (estado por fio). "Só o https funciona" contraria um AVPlay quebrado (os dois passam por ele) e aponta para a conta do debrid/links do host, que é do lado de lá. SUSPEITA, não provada: (1) o open de reconexão não tem prazo: se o prepareAsync nunca responder, video_reconectando() fica 1 e tentarProximaFonteVOD (app.c) volta cedo, então fica "reconectando" sem fim; (2) a op "abrir" do JS faz stop() e close() no MESMO try (video_tizen.c:264-267): se o stop() levantar, o close() não roda e o próximo open() falha; (3) debrid.c marca conta sem plano para a SESSÃO inteira (semPlano), mas só com corpo "PLAN_RESTRICTED/not premium", não com 429. Essas três ficam como plano da 2.0.4 se a 2.0.3 não resolver.
 
 ## Planejado na 2.0.4 (com branch)
 
@@ -254,7 +252,7 @@ Notas:
 
 ## Aberta sem plano
 
-34 issues.
+35 issues.
 
 | # | Título | Plat. | Tipo | Status | Release | Alvo | Conserto | Última resposta | Próximo passo |
 |---|---|---|---|---|---|---|---|---|---|
@@ -292,6 +290,7 @@ Notas:
 | [#378](https://github.com/iqui27/nuvio-native-legacy/issues/378) | “From Account” subtitle setting defaults to “NONE” on playba | Samsung .tpk | bug | aberta | - | 2.0.4 | - | autor 10-08 | responder / pedir log (ghbarker confirmou com +1) |
 | [#379](https://github.com/iqui27/nuvio-native-legacy/issues/379) | Movie or TV show at the end never return to homescreen. | Samsung .tpk | bug | aberta | - | 2.0.4 | - | sem comentários | responder / pedir log (sem resposta) |
 | [#384](https://github.com/iqui27/nuvio-native-legacy/issues/384) | Embedded ASS subtitles stopped rendering after anime intro | LG | bug | aberta | - | 2.0.4 | - | autor 10-09 | causa achada nos logs do autor (limite de 8000 blocos do coletor de ASS embutido); aguarda |
+| [#385](https://github.com/iqui27/nuvio-native-legacy/issues/385) | Internet Connection Drop and Reconnecting Bug to no end | Samsung .wgt | bug | precisa-log | - | 2.0.4 | - | autor 10-09 | pedir log: Ajustes > Sobre > Enviar registro logo depois da queda, e comentar o código; pe |
 
 Notas:
 
@@ -313,6 +312,7 @@ Notas:
 - **#357**: Zidoo Z9X 8K (Android 11) fecha ao abrir; Ugoos AM9 Pro. Autor comentou que não achou o aparelho no relatório #324 e não consegue enviar log.
 - **#365**: Autor diz que o problema principal da Home foi resolvido; fantasmas permanecem em "Fora da Home". Relacionado a #358.
 - **#384**: LG C5, webOS 26, Nuvio 2.0.2; Re:Zero S1 (Seadex): legenda embutida do ep. 3 funcionou, a do ep. 4 parou de aparecer depois da abertura. O autor (Vidhin05) JÁ mandou dois códigos de log no corpo (DDRROH e 98ZQED), ainda não lidos por nós; por isso o status é aberta e não precisa-log. Um comentário do próprio autor fala de "quedas de conexão e falhas de rede, talvez queda do debrid": relato solto, sem log próprio, tratar como segundo sintoma e checar nos mesmos logs. Namer03 (não é do projeto) respondeu "mesma coisa do #308, sai na 2.0.3": SUSPEITA, o #308 é legenda que bloqueia a fonte, o sintoma aqui (legenda some no meio) pode ser outro; não confirmado. Candidatos já na 2.0.3: #269 (legenda embutida) e #335 (ASS). ALVO 2.0.4 = triagem: pode virar 2.0.3 se os logs mostrarem que é o #308. CAUSA ACHADA (09/10, nos logs do próprio autor): NÃO é o #308 e NÃO está corrigido na 2.0.3 até agora. O coletor de ASS embutido indexa no máximo 8000 blocos (MKVASS_MAX_PONTOS, src/mkvass.c:61) NA ORDEM DO ARQUIVO; numa release com muito typeset (letreiros, karaokê) os 8000 acabam logo depois da abertura, e o resto do episódio fica sem legenda (log: "cobertura=7360-217270ms" com exatamente 8000 eventos). O branch agente/203-384 trabalha nisso; o alvo continua 2.0.4 a menos que esse branch entre na 2.0.3. Próximo passo: integrar agente/203-384 (ou deixar para a 2.0.4) e avisar o autor. O comentário de "queda do debrid" segue sem log próprio.
+- **#385**: Sem log. HIPÓTESE #308 ENFRAQUECIDA (09/10): o autor pôs o idioma da legenda em coreano (nenhuma faixa é escolhida) e "caiu na hora de novo". Lido no código (483a73b8): no .wgt a pré-busca do mkvass NEM EXISTE (player.c:1548, #ifndef __EMSCRIPTEN__) e, sem faixa escolhida, a automática dá LING_AUTO_NADA e o mkvass não colhe nada por Range; o que roda em TODO MKV no .wgt é só a sonda do cabeçalho (video_tizen.c lerMkv -> mkv_faixas_e_caps: um trecho inicial, mais um ou dois Ranges se Tracks/Chapters ficarem fora dele), uma vez por abertura. Logo, sem legenda ligada o app não enche o CDN de pedidos. Resta, sem prova, o bloqueio do CDN do debrid àquele IP/conta ainda valendo de antes. Alvo volta para 2.0.4 (triagem); plano: as três suspeitas da triagem no fim desta nota. Hipótese anterior, mantida para registro: provavelmente coberta pelo conserto da #308 que já está na 2.0.3 (b65c3324 leitor lateral mais gentil: menos Ranges, uma conexão, pausa quando o CDN aperta; 73ce1648). Namer03 comentou (09/10) que a leitura da legenda embutida enche o CDN do TorBox de pedidos; bate com o relato: o CDN do debrid passa a recusar, o vídeo reconecta em laço e TODA fonte de debrid falha, enquanto add-on https segue. CONDIÇÃO: no .wgt o mkvass (leitura por Range) só entra para legenda embutida ASS/SSA (faixas.c: FX_TEXTO_OVERLAY é 1 só no .tpk; SRT/texto embutido a TV desenha), e ele roda no .wgt (tizen.sh compila com NV_ASS_LIBASS, video_tizen.c tem a sonda do MKV). Então só é a #308 se o usuário estava com uma faixa ASS embutida ligada num MKV: perguntar isso (título, se a legenda era embutida, se desligando a embutida a queda some). Não medido quantos Ranges o mkvass fazia no .wgt antes do b65c3324, e nenhum registro .wgt do D1 mostra o laço. Se persistir na 2.0.3, volta para precisa-log com as suspeitas abaixo (plano 2.0.4). Triagem anterior: Samsung UT8000 (Tizen 5.5), .wgt, Nuvio 2.0.2; sem log. Relato: VOD de debrid cai no meio com "reconectando" em laço; depois TODA fonte dá "não deu para carregar", só add-on https segue tocando. Triagem (09/10) no D1 e no código, sem TV: NÃO provado. No D1 (.wgt, ~32 mil ids recentes, ~300 registros) só 2 registros (2 pessoas, ambos 2.0.1) mostram a reconexão de VOD começar ("conexao caiu ... tentativa 1/3"), nenhum chega a "reconexao: desistiu" e nenhum tem o par "queda e depois toda fonte falha"; os outros ~25 registros com PLAYER_ERROR_CONNECTION_FAILED são falha de abertura de uma fonte, e a próxima fonte abriu (sem envenenamento). Código: a reconexão do .wgt (video_tizen.c:1180-1215, video_reconexao.h) são 3 tentativas por queda, e o contador zera 10 s depois do ponto da queda, então rede instável gera laço de "reconectando" por desenho; o 2.0.3 só mexeu na reconexão de TV ao vivo (#302/#350), VOD não mudou. Descartado por leitura: negcache (só 4 APIs de metadados), flag offline (redesaude.c só pinta a ilha), pool de threads (strict=0, [fios] estável nos logs), lista de fontes recusadas (zera a cada lista nova), XHR síncrono (estado por fio). "Só o https funciona" contraria um AVPlay quebrado (os dois passam por ele) e aponta para a conta do debrid/links do host, que é do lado de lá. SUSPEITA, não provada: (1) o open de reconexão não tem prazo: se o prepareAsync nunca responder, video_reconectando() fica 1 e tentarProximaFonteVOD (app.c) volta cedo, então fica "reconectando" sem fim; (2) a op "abrir" do JS faz stop() e close() no MESMO try (video_tizen.c:264-267): se o stop() levantar, o close() não roda e o próximo open() falha; (3) debrid.c marca conta sem plano para a SESSÃO inteira (semPlano), mas só com corpo "PLAN_RESTRICTED/not premium", não com 429. Essas três ficam como plano da 2.0.4 se a 2.0.3 não resolver.
 
 ## Já lançado
 
