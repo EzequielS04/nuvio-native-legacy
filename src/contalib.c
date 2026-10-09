@@ -418,20 +418,71 @@ void contalib_reconciliar(void) {
   contalib_aplicar_catalogo();
 }
 
+int contalib_vistos_do_titulo(const char *id, int *desmarcados) {
+  int i, k = 0, d = 0;
+  if (desmarcados) *desmarcados = 0;
+  if (!id || !id[0]) return 0;
+  pthread_mutex_lock(&vistosTrava);
+  for (i = 0; i < nVistos; i++) {
+    if (vistos[i].episodio <= 0 || strcmp(vistos[i].id, id)) continue;
+    k++;
+    if (vistoep_estado(id, vistos[i].temporada, vistos[i].episodio) == 0) d++;
+  }
+  pthread_mutex_unlock(&vistosTrava);
+  if (desmarcados) *desmarcados = d;
+  return k;
+}
+
+// Titulos com linha barrada num mesmo pull que ganham linha propria no log. O
+// resto entra so no total: e log de diagnostico, nao relatorio.
+#define CL_BARRADOS_LOG 6
+
 int contalib_aplicar_vistos(void) {
-  int i, k = 0, ke = 0;
+  struct { char id[24]; VistoFonte f; } barrado[CL_BARRADOS_LOG];
+  VistoFonte total;
+  int i, j, k = 0, ke = 0, nBarrado = 0, jornal = 0;
+  memset(&total, 0, sizeof total);
   for (i = 0; i < nVistos; i++) {
     if (!vistos[i].id[0]) continue;
     // DESMARCADO NESTA TV depois desta linha: ela nao re-marca (contapend.h).
     if (vistoOculto && vistoOculto(vistos[i].id, vistos[i].temporada,
-                                   vistos[i].episodio, vistos[i].vistoMs)) continue;
+                                   vistos[i].episodio, vistos[i].vistoMs)) {
+      jornal++;
+      continue;
+    }
     // LINHA DE EPISODIO VAI PARA O MAPA DE EPISODIOS, e nao para o historico
     // de titulo. `season` e `episode` sempre vieram nesta resposta
     // (PLANO-CONTA-SYNC.md secao 1.5) e eram lidos e descartados aqui: o
     // `continue` abaixo pulava a linha inteira. E por isso que o app nunca
     // soube quais episodios a pessoa viu, so quais SERIES.
     if (vistos[i].temporada > 0 || vistos[i].episodio > 0) {
-      vistoep_definir(vistos[i].id, vistos[i].temporada, vistos[i].episodio, 1);
+      // PELA PORTA DAS FONTES (vistoep.h): o jornal acima so segura a linha
+      // ate a conta confirmar o delete e a entrada ser podada (contapend_podar).
+      // Uma linha que ainda venha depois disso — copia guardada, pagina velha,
+      // delete aceito e nao aplicado — re-marcava o episodio. A desmarcacao da
+      // pessoa fica guardada a parte e e consultada aqui, com o watched_at da
+      // linha: so um visto MAIS NOVO que o gesto volta a marcar.
+      VistoFonte um;
+      memset(&um, 0, sizeof um);
+      vistoep_fonte(vistos[i].id, vistos[i].temporada, vistos[i].episodio, 1,
+                    vistos[i].vistoMs, &um);
+      total.vistos += um.vistos;
+      total.venceu += um.venceu;
+      if (um.bloqueados) {
+        total.bloqueados++;
+        for (j = 0; j < nBarrado && strcmp(barrado[j].id, vistos[i].id); j++) {}
+        if (j == nBarrado && nBarrado < CL_BARRADOS_LOG) {
+          memset(&barrado[j], 0, sizeof barrado[j]);
+          snprintf(barrado[j].id, sizeof barrado[j].id, "%s", vistos[i].id);
+          nBarrado++;
+        }
+        if (j < nBarrado) {
+          VistoFonte *f = &barrado[j].f;
+          if (f->bloqueados < VE_FONTE_PARES) f->par[f->bloqueados] = um.par[0];
+          f->bloqueados++;
+        }
+        continue;
+      }
       ke++;
       continue;
     }
@@ -440,6 +491,28 @@ int contalib_aplicar_vistos(void) {
   }
   if (k) printf("[contalib] %d titulos marcados como vistos pela conta\n", k);
   if (ke) printf("[contalib] %d episodios vistos vindos da conta\n", ke);
+  // O LOG POR FONTE (vistoep.h). A conta fala de TODOS os titulos num pull so,
+  // e este pull roda a cada ciclo: uma linha de total, e uma por titulo SO
+  // onde algo foi barrado — e la que se le "a conta ainda acha que foi visto".
+  if (ke || total.bloqueados || total.venceu || jornal) {
+    printf("[vistoep] conta: +%d episodios (bloqueados %d; remoto mais novo %d)",
+           total.vistos, total.bloqueados, total.venceu);
+    if (jornal) printf(" | %d seguros pelo jornal (delete ainda nao podado)", jornal);
+    printf("\n");
+  }
+  for (j = 0; j < nBarrado; j++) {
+    char quais[VE_FONTE_PARES * 10 + 8];
+    size_t u = 0;
+    int q, lim = barrado[j].f.bloqueados < VE_FONTE_PARES ? barrado[j].f.bloqueados
+                                                          : VE_FONTE_PARES;
+    quais[0] = 0;
+    for (q = 0; q < lim && u + 12 < sizeof quais; q++)
+      u += (size_t)snprintf(quais + u, sizeof quais - u, " T%dE%d",
+                            barrado[j].f.par[q].temporada, barrado[j].f.par[q].episodio);
+    printf("[vistoep] %s: conta bloqueados %d:%s%s\n", barrado[j].id,
+           barrado[j].f.bloqueados, quais, barrado[j].f.bloqueados > lim ? " ..." : "");
+  }
+  fflush(stdout);
   return k;
 }
 

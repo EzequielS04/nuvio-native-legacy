@@ -103,6 +103,9 @@ int visto_titulo(const char *imdb, const char *tipo, const int *temporadas,
   Envio *e;
   destinos &= ~VISTO_TRAKT;
   if (!imdb || !imdb[0]) return 0;
+  // ANTES de qualquer destino, e mesmo sem nenhum: o gesto no titulo inteiro
+  // tambem e da pessoa (vistoep.h, "desmarcar ganha").
+  vistoep_titulo_gesto(imdb, visto);
   if (!destinos) return 1;
   if (destinos & VISTO_CONTA) {
     contapend_titulo(imdb, tipo && tipo[0] ? tipo : "movie", visto);

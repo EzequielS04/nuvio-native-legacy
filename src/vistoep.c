@@ -88,10 +88,35 @@ static int definir(const char *imdb, int temporada, int episodio, int visto) {
   return 1;
 }
 
+// O JUIZ DAS DESMARCACOES (vistonao.c), injetado por app.c. Ponteiros e nao
+// include: este arquivo entra sozinho em uma duzia de testes, e o juiz precisa
+// de perfil, sessao e disco. Sem juiz ligado nada e barrado — o comportamento
+// de antes. SEMPRE chamados FORA da trava do mapa: eles tem a trava deles e
+// gravam em disco, e o desenho le o mapa a cada quadro.
+static int  (*lapBarra)(const char *imdb, int temporada, int episodio, long long remotoMs);
+static void (*lapGesto)(const char *imdb, const VistoPar *pares, int n, int visto);
+
+void vistoep_lapides(int (*barra)(const char *, int, int, long long),
+                     void (*gesto)(const char *, const VistoPar *, int, int)) {
+  lapBarra = barra;
+  lapGesto = gesto;
+}
+
 void vistoep_definir(const char *imdb, int temporada, int episodio, int visto) {
   pthread_mutex_lock(&trava);
   definir(imdb, temporada, episodio, visto);
   pthread_mutex_unlock(&trava);
+  // MARCAR AQUI E A PESSOA (o player ao concluir o episodio): assistir de novo
+  // desfaz a desmarcacao. O 0 daqui nao cria uma — quem desmarca e o gesto da
+  // tela (vistoep_aplicar / vistoep_marcar_lote), e leitor de rede nao passa
+  // por esta funcao (vistoep_fonte).
+  if (visto && lapGesto && episodio >= 1 && episodio <= SHRT_MAX &&
+      temporada >= 0 && temporada <= SHRT_MAX) {
+    VistoPar par;
+    par.temporada = (short)temporada;
+    par.episodio = (short)episodio;
+    lapGesto(imdb, &par, 1, 1);
+  }
 }
 
 static int estado(const char *imdb, int temporada, int episodio) {
@@ -108,6 +133,48 @@ int vistoep_estado(const char *imdb, int temporada, int episodio) {
   r = estado(imdb, temporada, episodio);
   pthread_mutex_unlock(&trava);
   return r;
+}
+
+// ------------------------------------------------------------------ fontes
+
+int vistoep_fonte(const char *imdb, int temporada, int episodio, int visto,
+                  long long remotoMs, VistoFonte *c) {
+  int ok, juiz = 0;
+  // DESMARCAR GANHA (vistonao.h). So o "visto" e julgado: fonte dizendo "nao
+  // visto" concorda com a pessoa ou fala de episodio que ela nao tocou.
+  if (visto && lapBarra) juiz = lapBarra(imdb, temporada, episodio, remotoMs);
+  if (juiz > 0) visto = 0;
+  pthread_mutex_lock(&trava);
+  ok = definir(imdb, temporada, episodio, visto);
+  pthread_mutex_unlock(&trava);
+  if (!c) return ok;
+  if (juiz > 0) {
+    if (c->bloqueados < VE_FONTE_PARES) {
+      c->par[c->bloqueados].temporada = (short)temporada;
+      c->par[c->bloqueados].episodio = (short)episodio;
+    }
+    c->bloqueados++;
+  } else if (ok && visto) {
+    c->vistos++;
+    if (juiz < 0) c->venceu++;
+  }
+  return ok;
+}
+
+void vistoep_fonte_log(const char *imdb, const char *fonte, const VistoFonte *c) {
+  char quais[VE_FONTE_PARES * 10 + 8];
+  size_t u = 0;
+  int i, k;
+  if (!imdb || !fonte || !c) return;
+  quais[0] = 0;
+  k = c->bloqueados < VE_FONTE_PARES ? c->bloqueados : VE_FONTE_PARES;
+  for (i = 0; i < k && u + 12 < sizeof quais; i++)
+    u += (size_t)snprintf(quais + u, sizeof quais - u, "%sT%dE%d", i ? " " : ": ",
+                          c->par[i].temporada, c->par[i].episodio);
+  if (c->bloqueados > k && u + 5 < sizeof quais) snprintf(quais + u, sizeof quais - u, " ...");
+  printf("[vistoep] %s: %s +%d (bloqueados %d%s; remoto mais novo %d)\n", imdb, fonte,
+         c->vistos, c->bloqueados, quais, c->venceu);
+  fflush(stdout);
 }
 
 int vistoep_contar(const char *imdb) {
@@ -154,6 +221,9 @@ int vistoep_marcar_lote(const char *imdb, const VistoPar *pares, int qtd, int vi
     mudou += definir(imdb, pares[i].temporada, pares[i].episodio, visto);
   }
   pthread_mutex_unlock(&trava);
+  // O LOTE INTEIRO, e nao so o que mudou de estado: o gesto fala de todos
+  // (ver vistoep_aplicar).
+  if (lapGesto && qtd > 0) lapGesto(imdb, pares, qtd, visto);
   return mudou;
 }
 
@@ -196,7 +266,42 @@ int vistoep_aplicar(const char *imdb, const VistoPar *lote, int n, int visto,
     if (definir(imdb, lote[i].temporada, lote[i].episodio, visto)) envio[k++] = lote[i];
   }
   pthread_mutex_unlock(&trava);
+  // O GESTO VAI PARA O JUIZ COM O LOTE INTEIRO, e nao so com `envio`. Um
+  // episodio que ja estava 0 aqui (o Trakt nao o tem) pode estar "visto" em
+  // outra fonte que este mapa nao leu; "desmarcar a temporada" fala de todos.
+  // Marcar solta a desmarcacao de todos pelo mesmo motivo.
+  if (lapGesto) lapGesto(imdb, lote, n, visto);
   return k;
+}
+
+// O GESTO NO TITULO INTEIRO ("marcar/desmarcar a serie", visto.c). Nao mexe no
+// estado do mapa — isso continua vindo da proxima leitura, como antes —, so
+// avisa o juiz: marcar a serie SOLTA toda desmarcacao dela (senao um episodio
+// desmarcado ontem ficaria de fora de "marquei tudo"); desmarcar a serie guarda
+// a desmarcacao de cada episodio que o mapa tem como visto (senao a fonte que
+// nao aplicar o remove traz a serie inteira de volta).
+void vistoep_titulo_gesto(const char *imdb, int visto) {
+  char id[16];
+  VistoPar *pares;
+  int i, k = 0;
+  if (!lapGesto) return;
+  base(imdb, id, sizeof id);
+  if (!id[0]) return;
+  if (visto) { lapGesto(id, NULL, 0, 1); return; }
+  pthread_mutex_lock(&trava);
+  for (i = 0; i < n; i++) if (mapa[i].visto && !strcmp(mapa[i].id, id)) k++;
+  pares = k ? (VistoPar *)malloc(sizeof *pares * (size_t)k) : NULL;
+  k = 0;
+  if (pares)
+    for (i = 0; i < n; i++)
+      if (mapa[i].visto && !strcmp(mapa[i].id, id)) {
+        pares[k].temporada = mapa[i].temp;
+        pares[k].episodio = mapa[i].ep;
+        k++;
+      }
+  pthread_mutex_unlock(&trava);
+  if (pares && k) lapGesto(id, pares, k, 0);
+  free(pares);
 }
 
 // ORDEM DE EPISODIO E (temporada, numero), nesta ordem — nao o numero sozinho.
@@ -313,8 +418,10 @@ void vistoep_esquecer(void) {
 int vistoep_ler_progresso(const char *imdb, const char *json) {
   const char *temps;
   const char *fim;
+  VistoFonte conta;
   int total = 0;
   if (!imdb || !imdb[0] || !json) return -1;
+  memset(&conta, 0, sizeof conta);
   fim = json + strlen(json);
   temps = js_array(json, fim, "seasons");
   if (!temps) { printf("[vistoep] %s: resposta sem \"seasons\"\n", imdb); fflush(stdout); return -1; }
@@ -331,7 +438,7 @@ int vistoep_ler_progresso(const char *imdb, const char *json) {
     for (; eps && *eps == '{'; eps = js_prox(js_fim(eps))) {
       const char *fe = js_fim(eps);
       double episodio;
-      char concluido[16];
+      char concluido[16], quando[40];
       int ne, feito;
       if (!fe || fe > ft || fe[-1] != '}') return -1;
       episodio = js_num(eps, fe, "number", -1.0);
@@ -344,15 +451,17 @@ int vistoep_ler_progresso(const char *imdb, const char *json) {
       if (!strcmp(concluido, "true")) feito = 1;
       else if (!strcmp(concluido, "false")) feito = 0;
       else continue;
-      pthread_mutex_lock(&trava);
-      total += definir(imdb, nt, ne, feito);
-      pthread_mutex_unlock(&trava);
+      // QUANDO o Trakt diz que foi visto: e o que deixa um visto de verdade,
+      // feito em outro aparelho DEPOIS de a pessoa desmarcar aqui, ganhar.
+      quando[0] = 0;
+      if (feito) js_texto(eps, fe, "last_watched_at", quando, sizeof quando);
+      total += vistoep_fonte(imdb, nt, ne, feito, quando[0] ? js_ms_iso(quando) : 0, &conta);
       if (fe >= ft) break;
     }
     if (ft >= fim) break;
   }
   printf("[vistoep] %s: %d episodios no mapa (%d vistos)\n",
          imdb, total, vistoep_contar(imdb));
-  fflush(stdout);
+  vistoep_fonte_log(imdb, "trakt", &conta);
   return total;
 }
