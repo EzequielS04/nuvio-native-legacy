@@ -1442,9 +1442,18 @@ static void tocarFonte(const char *url) {
 #ifdef NV_ANDROID
     // app.c define episodio e "do inicio" antes de entregar a fonte. O
     // instante viaja junto da URL, nunca numa variavel pendente do Kotlin.
-    retomadaNaPreparacao = !ehCanal() && !semRetomada && retomarSeg > 0.0;
-    comVideo = video_tocar_posicao(proxyts_resolver(url, px, sizeof px),
-                                   retomadaNaPreparacao ? retomarSeg : 0.0);
+    // So o percentual (retomada da conta, sem registro local com segundos):
+    // vai junto e o Media3 aplica com a duracao do container antes do
+    // primeiro quadro. Antes abria em 0, tocava e buscava depois do "pronto"
+    // (TCL, 2.0.3: +6,4 s e um primeiro quadro jogado fora).
+    retomadaNaPreparacao = !ehCanal() && !semRetomada && (retomarSeg > 0.0 || retomarPct > 0);
+    if (retomadaNaPreparacao) {
+      if (retomarSeg > 0.0) marco("abrir: ponto salvo vai na abertura (segundos)");
+      else marco("abrir: ponto salvo vai na abertura (percentual)");
+    }
+    comVideo = video_tocar_retomada(proxyts_resolver(url, px, sizeof px),
+                                    retomadaNaPreparacao ? retomarSeg : 0.0,
+                                    retomadaNaPreparacao && retomarSeg <= 0.0 ? retomarPct : 0.0);
     if (!comVideo) retomadaNaPreparacao = 0;
 #else
     comVideo = video_tocar(proxyts_resolver(url, px, sizeof px));
@@ -3124,6 +3133,10 @@ void player_atualizar(float dt, Uint32 agora) {
         retomadaAplicada = 1;
         if (estado > 0) marco("abrir: ponto salvo na preparacao");
         if (estado < 0 && retomarPct > 0) {
+          if (retomadaNaPreparacao) {
+            printf("[player] retomada: a abertura nao aplicou o ponto salvo; seek depois do pronto\n");
+            fflush(stdout);
+          }
           marco("abrir: seek para o ponto salvo"); video_buscar(d * retomarPct / 100.0);
         }
       }
