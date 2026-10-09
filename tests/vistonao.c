@@ -291,21 +291,63 @@ int main(void) {
   }
 
 #ifdef TEM_VISTONAO
+  // ------------------------------------------------------------ titulo
+  printf("\ngesto na SERIE inteira (visto_titulo -> vistoep_titulo_gesto):\n");
+  { static const VistoPar T1E2[1] = { {1, 2} };
+    vistoep_esquecer();
+    vistoep_fonte("tt7000002", 1, 1, 1, antes, NULL);
+    vistoep_fonte("tt7000002", 1, 2, 1, antes, NULL);
+    vistoep_fonte("tt7000002", 1, 3, 0, 0, NULL);
+    vistoep_titulo_gesto("tt7000002", 0);           // desmarcar a serie
+    confere("cada episodio visto ganha desmarcacao (T1E1)",
+            vistonao_barra("tt7000002", 1, 1, antes), 1);
+    confere("(T1E2)", vistonao_barra("tt7000002", 1, 2, antes), 1);
+    confere("o que nao estava visto nao ganha (T1E3)",
+            vistonao_barra("tt7000002", 1, 3, antes), 0);
+    vistoep_fonte("tt7000002", 1, 1, 1, antes, NULL);
+    confere("e a fonte que nao aplicou o remove nao traz de volta",
+            vistoep_estado("tt7000002", 1, 1), 0);
+    vistonao_gesto("tt7000002", T1E2, 1, 0);
+    vistoep_titulo_gesto("tt7000002", 1);           // marcar a serie
+    confere("marcar a serie solta todas (T1E1)", vistonao_barra("tt7000002", 1, 1, 0), 0);
+    confere("(T1E2)", vistonao_barra("tt7000002", 1, 2, 0), 0);
+  }
+
+  // ------------------------------------------------------------ relogio
+  printf("\nTV ligada sem relogio (1970): a desmarcacao nao perde para tudo:\n");
+  { static const VistoPar T1E1[1] = { {1, 1} };
+    long long certo = agora;
+    agora = 86400000LL;                 // 02/01/1970
+    vistonao_gesto("tt7000001", T1E1, 1, 0);
+    confere("visto 'mais novo' que 1970 nao derruba o gesto",
+            vistonao_barra("tt7000001", 1, 1, certo - DIA), 1);
+    agora = certo;                      // a rede voltou, o relogio acertou
+    confere("com o relogio certo, visto de ontem continua barrado",
+            vistonao_barra("tt7000001", 1, 1, certo - DIA), 1);
+    confere("e um visto de amanha (depois do gesto) ganha",
+            vistonao_barra("tt7000001", 1, 1, certo + DIA), -1);
+    confere("ganhou: a desmarcacao caiu", vistonao_barra("tt7000001", 1, 1, 0), 0);
+  }
+
   // ------------------------------------------------------------ teto
   printf("\no arquivo de desmarcacoes tem teto e nao cresce sem limite:\n");
-  { int i, t, e;
-    for (i = 0; i < VISTONAO_MAX + 300; i++) {
-      VistoPar p;
+  { VistoPar cem[100];
+    int lote, e, lotes = VISTONAO_MAX / 100 + 3;
+    for (e = 0; e < 100; e++) { cem[e].temporada = 1; cem[e].episodio = (short)(e + 1); }
+    for (lote = 0; lote < lotes; lote++) {   // 3 lotes a mais que o teto
       char id[16];
-      t = 1 + i / 200; e = 1 + i % 200;
-      p.temporada = (short)t; p.episodio = (short)e;
-      snprintf(id, sizeof id, "tt%07d", 9000000 + i / 2000);
+      snprintf(id, sizeof id, "tt%07d", 9000000 + lote);
       agora += 1000;
-      vistonao_gesto(id, &p, 1, 0);
+      vistonao_gesto(id, cem, 100, 0);
     }
     confere("nunca passa do teto", vistonao_n() <= VISTONAO_MAX, 1);
-    confere("a mais NOVA ficou", vistonao_barra("tt9000001", 2, 100, 0), 1);
+    { char id[16];
+      snprintf(id, sizeof id, "tt%07d", 9000000 + lotes - 1);
+      confere("a mais NOVA ficou", vistonao_barra(id, 1, 100, 0), 1); }
     confere("a mais VELHA saiu", vistonao_barra("tt9000000", 1, 1, 0), 0);
+    reabrir();
+    confere("e o arquivo relido tambem respeita o teto", vistonao_n() <= VISTONAO_MAX, 1);
+    confere("com o conteudo de antes", vistonao_n() > VISTONAO_MAX - 100, 1);
   }
 #endif
 

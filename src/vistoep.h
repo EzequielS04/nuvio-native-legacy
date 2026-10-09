@@ -48,6 +48,11 @@ int  vistoep_conhecido(const char *imdb);
 // nao so 1. Devolve quantos episodios entraram, ou -1 em corpo invalido.
 int  vistoep_ler_progresso(const char *imdb, const char *json);
 
+// Um episodio, para os lotes. Os tres gestos que a tela oferece — este
+// episodio, ate aqui, a temporada inteira — sao o MESMO lote com tamanhos
+// diferentes, e por isso ha uma funcao so em vez de tres.
+typedef struct { short temporada, episodio; } VistoPar;
+
 // ---- o que as FONTES dizem (Trakt, conta Nuvio, jornal da conta) ------------
 //
 // LEITOR DE REDE NAO CHAMA vistoep_definir: chama vistoep_fonte, que CONTA o
@@ -61,7 +66,7 @@ typedef struct {
   int bloqueados;   // a fonte disse "visto" e uma desmarcacao da pessoa barrou
   int venceu;       // o visto da fonte era MAIS NOVO que a desmarcacao: ela caiu
   // Os primeiros barrados (temporada, episodio), para o log dizer QUAIS.
-  struct { short temporada, episodio; } par[VE_FONTE_PARES];
+  VistoPar par[VE_FONTE_PARES];
 } VistoFonte;
 
 // Um episodio vindo de uma fonte. `visto` 0 ou 1; `remotoMs` e QUANDO a fonte
@@ -70,14 +75,25 @@ typedef struct {
 // 0, e o que foi barrado sai em `c`); 0 so para episodio invalido ou teto.
 int  vistoep_fonte(const char *imdb, int temporada, int episodio, int visto,
                    long long remotoMs, VistoFonte *c);
+// DESMARCAR GANHA (vistonao.h). app.c liga aqui o juiz das desmarcacoes:
+//   barra(imdb, t, e, remotoMs): 1 = ha desmarcacao da pessoa e o visto da
+//     fonte nao e mais novo que ela (barrado); 0 = nao ha; -1 = havia e o
+//     remoto, mais novo, ganhou. Consultado por vistoep_fonte a cada "visto".
+//   gesto(imdb, pares, n, visto): avisado dos gestos locais — vistoep_aplicar e
+//     vistoep_marcar_lote (o lote inteiro) e vistoep_definir(..., 1).
+//     Com `pares` NULL e visto 1: TODAS as desmarcacoes do titulo caem
+//     (vistoep_titulo_gesto, "marcar a serie inteira").
+// NULL desliga (e o estado dos testes que linkam so este arquivo).
+void vistoep_lapides(int (*barra)(const char *imdb, int temporada, int episodio,
+                                  long long remotoMs),
+                     void (*gesto)(const char *imdb, const VistoPar *pares, int n,
+                                   int visto));
+// O gesto no TITULO inteiro (visto.c): marcar a serie solta as desmarcacoes
+// dela; desmarcar guarda a de cada episodio que o mapa tem como visto.
+void vistoep_titulo_gesto(const char *imdb, int visto);
 // A LINHA DO LOG, uma por titulo por leitura (nunca por episodio):
 //   [vistoep] tt14688458: trakt +24 (bloqueados 4: T2E7 T2E8 T2E9 T2E10; remoto mais novo 0)
 void vistoep_fonte_log(const char *imdb, const char *fonte, const VistoFonte *c);
-
-// Um episodio, para os lotes. Os tres gestos que a tela oferece — este
-// episodio, ate aqui, a temporada inteira — sao o MESMO lote com tamanhos
-// diferentes, e por isso ha uma funcao so em vez de tres.
-typedef struct { short temporada, episodio; } VistoPar;
 
 // Marca um lote de uma vez, LOCALMENTE. Quem fala com o servidor e o chamador:
 // o efeito local tem de ser imediato (a lista redesenha no mesmo quadro) e a

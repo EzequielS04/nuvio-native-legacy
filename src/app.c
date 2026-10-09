@@ -69,6 +69,7 @@
 #include "perfil.h"
 #include "salvos.h"
 #include "contapend.h"
+#include "vistonao.h"
 #include "contalib.h"
 #include "recomenda.h"
 #include "atividade.h"
@@ -1986,6 +1987,10 @@ int app_iniciar(const char *dirArte) {
   // o pull da biblioteca e dos vistos respeita o que a pessoa mudou aqui.
   salvos_ao_definir(salvoParaConta);
   contalib_filtros(contapend_lista_oculta, contapend_visto_oculto);
+  // DESMARCAR GANHA (vistonao.h): o que a pessoa desmarcou nesta TV fica
+  // guardado por perfil e barra o "visto" de qualquer fonte (Trakt, conta,
+  // jornal) que nao seja mais novo que o gesto. Antes da primeira leitura.
+  vistoep_lapides(vistonao_barra, vistonao_gesto);
   // AS LISTAS FIXADAS, PELO MESMO MOTIVO E ANTES DA PRIMEIRA HOME. Uma lista do
   // Trakt que a Biblioteca levou para a Home so vira fileira quando lst_iniciar
   // reinjeta a pasta dela em colecoes.c; chamando isto so ao ABRIR a Biblioteca,
