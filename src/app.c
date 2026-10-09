@@ -93,6 +93,7 @@
 #include "novidades20.h"
 #include "novidades201.h"
 #include "novidades202.h"
+#include "novidades_cartao.h"
 #include "apoio.h"
 #include "telemetria.h"
 #include "avisos.h"
@@ -1967,6 +1968,7 @@ int app_iniciar(const char *dirArte) {
   novidades20_dir(dirArte);
   novidades201_dir(dirArte);
   novidades202_dir(dirArte);
+  novcartao_dir(dirArte);
   arranque_etapa("app_iniciar/apoio_dir");
   apoio_dir(dirArte);
   if (!homePronta)
@@ -2179,7 +2181,8 @@ int app_no_login(void) { return tela == TELA_LOGIN; }
 
 int app_na_home(void) {
   return tela == TELA_HOME && homePronta && !player_aberto() && !detail_aberto() &&
-         !novidades170_aberto() && !novidades180_aberto() && !novidades20_aberto();
+         !novidades170_aberto() && !novidades180_aberto() && !novidades20_aberto() &&
+         !novcartao_aberto();
 }
 
 // ONDE A AZUL/CH+ ABRE O PAINEL DE SALVOS/AVISOS (dono, 04/10: "tem que dar
@@ -2296,6 +2299,11 @@ void app_evento(const SDL_Event *e) {
   // O CARTAO DA 2.0.1 (novidades201.h): come o teclado todo; "Abrir a
   // Central" fecha o cartao e abre a Central de controle no lugar.
   // O DA 2.0.2 (novidades202.h) e igual, sem a Central.
+  // O CARTAO DA VERSAO ATUAL (novidades_cartao.h, 2.0.3 em diante) tambem.
+  if (novcartao_aberto()) {
+    novcartao_evento(e);
+    return;
+  }
   if (novidades202_aberto()) {
     novidades202_evento(e);
     return;
@@ -2740,7 +2748,8 @@ static const char *homeTrailerBloqueio(void) {
       novidades13_aberto() || novidades131_aberto() || novidades132_aberto() ||
       novidades133_aberto() || novidades134_aberto() || novidades139_aberto() || novidades1312_aberto() ||
       novidades142_aberto() || novidades148_aberto() || novidades170_aberto() || novidades180_aberto() ||
-      novidades20_aberto()) return "whats-new";
+      novidades20_aberto() || novidades201_aberto() || novidades202_aberto() ||
+      novcartao_aberto()) return "whats-new";
   if (atualizacao_aberta() || agendaviso_aberto()) return "update-notice";
   if (recomenda_aberta() || recenviar_aberto() || pessoas_aberto()) return "recommend";
   if (faixas_aberta() || episodios_aberto() || stream_folha_aberta()) return "sheet";
@@ -3052,13 +3061,18 @@ void app_atualizar(float dt, Uint32 agora) {
   // e mais chamada: o cartao da 1.8.0 so vive como cena do Guia de uso.
   // A 2.0.1 decide ANTES do guia da 2.0, no mesmo quadro: ela olha se o guia
   // ja foi visto antes de ele gravar a marca (novidades201.h).
+  // O CARTAO DA VERSAO ATUAL (novidades_cartao.h) decide antes de todos: ele
+  // grava as marcas da 2.0.1 e da 2.0.2, que entao nao abrem nunca mais. A
+  // condicao (Home pronta, sem player nem pagina do titulo) mora nele, onde o
+  // teste a exercita.
+  novcartao_decidir(tela == TELA_HOME && homePronta, player_aberto(), detail_aberto());
   if (tela == TELA_HOME && homePronta && !player_aberto() && !detail_aberto()) {
     // A 2.0.2 antes da 2.0.1: ela substitui o cartao da 2.0.1.
     novidades202_primeira_vez();
     novidades201_primeira_vez();
     novidades20_primeira_vez();
   }
-  if (tela == TELA_HOME && homePronta && !player_aberto() && !detail_aberto() && !novidades170_aberto() && !novidades180_aberto() && !novidades20_aberto() && !novidades201_aberto() && !novidades202_aberto()) {
+  if (tela == TELA_HOME && homePronta && !player_aberto() && !detail_aberto() && !novidades170_aberto() && !novidades180_aberto() && !novidades20_aberto() && !novidades201_aberto() && !novidades202_aberto() && !novcartao_aberto()) {
     // Esta e a primeira explicacao da versao: aparece antes dos demais
     // cartoes de onboarding. Depois de OK, o bloco abaixo continua a fila
     // antiga no quadro seguinte.
@@ -4625,6 +4639,7 @@ void app_atualizar(float dt, Uint32 agora) {
   novidades20_atualizar(dt, agora);
   novidades201_atualizar(dt, agora);
   novidades202_atualizar(dt, agora);
+  novcartao_atualizar(dt, agora);
   telemetria_atualizar(dt, agora);
   recintro_atualizar(dt, agora);
   atualizacao_atualizar(dt, agora);
@@ -4861,7 +4876,7 @@ static int relogioCabe(void) {
       novidades13_aberto() || novidades131_aberto() || novidades132_aberto() ||
       novidades133_aberto() || novidades134_aberto() || novidades139_aberto() ||
       novidades1312_aberto() || novidades142_aberto() || novidades148_aberto() ||
-      novidades170_aberto() || novidades180_aberto() || novidades20_aberto() || novidades201_aberto() || novidades202_aberto() || telemetria_aberto() || recintro_aberto() ||
+      novidades170_aberto() || novidades180_aberto() || novidades20_aberto() || novidades201_aberto() || novidades202_aberto() || novcartao_aberto() || telemetria_aberto() || recintro_aberto() ||
       atualizacao_aberta() || agendaviso_aberto() || avisos_cartao_aberto() ||
       glem_cartao_aberto() || recenviar_aberto() || pessoas_aberto() ||
       recomenda_aberta() || pipintro_aberto() || diagnostico_intro_aberto())
@@ -4897,6 +4912,14 @@ void app_desenhar(Uint32 agora) {
             NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
     ponteiro_camada();
     novidades202_desenhar(agora);
+    return;
+  }
+  if (novcartao_aberto() && !registro_aberto() && !player_aberto()) {
+    gfx_sem_recorte();
+    gfx_cor((GfxRect){0, 0, NV_TELA_W, NV_TELA_H}, 0,
+            NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
+    ponteiro_camada();
+    novcartao_desenhar(agora);
     return;
   }
   // The highlights modal owns input and covers almost the whole screen.
@@ -5011,6 +5034,7 @@ void app_desenhar(Uint32 agora) {
   if (!registro_aberto() && novidades20_visivel()) novidades20_desenhar(agora);
   if (!registro_aberto()) novidades201_desenhar(agora);   // so o esmaecer de saida
   if (!registro_aberto()) novidades202_desenhar(agora);
+  if (!registro_aberto()) novcartao_desenhar(agora);      // so o esmaecer de saida
   CAMADA_SE(telemetria_aberto());
   if (!registro_aberto()) telemetria_desenhar(agora);
   CAMADA_SE(recintro_aberto());
@@ -5124,7 +5148,7 @@ int app_central_pode(void) {
   return tela != TELA_LOGIN && tela != TELA_ESCOLHA_PERFIL && login_concluido() &&
          perfilsel_concluido() && !registro_aberto() && !spot_aberto() &&
          !teclado_aberto() && !diagnostico_intro_aberto() && !novidades20_aberto() &&
-         !novidades201_aberto() && !novidades202_aberto();
+         !novidades201_aberto() && !novidades202_aberto() && !novcartao_aberto();
 }
 
 void app_encerrar(void) {

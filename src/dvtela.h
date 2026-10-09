@@ -100,6 +100,15 @@ const char *dvtela_nome_saida(int saida);
 // Desenho (dvtelaui.c), por cima de tudo do player e da ilha.
 void dvtela_desenhar(Uint32 agora);
 
+// A previa das novidades (novidades_cartao.c): o mesmo cartao, em miniatura,
+// com o estado que o chamador monta (dvt_entrar / dvt_passo) e molas proprias.
+// Nao mexe na instancia do player. dt em segundos, agora em ms.
+void  dvtela_previa_zerar(void);
+void  dvtela_previa_avancar(const DvtelaEstado *e, float dt);
+void  dvtela_previa_desenhar(float x, float y, float s, const DvtelaEstado *e, Uint32 agora, float a);
+float dvtela_previa_largura(void);
+float dvtela_previa_altura(void);
+
 #ifdef NV_SHOT_HOOKS
 void dvtela_shot_relogio(Uint32 ms);   // capturas: o brilho do passo parado num instante
 #endif
