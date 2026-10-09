@@ -88,6 +88,8 @@ void stream_lista_acrescentar(const Stream *l, int n, int o) { (void)l; (void)n;
 void stream_invalidar(const char *p) { (void)p; }
 int stream_n(void) { return 0; }
 int stream_lista_do_alvo(const char *id) { (void)id; return 0; }
+// addons.c recarimba o id normalizado ("tt:1:1") do pedido.
+void stream_definir_alvo(const char *id) { (void)id; }
 Uint32 SDL_GetTicks(void) { return 1000; }
 const char *sessao_usuario(void) { return ""; }
 int perfis_ativo(void) { return 1; }
