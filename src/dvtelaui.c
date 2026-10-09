@@ -48,11 +48,16 @@ static Uint32 relogioFixo;
 void dvtela_shot_relogio(Uint32 ms) { relogioFixo = ms; }
 #endif
 
-// As molas do desenho (independentes da maquina, que so diz o estado).
-static float vao = 1.0f, vaoV;          // 1 = camada solta no alto, 0 = encaixada
-static float luz, luzV;                 // a camada do DV acesa (perfil achado)
-static float linhaAudio;                // a linha do audio abrindo espaco
-static float feito[DVT_PASSOS], feitoV[DVT_PASSOS];
+// As molas do desenho (independentes da maquina, que so diz o estado). Uma
+// instancia e a da tela de verdade; a previa das novidades tem a propria.
+typedef struct {
+  float vao, vaoV;          // 1 = camada solta no alto, 0 = encaixada
+  float luz, luzV;          // a camada do DV acesa (perfil achado)
+  float linhaAudio;         // a linha do audio abrindo espaco
+  float feito[DVT_PASSOS], feitoV[DVT_PASSOS];
+} Molas;
+static Molas molas = { .vao = 1.0f };
+static Molas molasPrevia = { .vao = 1.0f };
 
 void dvtela_definir_arte(const char *url) {
   snprintf(arteUrl, sizeof arteUrl, "%s", url ? url : "");
@@ -109,9 +114,9 @@ static void placa(GfxRect r, float cr, float cg, float cb, float fill, float bor
   gfx_anel(r, 22.0f / r.h, 1.5f, 1, 1, 1, borda * a);
 }
 
-static void ilustracao(float x, float y, float w, float h, Uint32 agora, float a) {
+static void ilustracao(const DvtelaEstado *e, const Molas *m, float x, float y, float w, float h, Uint32 agora, float a) {
   int red = ajustes_animacoes_reduzidas();
-  const DvtelaEstado *e = dvtela_estado();
+  const float vao = m->vao, luz = m->luz;
   float ar, ag, ab, cx = x + w * 0.5f;
   float respira = red ? 0.0f : sinf((float)(agora % 4000u) / 4000.0f * 6.2831853f);
   float yBase = y + h * 0.5f + 34.0f;            // topo da placa de baixo
@@ -211,16 +216,15 @@ static int montarLinhas(const DvtelaEstado *e, Linha L[DVT_PASSOS]) {
   return atual;
 }
 
-static void passos(float x, float y, float w, Uint32 agora, float a) {
-  const DvtelaEstado *e = dvtela_estado();
+static void passos(const DvtelaEstado *e, const Molas *m, float x, float y, float w, Uint32 agora, float a) {
   Linha L[DVT_PASSOS];
   float ar, ag, ab, yy = y;
   int i;
   ajustes_acento(&ar, &ag, &ab);
   montarLinhas(e, L);
   for (i = 0; i < DVT_PASSOS; i++) {
-    float vis = i == DVT_PASSO_AUDIO ? linhaAudio : (L[i].visivel ? 1.0f : 0.0f);
-    float cy = yy + LIN_H * 0.5f, f = feito[i];
+    float vis = i == DVT_PASSO_AUDIO ? m->linhaAudio : (L[i].visivel ? 1.0f : 0.0f);
+    float cy = yy + LIN_H * 0.5f, f = m->feito[i];
     if (vis <= 0.01f) continue;
     // O MARCADOR: anel apagado (vem), ponto que respira (agora), visto no
     // acento que cresce com a mola (feito).
@@ -255,10 +259,73 @@ static int dvtPont;
 int dvtela_teste_ponteiro(void) { return dvtPont; }
 
 // ------------------------------------------------------------------ o cartao
+// As molas seguem o estado real (a mola2 parte macia e nao passa do alvo).
+static void molasSeguir(Molas *m, const DvtelaEstado *e, float dt) {
+  int i;
+  float alvoVao = e->passo >= DVT_PASSO_IMAGEM ? 0.0f : e->passo >= DVT_PASSO_ABRIR ? 0.45f : 1.0f;
+  Linha L[DVT_PASSOS];
+  if (!e->ativa && e->saida == DVT_SAIDA_DV) alvoVao = 0.0f;
+  m->vao = anim_mola2(&m->vaoV, m->vao, alvoVao, dt, 6.5f);
+  m->luz = anim_mola2(&m->luzV, m->luz, e->perfil > 0 ? 1.0f : 0.0f, dt, 8.0f);
+  m->linhaAudio = anim_mola(m->linhaAudio, e->audioTrocado ? 1.0f : 0.0f, dt, NV_MOLA_TELA);
+  montarLinhas(e, L);
+  for (i = 0; i < DVT_PASSOS; i++)
+    m->feito[i] = anim_mola2(&m->feitoV[i], m->feito[i], L[i].feito ? 1.0f : 0.0f, dt, 14.0f);
+}
+
+static void molasZerar(Molas *m) {
+  memset(m, 0, sizeof *m);
+  m->vao = 1.0f;
+}
+
+// O cartao inteiro (vidro, texto, passos, botao e a ilustracao) com o canto de
+// cima a esquerda em (cx0, cy0), em 1320 x 720. Sem o fundo e sem ponteiro:
+// quem chama decide. `dica` e o alfa da dica calma, `foco` o botao em foco.
+static void cartao(const DvtelaEstado *e, const Molas *m, Uint32 agora, float a, float cx0, float cy0,
+                   float dica, int foco, int comPonteiro) {
+  GfxRect c = { cx0, cy0, C_W, C_H };
+  float tx = cx0 + C_PAD, ty = cy0 + C_PAD;
+  float ar, ag, ab;
+  ajustes_acento(&ar, &ag, &ab);
+  gfx_sombra_sob((GfxRect){ c.x - 60, c.y - 20, c.w + 120, c.h + 110 }, 1.0f, 0, 0.10f, 0, 0, 0,
+                 0.55f * a, c, C_RAIO, 0.92f * a);
+  vidro(c, C_RAIO, a);
+  gfx_luz_canto(c, C_RAIO / c.h, c.w * 0.82f, -c.h * 0.10f, c.h * 1.1f, ar, ag, ab, 0.10f * a);
+
+  ajustes_ui_kicker(i18n("Dolby Vision em MKV"), tx, ty, a);
+  { TxtLinha l = txt_linha_corta(TXT_NOV_TITULO, i18n("Ligando o Dolby Vision"), 243, 242, 239, 255, COL_W);
+    txt_desenhar_alpha(l, tx, ty + 30.0f, a); }
+  txt_bloco_corta(TXT_V3_SUB, i18n("Esta TV abre MKV em HDR10. Para ter Dolby Vision, o app lê o arquivo e "
+                                   "entrega a imagem à TV. Leva alguns segundos."),
+                  243, 242, 239, tx, ty + 104.0f, COL_W - 40.0f, 33.0f, 0.64f * a, 3);
+
+  passos(e, m, tx, ty + 232.0f, COL_W, agora, a);
+
+  // A DICA CALMA (60 s sem mudanca): em ambar, embaixo da ilustracao, na
+  // altura do botao que ela menciona. Nao e erro: nada pisca, nada fica
+  // vermelho.
+  if (dica > 0.01f) {
+    float xd = cx0 + C_W - C_PAD - IL_W, yd = cy0 + C_H - C_PAD - BOTAO_H_SECUNDARIO - 4.0f + (1.0f - dica) * 6.0f;
+    gfx_icone((GfxRect){ xd, yd + 4.0f, 22.0f, 22.0f }, "aj_clock", 1.0f, 0.77f, 0.35f, dica * a);
+    txt_bloco_corta(TXT_V3_SUB, i18n("A fonte está lenta. Dá para esperar ou assistir em HDR10."),
+                    255, 196, 90, xd + 34.0f, yd, IL_W - 34.0f, 30.0f, 0.92f * dica * a, 2);
+  }
+
+  // O botao (o unico foco) e a dica do Voltar.
+  { const char *rot = i18n("Assistir agora em HDR10");
+    float bw = botao_largura(rot, "aj_tv-minimal-play", 0);
+    GfxRect b = { tx, cy0 + C_H - C_PAD - BOTAO_H_SECUNDARIO, bw, BOTAO_H_SECUNDARIO };
+    const char *k[1] = { "Voltar" }, *r[1] = { "Sair" };
+    if (comPonteiro) ponteiro_alvo(b.x, b.y, b.w, b.h, ponteiroBotao, NULL, 0, 0);
+    botao_pilula(b, rot, "aj_tv-minimal-play", foco ? 1.0f : 0.0f, 0, 0, a);
+    plrui_dicas(k, r, 1, b.x + b.w + 28.0f, b.y + b.h * 0.5f, 0, a * 0.85f); }
+
+  ilustracao(e, m, cx0 + C_W - C_PAD - IL_W, cy0 + C_PAD, IL_W, C_H - 2.0f * C_PAD - 70.0f, agora, a);
+}
+
 void dvtela_desenhar(Uint32 agora) {
   const DvtelaEstado *e = dvtela_estado();
   float a = dvtela_alfa(), dt;
-  int i;
   if (!dvtela_visivel() || a <= 0.002f) { ultQuadro = 0; return; }
 #ifdef NV_SHOT_HOOKS
   if (relogioFixo) agora = relogioFixo;
@@ -266,19 +333,10 @@ void dvtela_desenhar(Uint32 agora) {
   dt = ultQuadro ? (float)(agora - ultQuadro) / 1000.0f : 1.0f / 60.0f;
   if (dt > 0.1f || dt < 0.0f) dt = 1.0f / 60.0f;
   ultQuadro = agora;
-  // As molas seguem o estado real (a mola2 parte macia e nao passa do alvo).
-  { float alvoVao = e->passo >= DVT_PASSO_IMAGEM ? 0.0f : e->passo >= DVT_PASSO_ABRIR ? 0.45f : 1.0f;
-    if (!e->ativa && e->saida == DVT_SAIDA_DV) alvoVao = 0.0f;
-    vao = anim_mola2(&vaoV, vao, alvoVao, dt, 6.5f);
-    luz = anim_mola2(&luzV, luz, e->perfil > 0 ? 1.0f : 0.0f, dt, 8.0f);
-    linhaAudio = anim_mola(linhaAudio, e->audioTrocado ? 1.0f : 0.0f, dt, NV_MOLA_TELA);
-    { Linha L[DVT_PASSOS];
-      montarLinhas(e, L);
-      for (i = 0; i < DVT_PASSOS; i++) feito[i] = anim_mola2(&feitoV[i], feito[i], L[i].feito ? 1.0f : 0.0f, dt, 14.0f); } }
+  molasSeguir(&molas, e, dt);
   if (e->ativa && e->passo == DVT_PASSO_LER && e->perfil == 0 && agora - e->entrouEm < 50u) {
     // Tela nova: as molas comecam do comeco (a anterior pode ter acabado encaixada).
-    vao = 1.0f; vaoV = 0.0f; luz = 0.0f; luzV = 0.0f; linhaAudio = 0.0f;
-    for (i = 0; i < DVT_PASSOS; i++) feito[i] = feitoV[i] = 0.0f;
+    molasZerar(&molas);
   }
 
   fundo(a);
@@ -292,45 +350,25 @@ void dvtela_desenhar(Uint32 agora) {
   }
   { ESCALA_SE_COUBER_INI(C_W, C_H);
     float sobe = (1.0f - a) * 18.0f;
-    float cx0 = (NV_TELA_W - C_W) * 0.5f, cy0 = (NV_TELA_H - C_H) * 0.5f + sobe;
-    GfxRect c = { cx0, cy0, C_W, C_H };
-    float tx = cx0 + C_PAD, ty = cy0 + C_PAD;
-    float ar, ag, ab;
-    ajustes_acento(&ar, &ag, &ab);
-    gfx_sombra_sob((GfxRect){ c.x - 60, c.y - 20, c.w + 120, c.h + 110 }, 1.0f, 0, 0.10f, 0, 0, 0,
-                   0.55f * a, c, C_RAIO, 0.92f * a);
-    vidro(c, C_RAIO, a);
-    gfx_luz_canto(c, C_RAIO / c.h, c.w * 0.82f, -c.h * 0.10f, c.h * 1.1f, ar, ag, ab, 0.10f * a);
-
-    ajustes_ui_kicker(i18n("Dolby Vision em MKV"), tx, ty, a);
-    { TxtLinha l = txt_linha_corta(TXT_NOV_TITULO, i18n("Ligando o Dolby Vision"), 243, 242, 239, 255, COL_W);
-      txt_desenhar_alpha(l, tx, ty + 30.0f, a); }
-    txt_bloco_corta(TXT_V3_SUB, i18n("Esta TV abre MKV em HDR10. Para ter Dolby Vision, o app lê o arquivo e "
-                                     "entrega a imagem à TV. Leva alguns segundos."),
-                    243, 242, 239, tx, ty + 104.0f, COL_W - 40.0f, 33.0f, 0.64f * a, 3);
-
-    passos(tx, ty + 232.0f, COL_W, agora, a);
-
-    // A DICA CALMA (60 s sem mudanca): em ambar, embaixo da ilustracao, na
-    // altura do botao que ela menciona. Nao e erro: nada pisca, nada fica
-    // vermelho.
-    { float da = dvtela_dica_alfa();
-      if (da > 0.01f) {
-        float xd = cx0 + C_W - C_PAD - IL_W, yd = cy0 + C_H - C_PAD - BOTAO_H_SECUNDARIO - 4.0f + (1.0f - da) * 6.0f;
-        gfx_icone((GfxRect){ xd, yd + 4.0f, 22.0f, 22.0f }, "aj_clock", 1.0f, 0.77f, 0.35f, da * a);
-        txt_bloco_corta(TXT_V3_SUB, i18n("A fonte está lenta. Dá para esperar ou assistir em HDR10."),
-                        255, 196, 90, xd + 34.0f, yd, IL_W - 34.0f, 30.0f, 0.92f * da * a, 2);
-      } }
-
-    // O botao (o unico foco) e a dica do Voltar.
-    { const char *rot = i18n("Assistir agora em HDR10");
-      float bw = botao_largura(rot, "aj_tv-minimal-play", 0);
-      GfxRect b = { tx, cy0 + C_H - C_PAD - BOTAO_H_SECUNDARIO, bw, BOTAO_H_SECUNDARIO };
-      const char *k[1] = { "Voltar" }, *r[1] = { "Sair" };
-      if (dvtPont) ponteiro_alvo(b.x, b.y, b.w, b.h, ponteiroBotao, NULL, 0, 0);
-      botao_pilula(b, rot, "aj_tv-minimal-play", dvtela_foco_botao() ? 1.0f : 0.0f, 0, 0, a);
-      plrui_dicas(k, r, 1, b.x + b.w + 28.0f, b.y + b.h * 0.5f, 0, a * 0.85f); }
-
-    ilustracao(cx0 + C_W - C_PAD - IL_W, cy0 + C_PAD, IL_W, C_H - 2.0f * C_PAD - 70.0f, agora, a);
+    cartao(e, &molas, agora, a, (NV_TELA_W - C_W) * 0.5f, (NV_TELA_H - C_H) * 0.5f + sobe,
+           dvtela_dica_alfa(), dvtela_foco_botao(), dvtPont);
     ESCALA_SE_COUBER_FIM(); }
 }
+
+// A PREVIA DAS NOVIDADES (novidades_cartao.h): o MESMO cartao, desenhado por
+// esta funcao, a `s` do tamanho com o canto em (x, y). O estado vem da maquina
+// de verdade (dvt_passo) e as molas sao as daqui, so que de uma instancia a
+// parte (dvtela_previa_avancar as anda): a tela do player nao e tocada. Sem
+// fundo, sem ponteiro, sem dica.
+void dvtela_previa_zerar(void) { molasZerar(&molasPrevia); }
+
+void dvtela_previa_avancar(const DvtelaEstado *e, float dt) { molasSeguir(&molasPrevia, e, dt); }
+
+void dvtela_previa_desenhar(float x, float y, float s, const DvtelaEstado *e, Uint32 agora, float a) {
+  gfx_transformar(x, y, s, 0.0f, 0.0f);
+  cartao(e, &molasPrevia, agora, a, x, y, 0.0f, 1, 0);
+  gfx_sem_transformar();
+}
+
+float dvtela_previa_largura(void) { return C_W; }
+float dvtela_previa_altura(void) { return C_H; }
