@@ -56,6 +56,7 @@ New Settings, a new episode menu, the Magic Remote pointer on almost every scree
 - **Home hero:** the logo arrives with the art, the next item is loaded ahead, and items from Trakt lists get their synopsis. The hero no longer turns while the profile picker is open. Switching titles quickly no longer loses a synopsis or crashes the app.
 - **LG Dolby Vision:** no more pause panel while the stream fills, and playback starts at the saved point. Smoother background on OLED.
 - **Android:** the saved aspect mode waits for the first frame, so Dolby Vision no longer opens dark.
+- **Android:** recreating the video surface (HDR start, aspect change) no longer freezes the remote for seconds while the decoder lets go of it, which could end in "app not responding".
 - **Speed test** keeps the byte range through debrid redirects, measures with 4 connections on Android again, and handles sources served as octet-stream.
 - **Crashes from threads racing each other** (watched episodes, parallel source check, catalog episodes, sign-in token, collections) (#203, #323).
 - **LG webOS 4:** startup crash from FreeType symbols, and startup crashes are now reported on the next launch (#317).
