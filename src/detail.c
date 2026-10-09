@@ -337,6 +337,7 @@ static float  trailerFade = 0.0f;
 static int   carro;                 // 1 = esta abertura e o carrossel
 static int   carN, carIdx[CAR_MAX];  // titulos da fileira (indices do catalogo)
 static int   carPos;                // titulo pedido pelo D-pad
+static char  carPre[CAR_MAX];       // 1 = vizinho ja pre-buscado (ou nada a buscar) nesta abertura
 static int   carAplicado;           // titulo cuja pagina esta montada (= idx)
 static int   carBotaoFim;           // chegou pela direita: foco no ultimo botao
 static int   carFocou;              // a home ja recebeu o titulo da volta
@@ -1489,6 +1490,7 @@ void detail_abrir(const HomeItem *it) {
   if (n > 0 && pos >= 0 && carIdx[pos] == it->indice) {
     carro = 1; carN = n; carPos = carAplicado = pos; carBotaoFim = 0; carFocou = 0; carEsperaRect = 0;
     carOff = (float)pos; carVel = 0.0f; cartao = 1.0f; cartaoVel = 0.0f;
+    memset(carPre, 0, sizeof carPre);
     carCheia = 0; carTxt = 1.0f; carTxtVel = 0.0f;
     carOrigem = it->rect;
     if (carOrigem.w < 8.0f || carOrigem.h < 8.0f)
@@ -1524,6 +1526,28 @@ static void carAplicar(void) {
   botao = carBotaoFim ? nBotoes() - 1 : 0;
   if (botao < 0) botao = 0;
   printf("[carrossel] titulo %d/%d: %s\n", carPos + 1, carN, ci->titulo); fflush(stdout);
+}
+// PRE-BUSCA DOS VIZINHOS (+1, depois -1): meta e lista de episodios prontas
+// antes de o foco chegar (C9, 2.0.3: "[meta]" e "[desc]" saiam na chegada).
+// So com o titulo em cena assentado e sem pedido proprio em voo; um fio de
+// cada vez e uma tentativa por titulo e por abertura (rede fora nao vira laco).
+static void carPreBuscar(void) {
+  static const int passo[2] = { 1, -1 };
+  int j;
+  if (desc_episodios_carregando(carIdx[carPos])) return;
+  for (j = 0; j < 2; j++) {
+    int k = carPos + passo[j], r;
+    if (k < 0 || k >= carN || carPre[k]) continue;
+    r = desc_episodios_precarregar(carIdx[k]);
+    if (r < 0) return;
+    carPre[k] = 1;
+    if (r > 0) {
+      const CatItem *ci = cat_item(carIdx[k]);
+      printf("[carrossel] pre-busca %d/%d: %s\n", k + 1, carN, ci ? ci->titulo : "");
+      fflush(stdout);
+      return;
+    }
+  }
 }
 static void carPasso(int d) {
   if (carCheia || nivel > 0) return;
@@ -3344,6 +3368,7 @@ void detail_atualizar(float dt, Uint32 agora) {
       const char *a = (k >= 0 && k < carN) ? arteDe(carIdx[k]) : NULL;
       if (a) (void)tex_obter_hero(a);
     }
+    if (carAplicado == carPos && !saindo && !carCheia) carPreBuscar();
     // VOLTA: a fileira recebe o titulo em cena e o cartao encolhe ate o cartaz
     // dele, que a home volta a desenhar (detail_cobre_tela = 0 saindo).
     if (saindo) {

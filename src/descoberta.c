@@ -7629,6 +7629,19 @@ void desc_episodios_garantir(int indiceItem) {
   desc_episodios(indiceItem, 0);
 }
 
+// PRE-BUSCA do carrossel (detail.c): a mesma regra de desc_episodios_garantir,
+// mas NUNCA enfileira nem toma o lugar de um pedido de verdade. Fio em voo ou
+// pedido guardado = -1 (tente de novo); nada a pedir = 0; pedido saiu = 1.
+int desc_episodios_precarregar(int indiceItem) {
+  const CatItem *ci = cat_item(indiceItem);
+  if (!ci || !ci->imdb[0]) return 0;
+  if (!(!strcmp(ci->tipo, "series") || strcmp(ci->tipo, "movie") || ci->nElenco == 0)) return 0;
+  if (cat_n_episodios(indiceItem) > 0) return 0;
+  if (fioEpVivo || pendItem >= 0) return -1;
+  desc_episodios(indiceItem, 0);
+  return fioEpVivo ? 1 : 0;
+}
+
 int desc_episodios_carregando(int indiceItem) {
   return (fioEpVivo && epItem == indiceItem) || pendItem == indiceItem;
 }
