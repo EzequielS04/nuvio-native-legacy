@@ -136,6 +136,7 @@ typedef struct {
   UsoHost usoHost[REDE_HOSTS_POR_FIO];
   long teto;
   int restoRecusado;
+  int lateral;
   char erroTxt[200];
   char erroBuf[256];
 } RedeFio;
@@ -169,6 +170,7 @@ long *rede_teto_ptr(void) { return &redeFio()->teto; }
 #define redeParcialOk     (redeFio()->parcialOk)
 #define usoHost           (redeFio()->usoHost)
 #define redeRestoRecusado (redeFio()->restoRecusado)
+#define redeLateral       (redeFio()->lateral)
 #else
 /* Controle local da requisicao corrente. O estado nunca e compartilhado
  * entre sondagens: cada fio recebe seu teto e seu cancel token. */
@@ -177,6 +179,8 @@ static _Thread_local volatile int *redeCancelLocal;
 static _Thread_local int redeLimitouLocal;
 static _Thread_local int redeCancelouLocal;
 static _Thread_local long redeBytesLocal;
+// 1 = este fio e leitura lateral ao video (rede_lateral, #385).
+static _Thread_local int redeLateral;
 #endif
 static unsigned long redeAgoraMs(void);
 
@@ -1715,8 +1719,15 @@ static char *rede_baixar_interno(const char *url, int segundos, long *tam,
 // o prazo inteiro nao repete: o prazo e do pedido, nao de cada tentativa, e
 // quem chama continua sabendo quanto vai esperar no maximo. Corte de proposito
 // (teto, curl 23), cancelamento e resposta HTTP de erro nunca repetem.
+//
+// EXCECAO (#385): Range de leitura LATERAL ao video (rede_lateral) cuja
+// conexao foi recusada ou nao fechou o aperto de mao. No registro do .tpk o no
+// do CDN do TorBox recusava toda conexao nossa com o video aberto, e cada
+// Range da pre-busca virava duas. A segunda conexao ao host que acabou de
+// recusar nao ajuda a legenda e e mais uma batida no CDN que o player usa.
 static int valeRepetir(int r, const Vigia *v, size_t bytes) {
   if (redeCancelouLocal) return 0;
+  if (redeLateral && redeParcialOk && (r == 6 || r == 7 || r == 35)) return 0;
   if (r == 42) return v->parou;            // vigia: corpo parado
   if (bytes > 0) return 0;
   return r == 7 || r == 28 || r == 35 || r == 52 || r == 55 || r == 56;
@@ -2768,6 +2779,99 @@ static void corteHostDe(const char *u, char *h, size_t n) {
   h[k] = 0;
 }
 
+// PAUSA DO HOST QUE RECUSOU CONEXAO (#385), so para a leitura LATERAL ao
+// video (rede_lateral). No registro do .tpk o no do CDN do TorBox recusou 11
+// conexoes nossas em 13-15 s logo depois de o video abrir: a pre-busca da
+// legenda (5 Ranges, cada um em duas conexoes) e a sonda do MKV pela rede, ao
+// mesmo tempo, e o player caiu com ConnectionFailed. Recusa de CONEXAO e o CDN
+// pedindo calma tanto quanto o curl 28 / 429 / 5xx do #308, entao o mesmo
+// ritmo: 10 s, dobrando ate 60 s, solta no primeiro Range lateral que der
+// certo. Por host (esquema, host e porta) do endereco pedido E do endereco em
+// que a conexao falhou (o redirecionador do addon e o no do CDN): o proximo
+// Range lateral nao paga nem o 302. O player, o proxy do player, a conferencia
+// da fonte e o resto do app nao passam por aqui.
+#ifndef REDE_CALMA_INI_MS
+#define REDE_CALMA_INI_MS 10000UL
+#endif
+#ifndef REDE_CALMA_MAX_MS
+#define REDE_CALMA_MAX_MS 60000UL
+#endif
+#define REDE_CALMA_HOSTS 8
+typedef struct { char h[96]; unsigned long ate, pausa; int erro, avisou; } CalmaHost;
+static CalmaHost calmaHost[REDE_CALMA_HOSTS];
+static int calmaProx;
+static pthread_mutex_t calmaTrava = PTHREAD_MUTEX_INITIALIZER;
+
+void rede_lateral(int sim) { redeLateral = sim ? 1 : 0; }
+
+// curl 6 (o nome do no nao resolve), 7 (conexao recusada / sem rota) e 35 (o
+// aperto de mao TLS caiu): a conexao nem abriu. Prazo (28) e HTTP ficam com
+// quem ja tratava deles (rede.c repete, o mkvass pausa pelo #308).
+static int conexaoRecusada(int e) { return e == 6 || e == 7 || e == 35; }
+
+// O host de `url` esta em pausa? Devolve os ms que faltam (0 = livre) e o
+// codigo que a abriu. `*avisar` = 1 so na primeira consulta desta pausa.
+static unsigned long calmaFalta(const char *url, int *erro, int *avisar) {
+  char h[96];
+  unsigned long agora = redeAgoraMs(), falta = 0;
+  int i;
+  *avisar = 0;
+  corteHostDe(url, h, sizeof h);
+  if (!h[0]) return 0;
+  pthread_mutex_lock(&calmaTrava);
+  for (i = 0; i < REDE_CALMA_HOSTS; i++)
+    if (calmaHost[i].h[0] && !strcmp(calmaHost[i].h, h) && calmaHost[i].ate > agora) {
+      falta = calmaHost[i].ate - agora;
+      *erro = calmaHost[i].erro;
+      if (!calmaHost[i].avisou) { calmaHost[i].avisou = 1; *avisar = 1; }
+      break;
+    }
+  pthread_mutex_unlock(&calmaTrava);
+  return falta;
+}
+
+// A conexao a `url` falhou com `erro`: abre (ou dobra) a pausa do host.
+// Devolve a pausa aplicada em ms (0 = sem host).
+static unsigned long calmaAbrir(const char *url, int erro) {
+  char h[96];
+  unsigned long agora = redeAgoraMs(), pausa;
+  int i, achou = -1;
+  corteHostDe(url, h, sizeof h);
+  if (!h[0]) return 0;
+  pthread_mutex_lock(&calmaTrava);
+  for (i = 0; i < REDE_CALMA_HOSTS; i++)
+    if (calmaHost[i].h[0] && !strcmp(calmaHost[i].h, h)) { achou = i; break; }
+  if (achou < 0) {
+    achou = calmaProx; calmaProx = (calmaProx + 1) % REDE_CALMA_HOSTS;
+    snprintf(calmaHost[achou].h, sizeof calmaHost[achou].h, "%s", h);
+    calmaHost[achou].pausa = 0;
+  }
+  // Ainda dentro da pausa (outro fio lateral ja abriu): nao dobra de novo.
+  if (calmaHost[achou].pausa && calmaHost[achou].ate > agora) pausa = calmaHost[achou].pausa;
+  else {
+    pausa = calmaHost[achou].pausa ? calmaHost[achou].pausa * 2 : REDE_CALMA_INI_MS;
+    if (pausa > REDE_CALMA_MAX_MS) pausa = REDE_CALMA_MAX_MS;
+    calmaHost[achou].pausa = pausa;
+    calmaHost[achou].ate = agora + pausa;
+    calmaHost[achou].avisou = 0;
+  }
+  calmaHost[achou].erro = erro;
+  pthread_mutex_unlock(&calmaTrava);
+  return pausa;
+}
+
+// Range lateral que deu certo: o host atendeu, a pausa (e o dobro) acabam.
+static void calmaSoltar(const char *url) {
+  char h[96];
+  int i;
+  corteHostDe(url, h, sizeof h);
+  if (!h[0]) return;
+  pthread_mutex_lock(&calmaTrava);
+  for (i = 0; i < REDE_CALMA_HOSTS; i++)
+    if (calmaHost[i].h[0] && !strcmp(calmaHost[i].h, h)) calmaHost[i].h[0] = 0;
+  pthread_mutex_unlock(&calmaTrava);
+}
+
 long rede_corte_host(const char *url) {
   char h[96];
   long t = 0;
@@ -2821,6 +2925,23 @@ char *rede_baixar_trecho_st(const char *url, int segundos, long long ini, long l
   if (erro) *erro = 0;
   if (final && tamFinal) final[0] = 0;
   redeRestoRecusado = 0;
+  // #385: host em pausa por conexao recusada. Nenhuma conexao: o mesmo codigo,
+  // na hora, para quem chama tratar como a falha que ja foi.
+  if (redeLateral && url) {
+    int e0 = 0, avisar = 0;
+    unsigned long falta = calmaFalta(url, &e0, &avisar);
+    if (falta) {
+      if (avisar) {
+        char h[96];
+        corteHostDe(url, h, sizeof h);
+        printf("[rede] %s em pausa (recusou conexao, curl %d): Range lateral sem conexao por mais %lu ms\n",
+               h, e0, falta);
+        fflush(stdout);
+      }
+      if (erro) *erro = e0;
+      return NULL;
+    }
+  }
   if (!url || pedido <= 0) return trechoUmaVez(url, segundos, ini, fim, tam, status, erro, final, tamFinal);
   snprintf(atual, sizeof atual, "%s", url);
   for (;;) {
@@ -2841,10 +2962,25 @@ char *rede_baixar_trecho_st(const char *url, int segundos, long long ini, long l
     // servidor recusou o resto. A diferenca para "rede lenta" e o que decide o
     // recuo longo no mkvass.
     if (!r && veio > 0 && n == 0 && e != 28) redeRestoRecusado = 1;
+    if (!r && redeLateral && conexaoRecusada(e)) {
+      // #385: a conexao nem abriu. Pausa no host pedido e no que recusou (o
+      // no do CDN, quando houve redirecionamento); uma linha so por pausa.
+      char h[96];
+      unsigned long p = calmaAbrir(atual, e);
+      if (strcmp(atual, url)) calmaAbrir(url, e);
+      if (fin[0]) { char hf[96], ha[96];
+        corteHostDe(fin, hf, sizeof hf); corteHostDe(atual, ha, sizeof ha);
+        if (hf[0] && strcmp(hf, ha)) calmaAbrir(fin, e); }
+      corteHostDe(atual, h, sizeof h);
+      printf("[rede] %s recusou conexao (curl %d, Range lateral ao video): sem conexao nova a este host por %lu ms\n",
+             h, e, p);
+      fflush(stdout);
+    }
     if (!r) goto falhou;
     // Sem 206 o servidor ignorou o Range (200 com o comeco do arquivo): no
     // primeiro pedido e o contrato de sempre (quem chama recebe o que veio);
     // no meio de um trecho ja em pedacos, o que viria nao e o resto.
+    if (redeLateral) calmaSoltar(atual);
     if (st != 206) {
       if (pedacos == 1) { if (tam) *tam = n; if (status) *status = st; return r; }
       free(r); goto falhou;

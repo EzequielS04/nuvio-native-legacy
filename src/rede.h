@@ -200,6 +200,17 @@ long rede_corte_host(const char *url);
 // o Real-Debrid, com o video tocando). Ler logo depois da chamada, no mesmo fio.
 int rede_resto_recusado(void);
 
+// LEITURA LATERAL AO VIDEO (#385). O fio que chama rede_lateral(1) e uma
+// leitura AO LADO do player no mesmo arquivo (pre-busca e colheita do mkvass,
+// sonda do MKV, capitulos): nunca o proprio video nem o proxy dele. Nesses
+// fios um Range cuja CONEXAO falha (curl 6, 7 ou 35: o no do CDN recusou,
+// sumiu ou derrubou o aperto de mao) nao repete "em conexao nova", e o host
+// entra em PAUSA (10 s, dobrando ate 60 s, como o #308): ate ela vencer,
+// todo Range lateral a ele volta na hora com o mesmo codigo, sem abrir
+// conexao. O primeiro Range lateral que da certo solta a pausa. Vale para o
+// fio inteiro: chamar no comeco de um fio proprio.
+void rede_lateral(int sim);
+
 // Teto de bytes da transferencia corrente (0 = sem teto). E interno ao modulo;
 // esta exposto so porque rede_baixar_trecho o usa. Nao mexer de fora.
 //
