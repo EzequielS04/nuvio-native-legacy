@@ -29,7 +29,7 @@ Pequenos recursos de player e Biblioteca que já têm código fora da 2.0.3, mai
 - **Biblioteca: indicadores de visto, esconder assistidos, vitrine de coleção, detalhes da fonte** (#352, #366, #362, #355): Pequenos, cada um em seu branch agente/204-*; não dependem do redesign.
 - **Catálogos da conta, sync de add-ons, fonte recusada, P2P por formato** (#358, #365, #360, #364, #349): Branches agente/204-conta-catalogos, 204-sync-addons, 204-fonte-recusada prontos ou quase.
 - **Samsung: DTS/TrueHD escondido (fase 1)** (#313): Plano e spike em agente/204-samsung-dts (docs/plans); fase 1 já planejada para a 2.0.4.
-- **Android: fileiras ilimitadas na Home, armazenamento rotativo do P2P** (#334): agente/204-fileiras-android e agente/203-334/-334-janela existem e ficaram fora da 2.0.3 por risco.
+- **Android: fileiras ilimitadas na Home, armazenamento rotativo do P2P** (#334): agente/204-fileiras-android e agente/203-334-janela (janela de streaming do P2P) existem e ficaram fora da 2.0.3 por risco.
 - **Triagem de bugs sem conserto e dois pedidos pequenos (#306, #337)** (#288, #315, #316, #344, #345, #346, #353, #357, #367, #372, #373, #378, #379, #306, #337): Todos aguardam log do autor; entram na 2.0.4 se o log aparecer a tempo, senão escorregam.
 
 ### 2.1 - próxima grande; sem data
@@ -72,7 +72,7 @@ Plano de refatoração: `docs/plans/refatoracao-geral.md` (branch `agente/refato
 
 1. Próximo episódio automático após 5 s: entra na 2.0.4 junto da contagem do #331, ligado por padrão ou desligado? Recomendação: 2.0.4, desligado por padrão, valor configurável. O #256 ainda pede que o card volte depois de dispensado; isso fica fora.
 2. #360 (botão Sincronizar addons) fica em 2.0.4 mesmo com a mescla do sync já na 2.0.3? Recomendação: Sim, 2.0.4; corrigir a resposta que perguntou "on 2.0.3?" dizendo que a mescla vem agora e o botão depois.
-3. #318, #323 e #334 saem como 2.0.3 mesmo com commits ainda fora (c8793c11, f349c2f7/4d22e4f7, armazenamento rotativo)? Recomendação: Sim: o essencial está em 2.0.3. Integrar c8793c11 e f349c2f7 se ainda der (são conserto de travamento); armazenamento rotativo fica 2.0.4.
+3. #334 sai como 2.0.3 só com o limite de P2P e a limpeza, e a janela de streaming (armazenamento rotativo, agente/203-334-janela) fica para a 2.0.4? Recomendação: Sim: limite e limpeza já estão em 2.0.3; a janela muda o motor de P2P e a 2.0.3 está congelada. Avisar na issue que o rotativo vem na 2.0.4.
 4. #326 e #338 foram prometidos para "próxima atualização/next build" e o código só está em branches de 2.0.4. Responder já avisando 2.0.4? Recomendação: Sim, corrigir a promessa agora.
 5. Bugs sem log (#288, #315, #316, #344-346, #353, #357, #367, #372, #373, #378, #379) ficam todos em 2.0.4? Recomendação: Sim como alvo de triagem, mas sem prometer: pedir log primeiro; os que não chegarem com log em 30 dias viram "precisa-log" e saem do alvo.
 6. Blackbar/crop: 2.1 ou 2.0.4? Recomendação: 2.1. É recurso novo, sem branch e toca os três pipelines de vídeo.
@@ -134,12 +134,12 @@ Abertas sem nenhum comentário nosso: 37.
 | [#311](https://github.com/iqui27/nuvio-native-legacy/issues/311) | [suggestion] option to disable "from nuvio search" | ? | feature | consertada-nao-lancada | 2.0.3 | 2.0.3 | 607b25bf, a86e55c2, 0d5ca11b | nós 10-08 | avisar Namer03 quando sair (prometido: "I'll ping") |
 | [#312](https://github.com/iqui27/nuvio-native-legacy/issues/312) | few minor bugs, none affect use | LG | bug | consertada-nao-lancada | 2.0.3 | 2.0.3 | a86e55c2, 317cb179 | nós 10-08 | postar correção |
 | [#317](https://github.com/iqui27/nuvio-native-legacy/issues/317) | App doesn't  open on my LG webOS Tv UK6550PSB | LG | bug | consertada-nao-lancada | 2.0.3 | 2.0.3 | 9a17b810, 8cf12920, d423b051 | nós 10-07 | nada (aguardar release 2.0.3) |
-| [#318](https://github.com/iqui27/nuvio-native-legacy/issues/318) | screen flickers and stops responding when pressing OK (andro | Android | bug | consertada-nao-lancada | 2.0.3 | 2.0.3 | 142ae407, 773658c8, c8793c11 | autor 10-08 | responder (autor testou teste-318.3: ok, enviou log) |
+| [#318](https://github.com/iqui27/nuvio-native-legacy/issues/318) | screen flickers and stops responding when pressing OK (andro | Android | bug | consertada-nao-lancada | 2.0.3 | 2.0.3 | 142ae407, 773658c8, 730556e1 | autor 10-08 | responder (autor testou teste-318.3: ok, enviou log) |
 | [#319](https://github.com/iqui27/nuvio-native-legacy/issues/319) | Home row still not updating properly | ? | bug | consertada-nao-lancada | 2.0.3 | 2.0.3 | 66e6ae9e, 3c51d5b7, 0fcfa601 | nós 10-07 | nada (aguardar release 2.0.3) |
 | [#320](https://github.com/iqui27/nuvio-native-legacy/issues/320) | Arabic language in Subtitle shows no glyph font | Samsung .tpk | bug | consertada-nao-lancada | 2.0.3 | 2.0.3 | 22ecac46, 8ab3b78f | nós 10-07 | nada (aguardar release 2.0.3) |
 | [#321](https://github.com/iqui27/nuvio-native-legacy/issues/321) | The "not started" label does not shift downwards. | Samsung .tpk | bug | consertada-nao-lancada | 2.0.3 | 2.0.3 | b347004c | nós 10-07 | nada (aguardar release 2.0.3) |
 | [#322](https://github.com/iqui27/nuvio-native-legacy/issues/322) | Can't delete from Continue watching on the home screen | Samsung .tpk | bug | consertada-nao-lancada | 2.0.3 | 2.0.3 | b8d110de | nós 10-07 | nada (aguardar release 2.0.3) |
-| [#323](https://github.com/iqui27/nuvio-native-legacy/issues/323) | App crashes on playback | Android | bug | consertada-nao-lancada | 2.0.3 | 2.0.3 | 1b6c9a89, f349c2f7, 4d22e4f7 | autor 10-07 | nada (autor confirmou: sem o passo de múltiplas fontes não cai) |
+| [#323](https://github.com/iqui27/nuvio-native-legacy/issues/323) | App crashes on playback | Android | bug | consertada-nao-lancada | 2.0.3 | 2.0.3 | 1b6c9a89, 696afa74 | autor 10-07 | nada (autor confirmou: sem o passo de múltiplas fontes não cai) |
 | [#327](https://github.com/iqui27/nuvio-native-legacy/issues/327) | Hero doesn’t working / Catalog bug | Samsung .wgt | bug | consertada-nao-lancada | 2.0.3 | - | 8ab1b19b, d268b069 | autor 10-07 | nada (aguardar release 2.0.3) |
 | [#328](https://github.com/iqui27/nuvio-native-legacy/issues/328) | 🐛 Bug Report: Episodes Are Being Duplicated | ? | bug | consertada-nao-lancada | 2.0.3 | 2.0.3 | 9c5d0027, 7edab4b0 | sem comentários | responder (sem resposta nossa) |
 | [#330](https://github.com/iqui27/nuvio-native-legacy/issues/330) | [Bug]extremely laggy after repeated playback | ? | bug | consertada-nao-lancada | 2.0.3 | 2.0.3 | 2f047898 | sem comentários | responder (sem resposta nossa) |
@@ -172,14 +172,14 @@ Notas:
 - **#311**: Resposta corrigiu: opções de busca não estão na 2.0.2, saem na 2.0.3.
 - **#312**: Nossa resposta disse que "Dolby Vision in MKV" vem LIGADO por padrão: ERRADO, é DESLIGADO (docs 203-dvmkv-decisao.md; ajustes_ux_padrao.inc). Resumo traduzido e "All sources" saem na 2.0.3, não na 2.0.2.
 - **#317**: LG webOS 4 com pouca RAM; partes na 2.0.2 (0fcfa601, 937f8e6b).
-- **#318**: c8793c11 (agente/203-318-play) ainda não integrado em integracao/2.0.3. Em 6a9140c2 o c8793c11 (agente/203-318-play) continua fora; o grosso do conserto (MStar, relatório de queda) está em 2.0.3.
+- **#318**: Tudo integrado em 2.0.3. O relator de queda nativa no Android < 12 (c8793c11 em agente/203-318-play) entrou como 142ae407, o mesmo commit com outro hash; tests/queda.sh passa em c3c1032e.
 - **#320**: Nenhum commit cita #320; 22ecac46/8ab3b78f ("tpk: arabic plain subtitles find Noto Naskh when the installed res/ predates 2.0.2") batem com a promessa "o próximo update busca a fonte sozinho".
 - **#321**: b347004c "rotulo de secao desce com o cartao aberto" (cita #203 = versão); NOTAS 2.0.3 o lista.
 - **#322**: b8d110de: up next removível + opção para desligar (cita "#203" = versão).
-- **#323**: 1b6c9a89 na 2.0.3; f349c2f7 (agente/203-318-play) e 4d22e4f7 (agente/203-323) ainda não integrados. Em 6a9140c2 f349c2f7 e 4d22e4f7 continuam fora; 1b6c9a89 (travas entre threads) está em 2.0.3.
+- **#323**: Tudo integrado em 2.0.3. O SIGSEGV em verificarOuParar (Conferencia na pilha) está consertado por 696afa74, que veio no merge 1b6c9a89: a Conferencia vai para o heap com contagem e é solta pelo último fio. f349c2f7/4d22e4f7 são uma versão anterior do mesmo conserto (sem liberar) e não precisam entrar; SANITIZE=1 tests/fonteparalela.sh passa em c3c1032e.
 - **#327**: Fechada no GitHub antes do release 2.0.3.
 - **#332**: SUSPEITA: relato Sony BRAVIA preso em "rede _preparar"; commits citados são os do #266. A resposta final do dono fala de outro assunto (contorno do vidro dos pôsteres, citado como "corrigido para a próxima versão"). teste-shield-266.2 não resolveu segundo EzequielS04.
-- **#334**: Limite de P2P e limpeza na 2.0.3. "Armazenamento rotativo" (prometido como planejado) está em agente/203-334 e agente/203-334-janela, ainda NÃO integrados. Em 6a9140c2 o armazenamento rotativo continua fora (alvo 2.0.4 para essa parte); limite de P2P e limpeza estão em 2.0.3.
+- **#334**: Limite de P2P e limpeza integrados em 2.0.3 (d3ca720b, c3e19d00, merge 891a72a9 de agente/203-334b; agente/203-334 tem os mesmos dois commits com outro hash). Só a janela de streaming ("armazenamento rotativo", prometido como planejado: d453fd1c e 8e09dad2 em agente/203-334-janela) NÃO está integrada; alvo 2.0.4 para essa parte.
 - **#341**: SUSPEITA: nenhum commit cita #341; beb5007a "tpk 4/5: botão de aspecto/zoom do player passa a ter efeito" está na 2.0.3 e NOTAS cita "aspect/zoom button on Tizen 4/5".
 - **#350**: Rascunho de correção: nome do ajuste é "OK no card"; "Ver detalhes" no menu de segurar sai na 2.0.3. Autor relatou depois filme travando durante TV ao vivo: responder.
 - **#356**: d47a78c8 (Cinemeta antes da ficha Nuvio, 2.0.3) cobre uma suspeita, sem confirmação. Config "quanto à frente" planejada 2.0.4 (sem commit).

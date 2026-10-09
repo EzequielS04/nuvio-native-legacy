@@ -6804,7 +6804,6 @@
    "conserto": [
     "142ae407 (2.0.3)",
     "773658c8 (2.0.3)",
-    "c8793c11 (agente/203-318-play)",
     "730556e1 (2.0.3)",
     "a4b580a8 (2.0.3)",
     "8ecc6bdc (2.0.3)",
@@ -6818,7 +6817,7 @@
     "ultima_nossa": "2026-10-08"
    },
    "proximo_passo": "responder (autor testou teste-318.3: ok, enviou log)",
-   "notas": "c8793c11 (agente/203-318-play) ainda não integrado em integracao/2.0.3. Em 6a9140c2 o c8793c11 (agente/203-318-play) continua fora; o grosso do conserto (MStar, relatório de queda) está em 2.0.3.",
+   "notas": "Tudo integrado em 2.0.3. O relator de queda nativa no Android < 12 (c8793c11 em agente/203-318-play) entrou como 142ae407, o mesmo commit com outro hash; tests/queda.sh passa em c3c1032e.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/318",
    "criada_em": "2026-10-07",
    "alvo": "2.0.3"
@@ -6929,8 +6928,7 @@
    "release": "2.0.3",
    "conserto": [
     "1b6c9a89 (2.0.3)",
-    "f349c2f7 (agente/203-318-play)",
-    "4d22e4f7 (agente/203-323)"
+    "696afa74 (2.0.3)"
    ],
    "ultima_resposta": {
     "nos": false,
@@ -6939,7 +6937,7 @@
     "ultima_nossa": "2026-10-07"
    },
    "proximo_passo": "nada (autor confirmou: sem o passo de múltiplas fontes não cai)",
-   "notas": "1b6c9a89 na 2.0.3; f349c2f7 (agente/203-318-play) e 4d22e4f7 (agente/203-323) ainda não integrados. Em 6a9140c2 f349c2f7 e 4d22e4f7 continuam fora; 1b6c9a89 (travas entre threads) está em 2.0.3.",
+   "notas": "Tudo integrado em 2.0.3. O SIGSEGV em verificarOuParar (Conferencia na pilha) está consertado por 696afa74, que veio no merge 1b6c9a89: a Conferencia vai para o heap com contagem e é solta pelo último fio. f349c2f7/4d22e4f7 são uma versão anterior do mesmo conserto (sem liberar) e não precisam entrar; SANITIZE=1 tests/fonteparalela.sh passa em c3c1032e.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/323",
    "criada_em": "2026-10-07",
    "alvo": "2.0.3"
@@ -7192,9 +7190,7 @@
     "c3e19d00 (2.0.3)",
     "d3ca720b (2.0.3)",
     "8e09dad2 (agente/203-334-janela)",
-    "d453fd1c (agente/203-334-janela)",
-    "9077ae98 (agente/203-334)",
-    "d1085031 (agente/203-334)"
+    "d453fd1c (agente/203-334-janela)"
    ],
    "ultima_resposta": {
     "nos": true,
@@ -7203,7 +7199,7 @@
     "ultima_nossa": "2026-10-07"
    },
    "proximo_passo": "nada (aguardar release 2.0.3)",
-   "notas": "Limite de P2P e limpeza na 2.0.3. \"Armazenamento rotativo\" (prometido como planejado) está em agente/203-334 e agente/203-334-janela, ainda NÃO integrados. Em 6a9140c2 o armazenamento rotativo continua fora (alvo 2.0.4 para essa parte); limite de P2P e limpeza estão em 2.0.3.",
+   "notas": "Limite de P2P e limpeza integrados em 2.0.3 (d3ca720b, c3e19d00, merge 891a72a9 de agente/203-334b; agente/203-334 tem os mesmos dois commits com outro hash). Só a janela de streaming (\"armazenamento rotativo\", prometido como planejado: d453fd1c e 8e09dad2 em agente/203-334-janela) NÃO está integrada; alvo 2.0.4 para essa parte.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/334",
    "criada_em": "2026-10-07",
    "alvo": "2.0.3"
@@ -8250,7 +8246,7 @@
     },
     {
      "nome": "Android: fileiras ilimitadas na Home, armazenamento rotativo do P2P",
-     "porque": "agente/204-fileiras-android e agente/203-334/-334-janela existem e ficaram fora da 2.0.3 por risco.",
+     "porque": "agente/204-fileiras-android e agente/203-334-janela (janela de streaming do P2P) existem e ficaram fora da 2.0.3 por risco.",
      "issues": [
       334
      ]
@@ -8376,11 +8372,9 @@
    ]
   },
   {
-   "pergunta": "#318, #323 e #334 saem como 2.0.3 mesmo com commits ainda fora (c8793c11, f349c2f7/4d22e4f7, armazenamento rotativo)?",
-   "recomendacao": "Sim: o essencial está em 2.0.3. Integrar c8793c11 e f349c2f7 se ainda der (são conserto de travamento); armazenamento rotativo fica 2.0.4.",
+   "pergunta": "#334 sai como 2.0.3 só com o limite de P2P e a limpeza, e a janela de streaming (armazenamento rotativo, agente/203-334-janela) fica para a 2.0.4?",
+   "recomendacao": "Sim: limite e limpeza já estão em 2.0.3; a janela muda o motor de P2P e a 2.0.3 está congelada. Avisar na issue que o rotativo vem na 2.0.4.",
    "issues": [
-    318,
-    323,
     334
    ]
   },
