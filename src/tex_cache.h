@@ -39,6 +39,8 @@ GLuint tex_obter(const char *caminho);
 // home, backdrop do detalhe, arte do player). Com o teto comum de 960 essas
 // tres eram decodificadas com metade da resolucao e ampliadas na tela.
 GLuint tex_obter_hero(const char *caminho);
+// Idem, sem furar a fila (vizinho do carrossel; ver tex_cache.c).
+GLuint tex_obter_hero_quente(const char *caminho);
 
 // Escala entre o pixel do BUFFER e o pixel de layout (1 na TV, 2 no Mac
 // retina). Definir uma vez no arranque, junto com a do texto.

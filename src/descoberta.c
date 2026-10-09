@@ -6821,6 +6821,19 @@ static int episodiosDoCatalogo(int alvoItem, const char *titulo, const char *ser
   return !mf->cine[fonte];
 }
 
+// PRE-BUSCA QUE CEDE. O fio de episodios e um so (epItem, epAlvoId...): uma
+// pre-busca do carrossel em voo fazia o pedido do titulo que chegou ficar
+// guardado (pendItem) ate ela acabar. Quem pre-busca marca epPreQuer; quando um
+// pedido de verdade chega com o fio ocupado por ela, epCancelar sobe e ela
+// larga nos pontos de parada abaixo (no maximo uma viagem de rede depois).
+static volatile int epPreQuer, epRodaPre, epCancelar;
+static int preCede(const char *id) {
+  if (!(epRodaPre && epCancelar)) return 0;
+  printf("[desc] pre-busca de %s cedeu ao titulo em cena\n", id);
+  fflush(stdout);
+  return 1;
+}
+
 static void *buscarEps(void *u) {
   int alvoItem = epItem;
   const CatItem *orig = cat_item(alvoItem);
@@ -6834,6 +6847,7 @@ static void *buscarEps(void *u) {
   (void)u;
   memset(&mf, 0, sizeof mf);
   if (!orig || !orig->imdb[0]) { fioEpVivo = 0; return NULL; }
+  if (preCede(orig->imdb)) { fioEpVivo = 0; return NULL; }
   snprintf(epAlvoId, sizeof epAlvoId, "%s", orig->imdb);
   snprintf(meuId, sizeof meuId, "%s", orig->imdb);
   // COPIA AGORA (#190): o ponteiro de cat_item so vale ate o fim do quadro, e
@@ -6916,7 +6930,7 @@ static void *buscarEps(void *u) {
     ehFilme = strcmp(tipos[ti], "series") != 0;
     if (ultimo || desc_meta_tem_temporadas(corpo)) break;
   }
-  if (!corpo) { metaFontesLiberar(&mf); fioEpVivo = 0; return NULL; }
+  if (!corpo || preCede(meuId)) { metaFontesLiberar(&mf); free(corpo); fioEpVivo = 0; return NULL; }
   if (nTipos > 1) {
     const char *resolvido = ehFilme ? "movie" : "series";
     printf("[desc] %s: tipo '%s' do catalogo resolvido como '%s' pelo /meta\n",
@@ -7606,12 +7620,17 @@ int desc_vertudo_item(int i, CatItem *dst) {
 }
 
 void desc_episodios(int indiceItem, int temporada) {
-  if (fioEpVivo) { pendItem = indiceItem; pendTemp = temporada; return; }
+  if (fioEpVivo) {
+    pendItem = indiceItem; pendTemp = temporada;
+    if (epRodaPre) epCancelar = 1;   // a pre-busca em voo cede (ver preCede)
+    return;
+  }
   // A lista agora e UNICA e cobre todas as temporadas, entao ter qualquer
   // episodio deste titulo ja basta — trocar de aba nao pede nada.
   (void)temporada;
   if (cat_n_episodios(indiceItem) > 0) return;
   epItem = indiceItem; epTemp = temporada;
+  epRodaPre = epPreQuer; epPreQuer = 0; epCancelar = 0;
   fioEpVivo = 1;
   if (pthread_create(&fioEp, NULL, buscarEps, NULL) != 0) fioEpVivo = 0;
   else pthread_detach(fioEp);
@@ -7638,7 +7657,9 @@ int desc_episodios_precarregar(int indiceItem) {
   if (!(!strcmp(ci->tipo, "series") || strcmp(ci->tipo, "movie") || ci->nElenco == 0)) return 0;
   if (cat_n_episodios(indiceItem) > 0) return 0;
   if (fioEpVivo || pendItem >= 0) return -1;
+  epPreQuer = 1;
   desc_episodios(indiceItem, 0);
+  epPreQuer = 0;
   return fioEpVivo ? 1 : 0;
 }
 
