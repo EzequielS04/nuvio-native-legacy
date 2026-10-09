@@ -815,7 +815,9 @@ int contapend_lista_oculta(const char *imdb, long long remotoMs) {
 int contapend_aplicar_local(void) {
   int i, k = 0, perfil = perfis_ativo();
   Ent *copia = NULL;
+  VistoFonte fonte;
   int n = 0;
+  memset(&fonte, 0, sizeof fonte);
   pthread_mutex_lock(&trava);
   if (garantir() && nEnt) {
     copia = (Ent *)malloc(sizeof *copia * (size_t)nEnt);
@@ -826,13 +828,21 @@ int contapend_aplicar_local(void) {
   pthread_mutex_unlock(&trava);
   // Fora da trava: o historico tem a trava dele.
   for (i = 0; i < n; i++) {
+    // O JORNAL TAMBEM E FONTE (vistoep_fonte): um '+' daqui e um gesto ANTIGO
+    // sendo reaplicado a cada ciclo, com o instante dele — nao pode passar por
+    // cima de uma desmarcacao mais nova do mesmo episodio.
     if (copia[i].ep > 0)
-      vistoep_definir(copia[i].id, copia[i].temp, copia[i].ep, copia[i].op == '+');
+      vistoep_fonte(copia[i].id, copia[i].temp, copia[i].ep, copia[i].op == '+',
+                    copia[i].ms, &fonte);
     else
       cat_historico_definir_id(copia[i].id, copia[i].tipo, copia[i].op == '+');
     k++;
   }
   free(copia);
+  // Mudo no caso normal (roda a cada ciclo); fala quando algo foi barrado.
+  if (fonte.bloqueados || fonte.venceu)
+    printf("[vistoep] jornal da conta: +%d (bloqueados %d; remoto mais novo %d)\n",
+           fonte.vistos, fonte.bloqueados, fonte.venceu);
   return k;
 }
 

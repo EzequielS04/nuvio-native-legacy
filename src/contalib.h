@@ -145,6 +145,10 @@ void contalib_reconciliar(void);
 // o historico daqui responde "esta obra esta marcada como vista?", e um
 // episodio nao responde isso por uma serie de oito temporadas.
 int contalib_aplicar_vistos(void);
+// Para o LOG por fonte (vistoep_fonte_log): quantas linhas de EPISODIO a conta
+// tem para este titulo no ultimo pull, e em `*desmarcados` (pode ser NULL)
+// quantas delas estao como NAO vistas no mapa desta TV. Qualquer fio.
+int contalib_vistos_do_titulo(const char *id, int *desmarcados);
 // Filtros do jornal da conta (contapend.h), ligados por app.c: 1 = a linha
 // remota fica de fora porque a pessoa tirou/desmarcou o item nesta TV depois
 // dela. NULL desliga (os testes deste modulo nao ligam).

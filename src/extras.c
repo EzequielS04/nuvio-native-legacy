@@ -3,6 +3,7 @@
 #include "streams.h"
 #include "marco.h"
 #include "vistoep.h"
+#include "contalib.h"
 #include "trakt.h"
 #include "rede.h"
 #include "js.h"
@@ -502,6 +503,7 @@ static void *buscar(void *arg) {
     corpo = rede_baixar_com(url, 20, cab);
     if (corpo) {
       unsigned char novo[EX_VIS_T][EX_VIS_E];
+      VistoFonte fonte;
       const char *p = js_array(corpo, NULL, "seasons");
       // OS DOIS CONTADORES SAEM DO CABECALHO, antes do array — e tem de ser
       // antes MESMO: "completed" reaparece como BOOLEANO em cada episodio, e
@@ -513,6 +515,7 @@ static void *buscar(void *arg) {
         exib = (int)js_num(corpo, fimCab, "aired", 0.0);
         vist = (int)js_num(corpo, fimCab, "completed", 0.0); }
       memset(novo, 0, sizeof novo);
+      memset(&fonte, 0, sizeof fonte);
       while (p) {
         const char *f = js_fim(p);
         int t = (int)js_num(p, f, "number", -1.0);
@@ -534,13 +537,30 @@ static void *buscar(void *arg) {
             if (c && c < qf) { const char *v = c + 12;
                                while (*v == ' ' || *v == ':') v++;
                                visto = (*v == 't'); }
-            if (visto && t < EX_VIS_T && en > 0 && en < EX_VIS_E) novo[t][en] = 1;
             // O MAPA SEM TETO recebe o episodio inteiro, visto ou nao. A matriz
-            // acima so guarda o "sim" e nao distingue "nao viu" de "nao sei";
+            // abaixo so guarda o "sim" e nao distingue "nao viu" de "nao sei";
             // vistoep distingue, e e nisso que as acoes de marcar em lote se
             // apoiam. A matriz continua porque extras_ep_visto tem chamador no
             // desenho, e trocar as duas coisas no mesmo passo seria demais.
-            if (en > 0) vistoep_definir(id, t, en, visto);
+            //
+            // PELA PORTA DAS FONTES (vistoep_fonte), e nao por vistoep_definir:
+            // o Trakt repete `completed:true` enquanto o historico dele tiver o
+            // episodio, e era esta linha que re-marcava o que a pessoa tinha
+            // acabado de desmarcar (Silo, tt14688458). last_watched_at vai junto
+            // porque um visto MAIS NOVO que a desmarcacao ganha dela.
+            if (en > 0) {
+              int barrados = fonte.bloqueados;
+              long long quandoMs = 0;
+              if (visto) {
+                char quando[40];
+                if (js_texto(q, qf, "last_watched_at", quando, sizeof quando) && quando[0])
+                  quandoMs = js_ms_iso(quando);
+              }
+              vistoep_fonte(id, t, en, visto, quandoMs, &fonte);
+              // Barrado nao entra na matriz nem na conta de vistos do topo.
+              if (fonte.bloqueados != barrados) visto = 0;
+            }
+            if (visto && t < EX_VIS_T && en > 0 && en < EX_VIS_E) novo[t][en] = 1;
             q = js_prox(qf);
           }
         }
@@ -553,6 +573,19 @@ static void *buscar(void *arg) {
       // dia em que o mapa nasceu.
       printf("[vistoep] %s: %d episodios no mapa (%d vistos)\n",
              id, vistoep_total(id), vistoep_contar(id));
+      // E A LINHA POR FONTE: quantos o TRAKT marcou nesta leitura, quantos ele
+      // tentou marcar e a desmarcacao da pessoa barrou (e quais). A conta Nuvio
+      // nao escreve no mapa com o Trakt ativo (sync.c), mas o que ela TEM para
+      // este titulo sai na linha seguinte — e o que responde, lendo o log da
+      // TV, "quem ainda acha que o episodio foi visto?".
+      vistoep_fonte_log(id, "trakt", &fonte);
+      { int discordam = 0, daConta = contalib_vistos_do_titulo(id, &discordam);
+        printf("[vistoep] %s: conta Nuvio tem %d episodios (%d deles desmarcados aqui); "
+               "nao aplicada ao mapa com Trakt ativo\n", id, daConta, discordam); }
+      // O TOPO DO TRAKT conta o que a pessoa desmarcou: sem descontar, a serie
+      // voltava a "100% assistida" e ao selo de vista com episodios desmarcados.
+      vist -= fonte.bloqueados;
+      if (vist < 0) vist = 0;
       // A SERIE INTEIRA (#212): o selo do cartaz e o olho do detalhe leem o
       // historico de titulo (cat_visto), e /sync/history nunca diz "serie
       // vista" — so episodios. Os contadores do topo dizem: tudo o que ja foi
@@ -569,6 +602,14 @@ static void *buscar(void *arg) {
           pt = (int)js_num(prox, fim, "season", 0);
           pe = (int)js_num(prox, fim, "number", 0);
         }
+      }
+      // O "PROXIMO" DO TRAKT e o seguinte ao ultimo que ELE tem como visto. Com
+      // episodio barrado ele aponta para depois do que a pessoa desmarcou; o
+      // primeiro nao visto do mapa e a resposta certa (a mesma regra de
+      // extras_proximo_episodio quando o mapa muda depois da leitura).
+      if (fonte.bloqueados > 0) {
+        int mt = 0, me = 0;
+        if (vistoep_primeiro_nao_visto(id, &mt, &me)) { pt = mt; pe = me; }
       }
       int valido = strstr(corpo, "\"seasons\"") != NULL;
       free(corpo);

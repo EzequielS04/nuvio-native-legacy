@@ -48,6 +48,32 @@ int  vistoep_conhecido(const char *imdb);
 // nao so 1. Devolve quantos episodios entraram, ou -1 em corpo invalido.
 int  vistoep_ler_progresso(const char *imdb, const char *json);
 
+// ---- o que as FONTES dizem (Trakt, conta Nuvio, jornal da conta) ------------
+//
+// LEITOR DE REDE NAO CHAMA vistoep_definir: chama vistoep_fonte, que CONTA o
+// que a fonte fez. O relato do Silo (tt14688458, 08/10/2026) era "desmarco e
+// volta marcado" com tres fontes vinculadas, e o log so dizia "30 episodios no
+// mapa (28 vistos)" — o total, sem dizer QUEM marcou. Agora cada leitura diz,
+// por fonte, quantos marcou e quantos tentou marcar e foram barrados.
+#define VE_FONTE_PARES 12
+typedef struct {
+  int vistos;       // a fonte disse "visto" e entrou no mapa
+  int bloqueados;   // a fonte disse "visto" e uma desmarcacao da pessoa barrou
+  int venceu;       // o visto da fonte era MAIS NOVO que a desmarcacao: ela caiu
+  // Os primeiros barrados (temporada, episodio), para o log dizer QUAIS.
+  struct { short temporada, episodio; } par[VE_FONTE_PARES];
+} VistoFonte;
+
+// Um episodio vindo de uma fonte. `visto` 0 ou 1; `remotoMs` e QUANDO a fonte
+// diz que foi visto (0 = ela nao diz). `c` acumula e pode ser NULL. Devolve 1
+// quando o episodio esta no mapa depois da chamada (barrado tambem: entra com
+// 0, e o que foi barrado sai em `c`); 0 so para episodio invalido ou teto.
+int  vistoep_fonte(const char *imdb, int temporada, int episodio, int visto,
+                   long long remotoMs, VistoFonte *c);
+// A LINHA DO LOG, uma por titulo por leitura (nunca por episodio):
+//   [vistoep] tt14688458: trakt +24 (bloqueados 4: T2E7 T2E8 T2E9 T2E10; remoto mais novo 0)
+void vistoep_fonte_log(const char *imdb, const char *fonte, const VistoFonte *c);
+
 // Um episodio, para os lotes. Os tres gestos que a tela oferece — este
 // episodio, ate aqui, a temporada inteira — sao o MESMO lote com tamanhos
 // diferentes, e por isso ha uma funcao so em vez de tres.

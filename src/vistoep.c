@@ -110,6 +110,35 @@ int vistoep_estado(const char *imdb, int temporada, int episodio) {
   return r;
 }
 
+// ------------------------------------------------------------------ fontes
+
+int vistoep_fonte(const char *imdb, int temporada, int episodio, int visto,
+                  long long remotoMs, VistoFonte *c) {
+  int ok;
+  (void)remotoMs;
+  pthread_mutex_lock(&trava);
+  ok = definir(imdb, temporada, episodio, visto);
+  pthread_mutex_unlock(&trava);
+  if (ok && visto && c) c->vistos++;
+  return ok;
+}
+
+void vistoep_fonte_log(const char *imdb, const char *fonte, const VistoFonte *c) {
+  char quais[VE_FONTE_PARES * 10 + 8];
+  size_t u = 0;
+  int i, k;
+  if (!imdb || !fonte || !c) return;
+  quais[0] = 0;
+  k = c->bloqueados < VE_FONTE_PARES ? c->bloqueados : VE_FONTE_PARES;
+  for (i = 0; i < k && u + 12 < sizeof quais; i++)
+    u += (size_t)snprintf(quais + u, sizeof quais - u, "%sT%dE%d", i ? " " : ": ",
+                          c->par[i].temporada, c->par[i].episodio);
+  if (c->bloqueados > k && u + 5 < sizeof quais) snprintf(quais + u, sizeof quais - u, " ...");
+  printf("[vistoep] %s: %s +%d (bloqueados %d%s; remoto mais novo %d)\n", imdb, fonte,
+         c->vistos, c->bloqueados, quais, c->venceu);
+  fflush(stdout);
+}
+
 int vistoep_contar(const char *imdb) {
   char id[16];
   int i, k = 0;
@@ -313,8 +342,10 @@ void vistoep_esquecer(void) {
 int vistoep_ler_progresso(const char *imdb, const char *json) {
   const char *temps;
   const char *fim;
+  VistoFonte conta;
   int total = 0;
   if (!imdb || !imdb[0] || !json) return -1;
+  memset(&conta, 0, sizeof conta);
   fim = json + strlen(json);
   temps = js_array(json, fim, "seasons");
   if (!temps) { printf("[vistoep] %s: resposta sem \"seasons\"\n", imdb); fflush(stdout); return -1; }
@@ -331,7 +362,7 @@ int vistoep_ler_progresso(const char *imdb, const char *json) {
     for (; eps && *eps == '{'; eps = js_prox(js_fim(eps))) {
       const char *fe = js_fim(eps);
       double episodio;
-      char concluido[16];
+      char concluido[16], quando[40];
       int ne, feito;
       if (!fe || fe > ft || fe[-1] != '}') return -1;
       episodio = js_num(eps, fe, "number", -1.0);
@@ -344,15 +375,17 @@ int vistoep_ler_progresso(const char *imdb, const char *json) {
       if (!strcmp(concluido, "true")) feito = 1;
       else if (!strcmp(concluido, "false")) feito = 0;
       else continue;
-      pthread_mutex_lock(&trava);
-      total += definir(imdb, nt, ne, feito);
-      pthread_mutex_unlock(&trava);
+      // QUANDO o Trakt diz que foi visto: e o que deixa um visto de verdade,
+      // feito em outro aparelho DEPOIS de a pessoa desmarcar aqui, ganhar.
+      quando[0] = 0;
+      if (feito) js_texto(eps, fe, "last_watched_at", quando, sizeof quando);
+      total += vistoep_fonte(imdb, nt, ne, feito, quando[0] ? js_ms_iso(quando) : 0, &conta);
       if (fe >= ft) break;
     }
     if (ft >= fim) break;
   }
   printf("[vistoep] %s: %d episodios no mapa (%d vistos)\n",
          imdb, total, vistoep_contar(imdb));
-  fflush(stdout);
+  vistoep_fonte_log(imdb, "trakt", &conta);
   return total;
 }
