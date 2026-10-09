@@ -34,6 +34,7 @@ New Settings, a new episode menu, the Magic Remote pointer on almost every scree
 - **End-of-video card** without an accepted marker: series at 50 s before the end (was 40), movies at a fixed 3 min, 90 s under 1 h, none under 10 min.
 - **Holding fast-forward** speeds up and crosses the whole file in about 10 s. A single press is still 10 s (#340).
 - **Recommendations from friends** no longer open over Home. The clock island announces them and the card opens when you choose it.
+- **LG, automatic source pick:** with autoplay on, HDR set to Prefer and Dolby Vision on, an MP4 comes first among sources of the same resolution (MP4 Dolby Vision, then MP4 HDR, then MP4 SDR), even ahead of Dolby Vision in MKV. It never drops to a lower resolution to get an MP4, and your source rules still come first.
 
 ## Fixed
 

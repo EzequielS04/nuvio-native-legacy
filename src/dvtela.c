@@ -107,6 +107,7 @@ static const char *nomeRecusa(int r) {
     case VIDEO_DV_NAO_LENTO:   return "lento";
     case VIDEO_DV_NAO_FALHOU:  return "falhou";
     case VIDEO_DV_NAO_PESSOA:  return "pessoa";
+    case VIDEO_DV_NAO_CONTENTOR: return "nao-mkv";
     default:                   return "-";
   }
 }

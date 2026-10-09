@@ -46,6 +46,8 @@ static char dtsSaida[64];
 // dvMkv*: what the header says, written by the probe thread and read here;
 // plain ints, the same tolerance faixaLeg already has.
 static volatile int dvSondado, dvMkvPerfil, dvMkvEl, dvMkvBl, dvMkvRpu;
+// A sonda leu o comeco do arquivo e ele nao e Matroska (mkv_contentor_definitivo).
+static volatile int mkvNaoMkv;
 static char dvAudioCodec[16][16];   // Matroska CodecID of each audio track, file order
 static char dvAudioIdioma[16][8];   // idioma/nome de cada faixa DO MKV (a lista da TV pode trazer so uma)
 static char dvAudioNome[16][48];
@@ -1901,6 +1903,23 @@ static void *lerMkv(void *arg) {
     // saber se o arquivo nao e MKV, se o Range falhou ou se o cabecalho passa
     // dos 2 MB que baixamos.
     marco("mkv: nenhuma faixa lida (nao e MKV, ou Range falhou)");
+    // CHEGARAM BYTES E NAO SAO MATROSKA (MP4 "ftyp", MPEG-TS 0x47...): resposta
+    // definitiva, nao falha de rede. C9, 2.0.3: um MP4 com URL sem extensao
+    // levou as 3 novas tentativas (3/8/20 s) com a tela do DV de pe ~50 s.
+    // Sem DV para esta fonte; dvPronto() devolve o HDR10 ao ponto de partida e
+    // a tela sai no proximo quadro.
+    { int cont = mkv_ultimo_contentor();
+      if (mkv_contentor_definitivo(cont) && mkvFioSessao == __atomic_load_n(&sessao, __ATOMIC_ACQUIRE) &&
+          !strcmp(url, urlAtual)) {
+        char m[96];
+        printf("[mkv] nao e Matroska (%s no comeco do arquivo): sem nova tentativa\n",
+               mkv_contentor_nome(cont));
+        fflush(stdout);
+        snprintf(m, sizeof m, "mkv: nao e Matroska (%s), sem nova tentativa", mkv_contentor_nome(cont));
+        marco(m);
+        mkvNaoMkv = 1; dvSondado = 1;
+        fioMkvVivo = 0; return NULL;
+      } }
     // Falha de sonda nao e "nao e MKV" (C9: a rede da TV ficou ~10 s fora logo
     // apos o disparo). Se o DV ainda pode valer para ESTA fonte, agenda nova
     // tentativa em vez de dar dvSondado=1 e perder o DV pelo resto da sessao.
@@ -2120,6 +2139,7 @@ int video_tocar(const char *url) {
   dtsHabilitado = dts_playback_enabled() && dtsLiberadoNestaTv();
   printf("[dts] fallback %s\n", dtsHabilitado ? "available" : "unavailable");
   dvSondado = dvMkvPerfil = dvAudios = 0; dtsModoDv = 0; dvAudioMkvOrd = -1; dvSegurar = 0;
+  mkvNaoMkv = 0;
   dvNao = 0; dvSessaoN++; dvFonteAberta = 0; dvAudioDe[0] = 0;
   nv_dvsonda_zerar(&mkvRetry); mkvRetryEm = 0; dvEntradaSeg = 0.0;
   dvHabilitado = dvLiberadoNestaTv();
@@ -2695,7 +2715,8 @@ static int dvPronto(void) {
     }
     // Sem perfil: o arquivo nao tem dvcC, ou a sonda desistiu de ler o
     // cabecalho (tres falhas) — sao notas diferentes para a pessoa.
-    dvNao = dvMkvPerfil ? VIDEO_DV_NAO_PERFIL : mkvRetry.desistiu ? VIDEO_DV_NAO_SONDA : VIDEO_DV_NAO_SEM_DV;
+    dvNao = dvMkvPerfil ? VIDEO_DV_NAO_PERFIL : mkvNaoMkv ? VIDEO_DV_NAO_CONTENTOR
+          : mkvRetry.desistiu ? VIDEO_DV_NAO_SONDA : VIDEO_DV_NAO_SEM_DV;
     dvHabilitado = 0; dvVoltarEntrada(); return 0;
   }
   if (dvMemOrd >= 0 && dvMemOrd < nAudio && dvMemOrd != audioAtual && !strcmp(urlAtual, dvMemUrl) &&

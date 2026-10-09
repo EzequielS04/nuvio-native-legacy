@@ -241,6 +241,10 @@ int  stream_texto_fora_de_cache(const char *texto);
 // titulo aberto: o teste de velocidade do diagnostico mede primeiro a fonte
 // que o automatico escolheria, com a mesma regra, sem copia-la.
 long stream_pontos(const Stream *s);
+// A fonte e MP4: s->mp4 (o addon disse), ".mp4" na URL ou ".mp4" no rotulo.
+// UMA resposta para o cartao (MP4/MKV) e para o anuncio ao video
+// (video_definir_mp4), que decide se a tela/sonda do Dolby Vision em MKV entra.
+int  stream_e_mp4(const Stream *s);
 // R9b: o que a tela mostra (1/0; -1 = desconhecido, o padrao, nao penaliza).
 void stream_definir_tela(int hdr, int dv);
 int  stream_cabe_no_teto(const Stream *s);

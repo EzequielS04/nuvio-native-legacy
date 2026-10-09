@@ -92,6 +92,23 @@ int mkv_faixas(const char *url, MkvFaixa *saida, int max);
 int mkv_faixas_e_caps(const char *url, MkvFaixa *saida, int max,
                       MkvCap *caps, int maxCaps, int *nCaps);
 
+// O QUE A ULTIMA mkv_faixas_e_caps LEU no comeco do arquivo. "0 faixas" tinha
+// duas causas que a sonda do DV (video.c) tratava igual: a rede nao trouxe nada
+// (vale nova tentativa) e o arquivo chegou e NAO e Matroska — resposta
+// definitiva. C9, 2.0.3: um MP4 sem extensao na URL levou 3 novas tentativas
+// (3/8/20 s) com a tela do DV de pe.
+#define MKV_CONT_NADA  0   // nada (ou < 4 bytes) chegou: rede, Range, prazo
+#define MKV_CONT_MKV   1   // assinatura EBML 1A 45 DF A3
+#define MKV_CONT_MP4   2   // caixa ISO-BMFF no byte 4 (ftyp, styp, moov, mdat, free, skip, wide)
+#define MKV_CONT_TS    3   // MPEG-TS: 0x47 a cada 188 bytes (ou M2TS, 192 com 4 de prefixo)
+#define MKV_CONT_TEXTO 4   // HTML/JSON: pagina de erro com 200, pode passar — vale nova tentativa
+#define MKV_CONT_OUTRO 5   // binario que nao e nenhum dos acima: tambem nao e Matroska
+int mkv_contentor(const unsigned char *p, long n);   // puro
+int mkv_ultimo_contentor(void);
+// 1 quando o contentor lido encerra a pergunta "e MKV?" sem nova tentativa.
+int mkv_contentor_definitivo(int contentor);
+const char *mkv_contentor_nome(int contentor);
+
 // A MESMA leitura sobre um trecho que ja esta na memoria (o inicio do arquivo
 // que a pre-busca do mkvass leu antes do video, #92 v1.4.7). Sem rede. Devolve
 // 0 quando o trecho nao traz Tracks INTEIRO — ai quem chama vai a rede. Os
