@@ -5,7 +5,7 @@ Base: `80fc8e6d` (integracao/2.0.3). Atualizado em 2026-10-08. 354 issues (abert
 ## Como atualizar
 
 1. Chegou issue nova, ou um conserto entrou numa branch/tag: edite **uma** entrada em `docs/issues/mapa.json` (procure por `"numero": N`) e rode `python3 docs/issues/mapa.py`, que valida e reescreve este arquivo. Sem o script, edite a linha equivalente aqui.
-2. Campos: `numero`, `titulo`, `plataforma` (LG, Samsung .tpk, Samsung .wgt, Android, all, `?`), `tipo` (bug, feature, question, meta), `status`, `release` (2.0.2 ou tag antiga, 2.0.3 = integracao/2.0.3, `2.0.4 (branch)`, 2.1/2.2/futuro, `-`), `conserto` (hashes curtos com a ref entre parênteses), `ultima_resposta` (`nos` = o último comentário é nosso, `data`, `ultimo_comentario_por`, `ultima_nossa`), `proximo_passo`, `notas`, `alvo` (só issues ABERTAS, obrigatório: `2.0.3`, `2.0.4`, `2.1`, `futuro`, `nao vamos fazer`, ou `ja-lancada` quando já saiu e só falta fechar). `python3 docs/issues/mapa.py --check` valida e confere se o MAPA.md está em dia, sem escrever; o gerador sai com erro se uma issue aberta não tiver alvo. O roadmap e as decisões ficam em `roadmap` e `decisoes` no json.
+2. Campos: `numero`, `titulo`, `plataforma` (LG, Samsung .tpk, Samsung .wgt, Android, all, `?`), `tipo` (bug, feature, question, meta), `status`, `release` (2.0.2 ou tag antiga, 2.0.3 = integracao/2.0.3, `2.0.4 (branch)`, 2.1/2.2/futuro, `-`), `conserto` (hashes curtos com a ref entre parênteses), `ultima_resposta` (`nos` = o último comentário é nosso, `data`, `ultimo_comentario_por`, `ultima_nossa`), `proximo_passo`, `notas`, `alvo` (só issues ABERTAS, obrigatório: `2.0.3`, `2.0.4`, `2.1`, `2.2`, `futuro`, `nao vamos fazer`, ou `ja-lancada` quando já saiu e só falta fechar). `python3 docs/issues/mapa.py --check` valida e confere se o MAPA.md está em dia, sem escrever; o gerador sai com erro se uma issue aberta não tiver alvo. O roadmap e as decisões ficam em `roadmap` e `decisoes` no json.
 3. Vocabulário de `status`: `aberta`, `respondida`, `consertada-nao-lancada`, `lancada`, `por-desenho`, `fora-do-escopo`, `precisa-log`, `duplicada`. Extra: `fechada-sem-resposta` (issue fechada sem nenhum comentário).
 4. Regra de honestidade: só vale `consertada-nao-lancada`/`lancada` com commit na ref. "Lançado" = commit contido numa tag `v*`. Sem commit, escreva "suspeita" ou "sem commit" em `conserto`/`notas`. "Lançada" em issue antiga sem commit com `#N` quer dizer: a nossa resposta cita uma versão que existe como tag (ver nota na linha).
 5. Atenção: mensagens de commit com `(#203)` / `(#204)` falam da VERSÃO 2.0.3 / 2.0.4, não das issues #203/#204. Esses dois números foram ignorados na busca por commits.
@@ -32,16 +32,30 @@ Pequenos recursos de player e Biblioteca que já têm código fora da 2.0.3, mai
 - **Android: fileiras ilimitadas na Home, armazenamento rotativo do P2P** (#334): agente/204-fileiras-android e agente/203-334-janela (janela de streaming do P2P) existem e ficaram fora da 2.0.3 por risco.
 - **Triagem de bugs sem conserto e dois pedidos pequenos (#306, #337)** (#288, #315, #316, #344, #345, #346, #353, #357, #367, #372, #373, #378, #379, #306, #337): Todos aguardam log do autor; entram na 2.0.4 se o log aparecer a tempo, senão escorregam.
 
-### 2.1 - próxima grande; sem data
+### 2.1 - aprovada pelo dono em 06/10/2026 (e 07/10 para Ajustes); sem data
 
-Trabalho que mexe em estrutura ou precisa de pesquisa por plataforma.
+Os seis recursos aprovados pelo dono, mais perfis com o pacote de UX dos Ajustes. Os itens marcados "suspeita" foram colocados aqui pelo agente anterior e NÃO estão aprovados.
 
-- **Redesign da Biblioteca**: Branch agente/202-biblioteca (procedência por título, aba Listas); o plano de dados está em docs/plans/biblioteca-ilimitada.md (branch agente/biblioteca-ilimitada-plano) e diz "não na 2.0.3". Mexe em memória e navegação; não cabe num ponto de versão.
-- **Limites maiores de Trakt/Biblioteca (sem teto)**: A 2.0.3 só pagina a watchlist do Trakt até 400 itens e mantém os tetos de hoje (96ccdab1). Tirar o teto exige o índice leve + janela de CatItem do plano biblioteca-ilimitada, que é parte do redesign.
-- **Remoção de barras pretas embutidas no quadro (blackbar/crop)** (#341): Recurso novo, sem issue nem branch (relacionados: #341 aspecto/zoom e #241 barras do trailer, esse já tratado). Precisa detectar a barra no quadro em cada pipeline (LG, .tpk, Android). SUSPEITA de 2.1; pode virar 2.0.4 se for só um recorte manual por título.
-- **Dolby Vision em MKV na Samsung**: A 2.0.3 só traz DV em MKV na LG (opcional, desligado) e a Samsung nunca escolhe DV. Na Samsung falta prova de que o decodificador aceita; precisa de spike por modelo antes de prometer. SUSPEITA de 2.1.
-- **Menus em árabe e auto sync de legenda por linha** (#250, #333, #374): Árabe nos menus foi prometido para a 2.1 (resposta em #325); auto sync tem pesquisa em legenda-sync-lg-samsung-pesquisa.md.
-- **Plano de refatoração geral**: docs/plans/refatoracao-geral.md (branch agente/refatoracao-plano, 0dc06334): 23 mudanças pequenas, cada uma com porteiro de teste. Fazer depois da 2.0.3 sair e fora da 2.0.4, para não misturar refatoração com os recursos acima. Itens 01-04 (apagar morto, deduplicar Biblioteca) vão melhor junto do redesign da Biblioteca.
+- **Watch Together (Assistir Juntos)**: Aprovado pelo dono para a 2.1. Sala compartilhada entre aparelhos; o branch já carrega a marca de perfil infantil enviada para a sala. Origem: dono 06/10. Branches: `feat/watch-together`.
+- **Diário + sono (Diário + sono)**: Aprovado pelo dono para a 2.1. Origem: dono 06/10. Branches: `feat/sp-diario`.
+- **Trava (Lock)**: Aprovado pelo dono para a 2.1. Origem: dono 06/10. Branches: `feat/sp-trava`.
+- **Caça / Conquistas (Hunt/Achievements)**: Aprovado pelo dono para a 2.1. Origem: dono 06/10. Branches: `feat/sp-conquistas`.
+- **Redesign da Biblioteca (Biblioteca)**: Branch agente/202-biblioteca (procedência por título, aba Listas); o plano de dados está em docs/plans/biblioteca-ilimitada.md (branch agente/biblioteca-ilimitada-plano) e diz "não na 2.0.3". Mexe em memória e navegação; não cabe num ponto de versão. Origem: dono 06/10. Branches: `agente/202-biblioteca`, `agente/biblioteca-ilimitada-plano (docs/plans/biblioteca-ilimitada.md)`.
+- **Coleções + fileiras**: Aprovado pelo dono para a 2.1. Os pequenos ajustes de vitrine (#362) continuam na 2.0.4 em agente/204-colecao-vitrine e não dependem disto. Origem: dono 06/10. Branches: `feat/colecoes-fileiras`, `agente/201-colecoes`.
+- **Perfis + tour, "Começar", "Resolver um problema" e busca com i18n nos Ajustes**: Decisão de UX dos Ajustes de 07/10: esses quatro itens saem na 2.1 junto com perfis. Branch de cada um: não identificado (suspeita: parte do trabalho está em feat/ajustes-ux e agente/204-perfil, não confirmado). Origem: dono 07/10.
+- **Limites maiores de Trakt/Biblioteca (sem teto)**: Parte do plano biblioteca-ilimitada, que o dono aprovou só como redesign; tirar os tetos do Trakt como item próprio não foi citado por ele. A 2.0.3 só pagina a watchlist do Trakt até 400 itens e mantém os tetos de hoje (96ccdab1). Tirar o teto exige o índice leve + janela de CatItem do plano biblioteca-ilimitada, que é parte do redesign. Origem: suspeita (sugestão do agente, não aprovado).
+- **Remoção de barras pretas embutidas no quadro (blackbar/crop)** (#341): Recurso novo, sem issue nem branch (relacionados: #341 aspecto/zoom e #241 barras do trailer, esse já tratado). Precisa detectar a barra no quadro em cada pipeline (LG, .tpk, Android). SUSPEITA de 2.1; pode virar 2.0.4 se for só um recorte manual por título. Origem: suspeita (sugestão do agente, não aprovado).
+- **Dolby Vision em MKV na Samsung**: A 2.0.3 só traz DV em MKV na LG (opcional, desligado) e a Samsung nunca escolhe DV. Na Samsung falta prova de que o decodificador aceita; precisa de spike por modelo antes de prometer. SUSPEITA de 2.1. Origem: suspeita (sugestão do agente, não aprovado).
+- **Menus em árabe e auto sync de legenda por linha** (#250, #333, #374): SUSPEITA do agente, fora do roadmap do dono: o árabe nos menus foi prometido na resposta do #325 e o auto sync tem pesquisa em legenda-sync-lg-samsung-pesquisa.md, mas nenhum dos dois consta da decisão de 06/10. Pode sair da 2.1 para futuro se o dono preferir. Origem: suspeita (sugestão do agente, não aprovado).
+- **Plano de refatoração geral**: docs/plans/refatoracao-geral.md (branch agente/refatoracao-plano, 0dc06334): 23 mudanças pequenas, cada uma com porteiro de teste. Fazer depois da 2.0.3 sair e fora da 2.0.4, para não misturar refatoração com os recursos acima. Itens 01-04 (apagar morto, deduplicar Biblioteca) vão melhor junto do redesign da Biblioteca. Origem: suspeita (sugestão do agente, não aprovado). Branches: `agente/refatoracao-plano`.
+
+### 2.2 - aprovada pelo dono em 06/10/2026; sem data
+
+Servidores locais, guia de TV e música.
+
+- **Servidores locais (Jellyfin / Plex / Emby)**: Aprovado pelo dono para a 2.2; ele tem um servidor real para testar. Origem: dono 06/10. Branches: `f11-jellyfin`, `feat/emby-plex`.
+- **Guia de TV (guia pro)**: Aprovado pelo dono para a 2.2. Existem várias linhas de trabalho: guia-tv, guia-pro, guia-pro-2, lembrete e a UI w18; qual é a mais recente fica a conferir. Origem: dono 06/10. Branches: `feat/guia-tv`, `feat/guia-pro`, `feat/guia-pro-2`, `feat/guia-lembrete`, `ui/w18-guia-tv`.
+- **Música (álbum da trilha sonora)**: Aprovado pelo dono para a 2.2: álbum da trilha, só link do Spotify, prévia para testar na TV e no celular, crowdsourcing no Android permitido, Apple Insight via uts-api timed-metadata. Branch: nenhum encontrado. Origem: dono 06/10.
 
 ### futuro - sem data nem dono
 
@@ -64,6 +78,7 @@ Plano de refatoração: `docs/plans/refatoracao-geral.md` (branch `agente/refato
 | 2.0.3 | 36 | #246, #266, #269, #280, #283, #284, #286, #294, #302, #305, #308, #311, #312, #317, #318, #319, #320, #321, #322, #323, #328, #330, #332, #334, #335, #339, #340, #341, #350, #356, #359, #361, #363, #368, #369, #370 |
 | 2.0.4 | 30 | #256, #288, #306, #313, #315, #316, #326, #329, #331, #337, #338, #344, #345, #346, #349, #352, #353, #355, #357, #358, #360, #362, #364, #365, #366, #367, #372, #373, #378, #379 |
 | 2.1 | 3 | #250, #333, #374 |
+| 2.2 | 0 |  |
 | futuro | 7 | #135, #260, #304, #342, #343, #347, #348 |
 | nao vamos fazer | 4 | #292, #307, #324, #354 |
 | ja-lancada | 9 | #144, #252, #287, #290, #293, #296, #298, #300, #303 |
@@ -75,14 +90,15 @@ Plano de refatoração: `docs/plans/refatoracao-geral.md` (branch `agente/refato
 3. #334 sai como 2.0.3 só com o limite de P2P e a limpeza, e a janela de streaming (armazenamento rotativo, agente/203-334-janela) fica para a 2.0.4? Recomendação: Sim: limite e limpeza já estão em 2.0.3; a janela muda o motor de P2P e a 2.0.3 está congelada. Avisar na issue que o rotativo vem na 2.0.4.
 4. #326 e #338 foram prometidos para "próxima atualização/next build" e o código só está em branches de 2.0.4. Responder já avisando 2.0.4? Recomendação: Sim, corrigir a promessa agora.
 5. Bugs sem log (#288, #315, #316, #344-346, #353, #357, #367, #372, #373, #378, #379) ficam todos em 2.0.4? Recomendação: Sim como alvo de triagem, mas sem prometer: pedir log primeiro; os que não chegarem com log em 30 dias viram "precisa-log" e saem do alvo.
-6. Blackbar/crop: 2.1 ou 2.0.4? Recomendação: 2.1. É recurso novo, sem branch e toca os três pipelines de vídeo.
-7. Dolby Vision em MKV na Samsung: 2.1 ou futuro? Recomendação: 2.1 só como spike de pesquisa; não prometer ao público até haver prova num modelo.
-8. Redesign da Biblioteca e limites maiores do Trakt: 2.1? Recomendação: 2.1, juntos (o plano biblioteca-ilimitada é parte do redesign). A 2.0.4 fica só com indicadores de visto (#352) e esconder assistidos (#366).
-9. Refatoração geral: quando? Recomendação: Depois da 2.0.3, como trabalho próprio na 2.1; na 2.0.4 no máximo os itens 01-04 (apagar morto). Não misturar com recursos.
-10. "nao vamos fazer": #354 (PC), #307 (.ipa iOS), #324 (relatório de logs), #292 (aviso 4K Android). Confirma? Recomendação: Confirmar #354 e #307 (fora de escopo, já classificados fora-do-escopo). #324 e #292 não são pedidos de recurso: fechar como informativos em vez de "não vamos fazer".
-11. Pedidos de interface (#304 serviços na barra lateral, #347 microfone, #348 pontos do carrossel/botão Reproduzir, #342 botão Pular cena) ficam em "futuro" ou "nao vamos fazer"? Recomendação: Futuro para #304, #348 e #347. #342 (conteúdo explícito) depende de base de dados de terceiros que não existe: recomendo nao vamos fazer.
-12. #135 (porte VIDAA) e #260 (RTL) em "futuro" ou "nao vamos fazer"? Recomendação: Futuro; há trabalho feito em feat/vidaa e uma resposta pública dizendo "depois" para o RTL.
-13. Issues abertas só aguardando fechamento (#144, #252, #287, #290, #293, #296, #298, #300, #303): fechar? Recomendação: Fechar com comentário, depois que o dono aprovar o texto. Alvo registrado como ja-lancada (valor extra além dos cinco pedidos).
+6. "nao vamos fazer": #354 (PC), #307 (.ipa iOS), #324 (relatório de logs), #292 (aviso 4K Android). Confirma? Recomendação: Confirmar #354 e #307 (fora de escopo, já classificados fora-do-escopo). #324 e #292 não são pedidos de recurso: fechar como informativos em vez de "não vamos fazer".
+7. Pedidos de interface (#304 serviços na barra lateral, #347 microfone, #348 pontos do carrossel/botão Reproduzir, #342 botão Pular cena) ficam em "futuro" ou "nao vamos fazer"? Recomendação: Futuro para #304, #348 e #347. #342 (conteúdo explícito) depende de base de dados de terceiros que não existe: recomendo nao vamos fazer.
+8. #135 (porte VIDAA) e #260 (RTL) em "futuro" ou "nao vamos fazer"? Recomendação: Futuro; há trabalho feito em feat/vidaa e uma resposta pública dizendo "depois" para o RTL.
+9. Issues abertas só aguardando fechamento (#144, #252, #287, #290, #293, #296, #298, #300, #303): fechar? Recomendação: Fechar com comentário, depois que o dono aprovar o texto. Alvo registrado como ja-lancada (valor extra além dos cinco pedidos).
+10. Blackbar/crop (remover barras pretas embutidas) é 2.1, 2.2 ou 2.0.4? Não consta do roadmap aprovado. Recomendação: Sugestão do agente, não aprovada: manter fora das versões aprovadas; se o dono quiser, 2.2 ou futuro, pois é recurso novo, sem branch e toca os três pipelines de vídeo.
+11. Dolby Vision em MKV na Samsung: manter na 2.1, passar para 2.2 ou futuro? Não consta do roadmap aprovado. Recomendação: Sugestão do agente, não aprovada: futuro, só como spike de pesquisa; não prometer ao público até haver prova num modelo.
+12. Limites maiores do Trakt/Biblioteca: entram dentro do redesign aprovado da 2.1 ou ficam fora? Recomendação: Sugestão do agente, não aprovada: dentro do redesign (o plano biblioteca-ilimitada é parte dele). O redesign em si já está aprovado; a 2.0.4 fica só com indicadores de visto (#352) e esconder assistidos (#366).
+13. Plano de refatoração geral (docs/plans/refatoracao-geral.md): quando? Não consta do roadmap aprovado. Recomendação: Sugestão do agente, não aprovada: depois da 2.0.3, na 2.1 como trabalho próprio; na 2.0.4 no máximo os itens 01-04 (apagar morto). Não misturar com recursos.
+14. Menus em árabe (#250, #333) e auto sync de legenda (#374) seguem na 2.1? Não constam do roadmap aprovado; o árabe foi prometido na resposta do #325. Recomendação: Sugestão do agente, não aprovada: manter na 2.1 só se sobrar espaço; senão futuro. Corrigir a promessa pública do #325 se for para futuro.
 
 ## Resumo
 

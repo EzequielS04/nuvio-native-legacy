@@ -8276,44 +8276,151 @@
   },
   {
    "release": "2.1",
-   "situacao": "próxima grande; sem data",
-   "descricao": "Trabalho que mexe em estrutura ou precisa de pesquisa por plataforma.",
+   "situacao": "aprovada pelo dono em 06/10/2026 (e 07/10 para Ajustes); sem data",
+   "descricao": "Os seis recursos aprovados pelo dono, mais perfis com o pacote de UX dos Ajustes. Os itens marcados \"suspeita\" foram colocados aqui pelo agente anterior e NÃO estão aprovados.",
    "itens": [
     {
-     "nome": "Redesign da Biblioteca",
+     "nome": "Watch Together (Assistir Juntos)",
+     "porque": "Aprovado pelo dono para a 2.1. Sala compartilhada entre aparelhos; o branch já carrega a marca de perfil infantil enviada para a sala.",
+     "issues": [],
+     "origem": "dono 06/10",
+     "branches": [
+      "feat/watch-together"
+     ]
+    },
+    {
+     "nome": "Diário + sono (Diário + sono)",
+     "porque": "Aprovado pelo dono para a 2.1.",
+     "issues": [],
+     "origem": "dono 06/10",
+     "branches": [
+      "feat/sp-diario"
+     ]
+    },
+    {
+     "nome": "Trava (Lock)",
+     "porque": "Aprovado pelo dono para a 2.1.",
+     "issues": [],
+     "origem": "dono 06/10",
+     "branches": [
+      "feat/sp-trava"
+     ]
+    },
+    {
+     "nome": "Caça / Conquistas (Hunt/Achievements)",
+     "porque": "Aprovado pelo dono para a 2.1.",
+     "issues": [],
+     "origem": "dono 06/10",
+     "branches": [
+      "feat/sp-conquistas"
+     ]
+    },
+    {
+     "nome": "Redesign da Biblioteca (Biblioteca)",
      "porque": "Branch agente/202-biblioteca (procedência por título, aba Listas); o plano de dados está em docs/plans/biblioteca-ilimitada.md (branch agente/biblioteca-ilimitada-plano) e diz \"não na 2.0.3\". Mexe em memória e navegação; não cabe num ponto de versão.",
-     "issues": []
+     "issues": [],
+     "origem": "dono 06/10",
+     "branches": [
+      "agente/202-biblioteca",
+      "agente/biblioteca-ilimitada-plano (docs/plans/biblioteca-ilimitada.md)"
+     ]
+    },
+    {
+     "nome": "Coleções + fileiras",
+     "porque": "Aprovado pelo dono para a 2.1. Os pequenos ajustes de vitrine (#362) continuam na 2.0.4 em agente/204-colecao-vitrine e não dependem disto.",
+     "issues": [],
+     "origem": "dono 06/10",
+     "branches": [
+      "feat/colecoes-fileiras",
+      "agente/201-colecoes"
+     ]
+    },
+    {
+     "nome": "Perfis + tour, \"Começar\", \"Resolver um problema\" e busca com i18n nos Ajustes",
+     "porque": "Decisão de UX dos Ajustes de 07/10: esses quatro itens saem na 2.1 junto com perfis. Branch de cada um: não identificado (suspeita: parte do trabalho está em feat/ajustes-ux e agente/204-perfil, não confirmado).",
+     "issues": [],
+     "origem": "dono 07/10",
+     "branches": []
     },
     {
      "nome": "Limites maiores de Trakt/Biblioteca (sem teto)",
-     "porque": "A 2.0.3 só pagina a watchlist do Trakt até 400 itens e mantém os tetos de hoje (96ccdab1). Tirar o teto exige o índice leve + janela de CatItem do plano biblioteca-ilimitada, que é parte do redesign.",
-     "issues": []
+     "porque": "Parte do plano biblioteca-ilimitada, que o dono aprovou só como redesign; tirar os tetos do Trakt como item próprio não foi citado por ele. A 2.0.3 só pagina a watchlist do Trakt até 400 itens e mantém os tetos de hoje (96ccdab1). Tirar o teto exige o índice leve + janela de CatItem do plano biblioteca-ilimitada, que é parte do redesign.",
+     "issues": [],
+     "origem": "suspeita (sugestão do agente, não aprovado)",
+     "branches": []
     },
     {
      "nome": "Remoção de barras pretas embutidas no quadro (blackbar/crop)",
      "porque": "Recurso novo, sem issue nem branch (relacionados: #341 aspecto/zoom e #241 barras do trailer, esse já tratado). Precisa detectar a barra no quadro em cada pipeline (LG, .tpk, Android). SUSPEITA de 2.1; pode virar 2.0.4 se for só um recorte manual por título.",
      "issues": [
       341
-     ]
+     ],
+     "origem": "suspeita (sugestão do agente, não aprovado)",
+     "branches": []
     },
     {
      "nome": "Dolby Vision em MKV na Samsung",
      "porque": "A 2.0.3 só traz DV em MKV na LG (opcional, desligado) e a Samsung nunca escolhe DV. Na Samsung falta prova de que o decodificador aceita; precisa de spike por modelo antes de prometer. SUSPEITA de 2.1.",
-     "issues": []
+     "issues": [],
+     "origem": "suspeita (sugestão do agente, não aprovado)",
+     "branches": []
     },
     {
      "nome": "Menus em árabe e auto sync de legenda por linha",
-     "porque": "Árabe nos menus foi prometido para a 2.1 (resposta em #325); auto sync tem pesquisa em legenda-sync-lg-samsung-pesquisa.md.",
+     "porque": "SUSPEITA do agente, fora do roadmap do dono: o árabe nos menus foi prometido na resposta do #325 e o auto sync tem pesquisa em legenda-sync-lg-samsung-pesquisa.md, mas nenhum dos dois consta da decisão de 06/10. Pode sair da 2.1 para futuro se o dono preferir.",
      "issues": [
       250,
       333,
       374
-     ]
+     ],
+     "origem": "suspeita (sugestão do agente, não aprovado)",
+     "branches": []
     },
     {
      "nome": "Plano de refatoração geral",
      "porque": "docs/plans/refatoracao-geral.md (branch agente/refatoracao-plano, 0dc06334): 23 mudanças pequenas, cada uma com porteiro de teste. Fazer depois da 2.0.3 sair e fora da 2.0.4, para não misturar refatoração com os recursos acima. Itens 01-04 (apagar morto, deduplicar Biblioteca) vão melhor junto do redesign da Biblioteca.",
-     "issues": []
+     "issues": [],
+     "origem": "suspeita (sugestão do agente, não aprovado)",
+     "branches": [
+      "agente/refatoracao-plano"
+     ]
+    }
+   ]
+  },
+  {
+   "release": "2.2",
+   "situacao": "aprovada pelo dono em 06/10/2026; sem data",
+   "descricao": "Servidores locais, guia de TV e música.",
+   "itens": [
+    {
+     "nome": "Servidores locais (Jellyfin / Plex / Emby)",
+     "porque": "Aprovado pelo dono para a 2.2; ele tem um servidor real para testar.",
+     "issues": [],
+     "origem": "dono 06/10",
+     "branches": [
+      "f11-jellyfin",
+      "feat/emby-plex"
+     ]
+    },
+    {
+     "nome": "Guia de TV (guia pro)",
+     "porque": "Aprovado pelo dono para a 2.2. Existem várias linhas de trabalho: guia-tv, guia-pro, guia-pro-2, lembrete e a UI w18; qual é a mais recente fica a conferir.",
+     "issues": [],
+     "origem": "dono 06/10",
+     "branches": [
+      "feat/guia-tv",
+      "feat/guia-pro",
+      "feat/guia-pro-2",
+      "feat/guia-lembrete",
+      "ui/w18-guia-tv"
+     ]
+    },
+    {
+     "nome": "Música (álbum da trilha sonora)",
+     "porque": "Aprovado pelo dono para a 2.2: álbum da trilha, só link do Spotify, prévia para testar na TV e no celular, crowdsourcing no Android permitido, Apple Insight via uts-api timed-metadata. Branch: nenhum encontrado.",
+     "issues": [],
+     "origem": "dono 06/10",
+     "branches": []
     }
    ]
   },
@@ -8406,31 +8513,6 @@
    ]
   },
   {
-   "pergunta": "Blackbar/crop: 2.1 ou 2.0.4?",
-   "recomendacao": "2.1. É recurso novo, sem branch e toca os três pipelines de vídeo.",
-   "issues": [
-    341
-   ]
-  },
-  {
-   "pergunta": "Dolby Vision em MKV na Samsung: 2.1 ou futuro?",
-   "recomendacao": "2.1 só como spike de pesquisa; não prometer ao público até haver prova num modelo.",
-   "issues": []
-  },
-  {
-   "pergunta": "Redesign da Biblioteca e limites maiores do Trakt: 2.1?",
-   "recomendacao": "2.1, juntos (o plano biblioteca-ilimitada é parte do redesign). A 2.0.4 fica só com indicadores de visto (#352) e esconder assistidos (#366).",
-   "issues": [
-    352,
-    366
-   ]
-  },
-  {
-   "pergunta": "Refatoração geral: quando?",
-   "recomendacao": "Depois da 2.0.3, como trabalho próprio na 2.1; na 2.0.4 no máximo os itens 01-04 (apagar morto). Não misturar com recursos.",
-   "issues": []
-  },
-  {
    "pergunta": "\"nao vamos fazer\": #354 (PC), #307 (.ipa iOS), #324 (relatório de logs), #292 (aviso 4K Android). Confirma?",
    "recomendacao": "Confirmar #354 e #307 (fora de escopo, já classificados fora-do-escopo). #324 e #292 não são pedidos de recurso: fechar como informativos em vez de \"não vamos fazer\".",
    "issues": [
@@ -8471,6 +8553,40 @@
     298,
     300,
     303
+   ]
+  },
+  {
+   "pergunta": "Blackbar/crop (remover barras pretas embutidas) é 2.1, 2.2 ou 2.0.4? Não consta do roadmap aprovado.",
+   "recomendacao": "Sugestão do agente, não aprovada: manter fora das versões aprovadas; se o dono quiser, 2.2 ou futuro, pois é recurso novo, sem branch e toca os três pipelines de vídeo.",
+   "issues": [
+    341
+   ]
+  },
+  {
+   "pergunta": "Dolby Vision em MKV na Samsung: manter na 2.1, passar para 2.2 ou futuro? Não consta do roadmap aprovado.",
+   "recomendacao": "Sugestão do agente, não aprovada: futuro, só como spike de pesquisa; não prometer ao público até haver prova num modelo.",
+   "issues": []
+  },
+  {
+   "pergunta": "Limites maiores do Trakt/Biblioteca: entram dentro do redesign aprovado da 2.1 ou ficam fora?",
+   "recomendacao": "Sugestão do agente, não aprovada: dentro do redesign (o plano biblioteca-ilimitada é parte dele). O redesign em si já está aprovado; a 2.0.4 fica só com indicadores de visto (#352) e esconder assistidos (#366).",
+   "issues": [
+    352,
+    366
+   ]
+  },
+  {
+   "pergunta": "Plano de refatoração geral (docs/plans/refatoracao-geral.md): quando? Não consta do roadmap aprovado.",
+   "recomendacao": "Sugestão do agente, não aprovada: depois da 2.0.3, na 2.1 como trabalho próprio; na 2.0.4 no máximo os itens 01-04 (apagar morto). Não misturar com recursos.",
+   "issues": []
+  },
+  {
+   "pergunta": "Menus em árabe (#250, #333) e auto sync de legenda (#374) seguem na 2.1? Não constam do roadmap aprovado; o árabe foi prometido na resposta do #325.",
+   "recomendacao": "Sugestão do agente, não aprovada: manter na 2.1 só se sobrar espaço; senão futuro. Corrigir a promessa pública do #325 se for para futuro.",
+   "issues": [
+    250,
+    333,
+    374
    ]
   }
  ]
