@@ -46,6 +46,7 @@ New Settings, a new episode menu, the Magic Remote pointer on almost every scree
 - **Up next** no longer disappears when the Nuvio catalog does not list the episode; Cinemeta is checked first (#356).
 - **Recommending a series** from a Continue Watching card works again (#363).
 - **Samsung .wgt:** Arabic subtitles use Noto Naskh (#370). Holding OK in the subtitle sheet makes one choice instead of reloading on every repeat (#370).
+- **Your subtitle choice comes back.** The subtitle you pick by hand (built-in or add-on) is remembered per profile: reopening the same title turns on that same track, other titles start with that language, and turning subtitles off by hand keeps them off. A subtitle language set in Settings still comes first for other titles.
 - **Profile page:** Left at the edge opens the sidebar without closing the page, also on a new profile or one with only friends (#371).
 - **Continue Watching:** with Episode thumbnail on, the card shows the episode still; a watched movie says Play. With the Nuvio account as source, up next is filled even when Trakt or Simkl is linked, without episodes already watched elsewhere.
 - **Watched:** "up to here" and "season" only send episodes that change, so Trakt gets no duplicate plays. The main button, next episode and "% watched" follow the change right away. Marking a series as watched no longer hides it on Trakt; only "Remove from Continue Watching" does.

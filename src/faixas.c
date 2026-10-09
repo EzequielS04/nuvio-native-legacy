@@ -19,6 +19,7 @@
 #include "legendasui.h"
 #include "legsync.h"
 #include "legauto.h"
+#include "legmemoria.h"
 #include "cacheboost.h"
 #include "velocidade.h"
 #include "faixasmkv.h"
@@ -713,6 +714,60 @@ static void escolherLegenda(int i) {
   }
 }
 
+// --- A ESCOLHA MANUAL LEMBRADA (2.0.3, legmemoria.c) --------------------------
+// Toda legenda escolhida a mao (folha, seletor, "Desativada") vai para a
+// memoria do perfil: o idioma vira a "ultima escolha" e a faixa exata fica
+// presa ao titulo. A automatica e as trocas do AutoSync NAO passam por aqui.
+static void tituloAtual(char *dst, unsigned tam) {
+  const CatItem *ci = cat_item(player_indice());
+  dst[0] = 0;
+  if (ci) legmem_id_titulo(ci->imdb[0] ? ci->imdb : ci->titulo, dst, tam);
+}
+// Etiqueta que nao e idioma ("(null)" da LG antes da sonda, "und") vira vazio:
+// ela nao diz o que a pessoa quer no proximo titulo.
+static void idiomaLembravel(const char *raw, char *dst, unsigned tam) {
+  const char *c;
+  ling_normalizar(raw, dst, tam);
+  if (!strcasecmp(dst, "und") || !strcasecmp(dst, "none")) { dst[0] = 0; return; }
+  for (c = dst; *c; c++)
+    if (!((*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z') || *c == '-')) { dst[0] = 0; return; }
+}
+static void lembrarEscolha(const LegMem *e) {
+  legmem_guardar(e);
+  printf("[legenda] escolha manual lembrada: '%s' (%s%s%s)\n", e->idioma[0] ? e->idioma : "?",
+         e->tipo == 'e' ? "embutida" : e->tipo == 'a' ? "addon" : "nenhuma", e->tipo ? " " : "",
+         e->tipo ? e->nome : "");
+  fflush(stdout);
+}
+static void lembrarAddon(const Legenda *l) {
+  LegMem e;
+  if (!l || player_id_canal()[0]) return;
+  memset(&e, 0, sizeof e);
+  tituloAtual(e.titulo, sizeof e.titulo);
+  e.tipo = 'a';
+  legendasui_id_addon(l, e.id);
+  idiomaLembravel(l->idioma, e.idioma, sizeof e.idioma);
+  snprintf(e.nome, sizeof e.nome, "%s", l->provedor[0] ? l->provedor : l->rotulo);
+  lembrarEscolha(&e);
+}
+// `i` na lista combinada (embutidas, depois addons); -1 = desligou a mao.
+static void lembrarManual(int i) {
+  LegMem e;
+  int emb = video_n_legenda();
+  if (player_id_canal()[0]) return;   // canal ao vivo: nada a lembrar
+  memset(&e, 0, sizeof e);
+  tituloAtual(e.titulo, sizeof e.titulo);
+  if (i < 0) snprintf(e.idioma, sizeof e.idioma, "none");
+  else if (i < emb) {
+    const VideoFaixa *f = video_legenda(i);
+    if (!f) return;
+    e.tipo = 'e'; e.numero = f->numero;
+    idiomaLembravel(f->idioma, e.idioma, sizeof e.idioma);
+    snprintf(e.nome, sizeof e.nome, "%s", f->rotulo);
+  } else { lembrarAddon(addons_legenda(i - emb)); return; }
+  lembrarEscolha(&e);
+}
+
 static void aplicar(void) {
   if (coluna == 0) {
     // F06: outra faixa de audio = outras falas; a escuta em curso nao vale mais.
@@ -722,7 +777,7 @@ static void aplicar(void) {
     // A pessoa escolheu: a automatica nao mexe mais nesta sessao, nem se a
     // escolha foi "Desativada".
     legAuto = 0;
-    escolherLegenda(legDaLinha(foco[1] - 1));
+    { int i = legDaLinha(foco[1] - 1); escolherLegenda(i); lembrarManual(i); }
   }
 }
 
@@ -734,11 +789,13 @@ static void aplicar(void) {
 #define FX_AUTO_EMB_MS  10000u   // espera pelos idiomas das embutidas (era 30 s: a legenda do addon ja estava na mao)
 #define FX_AUTO_FIM_MS  30000u   // desiste de vez: legenda ligada no minuto 5 assusta
 static void legendaAutomatica(Uint32 agora) {
-  const char *emb[NV_FAIXA_MAX], *add[LEG_MAX], *audio;
+  const char *emb[NV_FAIXA_MAX], *add[LEG_MAX], *audio, *pref;
   const VideoFaixa *fa;
   const CatItem *ci;
+  const LegMem *mt;
+  char tit[64];
   int tipos[NV_FAIXA_MAX];
-  int nEmb, nAdd = 0, embFechado, addFechado = 1, i, r, soForcada;
+  int nEmb, nAdd = 0, embFechado, addFechado = 1, i, r, soForcada, origem;
   Uint32 passou;
   if (!legAuto || aberta || !player_aberto() || !player_com_video()) return;
   // Canal ao vivo nao tem legenda de addon nem idioma no arquivo que valha.
@@ -751,6 +808,14 @@ static void legendaAutomatica(Uint32 agora) {
   // primeiro quadro dava agora - marco = -1, e o log dizia "aos 4294967295 ms".
   passou = (Sint32)(agora - legAutoDesde) > 0 ? agora - legAutoDesde : 0;
   if (!video_n_audio() && !video_n_legenda() && passou < 8000u) return;
+  // 2.0.3: A PREFERENCIA EM VIGOR nao e mais so a de Ajustes/da conta. Antes,
+  // sem idioma em Ajustes (o caso da TCL do dono) isto decidia NADA no
+  // primeiro quadro e a legenda escolhida a mao nunca voltava. Agora: a
+  // escolha deste titulo > Ajustes > a ultima escolha a mao (legmemoria.h).
+  ci = cat_item(player_indice());
+  tituloAtual(tit, sizeof tit);
+  mt = tit[0] ? legmem_do_titulo(tit) : NULL;
+  pref = legmem_preferencia(ling_legenda(), mt, legmem_ultima(), &origem);
   nEmb = video_n_legenda();
   if (nEmb > NV_FAIXA_MAX) nEmb = NV_FAIXA_MAX;
   // Faixa de LETREIROS/FORCADA nunca liga como a legenda inteira: nao traduz
@@ -763,12 +828,11 @@ static void legendaAutomatica(Uint32 agora) {
   }
   fa = video_audio(video_audio_atual());
   audio = fa ? fa->idioma : "";
-  soForcada = ajustes_legenda_forcada_auto() && audio[0] && ling_legenda()[0] &&
-              strcasecmp(ling_legenda(), "none") && ling_casa(audio, ling_legenda());
+  soForcada = ajustes_legenda_forcada_auto() && audio[0] && pref[0] &&
+              strcasecmp(pref, "none") && ling_casa(audio, pref);
   embFechado = video_mkv_sondado() != 0 || passou >= FX_AUTO_EMB_MS;
   // So confia na lista dos addons quando ela e DESTE titulo: sem imdb o app
   // nao pede legenda nenhuma (app.c), e o que estiver em memoria e do anterior.
-  ci = cat_item(player_indice());
   if (ci && ci->imdb[0]) {
     nAdd = addons_n_legendas();
     if (nAdd > LEG_MAX) nAdd = LEG_MAX;
@@ -776,11 +840,39 @@ static void legendaAutomatica(Uint32 agora) {
     addFechado = addons_legendas_prontas();
   }
   if (passou >= FX_AUTO_FIM_MS) embFechado = addFechado = 1;
-  r = ling_legenda_auto_tipo(ling_legenda(), audio, ajustes_legenda_forcada_auto(),
+  // O MESMO TITULO: a faixa exata que a pessoa escolheu, se ainda existe. Ela
+  // vale mais que "a primeira do idioma" (o arquivo pode ter pt e pt-BR, ou a
+  // completa e a SDH). Ainda nao apareceu e a lista dela nao fechou: espera.
+  if (origem == LEGMEM_DE_TITULO && mt->tipo) {
+    int nums[NV_FAIXA_MAX];
+    const char *nomes[NV_FAIXA_MAX], *ids[LEG_MAX];
+    char idsBuf[LEG_MAX][24];
+    for (i = 0; i < nEmb; i++) {
+      const VideoFaixa *f = video_legenda(i);
+      nums[i] = f ? f->numero : -1;
+      nomes[i] = f ? f->rotulo : "";
+    }
+    for (i = 0; i < nAdd; i++) { legendasui_id_addon(addons_legenda(i), idsBuf[i]); ids[i] = idsBuf[i]; }
+    r = legmem_exata(mt, nums, emb, nomes, nEmb, ids, nAdd);
+    if (r < 0 && !(mt->tipo == 'e' ? embFechado : addFechado)) return;
+    if (r >= 0) {
+      legAuto = 0;
+      printf("[legenda] automatica: ultima escolha '%s' -> %s %d (faixa exata deste titulo) aos %u ms\n",
+             mt->idioma[0] ? mt->idioma : "?", r < nEmb ? "embutida" : "addon",
+             r < nEmb ? r : r - nEmb, (unsigned)passou);
+      fflush(stdout);
+      if (r == legendaAtiva() &&
+          !(r < nEmb && legOverlay != r && vaiOverlay(video_legenda(r)) && video_legenda_ordinal_mkv(r) >= 0))
+        return;
+      escolherLegenda(r);
+      return;
+    }
+  }
+  r = ling_legenda_auto_tipo(pref, audio, ajustes_legenda_forcada_auto(),
                              emb, tipos, nEmb, embFechado, add, nAdd, addFechado);
   if (r == LING_AUTO_ESPERA) {
     // Passou do primeiro instante e ainda procura: a ilha diz o que esta fazendo.
-    if (!soForcada && passou >= 1200u && ling_legenda()[0] && strcasecmp(ling_legenda(), "none")) pilBuscando(ling_legenda(), agora);
+    if (!soForcada && passou >= 1200u && pref[0] && strcasecmp(pref, "none")) pilBuscando(pref, agora);
     return;
   }
   legAuto = 0;
@@ -789,19 +881,26 @@ static void legendaAutomatica(Uint32 agora) {
     // Sem legenda e o pedido, nao uma falha: a ilha fica quieta.
     pilBusca = 0;
     printf("[legenda] automatica: audio em '%s' = legenda '%s', sem forcada: nenhuma\n",
-           audio, ling_legenda());
+           audio, pref);
     fflush(stdout);
     return;
   }
   if (r == LING_AUTO_NADA) {
-    if (ling_legenda()[0] && strcasecmp(ling_legenda(), "none")) {
-      // Antes era silencio: a pessoa nao sabia se o app tentou. Agora a ilha diz.
-      pilFalhou(ling_legenda(), agora);
-    }
     pilBusca = 0;
-    if (ling_legenda()[0] && strcasecmp(ling_legenda(), "none"))
+    // A PESSOA DESLIGOU A MAO (neste titulo, ou por ultimo): nenhuma, mesmo
+    // que o arquivo marque uma faixa como padrao.
+    if (!strcasecmp(pref, "none") && (origem == LEGMEM_DE_TITULO || origem == LEGMEM_DE_ULTIMA)) {
+      printf("[legenda] automatica: ultima escolha 'none' -> nenhuma\n");
+      fflush(stdout);
+      if (legendaAtiva() >= 0) escolherLegenda(-1);
+      return;
+    }
+    if (pref[0] && strcasecmp(pref, "none")) {
+      // Antes era silencio: a pessoa nao sabia se o app tentou. Agora a ilha diz.
+      pilFalhou(pref, agora);
       printf("[legenda] automatica: nada em '%s' (%d embutida(s), %d de addon)\n",
-             ling_legenda(), nEmb, nAdd);
+             pref, nEmb, nAdd);
+    }
     fflush(stdout);
     return;
   }
@@ -817,18 +916,26 @@ static void legendaAutomatica(Uint32 agora) {
     Legenda *v = malloc(sizeof *v * LEG_MAX);
     if (v) {
       int nv = addons_legendas_copiar(v, LEG_MAX, NULL, NULL);
-      uint64_t lem = ci ? legauto_lembrada(ci->imdb[0] ? ci->imdb : ci->titulo, ling_legenda()) : 0;
-      int b = legauto_escolher(v, nv, ling_legenda(), video_url_atual(), NULL, 0, lem);
+      uint64_t lem = ci ? legauto_lembrada(ci->imdb[0] ? ci->imdb : ci->titulo, pref) : 0;
+      int b = legauto_escolher(v, nv, pref, video_url_atual(), NULL, 0, lem);
       if (b >= 0 && b < nAdd) r = nEmb + b;
       free(v);
     }
   }
-  printf("[legenda] automatica: '%s' -> %s %d (%s%s) aos %u ms\n", ling_legenda(),
-         r < nEmb ? "embutida" : "addon", r < nEmb ? r : r - nEmb,
-         r < nEmb ? emb[r] : add[r - nEmb],
-         r < nEmb && tipos[r] == LING_LEG_FORCADA ? ", forcada: audio no mesmo idioma" :
-         r < nEmb && tipos[r] == LING_LEG_LETREIROS ? ", letreiros: audio no mesmo idioma" : "",
-         (unsigned)passou);
+  if (origem == LEGMEM_DE_TITULO || origem == LEGMEM_DE_ULTIMA)
+    printf("[legenda] automatica: ultima escolha '%s' -> %s %d (%s%s) aos %u ms\n", pref,
+           r < nEmb ? "embutida" : "addon", r < nEmb ? r : r - nEmb,
+           r < nEmb ? emb[r] : add[r - nEmb],
+           r < nEmb && tipos[r] == LING_LEG_FORCADA ? ", forcada: audio no mesmo idioma" :
+           r < nEmb && tipos[r] == LING_LEG_LETREIROS ? ", letreiros: audio no mesmo idioma" : "",
+           (unsigned)passou);
+  else
+    printf("[legenda] automatica: '%s' -> %s %d (%s%s) aos %u ms\n", pref,
+           r < nEmb ? "embutida" : "addon", r < nEmb ? r : r - nEmb,
+           r < nEmb ? emb[r] : add[r - nEmb],
+           r < nEmb && tipos[r] == LING_LEG_FORCADA ? ", forcada: audio no mesmo idioma" :
+           r < nEmb && tipos[r] == LING_LEG_LETREIROS ? ", letreiros: audio no mesmo idioma" : "",
+           (unsigned)passou);
   fflush(stdout);
   escolherLegenda(r);
 }
@@ -1551,7 +1658,9 @@ int faixas_legenda_ativa(void) { return legendaAtiva(); }
 const char *faixas_legenda_externa_id(void) { return legExternaId; }
 void faixas_escolher_embutida(int i) {
   legAuto = 0;
-  escolherLegenda(i < 0 ? -1 : i < video_n_legenda() ? i : -1);
+  i = i < 0 ? -1 : i < video_n_legenda() ? i : -1;
+  escolherLegenda(i);
+  lembrarManual(i);   // so o seletor chama isto: e sempre a mao
 }
 // From the selector's COPY of the addon entry (addons_legendas_copiar): the
 // live list may have been replaced since the snapshot, so the index is
@@ -1566,7 +1675,8 @@ void faixas_escolher_externa(const Legenda *l) {
   legOverlay = -1; legOverlayEsperando = -1; legOverlayRetomar = 0; legOverlayTV = 0;
   video_escolher_legenda(-1);
   legsync_primaria_externa(l->url, l->idioma, l->provedor);   // F05: carrega e vira documento do AutoSync
-  if (!emTroca) pilExterna(l);
+  // emTroca = o AutoSync trocando sozinho: nao e escolha da pessoa.
+  if (!emTroca) { pilExterna(l); lembrarAddon(l); }
   legendasui_id_addon(l, id);
   legExterna = -1;
   v = malloc(sizeof *v * LEG_MAX);
