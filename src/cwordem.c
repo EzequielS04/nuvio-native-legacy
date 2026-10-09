@@ -161,11 +161,27 @@ void cwo_conta_definir(const char *const *ids, int n) {
   pthread_mutex_unlock(&contaTrava);
 }
 
+// Os "a seguir" que a DESMARCACAO moveu (descoberta.c, ajustarASeguir): o id
+// novo ("tt:2:7") nao esta na lista do Trakt/Simkl/conta, que falam do episodio
+// do remoto. Entram aqui e contam como "a seguir" para todo mundo que pergunta.
+static char ajust[CWO_CONTA_MAX][40];
+static int nAjust;
+
+void cwo_ajustados_definir(const char *const *ids, int n) {
+  int i;
+  pthread_mutex_lock(&contaTrava);
+  nAjust = 0;
+  for (i = 0; ids && i < n && nAjust < CWO_CONTA_MAX; i++)
+    if (ids[i] && ids[i][0]) snprintf(ajust[nAjust++], sizeof ajust[0], "%s", ids[i]);
+  pthread_mutex_unlock(&contaTrava);
+}
+
 int cwo_conta_a_seguir(const char *id) {
   int i, sim = 0;
   if (!id || !id[0]) return 0;
   pthread_mutex_lock(&contaTrava);
   for (i = 0; i < nConta && !sim; i++) sim = !strcmp(conta[i], id);
+  for (i = 0; i < nAjust && !sim; i++) sim = !strcmp(ajust[i], id);
   pthread_mutex_unlock(&contaTrava);
   return sim;
 }

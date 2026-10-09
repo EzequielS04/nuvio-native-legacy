@@ -253,6 +253,28 @@ int vistonao_barra(const char *imdb, int temporada, int episodio, long long remo
   return res;
 }
 
+int vistonao_primeira(const char *imdb, int temporada, int episodio, long long remotoMs,
+                      int *pt, int *pe) {
+  char id[16];
+  int i, achou = 0, bt = 0, be = 0, perfil = perfis_ativo();
+  idBase(imdb, id, sizeof id);
+  if (!id[0] || episodio < 1 || !pt || !pe) return 0;
+  pthread_mutex_lock(&trava);
+  garantir();
+  for (i = 0; i < nEnt; i++) {
+    const Ent *x = &ents[i];
+    if (x->perfil != perfil || strcmp(x->id, id) || x->temp < 1) continue;
+    if (x->temp > temporada || (x->temp == temporada && x->ep > episodio)) continue;
+    // O MESMO CRITERIO DE vistonao_barra, SEM SOLTAR A ENTRADA: remoto mais novo
+    // que o gesto (folga incluida) ganhou, e quem a solta e a leitura dos vistos.
+    if (remotoMs > 0 && x->ms < VN_SEM_RELOGIO && remotoMs > x->ms + VISTONAO_FOLGA_MS) continue;
+    if (!achou || x->temp < bt || (x->temp == bt && x->ep < be)) { bt = x->temp; be = x->ep; achou = 1; }
+  }
+  pthread_mutex_unlock(&trava);
+  if (achou) { *pt = bt; *pe = be; }
+  return achou;
+}
+
 int vistonao_n(void) {
   int r;
   pthread_mutex_lock(&trava);

@@ -1993,6 +1993,8 @@ int app_iniciar(const char *dirArte) {
   // guardado por perfil e barra o "visto" de qualquer fonte (Trakt, conta,
   // jornal) que nao seja mais novo que o gesto. Antes da primeira leitura.
   vistoep_lapides(vistonao_barra, vistonao_gesto);
+  // E o "a seguir" do Continuar assistindo recua para o primeiro desmarcado.
+  desc_lapides_primeira(vistonao_primeira);
   // AS LISTAS FIXADAS, PELO MESMO MOTIVO E ANTES DA PRIMEIRA HOME. Uma lista do
   // Trakt que a Biblioteca levou para a Home so vira fileira quando lst_iniciar
   // reinjeta a pasta dela em colecoes.c; chamando isto so ao ABRIR a Biblioteca,
