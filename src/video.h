@@ -39,6 +39,10 @@ int  video_tocar(const char *url);
 // MediaItem antes de prepare; o ack e da geracao desta abertura. Estado:
 // 0 aguardando, 1 aceito, -1 abertura normal (seek tardio como fallback).
 int  video_tocar_posicao(const char *url, double segundos);
+// Como a de cima, mais o percentual (0..100) para quando nao ha segundos
+// exatos (retomada da conta: Trakt/Simkl so dao percentual). O Kotlin aplica
+// sobre a duracao do container ANTES do primeiro quadro; mesmo ack/estado.
+int  video_tocar_retomada(const char *url, double segundos, double pct);
 int  video_retomada_inicial_estado(void);
 #endif
 

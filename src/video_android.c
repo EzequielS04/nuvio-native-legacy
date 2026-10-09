@@ -52,6 +52,10 @@
 static jclass    gCls;      // GlobalRef: FindClass de fio do SDL nao acha classe do app
 static jmethodID mAbrir, mParar, mPausar, mBuscar, mVolume, mJanela, mEscolher;
 static jmethodID mAbrirPosicao;
+// 2.0.3 (opcional): abrirRetomada(url, cab, inicioMs, fracao, geracao). So o
+// percentual conhecido (retomada da conta, sem registro local): o Kotlin
+// aplica fracao/10000 da duracao do CONTAINER antes do primeiro quadro.
+static jmethodID mAbrirRetomada;
 // F07 (optional, like abrirPosicao): cache(mb) and ganho(pct). A shell without
 // them simply has no seek cache and no boost.
 static jmethodID mCache, mGanho;
@@ -72,6 +76,8 @@ static int resolverMetodos(JNIEnv *env) {
   // depois da duracao. A ausencia deste metodo nao derruba a ponte inteira.
   mAbrirPosicao = (*env)->GetStaticMethodID(env, gCls, "abrirPosicao", "(Ljava/lang/String;Ljava/lang/String;II)V");
   if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); mAbrirPosicao = NULL; }
+  mAbrirRetomada = (*env)->GetStaticMethodID(env, gCls, "abrirRetomada", "(Ljava/lang/String;Ljava/lang/String;III)V");
+  if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); mAbrirRetomada = NULL; }
   mCache = (*env)->GetStaticMethodID(env, gCls, "cache", "(I)V");
   if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); mCache = NULL; }
   mGanho = (*env)->GetStaticMethodID(env, gCls, "ganho", "(I)V");
@@ -510,7 +516,7 @@ int  video_iniciar_auto(void) { return video_iniciar(); }
 int  video_registro_negado(void) { return 0; }
 
 // Abre urlAtual no Kotlin. Serve a fonte nova e ao recarregar da reconexao.
-static int abrirSessao(int inicioMs) {
+static int abrirSessao(int inicioMs, int fracao) {
   JNIEnv *env;
   ativo = 1; superficieEstavel = 0; prontoLoad = primeiroQuadro = falhou = terminou = tocando = 0;
   velEnviada = 100;
@@ -542,7 +548,21 @@ static int abrirSessao(int inicioMs) {
     // abrirPosicao also when starting at 0: it is how the Kotlin side learns
     // this session's generation (StreamFit passive telemetry). At 0 the
     // resume state stays -1, exactly as the plain abrir path left it.
-    if (mAbrirPosicao) {
+    if (inicioMs <= 0 && fracao > 0 && mAbrirRetomada) {
+      estadoRetomada(0);
+      (*env)->CallStaticVoidMethod(env, gCls, mAbrirRetomada, u, c, (jint)0, (jint)fracao, (jint)geracao);
+      if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+        estadoRetomada(-1);
+        printf("[video] retomada: abrirRetomada recusado, abre do inicio e o player busca depois\n");
+        fflush(stdout);
+        (*env)->CallStaticVoidMethod(env, gCls, mAbrir, u, c);
+      }
+    } else if (mAbrirPosicao) {
+      if (fracao > 0 && inicioMs <= 0) {
+        printf("[video] retomada: casca sem abrirRetomada, o player busca depois do pronto\n");
+        fflush(stdout);
+      }
       if (inicioMs > 0) estadoRetomada(0);
       (*env)->CallStaticVoidMethod(env, gCls, mAbrirPosicao, u, c, (jint)inicioMs, (jint)geracao);
       if ((*env)->ExceptionCheck(env)) {
@@ -562,9 +582,12 @@ static int abrirSessao(int inicioMs) {
   return 1;
 }
 
-int video_tocar_posicao(const char *u, double segundos) {
+int video_tocar_retomada(const char *u, double segundos, double pct) {
   int inicioMs = isfinite(segundos) && segundos > 0.0 && segundos <= INT_MAX / 1000.0
     ? (int)(segundos * 1000.0) : 0;
+  // Centesimos de ponto percentual; segundos exatos vencem (abrirPosicao).
+  int fracao = !inicioMs && isfinite(pct) && pct > 0.0 && pct < 100.0
+    ? (int)(pct * 100.0 + 0.5) : 0;
   snprintf(urlAtual, sizeof urlAtual, "%s", u ? u : "");
   capmkv_iniciar(urlAtual);
   nv_recon_zerar(&recon);
@@ -574,8 +597,9 @@ int video_tocar_posicao(const char *u, double segundos) {
   playerSessao = cacheArmado >= 0;
   cacheSessao = cacheArmado > 0 ? cacheArmado : 0;
   cacheArmado = -1;
-  return abrirSessao(inicioMs);
+  return abrirSessao(inicioMs, fracao);
 }
+int video_tocar_posicao(const char *u, double segundos) { return video_tocar_retomada(u, segundos, 0.0); }
 
 void cacheboost_backend_cache(int mb) { cacheArmado = mb > 0 ? mb : 0; }
 void cacheboost_backend_ganho(int pct) {
@@ -634,7 +658,7 @@ void video_bombear(void) {
     fflush(stdout);
     reconFaixasPend = 1;
     reconBuscarMs = recon.alvo > 1.0 ? (int)(recon.alvo * 1000.0) : -1;
-    if (!abrirSessao(0)) { reconErroCod = -1; reconErroPend = 1; }
+    if (!abrirSessao(0, 0)) { reconErroCod = -1; reconErroPend = 1; }
   }
 }
 void video_parar(void) {

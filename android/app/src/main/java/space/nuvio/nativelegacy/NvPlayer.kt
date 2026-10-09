@@ -88,6 +88,11 @@ object NvPlayer {
     private val pedidos = AtomicInteger()
     private var pedidoAtivo = 0
     private var inicioAtualMs = 0
+    // 2.0.3: retomada so com percentual (centesimos de ponto, 0 = nada). Fica
+    // pendente ate a timeline trazer a duracao do container; aplicada antes
+    // do primeiro quadro, o C nao busca depois do "pronto".
+    private var fracaoAtual = 0
+    private var fracaoPendente = 0
     private var geracaoNative = 0
     private var urlAtual = ""
     private var cabAtual = ""
@@ -254,6 +259,13 @@ object NvPlayer {
             if (pedido == pedidos.get()) abrirMain(url, cabecalhos, false, inicioMs.coerceAtLeast(0), geracao, pedido)
         }
     }
+    @JvmStatic fun abrirRetomada(url: String, cabecalhos: String, inicioMs: Int, fracao: Int, geracao: Int) {
+        val pedido = pedidos.incrementAndGet()
+        principal.post {
+            if (pedido == pedidos.get())
+                abrirMain(url, cabecalhos, false, inicioMs.coerceAtLeast(0), geracao, pedido, fracao.coerceIn(0, 9999))
+        }
+    }
     @JvmStatic fun parar() {
         val pedido = pedidos.incrementAndGet()
         principal.post { if (pedido == pedidos.get()) liberar() }
@@ -282,7 +294,7 @@ object NvPlayer {
     // --- abrir / liberar ------------------------------------------------------
 
     private fun abrirMain(url: String, cabecalhos: String, reabrindo: Boolean,
-                          inicioMs: Int, geracao: Int, pedido: Int) {
+                          inicioMs: Int, geracao: Int, pedido: Int, fracao: Int = 0) {
         val act = activity
         if (act == null) { confirmarRetomada(geracao, false); return }
         liberar()
@@ -298,6 +310,8 @@ object NvPlayer {
         cabAtual = cabecalhos
         inicioAtualMs = inicioMs
         geracaoNative = geracao
+        fracaoAtual = if (inicioMs > 0) 0 else fracao
+        fracaoPendente = 0
         abriuEm = SystemClock.elapsedRealtime()
         if (!reabrindo) retentou = false
         try {
@@ -439,7 +453,10 @@ object NvPlayer {
                     p.setMediaItem(mediaItem)
                 }
             } else p.setMediaItem(mediaItem)
-            confirmarRetomada(geracao, inicioAceito)
+            // So percentual: o ack sai quando a timeline der a duracao (ou
+            // recusado no READY); ate la o C espera, sem seek proprio.
+            if (inicioMs <= 0 && fracaoAtual > 0) fracaoPendente = fracaoAtual
+            else confirmarRetomada(geracao, inicioAceito)
             p.playWhenReady = true
             p.prepare()
             principal.postDelayed(tique(minha), TIQUE_MS)
@@ -773,6 +790,12 @@ object NvPlayer {
                 Player.STATE_READY -> {
                     ev(EV_BUFFER, 100)
                     if (!pronto) {
+                        // Antes do EV_PRONTO: o C le o ack ao ver o "pronto".
+                        if (fracaoPendente > 0) {
+                            fracaoPendente = 0
+                            Log.w(TAG, "[player] retomada: sem duracao antes do pronto; o C busca depois")
+                            confirmarRetomada(geracaoNative, false)
+                        }
                         pronto = true
                         duracaoEnviada = duracaoMs(p)
                         ev(EV_PRONTO, duracaoEnviada)
@@ -803,8 +826,9 @@ object NvPlayer {
         }
 
         override fun onTimelineChanged(timeline: Timeline, reason: Int) {
-            if (!atual(minha) || !pronto) return
+            if (!atual(minha)) return
             val p = player ?: return
+            if (!pronto) { aplicarFracao(p); return }
             val d = duracaoMs(p)
             if (d != duracaoEnviada) { duracaoEnviada = d; ev(EV_PRONTO, d) }   // so a duracao muda
         }
@@ -862,7 +886,8 @@ object NvPlayer {
                     ?: inicioAtualMs
                 val geracao = geracaoNative
                 val pedido = pedidoAtivo
-                principal.postDelayed({ if (atual(minha)) abrirMain(u, c, true, inicio, geracao, pedido) }, 400)
+                val fracao = if (inicio > 0) 0 else fracaoAtual
+                principal.postDelayed({ if (atual(minha)) abrirMain(u, c, true, inicio, geracao, pedido, fracao) }, 400)
                 return
             }
             ev(EV_ERRO, error.errorCode, 0)
@@ -883,6 +908,29 @@ object NvPlayer {
             val n = decoderName.lowercase()
             decoderDv = n.contains("dolby") || Regex("""\.dv(he|h1|av|a1)""").containsMatchIn(n)
             player?.let { publicarHdr(it.currentTracks) }
+        }
+    }
+
+    // A duracao chega na timeline assim que o container e lido (MKV: Info +
+    // Cues; MP4: moov), antes de o periodo preparar e decodificar. O seek
+    // aqui troca o ponto de partida sem um primeiro quadro em 0.
+    private fun aplicarFracao(p: ExoPlayer) {
+        val f = fracaoPendente
+        if (f <= 0) return
+        if (p.isCurrentMediaItemLive) {
+            fracaoPendente = 0; confirmarRetomada(geracaoNative, false); return
+        }
+        val d = p.duration
+        if (d == C.TIME_UNSET || d <= 1000L || !p.isCurrentMediaItemSeekable) return
+        val alvo = d * f / 10000L
+        fracaoPendente = 0
+        try {
+            p.seekTo(alvo)
+            Log.i(TAG, "[player] retomada na preparacao: ${alvo} ms de ${d} ms (${f / 100}.${"%02d".format(f % 100)}%)")
+            confirmarRetomada(geracaoNative, true)
+        } catch (e: Exception) {
+            Log.w(TAG, "retomada por percentual recusada: $e")
+            confirmarRetomada(geracaoNative, false)
         }
     }
 
