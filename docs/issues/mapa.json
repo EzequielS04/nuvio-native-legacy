@@ -8159,20 +8159,23 @@
    "estado_github": "aberta",
    "plataforma": "Samsung .wgt",
    "tipo": "bug",
-   "status": "precisa-log",
-   "release": "-",
-   "conserto": [],
+   "status": "consertada-nao-lancada",
+   "release": "2.0.3",
+   "conserto": [
+    "b65c3324 (2.0.3)",
+    "73ce1648 (2.0.3)"
+   ],
    "ultima_resposta": {
     "nos": false,
-    "data": null,
-    "ultimo_comentario_por": null,
+    "data": "2026-10-09",
+    "ultimo_comentario_por": "Namer03",
     "ultima_nossa": null
    },
-   "proximo_passo": "pedir log: Ajustes > Sobre > Enviar registro logo depois da queda, e comentar o código",
-   "notas": "Samsung UT8000 (Tizen 5.5), .wgt, Nuvio 2.0.2; sem log. Relato: VOD de debrid cai no meio com \"reconectando\" em laço; depois TODA fonte dá \"não deu para carregar\", só add-on https segue tocando. Triagem (09/10) no D1 e no código, sem TV: NÃO provado. No D1 (.wgt, ~32 mil ids recentes, ~300 registros) só 2 registros (2 pessoas, ambos 2.0.1) mostram a reconexão de VOD começar (\"conexao caiu ... tentativa 1/3\"), nenhum chega a \"reconexao: desistiu\" e nenhum tem o par \"queda e depois toda fonte falha\"; os outros ~25 registros com PLAYER_ERROR_CONNECTION_FAILED são falha de abertura de uma fonte, e a próxima fonte abriu (sem envenenamento). Código: a reconexão do .wgt (video_tizen.c:1180-1215, video_reconexao.h) são 3 tentativas por queda, e o contador zera 10 s depois do ponto da queda, então rede instável gera laço de \"reconectando\" por desenho; o 2.0.3 só mexeu na reconexão de TV ao vivo (#302/#350), VOD não mudou. Descartado por leitura: negcache (só 4 APIs de metadados), flag offline (redesaude.c só pinta a ilha), pool de threads (strict=0, [fios] estável nos logs), lista de fontes recusadas (zera a cada lista nova), XHR síncrono (estado por fio). \"Só o https funciona\" contraria um AVPlay quebrado (os dois passam por ele) e aponta para a conta do debrid/links do host, que é do lado de lá. SUSPEITA, não provada: (1) o open de reconexão não tem prazo: se o prepareAsync nunca responder, video_reconectando() fica 1 e tentarProximaFonteVOD (app.c) volta cedo, então fica \"reconectando\" sem fim; (2) a op \"abrir\" do JS faz stop() e close() no MESMO try (video_tizen.c:264-267): se o stop() levantar, o close() não roda e o próximo open() falha; (3) debrid.c marca conta sem plano para a SESSÃO inteira (semPlano), mas só com corpo \"PLAN_RESTRICTED/not premium\", não com 429. ALVO 2.0.4 = triagem: sem log não há conserto provável; pode ficar para 2.1 se o log mostrar defeito do debrid.",
+   "proximo_passo": "responder: deve sair na 2.0.3 (#308); perguntar se a legenda era ASS embutida e pedir log na 2.0.3 se continuar",
+   "notas": "SUSPEITA, sem log: provavelmente coberta pelo conserto da #308 que já está na 2.0.3 (b65c3324 leitor lateral mais gentil: menos Ranges, uma conexão, pausa quando o CDN aperta; 73ce1648). Namer03 comentou (09/10) que a leitura da legenda embutida enche o CDN do TorBox de pedidos; bate com o relato: o CDN do debrid passa a recusar, o vídeo reconecta em laço e TODA fonte de debrid falha, enquanto add-on https segue. CONDIÇÃO: no .wgt o mkvass (leitura por Range) só entra para legenda embutida ASS/SSA (faixas.c: FX_TEXTO_OVERLAY é 1 só no .tpk; SRT/texto embutido a TV desenha), e ele roda no .wgt (tizen.sh compila com NV_ASS_LIBASS, video_tizen.c tem a sonda do MKV). Então só é a #308 se o usuário estava com uma faixa ASS embutida ligada num MKV: perguntar isso (título, se a legenda era embutida, se desligando a embutida a queda some). Não medido quantos Ranges o mkvass fazia no .wgt antes do b65c3324, e nenhum registro .wgt do D1 mostra o laço. Se persistir na 2.0.3, volta para precisa-log com as suspeitas abaixo (plano 2.0.4). Triagem anterior: Samsung UT8000 (Tizen 5.5), .wgt, Nuvio 2.0.2; sem log. Relato: VOD de debrid cai no meio com \"reconectando\" em laço; depois TODA fonte dá \"não deu para carregar\", só add-on https segue tocando. Triagem (09/10) no D1 e no código, sem TV: NÃO provado. No D1 (.wgt, ~32 mil ids recentes, ~300 registros) só 2 registros (2 pessoas, ambos 2.0.1) mostram a reconexão de VOD começar (\"conexao caiu ... tentativa 1/3\"), nenhum chega a \"reconexao: desistiu\" e nenhum tem o par \"queda e depois toda fonte falha\"; os outros ~25 registros com PLAYER_ERROR_CONNECTION_FAILED são falha de abertura de uma fonte, e a próxima fonte abriu (sem envenenamento). Código: a reconexão do .wgt (video_tizen.c:1180-1215, video_reconexao.h) são 3 tentativas por queda, e o contador zera 10 s depois do ponto da queda, então rede instável gera laço de \"reconectando\" por desenho; o 2.0.3 só mexeu na reconexão de TV ao vivo (#302/#350), VOD não mudou. Descartado por leitura: negcache (só 4 APIs de metadados), flag offline (redesaude.c só pinta a ilha), pool de threads (strict=0, [fios] estável nos logs), lista de fontes recusadas (zera a cada lista nova), XHR síncrono (estado por fio). \"Só o https funciona\" contraria um AVPlay quebrado (os dois passam por ele) e aponta para a conta do debrid/links do host, que é do lado de lá. SUSPEITA, não provada: (1) o open de reconexão não tem prazo: se o prepareAsync nunca responder, video_reconectando() fica 1 e tentarProximaFonteVOD (app.c) volta cedo, então fica \"reconectando\" sem fim; (2) a op \"abrir\" do JS faz stop() e close() no MESMO try (video_tizen.c:264-267): se o stop() levantar, o close() não roda e o próximo open() falha; (3) debrid.c marca conta sem plano para a SESSÃO inteira (semPlano), mas só com corpo \"PLAN_RESTRICTED/not premium\", não com 429. Essas três ficam como plano da 2.0.4 se a 2.0.3 não resolver.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/385",
    "criada_em": "2026-10-09",
-   "alvo": "2.0.4"
+   "alvo": "2.0.3"
   }
  ],
  "fora_do_github": [
@@ -8313,8 +8316,7 @@
       379,
       306,
       337,
-      384,
-      385
+      384
      ]
     },
     {
