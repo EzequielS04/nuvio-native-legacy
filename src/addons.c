@@ -152,6 +152,16 @@ static char progNomeEx[ADD_EXTRA_MAX][48];
 static Chegada progFila[ADD_MAX * 2 + ADD_EXTRA_MAX];
 static int progN;
 static int progLigado, progPublicou, progExtraPublicou;
+// O QUE JA FOI PUBLICADO NESTA BUSCA, na ordem de chegada (bloqueador 2.0.3,
+// TCL do dono). Se a lista da tela for apagada com a busca no ar e o MESMO alvo
+// for pedido de novo, a busca em curso nao repete a rede (buscarPedido volta
+// cedo) — e sem isto as fontes de add-on ja publicadas sumiam enquanto as de
+// plugin que chegassem depois entravam: "28 fontes ... descartadas", depois
+// "+2 de MegaEmbed (lista com 2)" e o automatico escolhendo com 2. So o fio da
+// UI mexe aqui (progDrenar, buscarPedido, progLimpar). Custo: uma copia das
+// fontes enquanto a busca dura; progLimpar solta no fim.
+static Chegada progPub[ADD_MAX * 2 + ADD_EXTRA_MAX];
+static int progPubN;
 static Uint32 progInicio;
 
 static void progMarcar(int i, const Stream *a, int n, int estadoNovo) {
@@ -199,6 +209,8 @@ static void progLimpar(void) {
   memset(progEstado, 0, sizeof progEstado);
   memset(progEstadoEx, 0, sizeof progEstadoEx);
   pthread_mutex_unlock(&progTrava);
+  for (q = 0; q < progPubN; q++) free(progPub[q].a);
+  progPubN = 0;
 }
 
 static void capturarEscopo(FontecacheEscopo *e) {
@@ -591,9 +603,29 @@ static void progDrenar(void) {
       }
       stream_lista_acrescentar(local[q].a, local[q].n, local[q].idx);
       progPublicou = 1;
+      if (progPubN < (int)(sizeof progPub / sizeof *progPub)) {
+        progPub[progPubN++] = local[q];
+        continue;
+      }
     }
     free(local[q].a);
   }
+}
+
+// A lista da tela nao e mais a desta busca (apagada no meio: troca de alvo
+// desfeita, "episode changed"), e o mesmo alvo foi pedido de novo: ela volta a
+// ser desta busca, com tudo o que ja chegou — add-on e plugin juntos, na ordem
+// em que chegaram — e o resto continua entrando aos poucos.
+static void progRepublicar(void) {
+  int q, k = 0;
+  stream_definir_lista(NULL, 0);
+  for (q = 0; q < progPubN; q++) {
+    stream_lista_acrescentar(progPub[q].a, progPub[q].n, progPub[q].idx);
+    k += progPub[q].n;
+  }
+  printf("[addons] %s: lista apagada com a busca no ar; %d fonte(s) ja recebida(s) de volta\n",
+         alvoId, k);
+  fflush(stdout);
 }
 
 void addons_drenar(void) { progDrenar(); }
@@ -2475,6 +2507,7 @@ void addons_definir_origem(const char *base) {
 
 static void buscarPedido(const char *imdb, const char *tipo, int forcar) {
   int serie, renovar;
+  char id[sizeof alvoId];
   if (!imdb || !*imdb) return;
   if (jfid_e(imdb)) {
     // PERSONAL SERVER ITEM. No addon, no source cache, no "where to watch":
@@ -2502,29 +2535,42 @@ static void buscarPedido(const char *imdb, const char *tipo, int forcar) {
   // Recusa de conta do debrid vale por busca: a nova volta a tentar todos.
   debrid_nova_busca();
   if (!nAddon && !addons_origem_extra_ativa()) { stream_definir_lista(NULL, 0); resumoDaLista(&resumo); estado = ADD_VAZIO; return; }
-  if (fioVivo) {
-    if (forcar || strcmp(imdb, alvoId) || strcmp(tipo ? tipo : "movie", alvoTipo)) {
-      snprintf(pendId, sizeof pendId, "%s", imdb);
-      snprintf(pendTipo, sizeof pendTipo, "%s", tipo ? tipo : "movie");
-      pendRenovar = forcar;
-      snprintf(pendBase, sizeof pendBase, "%s", alvoBase);
-    }
-    return;
-  }
-  // Um pedido novo desfaz a espera pelo prefetch do anterior; o prefetch em si
-  // segue ou cede conforme o que vem abaixo.
-  adotado = 0;
-  serie = tipo && !strcmp(tipo, "series");
   // Serie SEM episodio devolve lista vazia, com HTTP 200 e sem erro nenhum
   // (medido: 14 bytes de resposta). O identificador tem de ser
   // "tt1234567:temporada:episodio". Como o catalogo ainda nao traz lista de
   // episodios, assume T1E1 — e o mesmo lugar onde o episodio real entra quando
   // houver.
   // Serie de addon de anime ("kitsu:41370") pede "id:episodio", nao "id:1:1".
+  serie = tipo && !strcmp(tipo, "series");
   if (serie && !idbase_tem_episodio(imdb))
-    snprintf(alvoId, sizeof alvoId, idbase_e_imdb(imdb) ? "%s:1:1" : "%s:1", imdb);
+    snprintf(id, sizeof id, idbase_e_imdb(imdb) ? "%s:1:1" : "%s:1", imdb);
   else
-    snprintf(alvoId, sizeof alvoId, "%s", imdb);
+    snprintf(id, sizeof id, "%s", imdb);
+  // O CARIMBO E O ID QUE VAI AOS ADDONS (bloqueador 2.0.3, TCL do dono). O
+  // detalhe aberto antes de a lista de episodios chegar carimba o id cru
+  // ("tt8714904"; app.c idDoAlvo) e a pergunta sai como "tt8714904:1:1"; o
+  // player confere "tt8714904:1:1", acha a lista "de outro alvo" e descartava
+  // as 28 fontes do MESMO episodio ("episode changed"). Quem pediu carimbou o
+  // id cru agora mesmo; aqui ele vira o que de fato foi perguntado.
+  if (strcmp(id, imdb)) stream_definir_alvo(id);
+  if (fioVivo) {
+    if (forcar || strcmp(id, alvoId) || strcmp(tipo ? tipo : "movie", alvoTipo)) {
+      snprintf(pendId, sizeof pendId, "%s", imdb);
+      snprintf(pendTipo, sizeof pendTipo, "%s", tipo ? tipo : "movie");
+      pendRenovar = forcar;
+      snprintf(pendBase, sizeof pendBase, "%s", alvoBase);
+    } else if (progLigado && !pendId[0] && !stream_lista_do_alvo(id))
+      // O MESMO alvo, com a busca dele no ar, e a lista da tela nao e mais
+      // dela: devolve o que ja chegou em vez de esperar (ou perder) — senao so
+      // as fontes que chegarem daqui em diante entram (as de plugin, quase
+      // sempre as mais lentas) e o automatico escolhe entre elas.
+      progRepublicar();
+    return;
+  }
+  // Um pedido novo desfaz a espera pelo prefetch do anterior; o prefetch em si
+  // segue ou cede conforme o que vem abaixo.
+  adotado = 0;
+  snprintf(alvoId, sizeof alvoId, "%s", id);
   snprintf(alvoTipo, sizeof alvoTipo, "%s", tipo && *tipo ? tipo : "movie");
   // Pedir de novo a lista que ainda esta ativa e renovar/recarregar, inclusive
   // depois de falha de reproducao: esse pedido continua indo a rede.

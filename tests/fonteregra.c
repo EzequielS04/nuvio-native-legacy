@@ -77,13 +77,25 @@ static void grupos(void) {
   c.usarOutros = 1;
   assert(fonteregra_grupo_pendente(&c, "Torrentio", 0) == 2);
 
-  // Escopo: so add-ons tira os plugins (ou manda para o fim com "os outros").
+  // Escopo: so add-ons tira os plugins, E "os outros" NAO os devolve. TCL do
+  // dono (2.0.3, 21:24): "Somente add-ons instalados" com "usar os outros"
+  // ligado tocou "MegaEmbed - 1080" ("winner other+match"). "Os outros" e a
+  // folga das listas de PERMITIDOS; o escopo e filtro: fora dele nunca toca,
+  // nem quando nao ha fonte de add-on (a espera segue, ou a lista abre).
   c.escopo = FR_ESCOPO_ADDONS;
-  assert(fonteregra_grupo(&c, "MegaEmbed", 1, "x") == 2);
+  assert(c.usarOutros == 1);
+  assert(fonteregra_grupo(&c, "MegaEmbed", 1, "x") == -1);
+  assert(fonteregra_grupo_pendente(&c, "MegaEmbed", 1) == -1);
+  assert(fonteregra_grupo(&c, "Torrentio", 0, "x") == 2);         // os outros add-ons: sim
+  assert(!fonteregra_no_escopo(&c, 1) && fonteregra_no_escopo(&c, 0));  // nem a lembrada
   c.usarOutros = 0;
   assert(fonteregra_grupo(&c, "MegaEmbed", 1, "x") == -1);
   c.escopo = FR_ESCOPO_PLUGINS;
   assert(fonteregra_grupo(&c, "Cuevana ES", 0, "x") == -1);
+  c.usarOutros = 1;
+  assert(fonteregra_grupo(&c, "Cuevana ES", 0, "x") == -1);      // simetrico: so plugins
+  assert(fonteregra_grupo_pendente(&c, "Cuevana ES", 0) == -1);
+  c.usarOutros = 0;
   assert(fonteregra_grupo(&c, "MegaEmbed", 1, "x") == 0);
   c = cfg(FR_ESCOPO_TODAS, FR_REGEX_DESLIGADA, 1);
 
