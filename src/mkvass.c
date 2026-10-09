@@ -56,10 +56,44 @@
 // quadro-chave de video fica em algumas centenas de KB.
 #define MKVASS_CUES_MAX    (4L * 1024 * 1024)
 #define MKVASS_CUES_1      (256L * 1024)
-// Teto de blocos e de corpo. O mesmo teto de legenda.c (LEG_MAX_CUES): mais
-// do que isto o overlay nao aceita de qualquer forma.
-#define MKVASS_MAX_PONTOS  8000
+// Teto do INDICE (pontos) e do CORPO (texto colhido). Sao coisas diferentes, e
+// trata-las como uma so foi o #384: o indice parava em 8000 pontos ("o mesmo
+// teto de legenda.c, mais que isto o overlay nao aceita") e, num anime com
+// karaoke e letreiro quadro a quadro, os 8000 acabavam junto com a abertura —
+// dali ate o fim do episodio nao havia fala, e a colheita ainda fechava
+// "completo: 8000/8000". Um ponto custa ~40 bytes: o indice cobre a faixa
+// INTEIRA (o Cues tem teto proprio, MKVASS_CUES_MAX, que nem chega a tantos
+// pontos). O que tem de caber na memoria da TV e o corpo, e esse fica na
+// JANELA do playhead quando passa de MKVASS_CORPO_ALTO (ver despejar).
+#ifndef MKVASS_MAX_PONTOS
+#define MKVASS_MAX_PONTOS  200000
+#endif
+#ifndef MKVASS_CORPO_MAX
 #define MKVASS_CORPO_MAX   (16L * 1024 * 1024)
+#endif
+// A faixa INTEIRA so e colhida em segundo plano ate este tanto de pontos — o
+// teto antigo do indice, ou seja, exatamente o que a 2.0.2 ja colhia. Acima
+// disso a faixa e colhida SO na janela do playhead, desde o primeiro bloco:
+// o #384 nao pode virar o #308/#385 (o leitor lateral pedindo Range demais ao
+// CDN do debrid, que freia e derruba o VIDEO). Uma faixa de 20 mil blocos em
+// segundo plano seriam milhares de Ranges que ninguem pediu para ver.
+#ifndef MKVASS_PONTOS_INTEIRA
+#define MKVASS_PONTOS_INTEIRA 8000
+#endif
+// Acima disto o corpo deixa de ser "a faixa inteira" e passa a ser a janela.
+// A folga ate MKVASS_CORPO_MAX e para o grupo que estiver chegando.
+#ifndef MKVASS_CORPO_ALTO
+#define MKVASS_CORPO_ALTO  (MKVASS_CORPO_MAX / 4 * 3)
+#endif
+// O que o despejo tenta manter em volta do playhead; encolhe (ate
+// MKVASS_ATRAS_SEG atras e MKVASS_URGENTE_SEG a frente) enquanto o que fica
+// passar de metade de MKVASS_CORPO_ALTO.
+#define MKVASS_MANTER_ATRAS_SEG  30.0
+#define MKVASS_MANTER_FRENTE_SEG (2.0 * MKVASS_JANELA_SEG)
+// Dois pontos a menos disto um do outro nao sao separados pelo corte do
+// despejo: a linha do corpo guarda o inicio em centesimos, e o corte so e
+// exato (nenhuma linha fica do lado errado do seu ponto) com folga entre eles.
+#define MKVASS_DESPEJO_FOLGA_SEG 0.025
 // Falhas de Range seguidas antes de desistir (NOGO_REDE). Entre uma e outra
 // o fio RECUA (0,5, 1, 2, 4 s): antes eram 500 ms fixos, e cinco pedidos em
 // 2,5 s contra um CDN que acabou de recusar uma conexao so repetiam a recusa.
@@ -96,6 +130,14 @@ static long pausasCdn;   // quantas pausas de CDN o modulo ja fez (testes)
 // Fora do urgente, uma entrega a cada isto no maximo: cada entrega reparseia
 // o corpo inteiro (legenda.c e libass).
 #define MKVASS_ENTREGA_MS  2000L
+// Com o corpo em janela (#384) o documento tem MBs e a colheita nunca acaba:
+// ela acompanha o playhead, um Cluster por segundo de filme. Entregar a cada
+// passada seria reparsear esses MBs uma vez por segundo o episodio inteiro.
+// Fora do urgente a entrega espera isto — o que foi colhido esta a mais de
+// MKVASS_URGENTE_SEG do playhead, entao chega com folga.
+#ifndef MKVASS_ENTREGA_JANELA_MS
+#define MKVASS_ENTREGA_JANELA_MS 10000L
+#endif
 // Ranges EM PARALELO. Medido na C9 com a fonte Debridio (23/09): ~1,2 s por
 // Range, qualquer tamanho — um por vez colhia uma fala a cada 1,2 s, e a
 // janela de 90 s levou 49 s. Tres conexoes a mais (o pipeline ja usa uma ou
@@ -451,6 +493,19 @@ typedef struct {
   // tentativa para e vira MKVASS_NOGO_RESTO, com recuo longo em faixas.c.
   int      restoRecusado;
   int      fontesFalharam; // fontes anexadas indisponiveis: o libass usa as do app
+  // #384 — CORPO EM JANELA. `janela`: o corpo ja passou de MKVASS_CORPO_ALTO
+  // uma vez e deixou de guardar a faixa inteira; dali em diante so se colhe em
+  // volta do playhead (ver despejar). `manterFrente`: quanto a frente o ultimo
+  // despejo conseguiu manter — a colheita nao passa disso, senao baixaria o
+  // que o proximo despejo joga fora. `despejados`: pontos devolvidos a fila.
+  // `despejoPos`: o playhead no ultimo despejo. `cheio`: nem a janela minima
+  // coube; espera o playhead andar.
+  // `indiceCortado`: o Cues tinha mais pontos que MKVASS_MAX_PONTOS.
+  // `corpoCortou`: uma linha nao coube em MKVASS_CORPO_MAX e se perdeu.
+  // Com qualquer um dos dois a faixa NAO esta inteira: nada de "completo".
+  int      janela, cheio, indiceCortado, corpoCortou;
+  double   manterFrente, despejoPos;
+  long     despejados, despejos;
 } Fio;
 
 // #269: ver mkvass_aceitar_texto. Lido pelo fio no cabecalho.
@@ -881,7 +936,17 @@ static int corpoAnexar(Fio *f, const char *s, size_t n) {
     size_t nc = f->corpoCap ? f->corpoCap : 8192;
     char *nv;
     while (nc < f->corpoTam + n + 1) nc *= 2;
-    if (nc > MKVASS_CORPO_MAX) return 0;
+    if (nc > MKVASS_CORPO_MAX) {
+      // A linha se perde. Antes isto era calado e a faixa ainda fechava
+      // "completo"; agora fica marcado (ver corpoCortou na struct).
+      if (!f->corpoCortou) {
+        f->corpoCortou = 1;
+        printf("[mkvass] corpo no teto de %ld KB com %zu KB colhidos: uma fala de %zu bytes ficou de fora "
+               "(a faixa nao fecha completa)\n", (long)(MKVASS_CORPO_MAX / 1024), f->corpoTam / 1024, n);
+        fflush(stdout);
+      }
+      return 0;
+    }
     nv = realloc(f->corpo, nc);
     if (!nv) return 0;
     f->corpo = nv; f->corpoCap = nc;
@@ -899,6 +964,11 @@ static int corpoAnexar(Fio *f, const char *s, size_t n) {
 // Effect, Text) e nao a ordem que o arquivo original declarou — o bloco do
 // Matroska ja vem SEM Start/End e com ReadOrder na frente, entao a ordem do
 // arquivo nao serve para nada aqui.
+// A secao de eventos que o modulo abre. O despejo (#384) acha por ela onde o
+// cabecalho acaba e as linhas Dialogue: comecam.
+static const char CORPO_EVENTOS[] = "\n[Events]\nFormat: Layer, Start, End, Style, Name, "
+                                    "MarginL, MarginR, MarginV, Effect, Text\n";
+
 static int montarCabecalho(Fio *f, const unsigned char *priv, long n) {
   const char *ev;
   size_t ate = (size_t)n;
@@ -911,9 +981,7 @@ static int montarCabecalho(Fio *f, const unsigned char *priv, long n) {
   if (!corpoAnexar(f, tmp, ate)) { free(tmp); return 0; }
   free(tmp);
   if (f->corpoTam && f->corpo[f->corpoTam - 1] != '\n') corpoAnexar(f, "\n", 1);
-  { static const char EV[] = "\n[Events]\nFormat: Layer, Start, End, Style, Name, "
-                             "MarginL, MarginR, MarginV, Effect, Text\n";
-    return corpoAnexar(f, EV, sizeof EV - 1); }
+  return corpoAnexar(f, CORPO_EVENTOS, sizeof CORPO_EVENTOS - 1);
 }
 
 static int extensaoFonte(const char *nome, const char *mime) {
@@ -1080,7 +1148,16 @@ static void nomeSidecar(const char *url, int faixa, char *dst, size_t tam) {
 
 // v3: os tempos passaram a centesimos (ver tempoAss). Sidecars v2 guardam
 // milesimos, que o libass le errado — sao descartados e colhidos de novo.
-#define MARCA_COMPLETO "; mkvass-estado: completo-v3\n"
+// v4 (#384): o "completo-v3" podia ser um corpo TRUNCADO nos 8000 primeiros
+// pontos do indice (a abertura do anime e mais nada), gravado como completo.
+// O completo passa a ser gravado como v4. Um v3 ainda vale quando tem menos
+// eventos do que o teto antigo deixaria num truncado (sidecarCompleto): sao as
+// faixas normais, que nao precisam ser colhidas de novo. O parcial nao muda de
+// versao: ele leva um bit por ponto, e um parcial feito com o indice cortado
+// tem 8000 bits para um indice que agora e maior — restaurarParcial o ignora.
+#define MARCA_COMPLETO    "; mkvass-estado: completo-v4\n"
+#define MARCA_COMPLETO_V3 "; mkvass-estado: completo-v3\n"
+#define MARCA_V3_EVENTOS  7000
 #define MARCA_PARCIAL  "; mkvass-estado: parcial-v3 "
 #define MARCA_FONTES   "NVASS-FONTES-1\n"
 
@@ -1129,6 +1206,27 @@ static unsigned char *b64_decodificar(const char *src, size_t n, size_t *tam) {
   }
   *tam = o;
   return dst;
+}
+
+// Corpo de um sidecar COMPLETO em que se pode confiar, ou NULL (parcial,
+// outra versao, ou o "completo" truncado da 2.0.2 — ver MARCA_COMPLETO).
+static const char *sidecarCompleto(const char *sc) {
+  const char *corpo, *p; int n = 0;
+  if (!sc) return NULL;
+  if (!strncmp(sc, MARCA_COMPLETO, strlen(MARCA_COMPLETO))) return sc + strlen(MARCA_COMPLETO);
+  if (strncmp(sc, MARCA_COMPLETO_V3, strlen(MARCA_COMPLETO_V3))) return NULL;
+  corpo = sc + strlen(MARCA_COMPLETO_V3);
+  // Um truncado tem os 8000 pontos do teto antigo (menos os desistidos, que
+  // sao raros): na duvida, colhe de novo — custa uma colheita, uma vez.
+  for (p = corpo; n < MARCA_V3_EVENTOS && (p = strstr(p, "\nDialogue: ")) != NULL; p += 11) n++;
+  for (p = corpo; n < MARCA_V3_EVENTOS && (p = strstr(p, " --> ")) != NULL; p += 5) n++;
+  if (n >= MARCA_V3_EVENTOS) {
+    printf("[mkvass] sidecar completo antigo com %d+ eventos: pode estar cortado no teto de 8000, "
+           "a faixa e colhida de novo\n", n);
+    fflush(stdout);
+    return NULL;
+  }
+  return corpo;
 }
 
 static const char *linhaCache(const char **p, size_t *n) {
@@ -1222,12 +1320,15 @@ static void gravarSidecar(Fio *f, int completo, int saindo) {
   if (!tudo) return;
   if (completo) strcpy(tudo, MARCA_COMPLETO);
   else {
+    // Escreve pelo ponteiro: strcat por bit relia a marca inteira a cada um, e
+    // com o indice cobrindo a faixa toda (#384) isso virou dezenas de milhares.
+    char *w;
     strcpy(tudo, MARCA_PARCIAL);
-    for (i = 0; i < (size_t)f->nPontos; i++)
-      strcat(tudo, f->pontos[i].colhido == 1 ? "1" : "0");
-    strcat(tudo, "\n");
+    w = tudo + strlen(tudo);
+    for (i = 0; i < (size_t)f->nPontos; i++) *w++ = f->pontos[i].colhido == 1 ? '1' : '0';
+    *w++ = '\n'; *w = 0;
   }
-  strcat(tudo, f->corpo);
+  memcpy(tudo + strlen(tudo), f->corpo, f->corpoTam + 1);
   // Segura a troca de geracao durante a escrita. O parcial do pedido que esta
   // sendo parado e valido; um fio velho depois de uma troca nao pode tocar o
   // mesmo sidecar e contaminar a nova faixa.
@@ -1834,7 +1935,7 @@ static int lerCues(Fio *f) {
         // conhecido e sera lido inteiro (colherCluster). Antes isto mandava a
         // faixa TODA para a varredura.
         if (rel < 0) semRel++;
-        if (f->nPontos >= MKVASS_MAX_PONTOS) continue;
+        if (f->nPontos >= MKVASS_MAX_PONTOS) { f->indiceCortado = 1; continue; }
         if (f->nPontos >= cap) {
           Ponto *nv = realloc(f->pontos, (size_t)cap * 2 * sizeof *nv);
           if (!nv) break;
@@ -1854,6 +1955,11 @@ static int lerCues(Fio *f) {
     free(daFaixa); free(doVideo);
     qsort(f->pontos, (size_t)f->nPontos, sizeof *f->pontos, cmpPonto);
     f->semRel = semRel;
+    if (f->indiceCortado) {
+      printf("[mkvass] faixa %d: o indice tem mais de %d pontos — o que passa disso fica de fora "
+             "e a faixa nao fecha completa\n", f->faixa, MKVASS_MAX_PONTOS);
+      fflush(stdout);
+    }
     if (semRel)
       printf("[mkvass] faixa %d: %d de %d CuePoints sem CueRelativePosition — "
              "o Cluster deles e lido inteiro, na janela do playhead\n", f->faixa, semRel, f->nPontos);
@@ -2630,7 +2736,9 @@ static int varrerLaco(Fio *f) {
       if (avancarFontes(f, 2)) entregar(f);
       buscarFontesAdiadas(f);
       entregar(f);
-      gravarSidecar(f, 1, 0);
+      // Fala que nao coube no corpo (#384): o que ha nao e a faixa inteira, e
+      // um sidecar "completo" o repetiria em toda reabertura.
+      if (!f->corpoCortou) gravarSidecar(f, 1, 0);
       pthread_mutex_lock(&S.trava);
       if (f->g == S.geracao) S.nColhidos = f->nColhidos;
       pthread_mutex_unlock(&S.trava);
@@ -2817,8 +2925,137 @@ static int contarDesistidos(const Fio *f) {
   return n;
 }
 
+// --- #384: corpo em janela ---------------------------------------------------
+//
+// A faixa de um anime com karaoke e letreiro quadro a quadro nao cabe inteira:
+// no relato, os 8000 eventos da ABERTURA ja eram 9,6 MB de corpo. Enquanto o
+// corpo cabe (MKVASS_CORPO_ALTO), nada muda: a faixa inteira e colhida em
+// segundo plano e o sidecar fecha completo. Quando passa, o que esta LONGE do
+// playhead sai do corpo e os pontos correspondentes voltam a fila (colhido =
+// 0); dali em diante so se colhe em volta do playhead, e um seek colhe de
+// novo o que tinha saido. "Completo" so acontece se tudo estiver colhido ao
+// mesmo tempo — com a faixa em janela, nao acontece, e nao deve.
+//
+// Antes, o que nao cabia era recusado em silencio (corpoAnexar devolvia 0 e o
+// ponto ficava marcado como colhido), sempre do bloco N em diante.
+
+// Inicio, em segundos, de uma linha "Dialogue: Layer,H:MM:SS.cc,..." do corpo
+// (o formato que anexarEvento escreve). < 0 quando a linha nao e um evento.
+// Na mao e nao com sscanf: ha libc em que sscanf mede a string INTEIRA a cada
+// chamada, e aqui a string e o corpo de varios MB.
+static double inicioDaLinha(const char *l, const char *fim) {
+  const char *p; long v[4] = { 0, 0, 0, 0 }; int k = 0, dig = 0;
+  if (fim - l < 20 || memcmp(l, "Dialogue: ", 10)) return -1.0;
+  p = memchr(l + 10, ',', (size_t)(fim - l - 10));
+  if (!p) return -1.0;
+  for (p++; p < fim; p++) {
+    if (*p >= '0' && *p <= '9') {
+      if (v[k] > 1000000L) return -1.0;
+      v[k] = v[k] * 10 + (*p - '0'); dig++;
+    } else if (dig && ((*p == ':' && k < 2) || (*p == '.' && k == 2))) { k++; dig = 0; }
+    else if (dig && *p == ',' && k == 3) return (double)v[0] * 3600.0 + (double)v[1] * 60.0 + (double)v[2] + (double)v[3] / 100.0;
+    else return -1.0;
+  }
+  return -1.0;
+}
+
+// Os pontos a manter para a janela [a, b] s: o intervalo [*i0, *i1) do indice
+// (ordenado por tempo) e os cortes *ta / *tb em segundos. Cada corte cai no
+// MEIO de uma folga de pelo menos MKVASS_DESPEJO_FOLGA_SEG entre dois pontos,
+// andando para FORA ate achar uma: assim a linha de um ponto mantido nunca e
+// lida como de fora (o inicio da linha e o do ponto arredondado a centesimos),
+// e nenhuma fala sai do corpo com o ponto ainda marcado, nem fica no corpo com
+// o ponto de volta a fila (que a colheria em dobro).
+static void limitesDaJanela(const Fio *f, double a, double b, int *i0, int *i1, double *ta, double *tb) {
+  int n = f->nPontos, i, j;
+  for (i = 0; i < n && segundosDe(f, f->pontos[i].tempo) < a; i++) {}
+  while (i > 0 && i < n && segundosDe(f, f->pontos[i].tempo) -
+                           segundosDe(f, f->pontos[i - 1].tempo) < MKVASS_DESPEJO_FOLGA_SEG) i--;
+  for (j = i; j < n && segundosDe(f, f->pontos[j].tempo) <= b; j++) {}
+  while (j > 0 && j < n && segundosDe(f, f->pontos[j].tempo) -
+                           segundosDe(f, f->pontos[j - 1].tempo) < MKVASS_DESPEJO_FOLGA_SEG) j++;
+  *i0 = i; *i1 = j;
+  *ta = i <= 0 ? -1e300 : i >= n ? 1e300
+      : (segundosDe(f, f->pontos[i - 1].tempo) + segundosDe(f, f->pontos[i].tempo)) / 2.0;
+  *tb = j >= n ? 1e300 : j <= 0 ? -1e300
+      : (segundosDe(f, f->pontos[j - 1].tempo) + segundosDe(f, f->pontos[j].tempo)) / 2.0;
+}
+
+// Bytes de eventos que ficam com os cortes [ta, tb). Linha que nao e evento
+// (ou cujo tempo nao se le) fica sempre.
+static size_t bytesNaJanela(const char *ev, const char *fim, double ta, double tb) {
+  size_t fica = 0; const char *l = ev;
+  while (l < fim) {
+    const char *nl = memchr(l, '\n', (size_t)(fim - l)), *prox = nl ? nl + 1 : fim;
+    double t = inicioDaLinha(l, prox);
+    if (t < 0.0 || (t >= ta && t < tb)) fica += (size_t)(prox - l);
+    l = prox;
+  }
+  return fica;
+}
+
+// Tira do corpo o que esta longe de `pos` e devolve os pontos a fila. So no
+// caminho indexado de ASS: a varredura tem o laco proprio (ja preso a janela)
+// e uma faixa de texto simples nao chega a este tamanho.
+static void despejar(Fio *f, double pos) {
+  double atras = MKVASS_MANTER_ATRAS_SEG, frente = MKVASS_MANTER_FRENTE_SEG, ta, tb;
+  char *ev, *fim, *l, *w; size_t cab, antes = f->corpoTam;
+  int i, i0, i1, saiu = 0;
+  if (f->texto || f->varredura || !f->corpo || !f->nPontos) return;
+  ev = strstr(f->corpo, CORPO_EVENTOS);
+  if (!ev) return;
+  ev += sizeof CORPO_EVENTOS - 1;
+  cab = (size_t)(ev - f->corpo);
+  fim = f->corpo + f->corpoTam;
+  for (;;) {
+    limitesDaJanela(f, pos - atras, pos + frente, &i0, &i1, &ta, &tb);
+    if (cab + bytesNaJanela(ev, fim, ta, tb) <= (size_t)(MKVASS_CORPO_ALTO / 2) ||
+        (atras <= MKVASS_ATRAS_SEG && frente <= MKVASS_URGENTE_SEG)) break;
+    atras /= 2.0;  if (atras < MKVASS_ATRAS_SEG) atras = MKVASS_ATRAS_SEG;
+    frente /= 2.0; if (frente < MKVASS_URGENTE_SEG) frente = MKVASS_URGENTE_SEG;
+  }
+  for (l = w = ev; l < fim; ) {
+    char *nl = memchr(l, '\n', (size_t)(fim - l)), *prox = nl ? nl + 1 : fim;
+    double t = inicioDaLinha(l, prox);
+    if (t < 0.0 || (t >= ta && t < tb)) { if (w != l) memmove(w, l, (size_t)(prox - l)); w += prox - l; }
+    l = prox;
+  }
+  f->corpoTam = (size_t)(w - f->corpo);
+  f->corpo[f->corpoTam] = 0;
+  for (i = 0; i < f->nPontos; i++)
+    if ((i < i0 || i >= i1) && f->pontos[i].colhido == 1) { f->pontos[i].colhido = 0; saiu++; }
+  f->nColhidos -= saiu; f->despejados += saiu; f->despejos++;
+  // TV desenhando por enquanto (segurar): a fala nova continua sendo "mais do
+  // que ha agora", nao "mais do que havia antes do despejo".
+  if (f->colhidosIni > f->nColhidos) f->colhidosIni = f->nColhidos;
+  f->janela = 1; f->manterFrente = frente; f->despejoPos = pos;
+  if (f->corpoTam == antes) return;      // nada longe do playhead: nem log
+  f->sujo = 1;
+  // As dez primeiras e depois uma a cada dez: tocando uma abertura densa o
+  // despejo se repete a cada minuto ou dois.
+  if (f->despejos <= 10 || f->despejos % 10 == 0) {
+    printf("[mkvass] corpo em janela (despejo %ld, playhead %.0f s): de %zu para %zu KB, ficam %d/%d blocos "
+           "entre %.0f e %.0f s — o resto da faixa volta quando o playhead chegar\n",
+           f->despejos, pos, antes / 1024, f->corpoTam / 1024, f->nColhidos, f->nPontos,
+           i0 < f->nPontos ? segundosDe(f, f->pontos[i0].tempo) : 0.0,
+           i1 > 0 ? segundosDe(f, f->pontos[i1 - 1].tempo) : 0.0);
+    fflush(stdout);
+  }
+}
+
+// Ate onde a frente do playhead a colheita vai. Em janela, com o corpo ja
+// acima do alvo do despejo (metade de MKVASS_CORPO_ALTO), nao alem do que o
+// ultimo despejo manteve: colher mais longe seria baixar o que o proximo
+// despejo joga fora. Abaixo do alvo ha espaco, e vale a janela de sempre.
+static double alcanceFrente(const Fio *f) {
+  double a = f->prebusca ? MKVASS_PREBUSCA_SEG : MKVASS_JANELA_SEG;
+  return f->janela && f->manterFrente < a && f->corpoTam >= (size_t)(MKVASS_CORPO_ALTO / 2)
+         ? f->manterFrente : a;
+}
+
 // Proximo ponto pendente pela prioridade do laco (ver trabalhar). -1 quando
-// nao ha nenhum. *noJanela diz se ele esta em [ini, fim].
+// nao ha nenhum. *noJanela diz se ele esta em [ini, fim]. Com o corpo em
+// janela (#384) so vale o que esta em [ini, fim]: o resto seria despejado.
 static int proximoPendente(const Fio *f, double ini, double fim, int *noJanela) {
   int i, frente = -1, atras = -1;
   double pos = ini + MKVASS_ATRAS_SEG;
@@ -2834,6 +3071,7 @@ static int proximoPendente(const Fio *f, double ini, double fim, int *noJanela) 
     if (f->pontos[i].rel < 0 &&
         (pausa || t > pos + MKVASS_VARRE_JANELA_SEG || t < pos - MKVASS_VARRE_ATRAS_SEG)) continue;
     if (t >= ini && t <= fim) { *noJanela = 1; return i; }
+    if (f->janela) { if (t > fim) break; continue; }
     if (t > fim) { if (frente < 0) frente = i; }
     else atras = i;               // o ultimo antes de ini: o mais perto
   }
@@ -2858,7 +3096,8 @@ static void preBuscar(Fio *f, double pos) {
   int ii[MKVASS_PARALELOS], jj[MKVASS_PARALELOS], n, k, m, noAr = 0;
   for (k = 0; k < MKVASS_PREBUSCA; k++) if (f->pre[k]) noAr++;
   for (n = 0; n < MKVASS_PARALELOS; n++) {
-    int noJ, i = proximoPendente(f, pos - MKVASS_ATRAS_SEG, pos + MKVASS_JANELA_SEG, &noJ);
+    int noJ, i = proximoPendente(f, pos - MKVASS_ATRAS_SEG,
+                                 pos + (f->janela ? alcanceFrente(f) : MKVASS_JANELA_SEG), &noJ);
     if (i < 0) break;
     ii[n] = i; jj[n] = grupoFim(f, i);
     for (m = ii[n]; m <= jj[n]; m++) f->pontos[m].colhido = 3;
@@ -2912,11 +3151,11 @@ static void *trabalhar(void *arg) {
     snprintf(f->sidecarFontes, sizeof f->sidecarFontes, "%s.fonts", f->sidecar);
     sc = dados_ler(f->sidecar);
   }
-  if (sc && !strncmp(sc, MARCA_COMPLETO, strlen(MARCA_COMPLETO))) {
+  if (sidecarCompleto(sc)) {
     // Os eventos e anexos usam versoes/provas separadas. Um marcador de corpo
     // sem cache de fontes correspondente nao pode virar cache completo.
     if (lerFontesSidecar(f)) {
-      if (!entregarCorpoSeAtual(f, sc + strlen(MARCA_COMPLETO))) { free(sc); goto fim; }
+      if (!entregarCorpoSeAtual(f, sidecarCompleto(sc))) { free(sc); goto fim; }
       if (!definirEstadoSeAtual(f, MKVASS_COMPLETO)) { free(sc); goto fim; }
       printf("[mkvass] sidecar completo %s: sem rede\n", f->sidecar);
       fflush(stdout);
@@ -2953,10 +3192,11 @@ static void *trabalhar(void *arg) {
     if (f->g == S.geracao && f->fracIni > 0.0 && f->varreDur > 1.0) S.pos = f->fracIni * f->varreDur;
     pthread_mutex_unlock(&S.trava);
     c = dados_ler(f->sidecar);
-    if (c && !strncmp(c, MARCA_COMPLETO, strlen(MARCA_COMPLETO)) && lerFontesSidecar(f)) {
+    const char *cc;
+    if ((cc = sidecarCompleto(c)) != NULL && lerFontesSidecar(f)) {
       printf("[mkvass] pre-busca: sidecar completo %s, sem mais rede\n", f->sidecar);
       fflush(stdout);
-      if (!esperarAdocao(f) || !entregarCorpoSeAtual(f, c + strlen(MARCA_COMPLETO)) ||
+      if (!esperarAdocao(f) || !entregarCorpoSeAtual(f, cc) ||
           !definirEstadoSeAtual(f, MKVASS_COMPLETO)) { free(c); goto fim; }
       free(c);
       goto fim;
@@ -3013,6 +3253,17 @@ static void *trabalhar(void *arg) {
     printf("[mkvass] sidecar parcial: %d/%d blocos ja colhidos\n", f->nColhidos, f->nPontos);
   f->colhidosIni = f->nColhidos;
   free(sc);
+  // #384: faixa maior que o que a 2.0.2 colhia inteira. So a janela do
+  // playhead, pelo mesmo leitor (uma conexao, mesmo teto de Ranges, pausa no
+  // freio do CDN); nunca fecha "completo" e o sidecar sai parcial.
+  if (!f->varredura && f->nPontos > MKVASS_PONTOS_INTEIRA) {
+    f->janela = 1; f->manterFrente = MKVASS_MANTER_FRENTE_SEG;
+    pthread_mutex_lock(&S.trava); f->despejoPos = S.pos; pthread_mutex_unlock(&S.trava);
+    printf("[mkvass] faixa %d: %d blocos, mais que os %d colhidos inteiros — colheita SO na janela do playhead "
+           "(sem faixa inteira em segundo plano, sem sidecar completo)\n",
+           f->faixa, f->nPontos, MKVASS_PONTOS_INTEIRA);
+    fflush(stdout);
+  }
   printf("[mkvass] faixa %d: %d blocos indexados, escala %lu ns, cabecalho %zu bytes "
          "(%ld ms desde a escolha, %ld Ranges, medio %ld ms, max %ld; fontes=%d)\n",
          f->faixa, f->nPontos, f->escala, f->corpoTam, agoraMs() - f->t0, f->redeN,
@@ -3038,12 +3289,28 @@ static void *trabalhar(void *arg) {
     verAdocao(f);
     pthread_mutex_lock(&S.trava);
     if (f->g != S.geracao || S.parar) { pthread_mutex_unlock(&S.trava); goto sair; }
-    pos = S.pos; S.nColhidos = f->nColhidos; f->folgaJan = S.folga;
+    // Publica os colhidos ATE AGORA, contando os que o despejo devolveu a fila
+    // (#384): faixas.c mede progresso por este numero crescer.
+    pos = S.pos; S.nColhidos = f->nColhidos + (int)f->despejados; f->folgaJan = S.folga;
     pthread_mutex_unlock(&S.trava);
     while (feitos < MKVASS_RANGES_POR_SEG && minhaVez(f)) {
       double t; int j, noJanela;
+      // #384: o corpo passou do que a TV guarda. Fica a janela do playhead; o
+      // que saiu volta a fila e e colhido de novo quando o playhead chegar.
+      // Se nem a janela minima coube (`cheio`), nada mais entra ate o playhead
+      // andar — sem isto o laco colheria e despejaria o mesmo trecho sem fim.
+      if (f->corpoTam > (size_t)MKVASS_CORPO_ALTO) {
+        if (!f->cheio || fabs(pos - f->despejoPos) >= 1.0) despejar(f, pos);
+        f->cheio = f->corpoTam > (size_t)MKVASS_CORPO_ALTO;
+        if (f->cheio) break;
+      } else {
+        f->cheio = 0;
+        // Ja em janela e o playhead foi para longe (seek, ou minutos tocando):
+        // o que ficou do trecho antigo sai, e abre espaco para a janela cheia.
+        if (f->janela && fabs(pos - f->despejoPos) > MKVASS_MANTER_FRENTE_SEG) despejar(f, pos);
+      }
       ini = pos - MKVASS_ATRAS_SEG;
-      fim = pos + (f->prebusca ? MKVASS_PREBUSCA_SEG : MKVASS_JANELA_SEG);
+      fim = pos + alcanceFrente(f);
       i = proximoPendente(f, ini, fim, &noJanela);
       // Pre-busca: a janela dos primeiros minutos esta colhida. Solta o video
       // e espera a adocao sem rede; o resto da faixa vem depois, adotada.
@@ -3121,19 +3388,25 @@ static void *trabalhar(void *arg) {
       }
       feitos++;
       // Fala da cena de agora: ao overlay ja, sem esperar a passada.
-      if (t < pos + MKVASS_URGENTE_SEG || agoraMs() - f->ultEntrega >= MKVASS_ENTREGA_MS)
+      if (t < pos + MKVASS_URGENTE_SEG ||
+          agoraMs() - f->ultEntrega >= (f->janela ? MKVASS_ENTREGA_JANELA_MS : MKVASS_ENTREGA_MS))
         entregar(f);
       // O playhead pode ter saltado (seek) durante o Range: reprioriza.
       pthread_mutex_lock(&S.trava);
       pos = S.pos;
       pthread_mutex_unlock(&S.trava);
     }
-    entregar(f);
+    // Em janela a entrega do fim da passada tambem espera (ver
+    // MKVASS_ENTREGA_JANELA_MS); a urgente, acima, nao.
+    if (!f->janela || agoraMs() - f->ultEntrega >= MKVASS_ENTREGA_JANELA_MS) entregar(f);
     pthread_mutex_lock(&S.trava);
     if (f->g != S.geracao || S.parar) { pthread_mutex_unlock(&S.trava); goto sair; }
-    S.nColhidos = f->nColhidos;
+    S.nColhidos = f->nColhidos + (int)f->despejados;
     pthread_mutex_unlock(&S.trava);
-    if (f->nColhidos + contarDesistidos(f) >= f->nPontos) {
+    // #384: indice cortado ou fala que nao coube = a faixa NAO esta inteira,
+    // por mais que todo ponto conhecido esteja marcado. Fica colhendo (ocioso).
+    if (!f->indiceCortado && !f->corpoCortou &&
+        f->nColhidos + contarDesistidos(f) >= f->nPontos) {
       soltarPrebusca(f);
       // Faixa inteira colhida ainda na pre-busca (episodio curto, rede boa):
       // espera a adocao antes de fechar, senao o fio morreria com tudo e
@@ -3174,7 +3447,7 @@ sair:
   // Saiu antes do fim (parar, troca de faixa, rede): guarda o que ha para a
   // proxima abertura nao repetir os Ranges ja pagos.
   pthread_mutex_lock(&S.trava);
-  if (f->g == S.geracao) S.nColhidos = f->nColhidos;
+  if (f->g == S.geracao) S.nColhidos = f->nColhidos + (int)f->despejados;
   pthread_mutex_unlock(&S.trava);
   if (f->nColhidos > 0 && mkvass_estado() != MKVASS_COMPLETO) gravarSidecar(f, 0, 1);
 
