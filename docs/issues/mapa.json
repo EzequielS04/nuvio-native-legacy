@@ -3080,7 +3080,8 @@
    "proximo_passo": "responder (feedback do gabo748 em 06/10 sem retorno)",
    "notas": "Porte experimental VIDAA; issue de chamada de testadores. Commits faacf493 (2.0.2) e feat/vidaa.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/135",
-   "criada_em": "2026-09-24"
+   "criada_em": "2026-09-24",
+   "alvo": "futuro"
   },
   {
    "numero": 136,
@@ -3246,9 +3247,10 @@
     "ultima_nossa": "2026-10-06"
    },
    "proximo_passo": "nada (autor disse que não vê mais os problemas; pode fechar)",
-   "notas": "",
+   "notas": "Alvo ja-lancada: já saiu numa versão publicada; só falta fechar.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/144",
-   "criada_em": "2026-09-25"
+   "criada_em": "2026-09-25",
+   "alvo": "ja-lancada"
   },
   {
    "numero": 145,
@@ -5399,9 +5401,10 @@
     "ultima_nossa": "2026-10-06"
    },
    "proximo_passo": "pedir log (pedido em 06/10, sem retorno)",
-   "notas": "NOTAS 2.0.3: \"LG: resume no longer drops the source on a failed seek (#246)\". Não confirmado que cobre o relato HEVC/anime; plataforma do relato desconhecida.",
+   "notas": "NOTAS 2.0.3: \"LG: resume no longer drops the source on a failed seek (#246)\". Não confirmado que cobre o relato HEVC/anime; plataforma do relato desconhecida. ALVO 2.0.3 = SUSPEITA: o conserto está nas NOTAS mas não está confirmado que cobre o relato; falta log do autor.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/246",
-   "criada_em": "2026-10-04"
+   "criada_em": "2026-10-04",
+   "alvo": "2.0.3"
   },
   {
    "numero": 247,
@@ -5487,7 +5490,8 @@
    "proximo_passo": "nada",
    "notas": "Metadados em árabe na 2.0.1; menus em árabe planejados para 2.1 (segundo a resposta em #325).",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/250",
-   "criada_em": "2026-10-05"
+   "criada_em": "2026-10-05",
+   "alvo": "2.1"
   },
   {
    "numero": 252,
@@ -5505,9 +5509,10 @@
     "ultima_nossa": "2026-10-06"
    },
    "proximo_passo": "nada (autor confirmou que funciona; pode fechar)",
-   "notas": "Opção já existe: Ajustes > Idiomas e legendas > Idioma do áudio.",
+   "notas": "Opção já existe: Ajustes > Idiomas e legendas > Idioma do áudio. Alvo ja-lancada: a opção já existe.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/252",
-   "criada_em": "2026-10-05"
+   "criada_em": "2026-10-05",
+   "alvo": "ja-lancada"
   },
   {
    "numero": 253,
@@ -5591,7 +5596,8 @@
    "proximo_passo": "responder (novo pedido: card no canto e autoplay mesmo após dispensar)",
    "notas": "Parte do pedido tem relação com #331 (contagem estilo Netflix, em agente/203-331 = 2.0.4). Ajuste de tempo do card \"ainda não existe\" (nossa resposta).",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/256",
-   "criada_em": "2026-10-05"
+   "criada_em": "2026-10-05",
+   "alvo": "2.0.4"
   },
   {
    "numero": 257,
@@ -5653,7 +5659,8 @@
    "proximo_passo": "nada",
    "notas": "Layout RTL \"planejado para depois\"; sem branch.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/260",
-   "criada_em": "2026-10-05"
+   "criada_em": "2026-10-05",
+   "alvo": "futuro"
   },
   {
    "numero": 261,
@@ -5770,7 +5777,8 @@
    "proximo_passo": "responder (confirmou QR com teste-318.x; nova queixa: legenda diferente do Nuvio oficial)",
    "notas": "Vários relatos juntos (Shield/TCL/BRAVIA). Reporter charles474 confirmou QR com build de teste em 08/10. Parte do conserto já na 2.0.2 (a1d5e039).",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/266",
-   "criada_em": "2026-10-06"
+   "criada_em": "2026-10-06",
+   "alvo": "2.0.3"
   },
   {
    "numero": 267,
@@ -5817,7 +5825,8 @@
    "proximo_passo": "nada (aguardar release 2.0.3)",
    "notas": "MKV >2 GB rejeitado pelo leitor de legendas; conserto 80569112 só na 2.0.3 (2.0.1/2.0.2 tiveram partes). Resposta também prometeu \"setting para o usuário escolher este comportamento\": item vago, sem commit identificado.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/269",
-   "criada_em": "2026-10-06"
+   "criada_em": "2026-10-06",
+   "alvo": "2.0.3"
   },
   {
    "numero": 270,
@@ -6034,9 +6043,10 @@
     "ultima_nossa": "2026-10-06"
    },
    "proximo_passo": "pedir log (autor mandou só captura \"See logs\", sem código)",
-   "notas": "SUSPEITA: único commit que cita #280 é 3c51d5b7 (remontagens da descoberta, 2.0.3); a correção é genérica de fileiras.",
+   "notas": "SUSPEITA: único commit que cita #280 é 3c51d5b7 (remontagens da descoberta, 2.0.3); a correção é genérica de fileiras. ALVO 2.0.3 = SUSPEITA: o conserto está nas NOTAS mas não está confirmado que cobre o relato; falta log do autor.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/280",
-   "criada_em": "2026-10-06"
+   "criada_em": "2026-10-06",
+   "alvo": "2.0.3"
   },
   {
    "numero": 281,
@@ -6102,9 +6112,10 @@
     "ultima_nossa": "2026-10-07"
    },
    "proximo_passo": "ler log MWASFG e responder",
-   "notas": "Canais de add-on passam pelo proxy com headers na 2.0.2 (b68bad96); 1424e409/6de601a5 na 2.0.3. Autor mandou log MWASFG depois da resposta: não confirmado que resolveu.",
+   "notas": "Canais de add-on passam pelo proxy com headers na 2.0.2 (b68bad96); 1424e409/6de601a5 na 2.0.3. Autor mandou log MWASFG depois da resposta: não confirmado que resolveu. Alvo 2.0.3: NOTAS 2.0.3 cita #283 (guia de TV por add-on); aguarda confirmação do autor.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/283",
-   "criada_em": "2026-10-06"
+   "criada_em": "2026-10-06",
+   "alvo": "2.0.3"
   },
   {
    "numero": 284,
@@ -6127,7 +6138,8 @@
    "proximo_passo": "responder (sem resposta nossa ainda)",
    "notas": "a63ec982: linha \"Melhor para esta TV\" mostra resolução. Sem comentário nosso na issue.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/284",
-   "criada_em": "2026-10-06"
+   "criada_em": "2026-10-06",
+   "alvo": "2.0.3"
   },
   {
    "numero": 286,
@@ -6150,7 +6162,8 @@
    "proximo_passo": "postar correção",
    "notas": "Rascunho de correção em 203-respostas-correcao.md: nome certo é \"Resolução da interface > 720p (leve)\". Mali-400 (Utgard).",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/286",
-   "criada_em": "2026-10-06"
+   "criada_em": "2026-10-06",
+   "alvo": "2.0.3"
   },
   {
    "numero": 287,
@@ -6170,9 +6183,10 @@
     "ultima_nossa": "2026-10-07"
    },
    "proximo_passo": "nada (autor confirmou; pode fechar)",
-   "notas": "",
+   "notas": "Alvo ja-lancada: já saiu numa versão publicada; só falta fechar.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/287",
-   "criada_em": "2026-10-06"
+   "criada_em": "2026-10-06",
+   "alvo": "ja-lancada"
   },
   {
    "numero": 288,
@@ -6192,7 +6206,8 @@
    "proximo_passo": "responder / pedir log (sem resposta)",
    "notas": "Formulário diz LG webOS mas o modelo é TCL C6K: plataforma incerta.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/288",
-   "criada_em": "2026-10-06"
+   "criada_em": "2026-10-06",
+   "alvo": "2.0.4"
   },
   {
    "numero": 289,
@@ -6240,9 +6255,10 @@
     "ultima_nossa": null
    },
    "proximo_passo": "nada (pedir confirmação se quiser)",
-   "notas": "7 commits #290 na 2.0.2 (gradiente do hero sobre trailer em janela, aspecto, etc.). Sem confirmação do autor; base08 confirmou o ponto 1 antes do release. Título original \"Few minor issues on 2.1\".",
+   "notas": "7 commits #290 na 2.0.2 (gradiente do hero sobre trailer em janela, aspecto, etc.). Sem confirmação do autor; base08 confirmou o ponto 1 antes do release. Título original \"Few minor issues on 2.1\". Alvo ja-lancada: já saiu numa versão publicada; só falta fechar.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/290",
-   "criada_em": "2026-10-06"
+   "criada_em": "2026-10-06",
+   "alvo": "ja-lancada"
   },
   {
    "numero": 292,
@@ -6260,9 +6276,10 @@
     "ultima_nossa": null
    },
    "proximo_passo": "nada",
-   "notas": "Aviso nosso (virou issue a partir da discussão #291): resolução da interface em 4K deixa o Android lento.",
+   "notas": "Aviso nosso (virou issue a partir da discussão #291): resolução da interface em 4K deixa o Android lento. Alvo nao vamos fazer: é aviso/pergunta, não há mudança de código planejada (ver decisões).",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/292",
-   "criada_em": "2026-10-06"
+   "criada_em": "2026-10-06",
+   "alvo": "nao vamos fazer"
   },
   {
    "numero": 293,
@@ -6283,9 +6300,10 @@
     "ultima_nossa": "2026-10-07"
    },
    "proximo_passo": "nada",
-   "notas": "Codec/canais do áudio no player na 2.0.2 (db1f5891). Estatísticas completas em 8c856535 (agente/203-338 = 2.0.4).",
+   "notas": "Codec/canais do áudio no player na 2.0.2 (db1f5891). Estatísticas completas em 8c856535 (agente/203-338 = 2.0.4). Alvo ja-lancada: já saiu numa versão publicada; só falta fechar.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/293",
-   "criada_em": "2026-10-06"
+   "criada_em": "2026-10-06",
+   "alvo": "ja-lancada"
   },
   {
    "numero": 294,
@@ -6310,7 +6328,8 @@
    "proximo_passo": "nada (aguardar release 2.0.3)",
    "notas": "Parte na 2.0.2 (b4186acd); 66e6ae9e/26d845c6/abd0770a na 2.0.3.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/294",
-   "criada_em": "2026-10-06"
+   "criada_em": "2026-10-06",
+   "alvo": "2.0.3"
   },
   {
    "numero": 295,
@@ -6352,9 +6371,10 @@
     "ultima_nossa": "2026-10-07"
    },
    "proximo_passo": "nada (pode fechar)",
-   "notas": "Coberto pela \"Elección de la fuente\" (#310) na 2.0.2; nenhum commit cita #296.",
+   "notas": "Coberto pela \"Elección de la fuente\" (#310) na 2.0.2; nenhum commit cita #296. Alvo ja-lancada: já saiu numa versão publicada; só falta fechar.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/296",
-   "criada_em": "2026-10-06"
+   "criada_em": "2026-10-06",
+   "alvo": "ja-lancada"
   },
   {
    "numero": 297,
@@ -6397,9 +6417,10 @@
     "ultima_nossa": "2026-10-07"
    },
    "proximo_passo": "responder (autor informou Tizen 6; dizer em qual versão testar)",
-   "notas": "#273 (legendas árabes, 546c7418/57e24174) está na 2.0.2; #335 refina na 2.0.3. Nossa resposta de 07/10 disse \"próxima release\"; já estava na 2.0.2.",
+   "notas": "#273 (legendas árabes, 546c7418/57e24174) está na 2.0.2; #335 refina na 2.0.3. Nossa resposta de 07/10 disse \"próxima release\"; já estava na 2.0.2. Alvo ja-lancada: já saiu numa versão publicada; só falta fechar.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/298",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "ja-lancada"
   },
   {
    "numero": 300,
@@ -6419,9 +6440,10 @@
     "ultima_nossa": "2026-10-07"
    },
    "proximo_passo": "nada (pode fechar)",
-   "notas": "Resposta cita 2.0.2; nenhum commit cita #300.",
+   "notas": "Resposta cita 2.0.2; nenhum commit cita #300. Alvo ja-lancada: já saiu numa versão publicada; só falta fechar.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/300",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "ja-lancada"
   },
   {
    "numero": 302,
@@ -6445,7 +6467,8 @@
    "proximo_passo": "postar correção",
    "notas": "Rascunho de correção: o conserto do live TV NÃO está na 2.0.2 (resposta anterior dizia que sim). 0021b573 (2.0.2) é parcial.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/302",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.3"
   },
   {
    "numero": 303,
@@ -6465,9 +6488,10 @@
     "ultima_nossa": "2026-10-07"
    },
    "proximo_passo": "nada (pode fechar)",
-   "notas": "",
+   "notas": "Alvo ja-lancada: já saiu numa versão publicada; só falta fechar.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/303",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "ja-lancada"
   },
   {
    "numero": 304,
@@ -6487,7 +6511,8 @@
    "proximo_passo": "responder (sem resposta)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/304",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "futuro"
   },
   {
    "numero": 305,
@@ -6509,7 +6534,8 @@
    "proximo_passo": "nada (aguardar release 2.0.3)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/305",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.3"
   },
   {
    "numero": 306,
@@ -6529,7 +6555,8 @@
    "proximo_passo": "responder (sem resposta)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/306",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.4"
   },
   {
    "numero": 307,
@@ -6549,7 +6576,8 @@
    "proximo_passo": "responder (sem resposta; pedido de .ipa)",
    "notas": "SUSPEITA de fora-do-escopo: pedido de .ipa, app é C/SDL para TVs. O dono decide.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/307",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "nao vamos fazer"
   },
   {
    "numero": 308,
@@ -6574,7 +6602,8 @@
    "proximo_passo": "nada (aguardar release 2.0.3)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/308",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.3"
   },
   {
    "numero": 309,
@@ -6642,7 +6671,8 @@
    "proximo_passo": "avisar Namer03 quando sair (prometido: \"I'll ping\")",
    "notas": "Resposta corrigiu: opções de busca não estão na 2.0.2, saem na 2.0.3.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/311",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.3"
   },
   {
    "numero": 312,
@@ -6665,7 +6695,8 @@
    "proximo_passo": "postar correção",
    "notas": "Nossa resposta disse que \"Dolby Vision in MKV\" vem LIGADO por padrão: ERRADO, é DESLIGADO (docs 203-dvmkv-decisao.md; ajustes_ux_padrao.inc). Resumo traduzido e \"All sources\" saem na 2.0.3, não na 2.0.2.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/312",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.3"
   },
   {
    "numero": 313,
@@ -6688,7 +6719,8 @@
    "proximo_passo": "nada (aguardar fase 1 da 2.0.4); autor se ofereceu para testar",
    "notas": "bf3e71e4 (2.0.2) converte DTS->AC3 só no webOS; f45ddc14 (2.0.2) apenas detecta e avisa na tpk. Conversão na Samsung = fase 2 do plano docs/plans/samsung-dts.md (sem código).",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/313",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.4"
   },
   {
    "numero": 315,
@@ -6708,7 +6740,8 @@
    "proximo_passo": "responder / pedir log (sem resposta)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/315",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.4"
   },
   {
    "numero": 316,
@@ -6728,7 +6761,8 @@
    "proximo_passo": "responder / pedir log (sem resposta)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/316",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.4"
   },
   {
    "numero": 317,
@@ -6756,7 +6790,8 @@
    "proximo_passo": "nada (aguardar release 2.0.3)",
    "notas": "LG webOS 4 com pouca RAM; partes na 2.0.2 (0fcfa601, 937f8e6b).",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/317",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.3"
   },
   {
    "numero": 318,
@@ -6783,9 +6818,10 @@
     "ultima_nossa": "2026-10-08"
    },
    "proximo_passo": "responder (autor testou teste-318.3: ok, enviou log)",
-   "notas": "c8793c11 (agente/203-318-play) ainda não integrado em integracao/2.0.3.",
+   "notas": "c8793c11 (agente/203-318-play) ainda não integrado em integracao/2.0.3. Em 6a9140c2 o c8793c11 (agente/203-318-play) continua fora; o grosso do conserto (MStar, relatório de queda) está em 2.0.3.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/318",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.3"
   },
   {
    "numero": 319,
@@ -6810,7 +6846,8 @@
    "proximo_passo": "nada (aguardar release 2.0.3)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/319",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.3"
   },
   {
    "numero": 320,
@@ -6833,7 +6870,8 @@
    "proximo_passo": "nada (aguardar release 2.0.3)",
    "notas": "Nenhum commit cita #320; 22ecac46/8ab3b78f (\"tpk: arabic plain subtitles find Noto Naskh when the installed res/ predates 2.0.2\") batem com a promessa \"o próximo update busca a fonte sozinho\".",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/320",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.3"
   },
   {
    "numero": 321,
@@ -6855,7 +6893,8 @@
    "proximo_passo": "nada (aguardar release 2.0.3)",
    "notas": "b347004c \"rotulo de secao desce com o cartao aberto\" (cita #203 = versão); NOTAS 2.0.3 o lista.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/321",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.3"
   },
   {
    "numero": 322,
@@ -6877,7 +6916,8 @@
    "proximo_passo": "nada (aguardar release 2.0.3)",
    "notas": "b8d110de: up next removível + opção para desligar (cita \"#203\" = versão).",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/322",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.3"
   },
   {
    "numero": 323,
@@ -6899,9 +6939,10 @@
     "ultima_nossa": "2026-10-07"
    },
    "proximo_passo": "nada (autor confirmou: sem o passo de múltiplas fontes não cai)",
-   "notas": "1b6c9a89 na 2.0.3; f349c2f7 (agente/203-318-play) e 4d22e4f7 (agente/203-323) ainda não integrados.",
+   "notas": "1b6c9a89 na 2.0.3; f349c2f7 (agente/203-318-play) e 4d22e4f7 (agente/203-323) ainda não integrados. Em 6a9140c2 f349c2f7 e 4d22e4f7 continuam fora; 1b6c9a89 (travas entre threads) está em 2.0.3.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/323",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.3"
   },
   {
    "numero": 324,
@@ -6921,9 +6962,10 @@
     "ultima_nossa": "2026-10-08"
    },
    "proximo_passo": "nada",
-   "notas": "Relatório automático de triagem de logs (comentários nossos); não é bug.",
+   "notas": "Relatório automático de triagem de logs (comentários nossos); não é bug. Alvo nao vamos fazer: não é bug nem pedido.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/324",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "nao vamos fazer"
   },
   {
    "numero": 325,
@@ -6966,7 +7008,8 @@
    "proximo_passo": "corrigir a promessa: dissemos \"próxima atualização\"; código só em branch 2.0.4",
    "notas": "PROMESSA SEM CÓDIGO NA 2.0.3: resposta \"Both in the next update\", mas ac424deb/56868756 só estão em agente/203-326 e agente/203-331 (2.0.4).",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/326",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.4"
   },
   {
    "numero": 327,
@@ -7012,7 +7055,8 @@
    "proximo_passo": "responder (sem resposta nossa)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/328",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.3"
   },
   {
    "numero": 329,
@@ -7037,7 +7081,8 @@
    "proximo_passo": "responder (sem resposta nossa)",
    "notas": "Pular intro/recap automático em agente/203-331. 7a69fda5 é de PR externo (pr-351).",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/329",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.4"
   },
   {
    "numero": 330,
@@ -7059,7 +7104,8 @@
    "proximo_passo": "responder (sem resposta nossa)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/330",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.3"
   },
   {
    "numero": 331,
@@ -7084,7 +7130,8 @@
    "proximo_passo": "responder (sem resposta nossa)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/331",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.4"
   },
   {
    "numero": 332,
@@ -7109,7 +7156,8 @@
    "proximo_passo": "pedir log (após build com /dev/urandom + HttpURLConnection)",
    "notas": "SUSPEITA: relato Sony BRAVIA preso em \"rede _preparar\"; commits citados são os do #266. A resposta final do dono fala de outro assunto (contorno do vidro dos pôsteres, citado como \"corrigido para a próxima versão\"). teste-shield-266.2 não resolveu segundo EzequielS04.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/332",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.3"
   },
   {
    "numero": 333,
@@ -7129,7 +7177,8 @@
    "proximo_passo": "responder (apontar #250/#260; sem resposta nossa)",
    "notas": "Duplicata de #250 (Arabic). Comentário no commit c824675c (v1.0.1) é falso positivo.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/333",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.1"
   },
   {
    "numero": 334,
@@ -7154,9 +7203,10 @@
     "ultima_nossa": "2026-10-07"
    },
    "proximo_passo": "nada (aguardar release 2.0.3)",
-   "notas": "Limite de P2P e limpeza na 2.0.3. \"Armazenamento rotativo\" (prometido como planejado) está em agente/203-334 e agente/203-334-janela, ainda NÃO integrados.",
+   "notas": "Limite de P2P e limpeza na 2.0.3. \"Armazenamento rotativo\" (prometido como planejado) está em agente/203-334 e agente/203-334-janela, ainda NÃO integrados. Em 6a9140c2 o armazenamento rotativo continua fora (alvo 2.0.4 para essa parte); limite de P2P e limpeza estão em 2.0.3.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/334",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.3"
   },
   {
    "numero": 335,
@@ -7183,7 +7233,8 @@
    "proximo_passo": "nada (aguardar release 2.0.3)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/335",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.3"
   },
   {
    "numero": 336,
@@ -7223,7 +7274,8 @@
    "proximo_passo": "responder (sem resposta)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/337",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.4"
   },
   {
    "numero": 338,
@@ -7246,7 +7298,8 @@
    "proximo_passo": "corrigir a promessa: dissemos \"next build\"; código só em branch 2.0.4",
    "notas": "PROMESSA SEM CÓDIGO NA 2.0.3: estatísticas ao vivo (e52360ed, agente/203-central/203-veloc) e buffer Android (c446b6a1, agente/203-338) não estão em integracao/2.0.3.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/338",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.4"
   },
   {
    "numero": 339,
@@ -7271,7 +7324,8 @@
    "proximo_passo": "nada (aguardar release 2.0.3)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/339",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.3"
   },
   {
    "numero": 340,
@@ -7293,7 +7347,8 @@
    "proximo_passo": "responder (sem resposta nossa)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/340",
-   "criada_em": "2026-10-07"
+   "criada_em": "2026-10-07",
+   "alvo": "2.0.3"
   },
   {
    "numero": 341,
@@ -7315,7 +7370,8 @@
    "proximo_passo": "responder (sem resposta nossa; pedir teste)",
    "notas": "SUSPEITA: nenhum commit cita #341; beb5007a \"tpk 4/5: botão de aspecto/zoom do player passa a ter efeito\" está na 2.0.3 e NOTAS cita \"aspect/zoom button on Tizen 4/5\".",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/341",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.3"
   },
   {
    "numero": 342,
@@ -7335,7 +7391,8 @@
    "proximo_passo": "responder (sem resposta)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/342",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "futuro"
   },
   {
    "numero": 343,
@@ -7355,7 +7412,8 @@
    "proximo_passo": "nada",
    "notas": "AniSkip/TheIntroDB já na 2.0.1 (3a02817d); anime-skip.com \"na atualização seguinte\".",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/343",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "futuro"
   },
   {
    "numero": 344,
@@ -7375,7 +7433,8 @@
    "proximo_passo": "ler log AX1R49 e responder",
    "notas": "Log code no corpo; sem resposta nossa.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/344",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.4"
   },
   {
    "numero": 345,
@@ -7395,7 +7454,8 @@
    "proximo_passo": "ler log DEPCJ0 e responder",
    "notas": "Log code no corpo; sem resposta nossa.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/345",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.4"
   },
   {
    "numero": 346,
@@ -7415,7 +7475,8 @@
    "proximo_passo": "ler log e responder",
    "notas": "Sem resposta nossa. Possível relação com #373 (Samsung).",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/346",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.4"
   },
   {
    "numero": 347,
@@ -7435,7 +7496,8 @@
    "proximo_passo": "responder (sem resposta)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/347",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "futuro"
   },
   {
    "numero": 348,
@@ -7455,7 +7517,8 @@
    "proximo_passo": "responder (sem resposta)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/348",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "futuro"
   },
   {
    "numero": 349,
@@ -7475,7 +7538,8 @@
    "proximo_passo": "responder (sem resposta); relacionado a #364",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/349",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.4"
   },
   {
    "numero": 350,
@@ -7497,7 +7561,8 @@
    "proximo_passo": "postar correção",
    "notas": "Rascunho de correção: nome do ajuste é \"OK no card\"; \"Ver detalhes\" no menu de segurar sai na 2.0.3. Autor relatou depois filme travando durante TV ao vivo: responder.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/350",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.3"
   },
   {
    "numero": 352,
@@ -7519,7 +7584,8 @@
    "proximo_passo": "nada (aguardar 2.0.4)",
    "notas": "Selo de assistido e ordenar na Biblioteca; menu em árabe separado (futuro).",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/352",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.4"
   },
   {
    "numero": 353,
@@ -7539,7 +7605,8 @@
    "proximo_passo": "responder / pedir log (sem resposta humana)",
    "notas": "Os 2 comentários nossos na issue são relatórios de triagem automática, não resposta ao autor.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/353",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.4"
   },
   {
    "numero": 354,
@@ -7559,7 +7626,8 @@
    "proximo_passo": "responder (sem resposta)",
    "notas": "SUSPEITA: versão desktop está fora do escopo (app é para TVs).",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/354",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "nao vamos fazer"
   },
   {
    "numero": 355,
@@ -7581,7 +7649,8 @@
    "proximo_passo": "nada (aguardar 2.0.4)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/355",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.4"
   },
   {
    "numero": 356,
@@ -7604,7 +7673,8 @@
    "proximo_passo": "pedir log (já pedido em 08/10)",
    "notas": "d47a78c8 (Cinemeta antes da ficha Nuvio, 2.0.3) cobre uma suspeita, sem confirmação. Config \"quanto à frente\" planejada 2.0.4 (sem commit).",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/356",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.3"
   },
   {
    "numero": 357,
@@ -7624,7 +7694,8 @@
    "proximo_passo": "responder: como tirar log sem abrir o app (adb logcat)",
    "notas": "Zidoo Z9X 8K (Android 11) fecha ao abrir; Ugoos AM9 Pro. Autor comentou que não achou o aparelho no relatório #324 e não consegue enviar log.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/357",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.4"
   },
   {
    "numero": 358,
@@ -7648,7 +7719,8 @@
    "proximo_passo": "ler log MD8G2R e responder",
    "notas": "29c640b7 em agente/204-conta-catalogos. Commits da8fdee7 e 6212d5b8 citam #358 mas não estão em nenhuma branch local.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/358",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.4"
   },
   {
    "numero": 359,
@@ -7670,7 +7742,8 @@
    "proximo_passo": "nada (aguardar release 2.0.3)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/359",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.3"
   },
   {
    "numero": 360,
@@ -7692,9 +7765,10 @@
     "ultima_nossa": "2026-10-08"
    },
    "proximo_passo": "postar correção",
-   "notas": "Mescla do sync em 2.0.3 (46507ea5, 6b305295); botão \"Sincronizar addons\" só 2.0.4 (e2f1eede). Namer03 perguntou \"on 2.0.3?\"; rascunho de correção.",
+   "notas": "Mescla do sync em 2.0.3 (46507ea5, 6b305295); botão \"Sincronizar addons\" só 2.0.4 (e2f1eede). Namer03 perguntou \"on 2.0.3?\"; rascunho de correção. Alvo 2.0.4 porque a issue pede o botão \"Sincronizar addons\" (e2f1eede, fora da 2.0.3); a mescla do sync já está em 2.0.3.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/360",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.4"
   },
   {
    "numero": 361,
@@ -7702,19 +7776,24 @@
    "estado_github": "aberta",
    "plataforma": "all",
    "tipo": "feature",
-   "status": "aberta",
-   "release": "-",
-   "conserto": [],
+   "status": "consertada-nao-lancada",
+   "release": "2.0.3",
+   "conserto": [
+    "9ac3531d (2.0.3)",
+    "2220b019 (2.0.3)",
+    "81f7128b (2.0.3)"
+   ],
    "ultima_resposta": {
     "nos": false,
     "data": null,
     "ultimo_comentario_por": null,
     "ultima_nossa": null
    },
-   "proximo_passo": "responder (sem resposta)",
-   "notas": "",
+   "proximo_passo": "responder (sem resposta nossa); avisar quando a 2.0.3 sair",
+   "notas": "NOTAS 2.0.3: posters com URL longa (>~500 caracteres) chegam inteiros ao fundo, detalhe, Salvos e conta (merge 9ac3531d, agente/203-361). Pedido original pedia limite maior; URL de fundo/logo longa demais é descartada com linha de log.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/361",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.3"
   },
   {
    "numero": 362,
@@ -7737,7 +7816,8 @@
    "proximo_passo": "nada (aguardar 2.0.4)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/362",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.4"
   },
   {
    "numero": 363,
@@ -7761,7 +7841,8 @@
    "proximo_passo": "nada (aguardar release 2.0.3)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/363",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.3"
   },
   {
    "numero": 364,
@@ -7784,7 +7865,8 @@
    "proximo_passo": "responder (sem resposta nossa)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/364",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.4"
   },
   {
    "numero": 365,
@@ -7804,7 +7886,8 @@
    "proximo_passo": "responder / pedir log (sem resposta)",
    "notas": "Autor diz que o problema principal da Home foi resolvido; fantasmas permanecem em \"Fora da Home\". Relacionado a #358.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/365",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.4"
   },
   {
    "numero": 366,
@@ -7824,7 +7907,8 @@
    "proximo_passo": "responder (sem resposta)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/366",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.4"
   },
   {
    "numero": 367,
@@ -7844,7 +7928,8 @@
    "proximo_passo": "responder / pedir log (sem resposta)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/367",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.4"
   },
   {
    "numero": 368,
@@ -7867,7 +7952,8 @@
    "proximo_passo": "postar correção",
    "notas": "Rascunho de correção: ocultar add-ons no guia sai na 2.0.3, não na 2.0.2; busca espera 300 ms.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/368",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.3"
   },
   {
    "numero": 369,
@@ -7890,7 +7976,8 @@
    "proximo_passo": "responder (sem resposta); relatório de 9 itens, só 2 com commit",
    "notas": "Parcial: tailandês (712557ca) e ocultar não lançados (5f04c36b). Os outros itens do relatório de 9: sem commit identificado.",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/369",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.3"
   },
   {
    "numero": 370,
@@ -7915,7 +8002,8 @@
    "proximo_passo": "nada (aguardar release 2.0.3)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/370",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.3"
   },
   {
    "numero": 371,
@@ -7960,7 +8048,8 @@
    "proximo_passo": "responder / pedir log (sem resposta)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/372",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.4"
   },
   {
    "numero": 373,
@@ -7980,7 +8069,8 @@
    "proximo_passo": "responder (autor deu mais detalhes)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/373",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.4"
   },
   {
    "numero": 374,
@@ -8000,7 +8090,8 @@
    "proximo_passo": "responder (sem resposta)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/374",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.1"
   },
   {
    "numero": 378,
@@ -8020,7 +8111,8 @@
    "proximo_passo": "responder / pedir log (ghbarker confirmou com +1)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/378",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.4"
   },
   {
    "numero": 379,
@@ -8040,7 +8132,8 @@
    "proximo_passo": "responder / pedir log (sem resposta)",
    "notas": "",
    "url": "https://github.com/iqui27/nuvio-native-legacy/issues/379",
-   "criada_em": "2026-10-08"
+   "criada_em": "2026-10-08",
+   "alvo": "2.0.4"
   }
  ],
  "fora_do_github": [
@@ -8095,6 +8188,296 @@
    "conserto": [],
    "proximo_passo": "perguntar ao dono o que é",
    "notas": "Nada encontrado em commits, docs, notas de release ou issues (buscas por \"80 GB\"/\"80GB\"). Não preencher sem a fonte."
+  }
+ ],
+ "base_roadmap": "6a9140c2",
+ "roadmap": [
+  {
+   "release": "2.0.3",
+   "situacao": "congelada (integracao/2.0.3, ainda não lançada)",
+   "descricao": "Só entra o que já está em integracao/2.0.3. Lista completa em docs/releases/2.0.3/NOTAS.md; o mapa abaixo marca cada issue aberta com conserto lá. Inclui #361 (URL de cartaz longa).",
+   "itens": []
+  },
+  {
+   "release": "2.0.4",
+   "situacao": "planejada; já tem branches agente/203-3xx e agente/204-*, nada integrado",
+   "descricao": "Pequenos recursos de player e Biblioteca que já têm código fora da 2.0.3, mais triagem dos bugs sem conserto (pedir log).",
+   "itens": [
+    {
+     "nome": "Próximo episódio automático após 5 s",
+     "porque": "Estende a contagem estilo Netflix do #331 (agente/203-331) e o pedido #256; é uma opção no mesmo card, então vai junto. Sem branch próprio para os 5 s: SUSPEITA de que baste um valor padrão.",
+     "issues": [
+      256,
+      331,
+      326,
+      329
+     ]
+    },
+    {
+     "nome": "Estatísticas do player e tamanho do buffer",
+     "porque": "Código pronto em agente/203-338; a resposta já prometeu \"next build\".",
+     "issues": [
+      338
+     ]
+    },
+    {
+     "nome": "Biblioteca: indicadores de visto, esconder assistidos, vitrine de coleção, detalhes da fonte",
+     "porque": "Pequenos, cada um em seu branch agente/204-*; não dependem do redesign.",
+     "issues": [
+      352,
+      366,
+      362,
+      355
+     ]
+    },
+    {
+     "nome": "Catálogos da conta, sync de add-ons, fonte recusada, P2P por formato",
+     "porque": "Branches agente/204-conta-catalogos, 204-sync-addons, 204-fonte-recusada prontos ou quase.",
+     "issues": [
+      358,
+      365,
+      360,
+      364,
+      349
+     ]
+    },
+    {
+     "nome": "Samsung: DTS/TrueHD escondido (fase 1)",
+     "porque": "Plano e spike em agente/204-samsung-dts (docs/plans); fase 1 já planejada para a 2.0.4.",
+     "issues": [
+      313
+     ]
+    },
+    {
+     "nome": "Android: fileiras ilimitadas na Home, armazenamento rotativo do P2P",
+     "porque": "agente/204-fileiras-android e agente/203-334/-334-janela existem e ficaram fora da 2.0.3 por risco.",
+     "issues": [
+      334
+     ]
+    },
+    {
+     "nome": "Triagem de bugs sem conserto e dois pedidos pequenos (#306, #337)",
+     "porque": "Todos aguardam log do autor; entram na 2.0.4 se o log aparecer a tempo, senão escorregam.",
+     "issues": [
+      288,
+      315,
+      316,
+      344,
+      345,
+      346,
+      353,
+      357,
+      367,
+      372,
+      373,
+      378,
+      379,
+      306,
+      337
+     ]
+    }
+   ]
+  },
+  {
+   "release": "2.1",
+   "situacao": "próxima grande; sem data",
+   "descricao": "Trabalho que mexe em estrutura ou precisa de pesquisa por plataforma.",
+   "itens": [
+    {
+     "nome": "Redesign da Biblioteca",
+     "porque": "Branch agente/202-biblioteca (procedência por título, aba Listas); o plano de dados está em docs/plans/biblioteca-ilimitada.md (branch agente/biblioteca-ilimitada-plano) e diz \"não na 2.0.3\". Mexe em memória e navegação; não cabe num ponto de versão.",
+     "issues": []
+    },
+    {
+     "nome": "Limites maiores de Trakt/Biblioteca (sem teto)",
+     "porque": "A 2.0.3 só pagina a watchlist do Trakt até 400 itens e mantém os tetos de hoje (96ccdab1). Tirar o teto exige o índice leve + janela de CatItem do plano biblioteca-ilimitada, que é parte do redesign.",
+     "issues": []
+    },
+    {
+     "nome": "Remoção de barras pretas embutidas no quadro (blackbar/crop)",
+     "porque": "Recurso novo, sem issue nem branch (relacionados: #341 aspecto/zoom e #241 barras do trailer, esse já tratado). Precisa detectar a barra no quadro em cada pipeline (LG, .tpk, Android). SUSPEITA de 2.1; pode virar 2.0.4 se for só um recorte manual por título.",
+     "issues": [
+      341
+     ]
+    },
+    {
+     "nome": "Dolby Vision em MKV na Samsung",
+     "porque": "A 2.0.3 só traz DV em MKV na LG (opcional, desligado) e a Samsung nunca escolhe DV. Na Samsung falta prova de que o decodificador aceita; precisa de spike por modelo antes de prometer. SUSPEITA de 2.1.",
+     "issues": []
+    },
+    {
+     "nome": "Menus em árabe e auto sync de legenda por linha",
+     "porque": "Árabe nos menus foi prometido para a 2.1 (resposta em #325); auto sync tem pesquisa em legenda-sync-lg-samsung-pesquisa.md.",
+     "issues": [
+      250,
+      333,
+      374
+     ]
+    },
+    {
+     "nome": "Plano de refatoração geral",
+     "porque": "docs/plans/refatoracao-geral.md (branch agente/refatoracao-plano, 0dc06334): 23 mudanças pequenas, cada uma com porteiro de teste. Fazer depois da 2.0.3 sair e fora da 2.0.4, para não misturar refatoração com os recursos acima. Itens 01-04 (apagar morto, deduplicar Biblioteca) vão melhor junto do redesign da Biblioteca.",
+     "issues": []
+    }
+   ]
+  },
+  {
+   "release": "futuro",
+   "situacao": "sem data nem dono",
+   "descricao": "Pedidos que fazem sentido mas não têm plano.",
+   "itens": [
+    {
+     "nome": "Porte VIDAA, layout RTL, anime-skip.com, busca por microfone, pontos do carrossel estilo Apple TV, serviços na barra lateral",
+     "porque": "Cada um é grande ou depende de terceiros; nenhum tem branch.",
+     "issues": [
+      135,
+      260,
+      343,
+      347,
+      348,
+      304,
+      342
+     ]
+    }
+   ]
+  },
+  {
+   "release": "nao vamos fazer",
+   "situacao": "fora do escopo do produto",
+   "descricao": "PC, iOS, e itens que não são trabalho de código.",
+   "itens": [
+    {
+     "nome": "App para PC (#354), .ipa para iOS (#307), relatório automático de logs (#324), aviso de desempenho em 4K (#292)",
+     "porque": "Plataformas que o projeto não atende ou issues que não pedem mudança.",
+     "issues": [
+      354,
+      307,
+      324,
+      292
+     ]
+    }
+   ]
+  }
+ ],
+ "decisoes": [
+  {
+   "pergunta": "Próximo episódio automático após 5 s: entra na 2.0.4 junto da contagem do #331, ligado por padrão ou desligado?",
+   "recomendacao": "2.0.4, desligado por padrão, valor configurável. O #256 ainda pede que o card volte depois de dispensado; isso fica fora.",
+   "issues": [
+    256,
+    331
+   ]
+  },
+  {
+   "pergunta": "#360 (botão Sincronizar addons) fica em 2.0.4 mesmo com a mescla do sync já na 2.0.3?",
+   "recomendacao": "Sim, 2.0.4; corrigir a resposta que perguntou \"on 2.0.3?\" dizendo que a mescla vem agora e o botão depois.",
+   "issues": [
+    360
+   ]
+  },
+  {
+   "pergunta": "#318, #323 e #334 saem como 2.0.3 mesmo com commits ainda fora (c8793c11, f349c2f7/4d22e4f7, armazenamento rotativo)?",
+   "recomendacao": "Sim: o essencial está em 2.0.3. Integrar c8793c11 e f349c2f7 se ainda der (são conserto de travamento); armazenamento rotativo fica 2.0.4.",
+   "issues": [
+    318,
+    323,
+    334
+   ]
+  },
+  {
+   "pergunta": "#326 e #338 foram prometidos para \"próxima atualização/next build\" e o código só está em branches de 2.0.4. Responder já avisando 2.0.4?",
+   "recomendacao": "Sim, corrigir a promessa agora.",
+   "issues": [
+    326,
+    338
+   ]
+  },
+  {
+   "pergunta": "Bugs sem log (#288, #315, #316, #344-346, #353, #357, #367, #372, #373, #378, #379) ficam todos em 2.0.4?",
+   "recomendacao": "Sim como alvo de triagem, mas sem prometer: pedir log primeiro; os que não chegarem com log em 30 dias viram \"precisa-log\" e saem do alvo.",
+   "issues": [
+    288,
+    315,
+    316,
+    344,
+    345,
+    346,
+    353,
+    357,
+    367,
+    372,
+    373,
+    378,
+    379
+   ]
+  },
+  {
+   "pergunta": "Blackbar/crop: 2.1 ou 2.0.4?",
+   "recomendacao": "2.1. É recurso novo, sem branch e toca os três pipelines de vídeo.",
+   "issues": [
+    341
+   ]
+  },
+  {
+   "pergunta": "Dolby Vision em MKV na Samsung: 2.1 ou futuro?",
+   "recomendacao": "2.1 só como spike de pesquisa; não prometer ao público até haver prova num modelo.",
+   "issues": []
+  },
+  {
+   "pergunta": "Redesign da Biblioteca e limites maiores do Trakt: 2.1?",
+   "recomendacao": "2.1, juntos (o plano biblioteca-ilimitada é parte do redesign). A 2.0.4 fica só com indicadores de visto (#352) e esconder assistidos (#366).",
+   "issues": [
+    352,
+    366
+   ]
+  },
+  {
+   "pergunta": "Refatoração geral: quando?",
+   "recomendacao": "Depois da 2.0.3, como trabalho próprio na 2.1; na 2.0.4 no máximo os itens 01-04 (apagar morto). Não misturar com recursos.",
+   "issues": []
+  },
+  {
+   "pergunta": "\"nao vamos fazer\": #354 (PC), #307 (.ipa iOS), #324 (relatório de logs), #292 (aviso 4K Android). Confirma?",
+   "recomendacao": "Confirmar #354 e #307 (fora de escopo, já classificados fora-do-escopo). #324 e #292 não são pedidos de recurso: fechar como informativos em vez de \"não vamos fazer\".",
+   "issues": [
+    354,
+    307,
+    324,
+    292
+   ]
+  },
+  {
+   "pergunta": "Pedidos de interface (#304 serviços na barra lateral, #347 microfone, #348 pontos do carrossel/botão Reproduzir, #342 botão Pular cena) ficam em \"futuro\" ou \"nao vamos fazer\"?",
+   "recomendacao": "Futuro para #304, #348 e #347. #342 (conteúdo explícito) depende de base de dados de terceiros que não existe: recomendo nao vamos fazer.",
+   "issues": [
+    304,
+    348,
+    347,
+    342
+   ]
+  },
+  {
+   "pergunta": "#135 (porte VIDAA) e #260 (RTL) em \"futuro\" ou \"nao vamos fazer\"?",
+   "recomendacao": "Futuro; há trabalho feito em feat/vidaa e uma resposta pública dizendo \"depois\" para o RTL.",
+   "issues": [
+    135,
+    260
+   ]
+  },
+  {
+   "pergunta": "Issues abertas só aguardando fechamento (#144, #252, #287, #290, #293, #296, #298, #300, #303): fechar?",
+   "recomendacao": "Fechar com comentário, depois que o dono aprovar o texto. Alvo registrado como ja-lancada (valor extra além dos cinco pedidos).",
+   "issues": [
+    144,
+    252,
+    287,
+    290,
+    293,
+    296,
+    298,
+    300,
+    303
+   ]
   }
  ]
 }
