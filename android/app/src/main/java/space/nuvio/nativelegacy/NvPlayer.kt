@@ -8,6 +8,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
+import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
 import android.widget.FrameLayout
@@ -26,6 +27,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
@@ -433,6 +435,7 @@ object NvPlayer {
             if (sv != null) {
                 sv.visibility = View.VISIBLE
                 p.setVideoSurfaceView(sv)
+                sv.holder.addCallback(depoisDoMedia3)
             }
             temJanela = false
             aplicarEncaixe()
@@ -486,6 +489,7 @@ object NvPlayer {
         val sv = superficie
         val ouv = ouvinteAtual; val ana = analiticoAtual
         ouvinteAtual = null; analiticoAtual = null
+        soltando = null
         if (p != null) {
             // Listeners fora ja (so mexem em lista local); o resto, no fio de fundo.
             try { if (ouv != null) p.removeListener(ouv) } catch (e: Exception) { }
@@ -534,8 +538,26 @@ object NvPlayer {
         // View deixa o processo vivo e a tela sem resposta (#318).
         sv.isFocusable = false
         sv.isFocusableInTouchMode = false
+        sv.holder.addCallback(antesDoMedia3)
         c.addView(sv, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         superficie = sv
+    }
+
+    // QUANTO O MEDIA3 SEGUROU O FIO PRINCIPAL ao perder a superficie (recriar,
+    // ou o sistema ao esconder o app: tecla de ajustes da TV, Home). O callback
+    // dele entra na lista entre estes dois (setVideoSurfaceView, em abrirMain).
+    private var destruirIni = 0L
+    private val antesDoMedia3 = object : SurfaceHolder.Callback {
+        override fun surfaceCreated(h: SurfaceHolder) {}
+        override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, a: Int) {}
+        override fun surfaceDestroyed(h: SurfaceHolder) { destruirIni = SystemClock.elapsedRealtime() }
+    }
+    private val depoisDoMedia3 = object : SurfaceHolder.Callback {
+        override fun surfaceCreated(h: SurfaceHolder) {}
+        override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, a: Int) {}
+        override fun surfaceDestroyed(h: SurfaceHolder) {
+            Log.i(TAG, "[player] superficie destruida: Media3 segurou o fio principal por ${SystemClock.elapsedRealtime() - destruirIni} ms")
+        }
     }
 
     // stop+release do player velho fora do fio principal. A SurfaceView so sai
@@ -665,13 +687,49 @@ object NvPlayer {
     private const val RECRIA_ESPERA_MS = 350L
     private var hdrRecriado = false
     private var quadroVisto = false
+    // SOLTAR A SAIDA SEM ESPERAR (2.0.3). Destruir a Surface com o decoder
+    // ainda ligado nela faz o Media3 esperar o fio de reproducao DENTRO do
+    // surfaceDestroyed, no fio principal (setVideoOutputInternal: ate 2 s, e
+    // no estouro derruba o player com timeout). Na TCL do dono o `recriar`
+    // segurou o fio principal por 7470 ms (logcat 08/10 00:49:48, "Slow
+    // dispatch"): controle morto, e tecla nesse meio = ANR. O pedido vai como
+    // mensagem ao fio de reproducao e `depois` so roda, de volta no fio
+    // principal, com o renderer ja sem a superficie: a espera do Media3 que
+    // vem em seguida encontra o trabalho feito. Player liberado no meio = a
+    // mensagem e descartada e `depois` nao roda (a superficie foi com ele).
+    private var soltando: ExoPlayer? = null
+    private fun soltarSaida(p: ExoPlayer, depois: Runnable) {
+        val ini = SystemClock.elapsedRealtime()
+        try {
+            for (i in 0 until p.rendererCount) {
+                if (p.getRendererType(i) != C.TRACK_TYPE_VIDEO) continue
+                p.createMessage(p.getRenderer(i)).setType(Renderer.MSG_SET_VIDEO_OUTPUT).setPayload(null).send()
+            }
+            p.createMessage { _, _ ->
+                Log.i(TAG, "[player] superficie: renderer soltou em ${SystemClock.elapsedRealtime() - ini} ms")
+                principal.post(depois)
+            }.send()
+        } catch (e: Exception) {
+            // Sem a mensagem, o caminho antigo: o Media3 espera no surfaceDestroyed.
+            Log.w(TAG, "soltarSaida: $e")
+            depois.run()
+        }
+    }
     private val recriar = Runnable {
+        val p = player
         val sv = superficie
-        if (player != null && sv != null && sv.visibility == View.VISIBLE && sv.holder.surface?.isValid == true) {
-            sv.visibility = View.GONE
-            principal.post {
-                if (player != null) sv.visibility = View.VISIBLE
-                (activity as? NuvioActivity)?.devolverFoco()
+        if (p != null && sv != null && soltando !== p && sv.visibility == View.VISIBLE && sv.holder.surface?.isValid == true) {
+            soltando = p
+            soltarSaida(p) {
+                if (soltando === p) soltando = null
+                if (player !== p || superficie !== sv) return@soltarSaida
+                val ini = SystemClock.elapsedRealtime()
+                sv.visibility = View.GONE
+                Log.i(TAG, "[player] superficie: destruir levou ${SystemClock.elapsedRealtime() - ini} ms no fio principal")
+                principal.post {
+                    if (player != null) sv.visibility = View.VISIBLE
+                    (activity as? NuvioActivity)?.devolverFoco()
+                }
             }
         }
     }

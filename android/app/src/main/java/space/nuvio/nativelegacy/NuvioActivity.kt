@@ -14,6 +14,7 @@ import android.net.LinkProperties
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
+import android.os.SystemClock
 import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -372,6 +373,7 @@ class NuvioActivity : SDLActivity() {
     }
 
     override fun onStop() {
+        val ini = SystemClock.elapsedRealtime()
         try {
             val f = despedida()
             if (!(f.exists() && f.readText().startsWith("fim"))) f.writeText("oculto\n")
@@ -380,6 +382,7 @@ class NuvioActivity : SDLActivity() {
         // ali fecharia a tarefa embaixo deles (ver aplicarIconePendente).
         if (!instalando && !esperandoTela && !isChangingConfigurations) aplicarIconePendente()
         super.onStop()
+        Log.i("nuvio", "[android] parada: ${SystemClock.elapsedRealtime() - ini} ms no fio da interface")
     }
 
     override fun onResume() {
@@ -387,10 +390,16 @@ class NuvioActivity : SDLActivity() {
         vigia?.frente(true)
     }
 
+    // [android] pausa / parada: quanto o fio da interface ficou em cada passo
+    // do ciclo de vida (ANR ao apertar a tecla de ajustes da TV tocando, TCL,
+    // 2.0.3). Direto no logcat: o printf do C passa por um pipe e pode esperar.
     override fun onPause() {
+        val ini = SystemClock.elapsedRealtime()
         vigia?.frente(false)
         NvPlayer.pausarPeloSistema()
+        val msPlayer = SystemClock.elapsedRealtime() - ini
         super.onPause()
+        Log.i("nuvio", "[android] pausa: ${SystemClock.elapsedRealtime() - ini} ms no fio da interface (player $msPlayer ms)")
     }
 
     override fun onDestroy() {
