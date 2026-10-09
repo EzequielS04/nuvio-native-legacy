@@ -99,7 +99,7 @@ int main(void) {
   // Reconnection reopen of the SAME video: no new arm, same cache (not re-sent),
   // and the volume is re-applied after the open (Kotlin starts each open at 100).
   registro[0] = 0;
-  assert(abrirSessao(0));
+  assert(abrirSessao(0, 0));
   assert(!strcmp(registro, "AG150"));
 
   // Source change inside the title: the player arms again (same limit, not
@@ -152,7 +152,7 @@ int main(void) {
   assert(!strcmp(registro, "V150"));
   assert(video_velocidade_atual() == 150);
   registro[0] = 0;
-  assert(abrirSessao(0));                     // reconnection / same playback
+  assert(abrirSessao(0, 0));                     // reconnection / same playback
   Java_space_nuvio_nativelegacy_NvPlayer_nativeEvento(&env, NULL, 1, 60000, 0);
   video_bombear();
   assert(!strcmp(registro, "AV150"));
