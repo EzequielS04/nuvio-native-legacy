@@ -15,6 +15,9 @@ void cachearte_estatisticas_pedir(void) {}
 void tex_cache_marcar_larg(int grupo, const char *url, float larg, int essencial, int emUso) {
   (void)grupo; (void)url; (void)larg; (void)essencial; (void)emUso; }
 #include "../src/home.c"
+// heroAquecerVizinhos (home_atualizar) pede a arte dos vizinhos: sem textura aqui.
+unsigned long tex_hash_public(const char *c) { (void)c; return 0; }
+GLuint tex_obter_hero_quente(const char *c) { (void)c; return 0; }
 void desc_sinopse_hero(const int *idx, int n) { (void)idx; (void)n; }
 #include "../src/cwordem.h"
 
